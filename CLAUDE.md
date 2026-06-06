@@ -1,0 +1,92 @@
+# CLAUDE.md — auto_write 프로젝트 작업 지침
+
+> `D:\auto_write` 전용. 정부지원사업 문서 자동생성 + 문서 품질 개선 하네스 프로젝트.
+> 공통 지침(글로벌 CLAUDE.md)과 충돌 시 이 repo-local 규칙을 우선한다.
+>
+> **🔄 세션을 새로 시작했다면 `RESUME.md` 를 먼저 읽어라** — 진행 상태·남은 일·재개 명령이 있다.
+> 작업을 잠시 멈추거나 컨텍스트가 무거워지면 "체크포인트 저장"으로 RESUME.md 를 갱신하고,
+> 새 세션에서 "이어서"로 복원한다(session-resume 스킬).
+
+## 프로젝트 개요
+
+- 핵심: 양식 DOCX 분석 → AI 작성 → DOCX 렌더링 → 검수(`app/auto_write/services/`).
+- 실행: 시스템 Python 3.11~3.13(venv 없음). `app/` 이 import 기준. AI 키 없어도 동작.
+- 진단 CLI: `app/_build_chochang.py inspect|analyze|generate|finalize|struct|heads`.
+
+---
+
+## 하네스: 문서 품질 개선 (Document Quality Harness)
+
+**목표:** 완성된 DOCX(사업계획서·R&D·컨설팅·정책자금·인증·수출·현장클리닉 보고서)의
+서식·구조·강조·시각화 품질을 자동으로 끌어올리고 100점 품질점수로 게이팅한다.
+
+**트리거:** 다음 요청 시 `document-quality-orchestrator` 스킬을 사용하라.
+- "문서 품질 개선", "DOCX 후처리", "양식 안내문구 삭제", "글머리표 공백 정리",
+  "인포그래픽 제안", "auto_write 문서검수", "제출문서 서식 보정", "PSST 검사",
+  "품질점수 산정", "문서 최종검수", "사업계획서 다듬어줘", "보고서 정리해줘"
+- 재실행·수정·보완·부분 재실행(특정 단계만)·회귀 검수 요청도 동일 스킬로 처리.
+- 단순 질문은 직접 응답 가능.
+
+### 실행 명령 (PowerShell)
+
+```powershell
+cd D:\auto_write\app
+python document_quality_orchestrator.py "C:\경로\문서.docx"            # 전체 1회
+python document_quality_orchestrator.py 문서.docx -o 결과.docx --underline
+python document_quality_orchestrator.py --rollback "..\results\backup\<ts>" 결과.docx
+python _build_chochang.py inspect "결과.docx"                          # 진단만
+# 테스트
+python -m pytest tests/test_document_quality_harness.py -q
+```
+
+### 에이전트 (`.claude/agents/`)
+
+document-architect · template-cleanup-agent · formatting-normalizer · content-emphasis-agent ·
+document-type-classifier · psst-review-agent · infographic-suggestion-agent · quality-gate-agent ·
+backup-rollback-agent · qa-document-agent · security-agent · documentation-agent
+
+### 스킬 (`.claude/skills/`)
+
+오케스트레이터 허브: **document-quality-orchestrator**.
+세부: docx-template-cleanup · bullet-spacing-normalization · paragraph-font-sizing ·
+table-whitespace-cleanup · content-emphasis · document-type-classification ·
+psst-structure-check · infographic-suggestion · document-quality-scoring ·
+backup-and-rollback · document-quality-inspection
+
+### 커맨드 (`.claude/commands/`)
+
+`/improve-doc-quality` · `/auto-write-quality` · `/auto-write-inspect` ·
+`/auto-write-psst` · `/auto-write-images` · `/auto-write-finalize`
+
+### 핵심 코드 (`app/auto_write/services/`)
+
+doc_quality_ops · document_type_classifier · psst_check · infographic_suggest ·
+doc_quality_score · document_quality_orchestrator (진입: `app/document_quality_orchestrator.py`,
+`scripts/run_document_quality_harness.py`)
+
+### 품질 게이트
+
+100점 만점, 9항목(안내문구15/글머리표10/문단공백10/글자크기15/표10/강조10/유형구조15/PSST10/이미지5).
+**90 우수 / 85 통과 / 70 보완 / 미만 실패.** 미달 시 최대 10회 보완 루프, 수렴 시 조기종료 후 수동확인 항목 명시.
+
+### 백업·롤백
+
+후처리 전 원본을 `results/backup/<YYYYMMDD_HHMMSS>/` 에 백업. **원본 절대 덮어쓰기 금지**
+(출력=입력 경로면 ValueError). 복구: `--rollback <backup_dir> <target>`.
+
+### 금지
+
+원본 덮어쓰기 · 백업 없는 수정 · Secret/API Key/.env 출력 · 유료 API 무단 호출 ·
+기존 생성 기능 삭제 · results/templates 원본 삭제 · 테스트 없이 완료 보고 · 실패의 성공 보고.
+
+### 글로벌 `D:\.claude` 와의 관계
+
+글로벌은 웹 개발 하네스 전용으로 도메인이 다르다. 직접 재사용·훼손하지 않는다.
+
+---
+
+**변경 이력**
+
+| 날짜 | 변경 내용 | 대상 | 사유 |
+|------|----------|------|------|
+| 2026-06-05 | 문서 품질 개선 하네스 초기 구축 | 전체 | auto_write 전용 DOCX 후처리·검수·점수 하네스 신규 |

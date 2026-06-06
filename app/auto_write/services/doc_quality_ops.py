@@ -1,0 +1,386 @@
+"""doc_quality_ops.py
+
+완성된 DOCX(사업계획서·보고서·제출문서)에 대한 **결정론적 후처리 연산** 모음.
+
+설계 원칙
+---------
+1. 모든 함수는 python-docx ``Document`` 를 받아 in-place 로 수정하고, 변경 횟수를 반환한다.
+2. AI 를 호출하지 않는다(규칙 기반). 키가 없어도 동작한다.
+3. 원본 구조를 최소 변경한다 — 텍스트 노드(``w:t``) 단위로만 손대고, 단락/런 구조는
+   가능한 보존한다. 파괴적 삭제는 "명백한 빈 단락" 과 "명백한 양식 안내 단락" 으로 제한.
+4. 검증된 헬퍼는 ``docx_ops`` 에서 재사용한다(중복 구현 금지).
+
+각 함수의 반환값은 정수(변경 건수)이며, 오케스트레이터가 품질 리포트에 집계한다.
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, field
+
+from docx import Document
+from docx.oxml.ns import qn
+from docx.shared import Pt
+
+# 검증된 헬퍼 재사용 (docx_ops.py)
+from .docx_ops import _iter_body_paragraphs, _paragraph_text, GUIDE_MARKER_RE
+
+# ---------------------------------------------------------------------------
+# 상수 / 정규식
+# ---------------------------------------------------------------------------
+
+# 글머리표로 쓰이는 대표 기호들
+_BULLET_SYMBOLS = "○●◦◌∙·•‣▪▫■□◇◆▶▷►▸-–—*ㅇㅁ"
+# 줄 맨 앞 "공백* 글머리표+ 공백+" 패턴 → 기호 뒤 공백을 1칸으로
+_BULLET_PREFIX_RE = re.compile(
+    rf"^([ \t 　]*)([{re.escape(_BULLET_SYMBOLS)}]+)([ \t 　]{{2,}})"
+)
+# 내부 다중 공백(2칸 이상) → 1칸 (줄바꿈/탭 제외, 일반/전각/nbsp 공백 대상)
+_MULTI_SPACE_RE = re.compile(r"[  　]{2,}")
+# 강조 대상 핵심 키워드 (정량 성과 지표)
+_EMPHASIS_KEYWORDS = (
+    "매출", "영업이익", "순이익", "고용", "채용", "수출", "특허", "인증",
+    "R&D", "연구개발", "KPI", "목표", "기대효과", "투자유치", "점유율",
+    "성장률", "ROI", "매출액", "거래액", "MAU", "전환율", "원가절감",
+)
+# 숫자/단위 패턴 (강조는 "키워드 + 수치" 동반 시에만 → 과잉 강조 방지)
+_NUMERIC_RE = re.compile(r"\d|％|%|억|만원|천원|배|건|명|개사|개|회|점|위|차")
+# "명백한 양식 안내" 로 판단할 보수적 패턴 (단락 통째 삭제 대상)
+_PURE_GUIDE_RE = re.compile(
+    r"^\s*(?:[<\(［【]\s*)?(?:작성\s*요령|작성\s*방법|작성\s*예시|기재\s*요령|기재\s*방법|"
+    r"유의\s*사항|예\s*시|참고\s*용|※[^。\n]{0,40}(?:작성|기재|예시))"
+)
+
+
+@dataclass
+class QualityOpsReport:
+    """후처리 연산 결과 집계."""
+    guide_paragraphs_removed: int = 0
+    bullet_spacing_fixed: int = 0
+    table_cells_cleaned: int = 0
+    empty_paragraphs_removed: int = 0
+    paragraphs_emphasized: int = 0
+    font_sizes_normalized: int = 0
+    notes: list[str] = field(default_factory=list)
+
+    def as_dict(self) -> dict:
+        return {
+            "guide_paragraphs_removed": self.guide_paragraphs_removed,
+            "bullet_spacing_fixed": self.bullet_spacing_fixed,
+            "table_cells_cleaned": self.table_cells_cleaned,
+            "empty_paragraphs_removed": self.empty_paragraphs_removed,
+            "paragraphs_emphasized": self.paragraphs_emphasized,
+            "font_sizes_normalized": self.font_sizes_normalized,
+            "notes": list(self.notes),
+        }
+
+
+# ---------------------------------------------------------------------------
+# 내부 유틸
+# ---------------------------------------------------------------------------
+
+def _text_nodes(element):
+    """주어진 oxml 요소 하위의 모든 w:t 노드를 반환."""
+    return list(element.iter(qn("w:t")))
+
+
+def _element_has_drawing(element) -> bool:
+    """이미지/도형(w:drawing, w:pict)을 포함하면 True (삭제 금지 판단용)."""
+    return bool(element.find(".//" + qn("w:drawing")) is not None
+                or element.find(".//" + qn("w:pict")) is not None)
+
+
+# ---------------------------------------------------------------------------
+# 1. 글머리표 공백 정리
+# ---------------------------------------------------------------------------
+
+def normalize_bullet_spacing(doc: Document) -> int:
+    """글머리표(○ ㅇ · • - 등) 뒤 과다 공백과 단락 내부 다중 공백을 1칸으로 정리.
+
+    런(run) 단위로 텍스트 노드만 수정하므로 서식은 보존된다. 보수적으로:
+    - 단락의 첫 텍스트 노드에 대해서만 '글머리표+공백' 접두 패턴을 정리
+    - 모든 텍스트 노드의 내부 2칸 이상 공백을 1칸으로 축소
+    표 안/밖 단락 모두 대상으로 한다.
+    """
+    fixed = 0
+    # 본문 + 표를 모두 포함하는 전체 단락 순회
+    all_paragraphs = list(doc.paragraphs)
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                all_paragraphs.extend(cell.paragraphs)
+
+    for para in all_paragraphs:
+        nodes = _text_nodes(para._p)
+        if not nodes:
+            continue
+        changed = False
+        # (a) 접두 글머리표 공백 — 첫 비어있지 않은 노드
+        for node in nodes:
+            if node.text is None or node.text == "":
+                continue
+            new = _BULLET_PREFIX_RE.sub(lambda m: f"{m.group(1)}{m.group(2)} ", node.text, count=1)
+            if new != node.text:
+                node.text = new
+                changed = True
+            break
+        # (b) 내부 다중 공백 축소 (모든 노드)
+        for node in nodes:
+            if not node.text:
+                continue
+            new = _MULTI_SPACE_RE.sub(" ", node.text)
+            if new != node.text:
+                node.text = new
+                changed = True
+        if changed:
+            fixed += 1
+    return fixed
+
+
+# ---------------------------------------------------------------------------
+# 2. 표 내부 공백 정리
+# ---------------------------------------------------------------------------
+
+def cleanup_table_whitespace(doc: Document) -> int:
+    """표 셀 텍스트의 앞뒤 공백·내부 다중 공백을 정리한다.
+
+    셀 단위로 처리하되 런 구조는 보존:
+    - 셀의 첫 텍스트 노드 왼쪽 공백 제거, 마지막 텍스트 노드 오른쪽 공백 제거
+    - 각 노드 내부 다중 공백 1칸 축소
+    이미지가 든 셀은 건드리지 않는다.
+    """
+    cleaned = 0
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                tc = cell._tc
+                if _element_has_drawing(tc):
+                    continue
+                nodes = [n for n in _text_nodes(tc) if n.text]
+                if not nodes:
+                    continue
+                before = [n.text for n in nodes]
+                # 내부 다중 공백 축소
+                for n in nodes:
+                    n.text = _MULTI_SPACE_RE.sub(" ", n.text)
+                # 셀 경계 trim
+                nodes[0].text = nodes[0].text.lstrip("  　\t")
+                nodes[-1].text = nodes[-1].text.rstrip("  　\t")
+                if [n.text for n in nodes] != before:
+                    cleaned += 1
+    return cleaned
+
+
+# ---------------------------------------------------------------------------
+# 3. 불필요한 빈 단락 삭제
+# ---------------------------------------------------------------------------
+
+def remove_empty_paragraphs(doc: Document, *, keep_single: bool = True) -> int:
+    """연속된 완전 빈 단락을 축소한다.
+
+    - 본문(body) 직계 단락만 대상으로 한다(표 셀 내부는 건드리지 않음 — 셀 구조 보존).
+    - '완전 빈 단락' = 텍스트가 비어있고 이미지/도형이 없는 w:p.
+    - 연속 빈 단락 그룹에서 ``keep_single`` 이면 1개만 남기고 제거, 아니면 모두 제거.
+    - 문서 맨 끝의 마지막 빈 단락 1개는 Word 호환을 위해 보존한다.
+    """
+    body = doc.element.body
+    children = list(body)
+    # w:p 직계만 인덱싱
+    para_flags = []  # (element, is_empty)
+    for el in children:
+        if el.tag != qn("w:p"):
+            para_flags.append((el, None))
+            continue
+        is_empty = (not _paragraph_text(el)) and (not _element_has_drawing(el))
+        para_flags.append((el, is_empty))
+
+    to_remove = []
+    run_start = None
+    sequence = []
+
+    def flush(seq):
+        if not seq:
+            return
+        # keep_single: 첫 단락 보존, 나머지 제거
+        start = 1 if keep_single else 0
+        to_remove.extend(seq[start:])
+
+    prev_empty = False
+    for el, is_empty in para_flags:
+        if is_empty is True:
+            sequence.append(el)
+            prev_empty = True
+        else:
+            if prev_empty:
+                flush(sequence)
+                sequence = []
+            prev_empty = False
+    if prev_empty:
+        flush(sequence)
+
+    # 문서 맨 끝 빈 단락 1개는 보존 (sectPr 직전 호환)
+    removed = 0
+    for el in to_remove:
+        # 마지막 body 자식이면 보존
+        if el is body[-1]:
+            continue
+        body.remove(el)
+        removed += 1
+    return removed
+
+
+# ---------------------------------------------------------------------------
+# 4. 핵심 문장 강조 (Bold)
+# ---------------------------------------------------------------------------
+
+def emphasize_key_sentences(
+    doc: Document,
+    *,
+    keywords: tuple[str, ...] = _EMPHASIS_KEYWORDS,
+    underline: bool = False,
+    require_numeric: bool = True,
+    max_emphasis: int = 60,
+) -> int:
+    """정량 성과(매출·고용·수출·특허·KPI 등) 핵심 키워드가 든 단락을 Bold 처리.
+
+    과잉 강조를 막기 위해:
+    - 기본적으로 '키워드 + 수치(숫자/%/억/명/건...)' 가 함께 있는 단락만 강조(require_numeric)
+    - 이미 표 안에 있는 단락은 제외(표는 보통 데이터라 강조 의미 적음)
+    - 단락 전체 길이가 4자 미만이면 제외(제목/기호 단락 방지)
+    - 최대 ``max_emphasis`` 단락까지만 강조
+    underline=True 면 밑줄도 추가(기본 off).
+    """
+    emphasized = 0
+    for para in _iter_body_paragraphs(doc):
+        if emphasized >= max_emphasis:
+            break
+        text = _paragraph_text(para)
+        if len(text) < 4:
+            continue
+        if not any(kw in text for kw in keywords):
+            continue
+        if require_numeric and not _NUMERIC_RE.search(text):
+            continue
+        runs = para.findall(qn("w:r"))
+        if not runs:
+            continue
+        applied = False
+        for run in runs:
+            # 텍스트가 있는 런만
+            if not any((n.text or "") for n in run.findall(qn("w:t"))):
+                continue
+            rpr = run.find(qn("w:rPr"))
+            if rpr is None:
+                rpr = run.makeelement(qn("w:rPr"), {})
+                run.insert(0, rpr)
+            if rpr.find(qn("w:b")) is None:
+                rpr.append(run.makeelement(qn("w:b"), {}))
+                applied = True
+            if underline and rpr.find(qn("w:u")) is None:
+                u = run.makeelement(qn("w:u"), {qn("w:val"): "single"})
+                rpr.append(u)
+                applied = True
+        if applied:
+            emphasized += 1
+    return emphasized
+
+
+# ---------------------------------------------------------------------------
+# 5. 문단 수준별 글자 크기 표준화 (보수적/옵션)
+# ---------------------------------------------------------------------------
+
+def normalize_font_sizes(
+    doc: Document,
+    *,
+    body_pt: float = 11.0,
+    min_pt: float = 9.0,
+    max_pt: float = 16.0,
+    enable: bool = False,
+) -> int:
+    """본문 런의 글자 크기 이상치를 표준 범위로 보정(기본 비활성).
+
+    문서 서식을 깨뜨릴 위험이 있어 ``enable=True`` 일 때만 동작한다. 동작 시:
+    - 본문(표 밖) 단락의 런 중 크기가 명시되어 있고 [min_pt, max_pt] 범위를 벗어난 것만
+      body_pt 로 보정한다(범위 내 값과 제목/표는 건드리지 않음).
+    """
+    if not enable:
+        return 0
+    normalized = 0
+    for para in _iter_body_paragraphs(doc):
+        for run in para.findall(qn("w:r")):
+            rpr = run.find(qn("w:rPr"))
+            if rpr is None:
+                continue
+            sz = rpr.find(qn("w:sz"))
+            if sz is None:
+                continue
+            try:
+                half_pt = float(sz.get(qn("w:val")))
+            except (TypeError, ValueError):
+                continue
+            pt = half_pt / 2.0
+            if pt < min_pt or pt > max_pt:
+                sz.set(qn("w:val"), str(int(body_pt * 2)))
+                szcs = rpr.find(qn("w:szCs"))
+                if szcs is not None:
+                    szcs.set(qn("w:val"), str(int(body_pt * 2)))
+                normalized += 1
+    return normalized
+
+
+# ---------------------------------------------------------------------------
+# 6. 명백한 양식 안내 단락 삭제 (보수적)
+# ---------------------------------------------------------------------------
+
+def remove_guide_paragraphs(doc: Document, *, max_len: int = 120) -> int:
+    """'작성요령/예시/유의사항' 등 명백한 양식 안내 단락을 삭제(보수적).
+
+    오삭제를 막기 위해:
+    - body 직계 단락만 대상(표 셀은 보존 — qa_service/docx_ops 가 음영·색상 처리 담당)
+    - ``_PURE_GUIDE_RE`` 로 시작하는 단락만 삭제(부분 포함은 제외)
+    - 길이가 ``max_len`` 초과면 실제 내용일 수 있어 제외
+    - 이미지/도형 포함 단락 제외
+    - 문서 맨 끝 단락은 보존
+    """
+    body = doc.element.body
+    removed = 0
+    for para in list(_iter_body_paragraphs(doc)):
+        if para is body[-1]:
+            continue
+        if _element_has_drawing(para):
+            continue
+        text = _paragraph_text(para)
+        if not text or len(text) > max_len:
+            continue
+        if _PURE_GUIDE_RE.search(text):
+            body.remove(para)
+            removed += 1
+    return removed
+
+
+# ---------------------------------------------------------------------------
+# 통합 실행기
+# ---------------------------------------------------------------------------
+
+def run_all(
+    doc: Document,
+    *,
+    remove_guides: bool = True,
+    emphasize: bool = True,
+    underline: bool = False,
+    normalize_fonts: bool = False,
+) -> QualityOpsReport:
+    """모든 결정론적 후처리를 안전한 순서로 1회 적용하고 집계 리포트를 반환한다.
+
+    순서: 안내삭제 → 글머리표공백 → 표공백 → 빈단락 → 강조 → (옵션)폰트
+    """
+    report = QualityOpsReport()
+    if remove_guides:
+        report.guide_paragraphs_removed = remove_guide_paragraphs(doc)
+    report.bullet_spacing_fixed = normalize_bullet_spacing(doc)
+    report.table_cells_cleaned = cleanup_table_whitespace(doc)
+    report.empty_paragraphs_removed = remove_empty_paragraphs(doc)
+    if emphasize:
+        report.paragraphs_emphasized = emphasize_key_sentences(doc, underline=underline)
+    report.font_sizes_normalized = normalize_font_sizes(doc, enable=normalize_fonts)
+    return report

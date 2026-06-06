@@ -1,0 +1,44 @@
+.env
+.env.*
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+*.log
+.DS_Store
+Thumbs.db
+
+# Runtime / large local data
+workspace/
+results/
+outputs/
+data/
+backup/
+app/tmp_e2e_downloads/
+
+# Personal input copies (개인 문서 복사본 - 절대 커밋 금지)
+app/tmp_quality_input/
+
+# Nested repositories (별도 저장소)
+autowrite_repo/
+Playground/
+
+# Separate projects / compare bundles / temp (별도 프로젝트·비교번들·임시)
+bizplan-autofill-codex/
+compare_bundle_autowrite/
+tmp_render_check/
+
+# Bundles / archives
+*.zip
+
+# Editor / OS
+.idea/
+.vscode/settings.json.user
+*.swp
+*~
+
+# Lock/temp Office
+~$*.docx
