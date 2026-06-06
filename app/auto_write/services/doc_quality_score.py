@@ -1,4 +1,4 @@
-"""doc_quality_score.py
+﻿"""doc_quality_score.py
 
 후처리가 끝난 DOCX 의 **문서 품질 점수(100점 만점)** 를 결정론적으로 산정한다.
 
@@ -30,11 +30,17 @@ from typing import Any
 from docx import Document
 from docx.oxml.ns import qn
 
-from .doc_quality_ops import _BULLET_PREFIX_RE, _MULTI_SPACE_RE, _PURE_GUIDE_RE
+from .doc_quality_ops import (
+    _BULLET_PREFIX_RE, _MULTI_SPACE_RE, _PURE_GUIDE_RE,
+    _text_nodes, _element_has_drawing,
+)
+from .docx_ops import _iter_body_paragraphs, _paragraph_text
 from .qa_service import QAService
 
-_CRITICAL_GUIDE_RE = QAService.CRITICAL_GUIDE_MARKER_RE
-_GENERAL_GUIDE_RE = QAService.GUIDE_MARKER_RE
+# 플레이스홀더(OOO / ○○○ / 000) — 명백한 미작성 흔적 (general 안내 판정 기준)
+# 이전에 쓰던 GUIDE_MARKER_RE("기재"·"예시"·"※" 단독)는 실제 내용에 과도하게 매치되어
+# false positive가 많았으므로 더 보수적인 기준으로 교체한다.
+_PLACEHOLDER_RE = re.compile(r"(?<!\w)(OOO|○○○|000)(?!\w)")
 
 # 유형별 '있어야 할' 구조 키워드(구조 적합성 채점용)
 _TYPE_STRUCTURE_KEYWORDS: dict[str, tuple[str, ...]] = {
@@ -95,18 +101,24 @@ def _iter_all_cell_texts(doc: Document):
 
 
 def _scan_guide(doc: Document) -> tuple[int, int]:
-    """(critical, general) 잔존 안내문구 단락/셀 수."""
+    """(critical, general) 잔존 안내문구 단락/셀 수.
+
+    remove_guide_paragraphs 와 동일한 _PURE_GUIDE_RE 를 critical 기준으로 사용한다.
+    이전에 쓰던 GUIDE_MARKER_RE("기재"·"예시"·"※" 단독)는 실제 본문에도 자주 등장해
+    false-positive 가 많아 제외했다. 대신 명백한 미작성 플레이스홀더(OOO/○○○/000) 만
+    general 로 집계한다.
+    """
     critical = general = 0
-    texts = [p.text for p in doc.paragraphs]
+    texts: list[str] = [p.text for p in doc.paragraphs]
     for cell in _iter_all_cell_texts(doc):
         texts.append(cell.text)
     for t in texts:
         t = (t or "").strip()
         if not t:
             continue
-        if _CRITICAL_GUIDE_RE.search(t) or _PURE_GUIDE_RE.search(t):
+        if _PURE_GUIDE_RE.search(t):
             critical += 1
-        elif _GENERAL_GUIDE_RE.search(t):
+        elif _PLACEHOLDER_RE.search(t):
             general += 1
     return critical, general
 
@@ -123,11 +135,25 @@ def _scan_bullet(doc: Document) -> int:
 
 
 def _scan_empty_groups(doc: Document) -> int:
-    """연속 빈 단락 그룹(2개 이상 연속) 수."""
+    """본문 직계 요소를 순회하며 연속 빈 단락 그룹(2개 이상) 수를 센다.
+
+    remove_empty_paragraphs 와 완전히 동일한 순회 방식:
+    - body 직계 자식을 전부 순회한다.
+    - 표(w:tbl)·섹션속성 등 비단락 요소는 연속 카운터를 리셋한다.
+      (표로 분리된 빈단락이 연속으로 오인되는 false-positive 방지)
+    - 완전 빈 단락 = 텍스트 없고 이미지/도형 없는 w:p.
+    """
+    body = doc.element.body
     groups = 0
     run = 0
-    for p in doc.paragraphs:
-        if not p.text.strip():
+    for el in body:
+        if el.tag != qn("w:p"):
+            if run >= 2:
+                groups += 1
+            run = 0
+            continue
+        is_empty = (not _paragraph_text(el)) and (not _element_has_drawing(el))
+        if is_empty:
             run += 1
         else:
             if run >= 2:
@@ -155,13 +181,41 @@ def _scan_font_sizes(doc: Document) -> tuple[int, int]:
 
 
 def _scan_table_ws(doc: Document) -> int:
+    """표 셀의 실제 w:t 노드에서 공백 결함 셀 수를 센다.
+
+    cleanup_table_whitespace 와 동일한 기준으로 검사한다:
+    - 첫 w:t 노드 앞 공백 / 마지막 w:t 노드 뒤 공백 / 노드 내부 다중 공백.
+    이전에 cell.text(단락 전체 합침, \\n 포함)를 검사하던 방식은
+    단락 구분 \\n 자체를 결함으로 오탐했으므로 노드 수준으로 수정한다.
+    merged cell 중복 카운팅도 방지한다.
+    """
+    seen: set[int] = set()
     defects = 0
-    for cell in _iter_all_cell_texts(doc):
-        t = cell.text
-        if not t:
-            continue
-        if t != t.strip() or _MULTI_SPACE_RE.search(t):
-            defects += 1
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                tc = cell._tc
+                tc_id = id(tc)
+                if tc_id in seen:
+                    continue
+                seen.add(tc_id)
+                if _element_has_drawing(tc):
+                    continue
+                nodes = [n for n in _text_nodes(tc) if n.text]
+                if not nodes:
+                    continue
+                has_defect = False
+                if nodes[0].text != nodes[0].text.lstrip("  　\t"):
+                    has_defect = True
+                elif nodes[-1].text != nodes[-1].text.rstrip("  　\t"):
+                    has_defect = True
+                else:
+                    for n in nodes:
+                        if _MULTI_SPACE_RE.search(n.text):
+                            has_defect = True
+                            break
+                if has_defect:
+                    defects += 1
     return defects
 
 
@@ -220,8 +274,9 @@ def score_document(
 
     # 4. 글자크기·스타일 일관성 (15)
     kinds, outliers = _scan_font_sizes(doc)
-    # 본문 폰트 종류가 4개 이하면 양호, 초과분/이상치 감점
-    penalty4 = max(0, kinds - 4) * 2.0 + outliers * 2.0
+    # 정부양식 문서는 제목·소제목·본문·표 등으로 6종 이하면 양호로 본다(이전 기준 4종은 과도).
+    # 폰트 정규화(normalize_font_sizes)가 기본 off 이므로 이상치 계수만 적용한다.
+    penalty4 = max(0, kinds - 6) * 1.0 + outliers * 2.0
     s4 = max(0.0, 15.0 - penalty4)
     items.append(ScoreItem("font_consistency", "글자크기·스타일 일관성", s4, 15,
                            max(0, kinds - 4) + outliers,
