@@ -43,8 +43,11 @@ _EMPHASIS_KEYWORDS = (
     "R&D", "연구개발", "KPI", "목표", "기대효과", "투자유치", "점유율",
     "성장률", "ROI", "매출액", "거래액", "MAU", "전환율", "원가절감",
 )
-# 숫자/단위 패턴 (강조는 "키워드 + 수치" 동반 시에만 → 과잉 강조 방지)
-_NUMERIC_RE = re.compile(r"\d|％|%|억|만원|천원|배|건|명|개사|개|회|점|위|차")
+# 숫자/단위 패턴 (강조는 "키워드 + 실제 수치" 동반 시에만 → 과잉 강조 방지)
+# 반드시 '아라비아/전각 숫자' 가 있어야 정량 성과로 인정한다.
+# 단독 한글 단위(개/회/점/위/차/명/건/배)는 '개발·관점·위해·차별·설명·요건' 등에서
+# 오탐을 유발하므로 수치로 인정하지 않는다(require_numeric 강화).
+_NUMERIC_RE = re.compile(r"[0-9０-９]")
 # "명백한 양식 안내" 로 판단할 보수적 패턴 (단락 통째 삭제 대상)
 _PURE_GUIDE_RE = re.compile(
     r"^\s*(?:[<\(［【]\s*)?(?:작성\s*요령|작성\s*방법|작성\s*예시|기재\s*요령|기재\s*방법|"
@@ -88,6 +91,30 @@ def _element_has_drawing(element) -> bool:
     """이미지/도형(w:drawing, w:pict)을 포함하면 True (삭제 금지 판단용)."""
     return bool(element.find(".//" + qn("w:drawing")) is not None
                 or element.find(".//" + qn("w:pict")) is not None)
+
+
+def _run_has_text(run) -> bool:
+    """런에 비어있지 않은 텍스트 노드가 있으면 True."""
+    return any((n.text or "") for n in run.findall(qn("w:t")))
+
+
+def _bold_is_on(rpr) -> bool:
+    """rPr 에 켜진 bold(<w:b>, val 이 false/0/off 가 아님)가 있으면 True."""
+    if rpr is None:
+        return False
+    b = rpr.find(qn("w:b"))
+    if b is None:
+        return False
+    val = b.get(qn("w:val"))
+    return val is None or str(val).lower() not in ("0", "false", "off")
+
+
+def _para_is_bold(para) -> bool:
+    """텍스트가 있는 런 중 하나라도 bold 가 켜진 단락이면 True."""
+    for run in para.findall(qn("w:r")):
+        if _run_has_text(run) and _bold_is_on(run.find(qn("w:rPr"))):
+            return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -239,23 +266,51 @@ def emphasize_key_sentences(
     keywords: tuple[str, ...] = _EMPHASIS_KEYWORDS,
     underline: bool = False,
     require_numeric: bool = True,
-    max_emphasis: int = 60,
+    max_emphasis_ratio: float = 0.15,
+    hard_emphasis_ratio: float = 0.30,
+    min_emphasis: int = 1,
+    max_emphasis: int | None = None,
 ) -> int:
     """정량 성과(매출·고용·수출·특허·KPI 등) 핵심 키워드가 든 단락을 Bold 처리.
 
-    과잉 강조를 막기 위해:
-    - 기본적으로 '키워드 + 수치(숫자/%/억/명/건...)' 가 함께 있는 단락만 강조(require_numeric)
-    - 이미 표 안에 있는 단락은 제외(표는 보통 데이터라 강조 의미 적음)
-    - 단락 전체 길이가 4자 미만이면 제외(제목/기호 단락 방지)
-    - 최대 ``max_emphasis`` 단락까지만 강조
-    underline=True 면 밑줄도 추가(기본 off).
+    과잉 강조(문서 전체가 굵어지는 현상)를 막기 위해 **비율 기반 예산**으로 강조량을
+    제한한다:
+    - 강조 허용 총량 = 본문 비어있지 않은 단락 수 × ``max_emphasis_ratio``(기본 15%).
+      단 ``hard_emphasis_ratio``(기본 30%)를 절대 넘지 않는다 — 채점의 과잉강조
+      게이트(0.35) 직전에서 차단된다.
+    - **이미 강조된 단락(원본 포함)도 예산에 합산**한다. 원본이 이미 많이 굵으면
+      추가 강조를 줄이거나 하지 않는다(재실행해도 누적 폭주 방지 = 멱등성).
+    - '키워드 + 실제 숫자' 가 함께 있는 단락만 강조(require_numeric, 단독 한글 단위 제외).
+    - 표 안 단락 제외(``_iter_body_paragraphs``), 길이 8자 미만(제목/캡션) 제외,
+      이미 강조된 단락 제외.
+    - ``max_emphasis`` 가 주어지면 추가 건수 절대 상한으로도 적용(하위호환, 기본 None).
+    underline=True 면 밑줄도 함께 추가(기본 off).
     """
+    paras = list(_iter_body_paragraphs(doc))
+    total_nonempty = sum(1 for p in paras if _paragraph_text(p).strip())
+    if total_nonempty == 0:
+        return 0
+
+    # 이미 강조된 단락(원본 포함) — 예산에서 차감
+    existing_bold = sum(1 for p in paras if _para_is_bold(p))
+    # 비율 기반 허용 총량(원본 포함). 작은 문서도 최소 강조는 가능하되 hard cap 으로 제한.
+    hard_cap = int(total_nonempty * hard_emphasis_ratio)
+    allowed_total = max(min_emphasis, round(total_nonempty * max_emphasis_ratio))
+    allowed_total = min(allowed_total, hard_cap) if hard_cap > 0 else min(allowed_total, 1)
+    budget = allowed_total - existing_bold
+    if max_emphasis is not None:
+        budget = min(budget, max_emphasis)
+    if budget <= 0:
+        return 0
+
     emphasized = 0
-    for para in _iter_body_paragraphs(doc):
-        if emphasized >= max_emphasis:
+    for para in paras:
+        if emphasized >= budget:
             break
         text = _paragraph_text(para)
-        if len(text) < 4:
+        if len(text.strip()) < 8:
+            continue
+        if _para_is_bold(para):
             continue
         if not any(kw in text for kw in keywords):
             continue
@@ -267,7 +322,7 @@ def emphasize_key_sentences(
         applied = False
         for run in runs:
             # 텍스트가 있는 런만
-            if not any((n.text or "") for n in run.findall(qn("w:t"))):
+            if not _run_has_text(run):
                 continue
             rpr = run.find(qn("w:rPr"))
             if rpr is None:

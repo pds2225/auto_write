@@ -30,14 +30,20 @@ description: >
 단락이 **아래 조건을 모두** 만족할 때만 강조 후보가 된다.
 
 1. **본문 직계 단락**일 것 (`_iter_body_paragraphs(doc)` 순회 대상 — 표 셀 제외).
-2. 단락 전체 텍스트 길이가 **4자 이상**일 것 (`len(text) < 4` 이면 제외 → 제목/기호 단락 방지).
+2. 단락 전체 텍스트 길이가 **8자 이상**일 것 (`len(text.strip()) < 8` 이면 제외 → 제목/기호/캡션 단락 방지).
 3. 핵심 키워드가 **하나 이상 포함**될 것. 키워드 목록(`_EMPHASIS_KEYWORDS`):
    `매출, 영업이익, 순이익, 고용, 채용, 수출, 특허, 인증, R&D, 연구개발, KPI, 목표, 기대효과,`
    `투자유치, 점유율, 성장률, ROI, 매출액, 거래액, MAU, 전환율, 원가절감`.
-4. **수치 동반**일 것 (`require_numeric=True` 기본값). `_NUMERIC_RE` 패턴 중 하나가 포함되어야 한다:
-   숫자(`\d`), `％`, `%`, `억`, `만원`, `천원`, `배`, `건`, `명`, `개사`, `개`, `회`, `점`, `위`, `차`.
-   → "키워드 + 수치" 동반 시에만 강조해 **과잉 강조를 방지**한다.
-5. 강조 누적 단락 수가 **`max_emphasis`(기본 60)** 미만일 것. 60개에 도달하면 즉시 중단.
+4. **실제 숫자 동반**일 것 (`require_numeric=True` 기본값). `_NUMERIC_RE = [0-9０-９]` — 즉
+   아라비아/전각 **숫자가 반드시 있어야** 한다. 단독 한글 단위(`개·회·점·위·차·명·건·배`)는
+   "개발·관점·위해·차별·설명·요건" 등에서 오탐을 유발하므로 **수치로 인정하지 않는다**.
+   → "키워드 + 실제 숫자" 동반 시에만 강조해 **과잉 강조를 방지**한다.
+5. **아직 강조되지 않은 단락**일 것 (이미 Bold 인 단락은 건너뜀).
+6. **비율 기반 강조 예산** 안일 것: 강조 허용 총량 = 본문 비어있지 않은 단락 수 ×
+   `max_emphasis_ratio`(기본 **15%**), 단 `hard_emphasis_ratio`(기본 **30%**)를 절대 초과 금지.
+   **이미 강조된 단락(원본 포함)도 예산에서 차감**한다 — 원본이 이미 굵으면 추가 강조를
+   줄이거나 0이 된다(재실행해도 누적 폭주 없음 = 멱등성). `max_emphasis`(기본 None)를 주면
+   추가 건수 절대 상한으로도 적용(하위호환).
 
 ## 수정 규칙
 
@@ -52,11 +58,11 @@ description: >
 ## 예외 규칙
 
 - **표 셀 내부 단락**은 강조하지 않는다(`_iter_body_paragraphs` 가 본문 직계만 반환).
-- **4자 미만 단락**은 제외(제목·번호·기호만 있는 단락 보호).
-- **키워드만 있고 수치가 없는 단락**은 제외(`require_numeric=True`). 예: "매출 증대를 목표로 한다"(숫자 없음) → 강조 안 함.
-- **수치만 있고 키워드가 없는 단락**도 제외.
-- 60개 초과 단락은 강조하지 않는다(`max_emphasis=60`) — 문서 전체가 굵어지는 과잉 강조 방지.
-- 이미 Bold 가 적용된 런에는 다시 추가하지 않는다(`w:b` 존재 시 skip).
+- **8자 미만 단락**은 제외(제목·번호·기호·캡션만 있는 단락 보호).
+- **키워드만 있고 실제 숫자가 없는 단락**은 제외(`require_numeric=True`). 예: "매출 증대를 목표로 한다"(숫자 없음) → 강조 안 함. "개발·관점·위해·차별"처럼 한글 단위가 들어간 단어도 숫자가 없으면 강조 안 함.
+- **숫자만 있고 키워드가 없는 단락**도 제외.
+- **비율 예산 초과 단락**은 강조하지 않는다 — 본문의 15%(상한 30%)를 넘기지 않으며, 원본이 이미 굵으면 추가 강조가 0이 될 수 있다(문서 전체가 굵어지는 과잉 강조 방지).
+- **이미 강조된 단락**은 건너뛴다(`_para_is_bold` True → skip). 이미 Bold 가 적용된 런에도 다시 추가하지 않는다(`w:b` 존재 시 skip).
 - 원본 DOCX 는 절대 덮어쓰지 않는다. 후처리는 백업 후 출력 경로에만 저장(출력=입력이면 ValueError).
 - AI 키를 사용하지 않는다(완전 결정론적).
 
@@ -93,13 +99,14 @@ python -c "import sys; sys.path.insert(0, '.'); from docx import Document; from 
 
 - 영향 배점 항목: **주요문장 강조 (10점)** — `doc_quality_score.score_document` 의 강조 항목.
 - 강조된 단락 수(`paragraphs_emphasized`)가 0이면 해당 항목 감점, 적정 강조 시 만점에 근접.
-- 과잉 강조(60개 상한 도달 등)는 가독성 저해로 간주될 수 있으므로 무분별한 강조를 피한다.
+- 채점 기준: 강조 비율 **35% 초과 시 과잉 강조로 감점**(10→5점), 0개면 4점, 그 사이는 10점.
+  비율 예산(15%/상한 30%)이 이 게이트 직전에서 과잉을 차단한다.
 - 게이트: 총점 90 우수 / 85 통과(passed=총점>=85) / 70 보완필요 / 70 미만 실패.
 
 ## 연결 코드·CLI (실제 함수/명령)
 
 - 핵심 함수: `app/auto_write/services/doc_quality_ops.py`
-  - `emphasize_key_sentences(doc, *, keywords=_EMPHASIS_KEYWORDS, underline=False, require_numeric=True, max_emphasis=60) -> int`
+  - `emphasize_key_sentences(doc, *, keywords=_EMPHASIS_KEYWORDS, underline=False, require_numeric=True, max_emphasis_ratio=0.15, hard_emphasis_ratio=0.30, min_emphasis=1, max_emphasis=None) -> int`
   - 통합 실행: `run_all(doc, remove_guides=True, emphasize=True, underline=False, normalize_fonts=False) -> QualityOpsReport`
   - 재사용 헬퍼: `_iter_body_paragraphs`, `_paragraph_text`(docx_ops.py)
 - 오케스트레이터: `app/auto_write/services/document_quality_orchestrator.py`

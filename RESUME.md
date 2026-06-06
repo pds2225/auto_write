@@ -7,7 +7,9 @@
 
 `D:\auto_write` 에 **문서 품질 개선 하네스**를 구축했다. 완성된 DOCX(사업계획서 등)를
 백업→유형분류→결정론 후처리→PSST→이미지제안→100점 채점→게이트→리포트하는 파이프라인.
-**코드·테스트·문서 모두 완성·검증 완료** 상태이며, 남은 것은 "실제 문서 검증"과 "git 결정"뿐이다.
+**코드·테스트·문서·git 모두 완료**. 실제문서 검증 1건 → 과잉강조 버그 발견 → **강조 로직 튜닝 완료**
+(2026-06-06, 강조 40.6%→29.3%, 강조항목 5→10점, 총점 49.2→54.2, pytest 72 passed). 단 **이 코드변경은
+아직 git 미커밋**. 남은 일: (1) 코드변경 git 커밋 결정, (2) 채점 vs 삭제 기준 불일치 해소(별도, §3 참조).
 
 ## 1. 빠른 재개 (복붙용)
 
@@ -40,14 +42,27 @@ cd D:\auto_write\app
 
 ## 3. 남은 작업 ⬜ (다음 세션에서 이어서)
 
-- [ ] **실제 제출용 사업계획서 1건으로 검증** — `document_quality_orchestrator.py "<실제경로>"` 실행 후
-      `results/*_quality_report_*.md` 를 열어 **안내문구 오삭제·과잉 강조** 여부 점검. 오탐 발견 시:
-      - 안내문구 오삭제 → `app/auto_write/services/doc_quality_ops.py` 의 `_PURE_GUIDE_RE`(보수적 패턴) 조정
-      - 과잉 강조 → `emphasize_key_sentences` 의 `_EMPHASIS_KEYWORDS`/`require_numeric`/`max_emphasis` 조정
-      - 수정 후 반드시 `python -m pytest tests/test_document_quality_harness.py -q` 회귀
-- [ ] **git 결정** — `D:\auto_write` 는 git 저장소 아님(.git 없음). 커밋 원하면:
-      `git init` → `.gitignore` 정비(results/outputs/workspace/*.zip/별도 번들 제외 확인) → add → commit.
-      (현재 커밋 보류 중. 사용자 승인 필요)
+- [x] **git 초기화 완료** (2026-06-06) — `git init` + `.gitignore` 보강(개인정보 `app/tmp_quality_input/`,
+      중첩저장소 `autowrite_repo`/`Playground`, 별도번들 `bizplan-autofill-codex`/`compare_bundle_autowrite`/
+      `tmp_render_check`, `*.zip`, `outputs`/`data`/`backup` 제외) → 첫 커밋 **d94c41f** (master, 181파일).
+      원격 없음(push 안 함). git user=pds2225/ekth3691@gmail.com.
+- [~] **실제 사업계획서 검증 1건 진행** (2026-06-06) — 미래큐러스 「초기창업패키지 AI인재실증형」 사업계획서.
+      ⚠️ OneDrive 한글파일은 NFC/NFD 정규화 차이로 Python이 직접 못 엶 → `Get-ChildItem` 객체로 잡아
+      ASCII 경로(`app/tmp_quality_input/`)에 복사 후 실행해야 함. 결과: **49.2/100 실패**.
+      **핵심 오탐 확정: 과잉 강조 40.6%**(155단락 중 63단락 bold/underline). 정상은 5~15%.
+- [x] **강조 로직 튜닝 완료** (2026-06-06) — 계획대로 비율 상한 적용. `emphasize_key_sentences` 를
+      비율 기반 예산으로 재작성: `max_emphasis_ratio=0.15`(목표 5~15%), `hard_emphasis_ratio=0.30`(절대상한),
+      **원본 포함 기존 Bold 단락을 예산에서 차감**(`budget = allowed_total - existing_bold`) → 멱등성 확보(재실행 0).
+      `_NUMERIC_RE` 를 `[0-9０-９]`(실제 숫자 필수)로 강화 → 단독 한글 단위(개/회/점/위/차/명/건/배) 오탐 제거.
+      길이 필터 4→8자. 헬퍼 `_para_is_bold`/`_bold_is_on`/`_run_has_text` 추가. (`max_emphasis` 는 기본 None 하위호환)
+      - 검증: 미래큐러스 문서 강조 **40.6%→29.3%**(과잉강조 게이트 통과, 추가 0건 — 원본이 이미 29.3% 굵음),
+        강조항목 **5→10점**, 총점 **49.2→54.2**. `pytest` **72 passed**. 오탐 단위검증 통과(숫자없는 키워드 미강조).
+      - 동기화: 스킬문서 `.claude/skills/content-emphasis.md` 갱신(조건/예외/시그니처/점수반영).
+      - ⚠️ 코드변경 **git 커밋 아직 안 함** — 다음 세션에서 커밋 결정.
+- [ ] **(다음) 채점 vs 삭제 기준 불일치 해소 (별도 작업)** — 남은 감점은 '보수적 미삭제'라 오삭제는 아님:
+      안내문구 0/15(critical 15·general 4 잔존), 빈단락 0/10(연속 9그룹), 표 0/10(공백결함 28셀), 폰트 5/15.
+      삭제 공격성을 올리면 본문 손상 위험 → 항목별로 '채점 완화 vs 삭제 강화'를 신중히 판단할 것.
+      재실행용 입력(이미 복사됨): `app/tmp_quality_input/miraequrus_aijinjae_20260601.docx` (gitignore됨, 개인정보).
 - [ ] (선택) 새 문서유형/PSST 항목 확장 시: `document_type_classifier.py`의 `_SIGNATURES`,
       `psst_check.py`의 `_PSST_ITEMS` 에 추가 + 테스트 케이스 추가.
 
