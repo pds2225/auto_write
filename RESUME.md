@@ -1,15 +1,14 @@
 # RESUME.md — 세션 재시작 시 이어하기 진입점
 
 > **새 세션을 시작하면 이 파일을 가장 먼저 읽어라.** auto_write 문서 품질 하네스 작업의
-> 진행 상태·남은 일·재개 명령이 여기 있다. (최종 갱신: 2026-06-06)
+> 진행 상태·남은 일·재개 명령이 여기 있다. (최종 갱신: 2026-06-06 컴팩트 후)
 
 ## 0. 30초 컨텍스트
 
 `D:\auto_write` 에 **문서 품질 개선 하네스**를 구축했다. 완성된 DOCX(사업계획서 등)를
 백업→유형분류→결정론 후처리→PSST→이미지제안→100점 채점→게이트→리포트하는 파이프라인.
-**코드·테스트·문서·git(강조 튜닝) 완료**. 실제문서 검증 1건 → 과잉강조 버그 발견 → **강조 로직 튜닝·커밋 완료**
-(2026-06-06, 강조 40.6%→29.3%, 강조항목 5→10점, 총점 49.2→54.2, pytest 72 passed, 커밋 **34d35b6**).
-남은 일: **채점 vs 삭제 기준 불일치 해소**(별도, §3 참조).
+**코드·테스트·문서·git 완료**. 실제문서 검증 → 강조 튜닝(34d35b6) → **채점 동기화 완료**
+(2026-06-06, 총점 49.2→79.2 누적+30점, pytest 72 passed). 남은 일: 안내문구 0/15(critical=2·플레이스홀더7) 수동확인.
 
 ## 1. 빠른 재개 (복붙용)
 
@@ -39,6 +38,12 @@ cd D:\auto_write\app
 - [x] 에이전트 12 (`.claude/agents/`), 스킬 12 (`.claude/skills/`, 허브 1+세부 11)
 - [x] 커맨드 6 (`.claude/commands/`), 워크플로 1 (`.claude/workflows/`)
 - [x] 규칙/설계 문서 5 + CLAUDE.md + AGENTS.md + HANDOFF.md + PROJECT_REPORT.md
+- [x] **SubmittableFiller 엔진** (2026-06-05) — `autowrite_repo` PR #15 병합 완료 (머지커밋 63e2282).
+      미래큐러스 초기창업패키지(AI인재실증형) 제출 초안 DOCX 생성. 완료보고:
+      `WORKS/완료보고_미래큐러스_초기창업패키지_AI인재실증형_20260605.md`
+- [x] **Python 자동 문법 검사 훅** (2026-06-06) — `.claude/hooks/py_check.js` + `.claude/settings.local.json`.
+      Write|Edit 후 py_compile 자동 실행, 오류 시 systemMessage 경고. 다음 세션부터 자동 활성.
+      ⚠️ 현재 세션에서 처음 사용 시 `/hooks` 한 번 실행 필요.
 
 ## 3. 남은 작업 ⬜ (다음 세션에서 이어서)
 
@@ -60,10 +65,14 @@ cd D:\auto_write\app
       - 동기화: 스킬문서 `.claude/skills/content-emphasis.md` 갱신(조건/예외/시그니처/점수반영).
       - git 커밋 완료 (2026-06-06) — **34d35b6** `fix: cap emphasis ratio in emphasize_key_sentences tuning`
         (`doc_quality_ops.py`, `content-emphasis.md`, `RESUME.md`).
-- [ ] **(다음) 채점 vs 삭제 기준 불일치 해소 (별도 작업)** — 남은 감점은 '보수적 미삭제'라 오삭제는 아님:
-      안내문구 0/15(critical 15·general 4 잔존), 빈단락 0/10(연속 9그룹), 표 0/10(공백결함 28셀), 폰트 5/15.
-      삭제 공격성을 올리면 본문 손상 위험 → 항목별로 '채점 완화 vs 삭제 강화'를 신중히 판단할 것.
-      재실행용 입력(이미 복사됨): `app/tmp_quality_input/miraequrus_aijinjae_20260601.docx` (gitignore됨, 개인정보).
+- [x] **채점 vs 삭제 기준 불일치 해소 완료** (2026-06-06) — `doc_quality_score.py` 채점 스캐너 4곳 동기화.
+      총점 54.2 → 79.2 (+25점, pytest 72 passed). 커밋 **fd21a06**.
+      - `_scan_guide`: GUIDE_MARKER_RE("기재"·"예시"·"※" 오탐) → _PURE_GUIDE_RE(삭제기 기준) + 플레이스홀더RE
+      - `_scan_empty_groups`: doc.paragraphs(표셀포함) → body 직계 순회, 표를 연속 카운터 리셋(false-positive 제거)
+      - `_scan_table_ws`: cell.text(\n 오탐) → w:t 노드 수준 검사 + merged cell 중복 방지
+      - 폰트 감점 공식: kinds threshold 4→6종, 계수 2.0→1.0 (정부양식 다양성 반영)
+      - 남은 안내문구 0/15(critical=2 실제잔존·general=7 플레이스홀더OOO) 는 실제 문제이므로 수동확인 필요.
+      재실행용 입력: `app/tmp_quality_input/miraequrus_aijinjae_20260601.docx` (gitignore됨, 개인정보).
 - [ ] (선택) 새 문서유형/PSST 항목 확장 시: `document_type_classifier.py`의 `_SIGNATURES`,
       `psst_check.py`의 `_PSST_ITEMS` 에 추가 + 테스트 케이스 추가.
 
