@@ -2,6 +2,7 @@
 실제 워크스페이스(D:\\auto_write\\workspace)를 대상으로 동작한다.
 """
 from __future__ import annotations
+import os
 import sys
 from datetime import date
 from pathlib import Path
@@ -15,7 +16,7 @@ from auto_write.services.render_service import RenderService
 from auto_write.services.qa_service import QAService
 from auto_write.services.project_service import ProjectService
 
-FORM = Path(r"C:\Users\ekth3\Downloads\(초기) [별첨 1] 2026년도 초기창업패키지(AI 인재 실증형) 사업계획서 양식.docx")
+FORM = Path(os.getenv("AUTO_WRITE_CHOCHANG_FORM", r"C:\Users\ekth3\Downloads\(초기) [별첨 1] 2026년도 초기창업패키지(AI 인재 실증형) 사업계획서 양식.docx"))
 
 
 def make_service() -> ProjectService:
@@ -51,7 +52,7 @@ def cmd_analyze() -> None:
     print("questions   :", len(profile.questions))
 
 
-MIRAE_BASE = Path(r"C:\Users\ekth3\OneDrive\바탕 화면\다솜\경영지도사 개인\02. 밸류업파트너스\2026 미래큐러스")
+MIRAE_BASE = Path(os.getenv("AUTO_WRITE_MIRAE_BASE", r"C:\Users\ekth3\OneDrive\바탕 화면\다솜\경영지도사 개인\02. 밸류업파트너스\2026 미래큐러스"))
 
 USER_BRIEF = (
     "미래큐러스(Miraculous)는 'AI가 실패하거나 해킹되어도 독립 하드웨어 안전 도메인이 인간을 보호한다'는 "

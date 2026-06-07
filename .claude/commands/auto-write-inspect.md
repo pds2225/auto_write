@@ -37,8 +37,8 @@ argument-hint: <docx경로> [--report]
 
 ## 호출 에이전트
 
-- `document-architect`: 구조 덤프 결과 해석 및 전체 진단 총괄.
-- `qa-document-agent`: `--report` 시 검수 메시지(필수입력 누락·안내문구·플레이스홀더) 요약.
+- `doc-architect`: 구조 덤프 결과 해석 및 전체 진단 총괄.
+- `doc-quality-gate`: `--report` 시 검수 메시지(필수입력 누락·안내문구·플레이스홀더) 요약.
 
 ## 출력물
 

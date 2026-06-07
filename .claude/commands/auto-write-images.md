@@ -26,7 +26,7 @@ argument-hint: <입력DOCX경로> [--max N] [--json]
 ## 실행 워크플로우(단계)
 
 1. 입력 경로 존재 확인. 없으면 즉시 중단하고 "실행 막힘"으로 보고한다.
-2. `infographic-suggestion-agent` 를 호출해 `suggest_images_docx(path, max_suggestions=N)`
+2. `doc-analyzer` 를 호출해 `suggest_images_docx(path, max_suggestions=N)`
    (내부적으로 `suggest_images(doc, max_suggestions=N)`)를 실행한다.
    - 문서 단락 + 표 첫 행(헤더) 텍스트를 앵커 후보로 수집한다.
    - 키워드 매칭으로 시각화 유형을 결정하되 **같은 유형은 1회만** 제안한다.
@@ -38,7 +38,7 @@ argument-hint: <입력DOCX경로> [--max N] [--json]
 
 ## 호출 에이전트
 
-- `infographic-suggestion-agent` (단독). `infographic_suggest.suggest_images` 호출 전담.
+- `doc-analyzer` (인포그래픽 제안 담당). `infographic_suggest.suggest_images` 호출 전담.
 - 전체 품질 파이프라인(분류→후처리→PSST→이미지→점수→게이트)이 필요하면
   `/auto-write-quality` 또는 `document-quality-orchestrator` 스킬을 사용하라.
 

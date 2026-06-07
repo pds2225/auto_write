@@ -43,8 +43,7 @@ PSST = Problem(문제인식) / Solution(실현가능성) / Scale-up(성장전략
 
 ## 호출 에이전트
 
-- `psst-review-agent` (주): PSST 검사 실행·해석·보고.
-- `document-type-classifier` (보조): 입력이 PSST 대상 유형인지 사전 확인.
+- `doc-analyzer` (주): 유형 분류로 PSST 대상 여부 확인 → PSST 검사 실행·해석·보고.
 
 ## 출력물
 

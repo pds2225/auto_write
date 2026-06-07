@@ -40,14 +40,12 @@ argument-hint: <입력DOCX경로> [--output 결과.docx] [--underline] [--keep-g
 
 이 커맨드는 단일 CLI 실행이 핵심이며, 필요 시 다음 에이전트/스킬과 연계된다(허브: `document-quality-orchestrator`).
 
-- document-type-classifier — 문서유형 분류
-- template-cleanup-agent — 양식 안내문구 제거
-- formatting-normalizer — 글머리표 공백·표 내부 공백 정리
-- content-emphasis-agent — 핵심문장 강조
-- psst-review-agent — PSST 4영역 구조검사
-- infographic-suggestion-agent — 시각화 제안
-- quality-gate-agent — 품질점수 산정·게이트 판정
-- backup-rollback-agent — 백업·롤백
+- doc-analyzer — 문서유형 분류 · PSST 4영역 구조검사 · 시각화 제안 (읽기 전용 분석)
+- doc-postprocessor — 양식 안내문구 제거 · 서식 정규화(글머리표/표/빈문단/글자크기) · 핵심문장 강조
+- doc-quality-gate — 품질점수 산정·85점 게이트 판정 · 회귀·비훼손 검수
+- doc-safety-guard — 원본 백업·롤백 · 보안 게이트(Secret/위험파일/무단API/원본덮어쓰기 차단)
+- doc-architect — 파이프라인 설계·단계 조율
+- doc-writer — 최종 리포트·핸드오프 문서화
 
 ## 출력물
 

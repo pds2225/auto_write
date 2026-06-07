@@ -38,9 +38,9 @@ argument-hint: <입력DOCX> [--output 결과DOCX] [--underline] [--json] [--roll
 6. 점수가 낮거나 결과가 이상하면 `--rollback` 으로 원본을 복구한다.
 
 ## 호출 에이전트
-- `quality-gate-agent` : 품질점수 산출과 게이트 판정(우수/통과/보완필요/실패) 해석을 담당한다.
-- `documentation-agent` : md/json 리포트 내용을 사용자 보고 형식으로 정리한다.
-- `document-type-classifier` : 입력 문서 유형 판별 결과를 확인한다.
+- `doc-quality-gate` : 품질점수 산출과 게이트 판정(우수/통과/보완필요/실패) 해석을 담당한다.
+- `doc-writer` : md/json 리포트 내용을 사용자 보고 형식으로 정리한다.
+- `doc-analyzer` : 입력 문서 유형 판별 결과를 확인한다.
 - (별도 호출 없이 오케스트레이터 단일 실행만으로 충분하면 위 에이전트는 결과 해석 보조용으로만 사용한다.)
 
 ## 출력물
