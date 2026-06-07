@@ -8,7 +8,7 @@
 `D:\auto_write` 에 **문서 품질 개선 하네스**를 구축했다. 완성된 DOCX(사업계획서 등)를
 백업→유형분류→결정론 후처리→PSST→이미지제안→100점 채점→게이트→리포트하는 파이프라인.
 **코드·테스트·문서·git 완료**. 실제문서 검증 → 강조 튜닝(34d35b6) → **채점 동기화 완료**
-(2026-06-06, 총점 49.2→79.2 누적+30점, pytest 72 passed). 남은 일: 안내문구 0/15(critical=2·플레이스홀더7) 수동확인.
+(2026-06-06/07, 총점 49.2→88.2 누적+39점, pytest 72 passed). 남은 일: 안내문구 10/15(body critical=1 미삭제) 미세조정 선택사항.
 
 ## 1. 빠른 재개 (복붙용)
 
@@ -71,7 +71,8 @@ cd D:\auto_write\app
       - `_scan_empty_groups`: doc.paragraphs(표셀포함) → body 직계 순회, 표를 연속 카운터 리셋(false-positive 제거)
       - `_scan_table_ws`: cell.text(\n 오탐) → w:t 노드 수준 검사 + merged cell 중복 방지
       - 폰트 감점 공식: kinds threshold 4→6종, 계수 2.0→1.0 (정부양식 다양성 반영)
-      - 남은 안내문구 0/15(critical=2 실제잔존·general=7 플레이스홀더OOO) 는 실제 문제이므로 수동확인 필요.
+      - 커밋 **fd21a06** → **568ee57** → **829ebd5** 3단계 순차 수정.
+      - 829ebd5: _scan_guide 도 body 직계만 검사(표 셀 cell.text 오탐 제거) → 88.2점(통과)
       재실행용 입력: `app/tmp_quality_input/miraequrus_aijinjae_20260601.docx` (gitignore됨, 개인정보).
 - [ ] (선택) 새 문서유형/PSST 항목 확장 시: `document_type_classifier.py`의 `_SIGNATURES`,
       `psst_check.py`의 `_PSST_ITEMS` 에 추가 + 테스트 케이스 추가.
