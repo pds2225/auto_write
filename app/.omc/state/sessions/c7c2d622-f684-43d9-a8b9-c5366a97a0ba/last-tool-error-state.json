@@ -1,7 +1,0 @@
-{
-  "tool_name": "Glob",
-  "tool_input_preview": "{\"pattern\":\"D:\\\\auto_write\\\\workspace\\\\projects\\\\*\\\\output\\\\output.docx\"}",
-  "error": "EUNKNOWN: unknown error, uv_spawn",
-  "timestamp": "2026-06-05T05:29:40.034Z",
-  "retry_count": 1
-}

@@ -1,7 +1,0 @@
-{
-  "tool_name": "PowerShell",
-  "tool_input_preview": "{\"command\":\"$env:PYTHONPATH = 'D:\\\\auto_write\\\\app'\\n$py = \\\"C:\\\\Users\\\\ekth3\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python311\\\\python.exe\\\"\\n$code = @'\\nfrom docx import Document\\nimport io, sys\\nout = r...",
-  "error": "Exit code 1\n���� �ܶ���: 155\r\n��ü����(��ü run bold/underline) �ܶ���: 63\r\n����: 40.6%\r\n---- ������ ���� ���� 12�� ----\r\n  * �� ��������� AI �����η��� ä���Ͽ� �޸ӳ��̵��� ���� �ൿ�� �ǽð����� �м��ϰ� ������ �� �ִ� AI ��\r\n  * 1�ܰ� : AI �����η� ä�� �� ����ȯ�� ����\r\n  * �� ����� AI ��� �޸ӳ��̵� �κ� �������� Ĩ �� Angel AI �÷����� �����Ͽ� �޸ӳ��̵�, ����� \r\n  * ����ȭ�� �������� ����� ���� Ư�㸦 ������� �κ� ������, �ݵ�ü ���, AI �÷��� ������� ��� ���� \r\n  * ���͸��� Ư�� IP ���̼���, �������, ��������, ���� �÷��� ���� ...",
-  "timestamp": "2026-06-06T06:57:00.491Z",
-  "retry_count": 1
-}
