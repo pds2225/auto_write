@@ -1,4 +1,4 @@
-﻿"""doc_quality_score.py
+"""doc_quality_score.py
 
 후처리가 끝난 DOCX 의 **문서 품질 점수(100점 만점)** 를 결정론적으로 산정한다.
 
@@ -101,19 +101,16 @@ def _iter_all_cell_texts(doc: Document):
 
 
 def _scan_guide(doc: Document) -> tuple[int, int]:
-    """(critical, general) 잔존 안내문구 단락/셀 수.
+    """(critical, general) 잔존 안내문구 — body 직계 단락만 검사.
 
-    remove_guide_paragraphs 와 동일한 _PURE_GUIDE_RE 를 critical 기준으로 사용한다.
-    이전에 쓰던 GUIDE_MARKER_RE("기재"·"예시"·"※" 단독)는 실제 본문에도 자주 등장해
-    false-positive 가 많아 제외했다. 대신 명백한 미작성 플레이스홀더(OOO/○○○/000) 만
-    general 로 집계한다.
+    remove_guide_paragraphs 와 완전히 동일한 범위(body 직계)로 스캔한다.
+    표 셀 내부는 삭제 대상이 아니므로 채점에서도 제외한다.
+    - critical : _PURE_GUIDE_RE 에 매치 (삭제기 기준과 동일)
+    - general  : body 직계 단락에 OOO/○○○/000 플레이스홀더가 있는 경우
     """
     critical = general = 0
-    texts: list[str] = [p.text for p in doc.paragraphs]
-    for cell in _iter_all_cell_texts(doc):
-        texts.append(cell.text)
-    for t in texts:
-        t = (t or "").strip()
+    for p in _iter_body_paragraphs(doc):
+        t = _paragraph_text(p).strip()
         if not t:
             continue
         if _PURE_GUIDE_RE.search(t):
