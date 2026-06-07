@@ -44,3 +44,4 @@ tmp_render_check/
 ~$*.docx
 .omc/
 .bkit/
+.claude/worktrees/
