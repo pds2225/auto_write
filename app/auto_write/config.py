@@ -24,6 +24,8 @@ class Settings:
     anthropic_api_key: str
     anthropic_model: str
     anthropic_search_model: str
+    gemini_api_key: str = ""
+    gemini_image_model: str = "gemini-2.5-flash-image"
     template_ai_refine_enabled: bool = False
     reference_library_dir: Optional[Path] = None
 
@@ -34,6 +36,10 @@ class Settings:
     @property
     def has_anthropic(self) -> bool:
         return bool(self.anthropic_api_key)
+
+    @property
+    def has_gemini(self) -> bool:
+        return bool(self.gemini_api_key)
 
     @property
     def ai_provider(self) -> str:
@@ -119,6 +125,8 @@ def get_settings() -> Settings:
         anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", "").strip(),
         anthropic_model=os.getenv("AUTO_WRITE_ANTHROPIC_MODEL", "claude-sonnet-4-20250514").strip(),
         anthropic_search_model=os.getenv("AUTO_WRITE_ANTHROPIC_SEARCH_MODEL", "claude-sonnet-4-20250514").strip(),
+        gemini_api_key=(os.getenv("GEMINI_API_KEY", "") or os.getenv("GOOGLE_API_KEY", "")).strip(),
+        gemini_image_model=os.getenv("AUTO_WRITE_GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image").strip(),
         template_ai_refine_enabled=os.getenv("AUTO_WRITE_TEMPLATE_AI_REFINE", "").strip().lower()
         in {"1", "true", "yes", "on"},
         reference_library_dir=reference_library_dir,

@@ -698,6 +698,25 @@ class ProjectService:
             }
             self.storage.save_project_input(project_id, project_input)
 
+        return self._render_and_publish(
+            project_id,
+            profile,
+            project_input,
+            psst_only=psst_only,
+            disable_images=disable_images,
+            transfer_mode=transfer_mode,
+        )
+
+    def _render_and_publish(
+        self,
+        project_id: str,
+        profile: TemplateProfile,
+        project_input: ProjectInput,
+        *,
+        psst_only: bool,
+        disable_images: bool,
+        transfer_mode: bool,
+    ) -> ArtifactBundle:
         evidence = self.evidence_service.search(project_input.evidence_requests)
         if disable_images:
             images: list[GeneratedImage] = []
@@ -779,6 +798,67 @@ class ProjectService:
             hwp_paste=published.get("hwp_paste", ""),
             copy_blocks=published.get("copy_blocks", ""),
             fill_map=published.get("fill_map", ""),
+        )
+
+    def regenerate_sections(
+        self,
+        project_id: str,
+        question_ids: list[str],
+        refinement_context: str = "",
+    ) -> ArtifactBundle:
+        """평가 루프용: 지정한 question_id 섹션만 재작성 후 전체 재렌더/발행한다.
+
+        EvalLoopRunner가 취약 섹션의 question_id 목록과 보완지시(refinement_context)를
+        전달하면, 해당 섹션만 다시 draft 하여 answers 를 갱신하고 _render_and_publish 로
+        문서를 다시 만든다. 원문에 없는 내용 생성은 strict_preserve 로 억제한다.
+        매핑되는 섹션이 없으면 답안 변경 없이 재렌더만 수행한다.
+        """
+        profile = self.load_profile_for_project(project_id)
+        project_input = self.storage.load_project_input(project_id)
+        source_docx = self._resolve_source_docx(profile, project_id)
+        profile.source_docx = str(source_docx)
+        psst_only = self._meta_flag(project_input.project_meta, "psst_only", True)
+        disable_images = self._meta_flag(project_input.project_meta, "disable_images", True)
+        has_references = bool(project_input.references)
+        transfer_mode = len(project_input.references) >= 2
+
+        wanted = {str(q).strip() for q in (question_ids or []) if str(q).strip()}
+        targets = [
+            question.model_dump()
+            for question in profile.questions
+            if str(question.question_id) in wanted
+            and str(question.target.get("kind", "")) in {"section", "table_cell"}
+        ]
+        if targets:
+            context = self._build_context(project_input, strict_preserve=has_references)
+            if refinement_context.strip():
+                context = f"{context}\n\n{refinement_context.strip()}"
+            writing_provider = str(project_input.project_meta.get("writing_provider", "")).strip().lower()
+            writing_model = str(project_input.project_meta.get("writing_model", "")).strip()
+            drafted = self._draft_missing_answers_in_chunks(
+                targets,
+                context,
+                writing_provider=writing_provider,
+                writing_model=writing_model,
+                strict_preserve=has_references,
+            )
+            if drafted:
+                project_input.answers.update(
+                    {key: value for key, value in drafted.items() if str(value).strip()}
+                )
+                project_input.answers = self._postprocess_answers(profile, project_input.answers)
+                project_input.answers = {
+                    key: self._sanitize_xml_text(value) if isinstance(value, str) else value
+                    for key, value in project_input.answers.items()
+                }
+                self.storage.save_project_input(project_id, project_input)
+        return self._render_and_publish(
+            project_id,
+            profile,
+            project_input,
+            psst_only=psst_only,
+            disable_images=disable_images,
+            transfer_mode=transfer_mode,
         )
 
     def _resolve_render_docx_script(self) -> Path | None:
