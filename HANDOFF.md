@@ -27,11 +27,13 @@ app/tests/test_document_quality_harness.py  # 회귀 테스트(11)
 .claude/{agents,skills,commands,workflows}/ # 에이전트·스킬·커맨드·워크플로
 ```
 
-## 3. Agent 목록 (`.claude/agents/`, 12)
+## 3. Agent 목록 (`.claude/agents/`, 6)
 
-document-architect · template-cleanup-agent · formatting-normalizer · content-emphasis-agent ·
-document-type-classifier · psst-review-agent · infographic-suggestion-agent · quality-gate-agent ·
-backup-rollback-agent · qa-document-agent · security-agent · documentation-agent
+> 2026-06-07 슬림화: 12종 → 6종 병합(책임·코드모듈 기준). 상세는 `HARNESS_TEAM_DESIGN.md`·`CLAUDE.md`.
+
+doc-architect(설계·조율) · doc-safety-guard(백업·롤백+보안게이트) ·
+doc-analyzer(유형분류+PSST+인포그래픽, 읽기전용) · doc-postprocessor(안내문구삭제+서식정규화+강조) ·
+doc-quality-gate(채점·85점게이트+회귀검수) · doc-writer(리포트·HANDOFF)
 
 ## 4. Skill 목록 (`.claude/skills/`, 허브 1 + 세부 11)
 

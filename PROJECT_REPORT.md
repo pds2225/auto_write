@@ -33,6 +33,8 @@
 
 ## 생성한 Agent (12)
 
+> ⚠️ 본 보고서는 2026-06-06 구축 시점 기록이다. 이후 **2026-06-07 에이전트를 12→6종으로 슬림화**했다(doc-architect, doc-safety-guard, doc-analyzer, doc-postprocessor, doc-quality-gate, doc-writer). 현재 기준 목록은 `CLAUDE.md`·`AGENTS.md`·`HARNESS_TEAM_DESIGN.md` 참조. 아래는 구축 당시 12종 원본 기록.
+
 document-architect, template-cleanup-agent, formatting-normalizer, content-emphasis-agent, document-type-classifier, psst-review-agent, infographic-suggestion-agent, quality-gate-agent, backup-rollback-agent, qa-document-agent, security-agent, documentation-agent (전원 `model: opus`, 팀 통신 프로토콜·재호출 섹션 포함)
 
 ## 생성한 Skill (12)
