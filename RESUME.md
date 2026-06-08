@@ -3,6 +3,28 @@
 > **새 세션을 시작하면 이 파일을 가장 먼저 읽어라.** auto_write 문서 품질 하네스 작업의
 > 진행 상태·남은 일·재개 명령이 여기 있다. (최종 갱신: 2026-06-06 컴팩트 후)
 
+## 🆕 2026-06-08 제출-100 이니셔티브 (브랜치 feature/submission-100-auto, 미병합)
+
+기존 품질 하네스 위에 사용자 목표 3종을 구현했다(별도 브랜치, master 미병합).
+
+- **Phase1 c040370 — 공고 평가 루프 종결:** `eval_loop_runner.py`(채점→취약섹션 재생성→재채점을 목표점수/수렴까지, 보수적 2회채점 하한, 매핑불가/근거부족은 needs_input 게이트로 허위생성 방지) + `project_service` 에 `_render_and_publish` 추출·`regenerate_sections` 신설 + `main.py /evaluate` 를 EvalLoopRunner 로 배선(하드코딩 converged=True 제거) + `config.py` Gemini 키 게이트(has_gemini).
+- **Phase2 973efcd — 요약 인포그래픽 생성+배치:** `image_providers.py`(승인된 유료: Gemini "Nano Banana" gemini-2.5-flash-image 1순위 + OpenAI 2순위, 사진금지·요약 인포그래픽 강제) + `image_service` provider 체인(Gemini→OpenAI→matplotlib 원문수치차트→Pillow 카드, 무키 시 외부호출 0) + requirements(matplotlib, google-genai). 배치는 기존 image_slots→render add_picture 경로.
+- **Phase3 b7f2bfb — end-to-end /goal:** `submission_orchestrator.py`(SubmissionPipeline: generate(텍스트)→평가루프→finalize→서식 quality gate→이미지 최후 삽입) + `plan_builder.py`(organization_profile/overview 라벨기반 자동 plan, 표좌표는 양식별 fill_plan.json 외부화) + `render_service.insert_images_into_docx`(이미지 최후 삽입) + CLI `python -m auto_write.submit`.
+
+**검증:** pytest **81 passed**(기존 72 + 신규 9: eval 3 / image 3 / submission 3). 원본 미변경·백업 유지·무키 유료호출 0.
+
+**실행(복붙):**
+```powershell
+$env:GEMINI_API_KEY="..."   # Nano Banana 인포그래픽용(선택; 없으면 무료 폴백)
+cd D:uto_writepp
+python -m auto_write.submit --project <project_id> --announcement-file "공고.txt" --target 95
+```
+전제: `<project_id>` 는 이미 양식 분석+폼 저장이 끝난 상태여야 함. 산출: `results\제출초안_<id>_품질.docx` + 콘솔 JSON 리포트(steps/eval/needs_input/images). 상세: `docs\submission-pipeline.md`.
+
+**미병합·후속:** 브랜치 `feature/submission-100-auto` 미병합(원격 push/PR 미실행, 사용자 승인 대기). 후속 후보: 양식별 `fill_plan.json` 작성, 실키 end-to-end 1건 검증, NotebookLM 어댑터(현재 보조 위치).
+
+---
+
 ## 0. 30초 컨텍스트
 
 `D:\auto_write` 에 **문서 품질 개선 하네스**를 구축했다. 완성된 DOCX(사업계획서 등)를
