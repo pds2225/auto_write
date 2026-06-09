@@ -159,6 +159,7 @@ class DocumentQualityOrchestrator:
             )
             # 누적 집계
             ops_report.guide_paragraphs_removed += pass_ops.guide_paragraphs_removed
+            ops_report.table_guide_rows_removed += pass_ops.table_guide_rows_removed
             ops_report.bullet_spacing_fixed += pass_ops.bullet_spacing_fixed
             ops_report.table_cells_cleaned += pass_ops.table_cells_cleaned
             ops_report.empty_paragraphs_removed += pass_ops.empty_paragraphs_removed
@@ -265,6 +266,7 @@ class DocumentQualityOrchestrator:
         lines.append("## 2. 후처리 결과")
         o = r.ops
         lines.append(f"- 삭제한 안내문구 단락: {o.guide_paragraphs_removed}")
+        lines.append(f"- 삭제한 표 안내 행: {o.table_guide_rows_removed}")
         lines.append(f"- 정리한 글머리표/공백 단락: {o.bullet_spacing_fixed}")
         lines.append(f"- 정리한 표 셀: {o.table_cells_cleaned}")
         lines.append(f"- 삭제한 빈 단락: {o.empty_paragraphs_removed}")
