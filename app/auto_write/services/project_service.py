@@ -685,12 +685,18 @@ class ProjectService:
             if drafted:
                 project_input.answers.update({k: v for k, v in drafted.items() if str(v).strip()})
             remaining = self._collect_missing_questions(profile, project_input.answers, required_only=False)
-            remaining = self._filter_missing_for_autofill(profile, remaining, transfer_mode)
+            dropped_required: list[dict[str, Any]] = []
+            remaining = self._filter_missing_for_autofill(profile, remaining, transfer_mode, dropped_required)
             if psst_only:
                 remaining = self._restrict_autofill_targets(profile, remaining)
             if remaining:
                 fallback = self._build_fallback_answers(remaining, project_input, combined_hints, strict_preserve=has_references)
                 project_input.answers.update(fallback)
+            # 자동작성에서 제외된 '필수' 셀은 빈칸으로 두지 않고 [확인필요] 로 표시(P2: 날조 금지).
+            for _q in dropped_required:
+                _qid = str(_q.get("question_id", "")).strip()
+                if _qid and not str(project_input.answers.get(_qid, "")).strip():
+                    project_input.answers[_qid] = "[확인필요]"
             project_input.answers = self._postprocess_answers(profile, project_input.answers)
             project_input.answers = {
                 key: self._sanitize_xml_text(value) if isinstance(value, str) else value
@@ -1406,6 +1412,7 @@ class ProjectService:
         profile: TemplateProfile,
         missing: list[dict[str, Any]],
         transfer_mode: bool,
+        dropped_required: list[dict[str, Any]] | None = None,
     ) -> list[dict[str, Any]]:
         by_cell_id, table_sizes = self._table_cell_index(profile)
         filtered: list[dict[str, Any]] = []
@@ -1431,6 +1438,10 @@ class ProjectService:
             row_header = str(meta.get("row_header", "")).strip()
             col_header = str(meta.get("col_header", "")).strip()
             if transfer_mode and table_sizes.get(table_id, 0) > 10 and (not row_header or not col_header):
+                # 행/열 의미가 없어 자동작성을 건너뛰는 와이드 표 셀이라도, '필수' 셀이면
+                # 조용히 비우지 않고 [확인필요] 로 표시하도록 따로 모은다(P2: 날조 금지).
+                if bool(question.get("required")) and dropped_required is not None:
+                    dropped_required.append(question)
                 continue
             filtered.append(question)
         return filtered
@@ -1560,7 +1571,9 @@ class ProjectService:
 
     def _fallback_table_text(self, project_title: str, label: str) -> str:
         if any(token in label for token in ("금액", "예산", "비용", "매출", "원", "만원")):
-            return "1,000(추정)"
+            # 수치는 날조 금지(P2) — 출처 없는 금액/매출 셀은 임의값('1,000(추정)') 대신
+            # 사용자가 직접 채울 자리임을 명시한다.
+            return "[확인필요]"
         if any(token in label for token in ("일정", "기간", "시기", "월")):
             return "1단계 준비 / 2단계 실행 / 3단계 확산(월 단위 점검)"
         if any(token in label for token in ("목표", "성과", "지표")):

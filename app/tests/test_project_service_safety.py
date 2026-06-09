@@ -667,6 +667,48 @@ class ProjectServiceSafetyTests(unittest.TestCase):
         self.assertNotIn("section_bad", filtered_ids)
         self.assertNotIn("table_bad", filtered_ids)
 
+    # ---- STEP2: 빈셀 미입력(item 5) ----
+    def test_fallback_table_text_no_number_fabrication(self):
+        """금액/예산 셀은 임의 수치('1,000(추정)') 대신 [확인필요] 로 표시(P2)."""
+        self.assertEqual(self.service._fallback_table_text("과제", "사업비 금액"), "[확인필요]")
+        self.assertEqual(self.service._fallback_table_text("과제", "예산 비용"), "[확인필요]")
+        self.assertNotIn("1,000", self.service._fallback_table_text("과제", "매출 원"))
+        # 산문 분기(일정/목표/담당)는 보존 — 과대치환 방지(P1)
+        self.assertNotEqual(self.service._fallback_table_text("과제", "추진 일정"), "[확인필요]")
+        self.assertNotEqual(self.service._fallback_table_text("과제", "담당 인력"), "[확인필요]")
+
+    def test_filter_missing_surfaces_required_dropped_cell(self):
+        """와이드 표에서 행/열 의미가 없어 드롭되는 '필수' 셀은 dropped_required 로 수집된다."""
+        cells = []
+        questions = []
+        # 필수·col_header 누락 셀(드롭 대상이지만 surface 돼야 함)
+        cells.append(TableCellProfile(cell_id="cell_req", label="사업비 총액",
+                                      row=1, cell=1, required=True,
+                                      row_header="사업비", col_header=""))
+        questions.append(QuestionProfile(question_id="cell_req", label="사업비 총액", required=True,
+                                         target={"kind": "table_cell", "table_id": "table_big", "cell_id": "cell_req"}))
+        # 나머지 11개는 정상 헤더 보유(표 크기 > 10 확보)
+        for i in range(11):
+            cid = f"cell_ok_{i}"
+            cells.append(TableCellProfile(cell_id=cid, label=f"항목{i} / 값",
+                                          row=i + 2, cell=1, required=False,
+                                          row_header=f"행{i}", col_header="값"))
+            questions.append(QuestionProfile(question_id=cid, label=f"항목{i} / 값", required=False,
+                                             target={"kind": "table_cell", "table_id": "table_big", "cell_id": cid}))
+        profile = TemplateProfile(
+            template_id="tpl_big", template_name="big.docx", source_docx="big.docx",
+            tables=[TableProfile(table_id="table_big", label="사업비", table_index=0,
+                                 row_count=12, col_count=1, cells=cells)],
+            questions=questions,
+        )
+        q_dicts = profile.model_dump()["questions"]
+        dropped: list[dict] = []
+        filtered = self.service._filter_missing_for_autofill(profile, q_dicts, transfer_mode=True, dropped_required=dropped)
+        filtered_ids = {q["question_id"] for q in filtered}
+        dropped_ids = {q.get("question_id") for q in dropped}
+        self.assertNotIn("cell_req", filtered_ids)      # 자동작성에서는 제외
+        self.assertIn("cell_req", dropped_ids)           # 그러나 surface 대상으로 수집됨
+
 
 if __name__ == "__main__":
     unittest.main()

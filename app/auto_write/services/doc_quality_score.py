@@ -241,11 +241,14 @@ def score_document(
     psst_ratio: float | None = None,
     image_suggestions: int = 0,
     existing_images: int = 0,
+    empty_required_cells: int = 0,
 ) -> QualityScore:
     """후처리된 문서를 채점한다.
 
     Parameters 는 오케스트레이터가 분류/PSST/이미지제안 단계 결과를 주입한다.
     psst_ratio 가 None 이면 PSST 미적용 유형 → 8번 항목은 보고서 구조 키워드로 대체.
+    empty_required_cells 는 (오케스트레이터가 양식 재분석으로 산출한) 미입력 필수셀 수로,
+    현재는 **참고용(informational, 가중치 0)** 으로만 표기해 85점 게이트를 흔들지 않는다.
     """
     items: list[ScoreItem] = []
     full_text = "\n".join(p.text for p in doc.paragraphs)
@@ -283,8 +286,11 @@ def score_document(
     # 5. 표 내부 품질 (10)
     tw = _scan_table_ws(doc)
     s5 = max(0.0, 10.0 - tw * 1.0)
-    items.append(ScoreItem("table_quality", "표 내부 품질", s5, 10, tw,
-                           f"공백 결함 셀={tw}"))
+    detail5 = f"공백 결함 셀={tw}"
+    if empty_required_cells:
+        # 참고용 표기만(가중치 0) — 게이트 점수에는 반영하지 않는다.
+        detail5 += f" / 미입력 필수셀(참고)={empty_required_cells}"
+    items.append(ScoreItem("table_quality", "표 내부 품질", s5, 10, tw, detail5))
 
     # 6. 주요문장 강조 적정성 (10)
     bold_p = _count_bold_paragraphs(doc)

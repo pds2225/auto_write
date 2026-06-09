@@ -284,3 +284,32 @@ def test_is_guide_text_single_source():
     d.add_paragraph("실제 매출 10억원 달성")
     crit, _gen = _scan_guide(d)
     assert crit == 1
+
+
+# --------------------------------------------------------------------------- STEP2: 빈셀 미입력 (item 5)
+def test_score_empty_required_cells_informational():
+    """미입력 필수셀 수는 참고용(informational) — item5 detail 에만 표기되고 게이트 점수 불변."""
+    d = _plan_doc()
+    dq.run_all(d)
+    base = score_document(d, doc_type="business_plan", type_confidence=0.9,
+                          psst_ratio=1.0, image_suggestions=3, existing_images=0)
+    info = score_document(d, doc_type="business_plan", type_confidence=0.9,
+                          psst_ratio=1.0, image_suggestions=3, existing_images=0,
+                          empty_required_cells=3)
+    # 총점·항목 점수 불변(게이트 안정성 P4)
+    assert info.total == base.total
+    item5 = next(i for i in info.items if i.key == "table_quality")
+    assert item5.score == next(i for i in base.items if i.key == "table_quality").score
+    # 참고 표기는 detail 에 노출
+    assert "미입력 필수셀(참고)=3" in item5.detail
+
+
+def test_orchestrator_counts_confirm_markers():
+    """오케스트레이터가 본문/표의 '[확인필요]' 마커(미입력 필수칸)를 정확히 센다."""
+    d = Document()
+    d.add_paragraph("정상 본문")
+    d.add_paragraph("핵심 수치: [확인필요]")
+    t = d.add_table(rows=1, cols=2)
+    t.cell(0, 0).text = "사업비"
+    t.cell(0, 1).text = "[확인필요]"
+    assert DocumentQualityOrchestrator._count_confirm_markers(d) == 2
