@@ -114,3 +114,39 @@ def test_autopilot_in_equals_out_blocked(tmp_path: Path) -> None:
     _make_doc(src)
     with pytest.raises(ValueError):
         run_autopilot(str(src), str(src))
+
+
+# --- bizplan 생성·완성 오케스트레이터 (AI 비의존 결정론 경로) ---
+
+def test_ai_writer_skips_without_key(tmp_path: Path) -> None:
+    from auto_write.services.bizplan_ai_writer import ai_write_areas
+
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    _make_doc(src)
+    r = ai_write_areas(str(src), str(out), openai_service=None)
+    assert r.skipped is True          # AI 키 없으면 본문 작성 생략(안전)
+    assert out.exists()
+    assert r.areas_written == 0
+
+
+def test_bizplan_no_ai_completes(tmp_path: Path) -> None:
+    from auto_write.services.bizplan_autopilot import run_bizplan_autopilot
+
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    _make_doc(src, with_table=True)
+    r = run_bizplan_autopilot(str(src), str(out), use_ai=False, write_report=False)
+    assert out.exists()
+    assert r.loops_run == 1           # 공고 없음 → 1회 완성
+    assert r.ai_used is False
+    assert r.backup_dir               # 원본 백업 생성
+
+
+def test_bizplan_in_equals_out_blocked(tmp_path: Path) -> None:
+    from auto_write.services.bizplan_autopilot import run_bizplan_autopilot
+
+    src = tmp_path / "in.docx"
+    _make_doc(src)
+    with pytest.raises(ValueError):
+        run_bizplan_autopilot(str(src), str(src), use_ai=False)
