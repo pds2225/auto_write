@@ -18,6 +18,7 @@ from .document_ingest import (
     template_upload_detail,
 )
 from .services.evaluation_service import EvaluationService
+from .services.eval_loop_runner import EvalLoopRunner
 from .services.evidence_service import EvidenceService
 from .services.image_service import ImageService
 from .services.openai_client import OpenAIService
@@ -306,6 +307,7 @@ async def evaluate_project(
     announcement_text: str = Form(default=""),
     announcement_file: UploadFile | None = File(default=None),
     max_iterations: int = Form(default=3),
+    target_score: int = Form(default=92),
 ):
     """공고문(텍스트 또는 파일)을 기준으로 사업계획서를 채점하고 평가 결과를 반환한다.
     공고문 없이 호출하면 내부 QA 기준으로만 채점한다."""
@@ -350,28 +352,19 @@ async def evaluate_project(
             "doc_length": len(doc_text),
         }
 
-    # 5. 채점
-    profile = project_service.load_profile_for_project(project_id)
-    profile_questions = [q.model_dump() for q in profile.questions]
-    scores = evaluation_service.score_document(doc_text, criteria, profile_questions)
-    eval_result = evaluation_service.build_eval_result(1, scores, profile_questions)
+    # 5. 평가 루프 (채점 → 취약 섹션 재생성 → 재채점, 목표점수/수렴까지)
+    runner = EvalLoopRunner(evaluation_service, project_service, storage)
+    loop_report = runner.run(
+        project_id,
+        ann_text,
+        criteria=criteria,
+        target_score=int(target_score),
+        max_iterations=int(max_iterations),
+    )
+    report_dict = evaluation_service.to_report_dict(loop_report)
 
     # 6. 결과 저장
     eval_path = storage.project_dir(project_id) / "output" / "eval_report.json"
-    from .services.evaluation_service import EvalLoopReport as _ELR
-    loop_report = _ELR(
-        project_id=project_id,
-        iterations=[eval_result],
-        final_score=eval_result.total_score,
-        final_max=eval_result.max_total,
-        final_pass_ratio=eval_result.pass_ratio,
-        converged=True,
-        announcement_criteria=[
-            {"name": c.name, "max_score": c.max_score, "description": c.description}
-            for c in criteria
-        ],
-    )
-    report_dict = evaluation_service.to_report_dict(loop_report)
     import json as _json
     eval_path.write_text(_json.dumps(report_dict, ensure_ascii=False, indent=2), encoding="utf-8")
 

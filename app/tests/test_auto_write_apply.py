@@ -75,6 +75,67 @@ def test_apply_images_no_table_still_inserts_prompt(tmp_path: Path) -> None:
     assert report.prompts_inserted >= 1
 
 
+def test_apply_images_table_anchor_inserts_after_table_not_end(tmp_path: Path) -> None:
+    """버그① 회귀: 키워드가 '표 헤더'에만 있는(표 기반 양식) 경우에도
+    NotebookLM 프롬프트가 문서 끝에 덤프되지 않고 해당 표 바로 뒤에 들어가야 한다."""
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    doc = Document()
+    doc.add_paragraph("개요: 본 사업계획서 본문(키워드 없음).")
+    table = doc.add_table(rows=2, cols=3)
+    table.rows[0].cells[0].text = "추진 일정"          # 로드맵/간트 트리거(표 헤더)
+    table.rows[0].cells[1].text = "마일스톤"
+    table.rows[0].cells[2].text = "담당"
+    table.rows[1].cells[0].text = "1분기"
+    doc.add_paragraph("맺음말: 마지막 본문 단락.")       # 표보다 뒤에 있는 본문
+    doc.save(str(src))
+
+    report = apply_images(str(src), str(out))            # openai_service=None → 키워드 폴백
+    assert report.prompts_inserted >= 1
+    assert report.anchors_missing == 0                   # 표 앵커를 찾았어야 함
+
+    # 본문 순서상: 표(tbl) < NotebookLM 프롬프트 < 맺음말  (끝에 덤프 아님)
+    from docx.oxml.ns import qn
+    from docx.text.paragraph import Paragraph as _P
+    out_doc = Document(str(out))
+    seq = []
+    for child in out_doc.element.body:
+        if child.tag == qn("w:tbl"):
+            seq.append(("tbl", ""))
+        elif child.tag == qn("w:p"):
+            seq.append(("p", _P(child, out_doc).text))
+    idx_tbl = next(i for i, s in enumerate(seq) if s[0] == "tbl")
+    idx_prompt = next(i for i, s in enumerate(seq) if "NotebookLM" in s[1])
+    idx_end = next(i for i, s in enumerate(seq) if "맺음말" in s[1])
+    assert idx_tbl < idx_prompt < idx_end
+
+
+def test_submittable_filler_paragraph_fill_in_table_cell(tmp_path: Path) -> None:
+    """버그①b 회귀: 채울 본문 앵커가 '표 셀 안'에 있어도 누락 없이 채워야 한다
+    (이전엔 doc.paragraphs 만 봐서 표 셀 앵커를 '본문 앵커 미발견'으로 건너뜀)."""
+    from auto_write.services.submittable_filler import SubmittableFiller
+
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    doc = Document()
+    doc.add_paragraph("머리말")
+    t = doc.add_table(rows=1, cols=1)
+    t.rows[0].cells[0].text = "5. AI 인재활용 계획 세부내용 작성"   # 표 셀 안 앵커
+    doc.save(str(src))
+
+    plan = {"paragraph_fills": [
+        {"anchor": "5. AI 인재활용 계획 세부내용 작성",
+         "lines": ["실제 인재활용 계획 내용입니다.", "하위 항목 1"]}
+    ]}
+    report = SubmittableFiller(plan).finalize(src, out)
+    assert report["paragraphs_filled"] == 1
+    assert not any("앵커 미발견" in n for n in report["notes"])
+    cell_text = "\n".join(
+        c.text for tb in Document(str(out)).tables for r in tb.rows for c in r.cells
+    )
+    assert "실제 인재활용 계획 내용입니다." in cell_text
+
+
 def test_psst_scaffold_adds_guidance(tmp_path: Path) -> None:
     src = tmp_path / "in.docx"
     out = tmp_path / "out.docx"

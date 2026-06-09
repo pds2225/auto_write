@@ -193,3 +193,62 @@ class RenderService:
             "errors": errors,
             "warnings": warnings,
         }
+
+    def insert_images_into_docx(self, profile: Any, images: list, docx_path) -> dict:
+        """이미 마감/품질처리된 DOCX 에 이미지를 '최후'에 삽입한다.
+
+        SubmissionPipeline 이 generate(텍스트)->finalize->quality 까지 끝낸 산출물에
+        호출한다. 텍스트 정리 단계(빈 문단 제거 등)가 먼저 삽입된 이미지를 지우는 것을
+        막기 위해 모든 텍스트 처리 후 마지막에 삽입한다. 배치 기준은 render 와 동일하게
+        profile.image_slots(slot_id/anchor_ref) 이다.
+        """
+        docx_path = Path(docx_path)
+        document = Document(str(docx_path))
+        image_by_slot = {image.slot_id: image for image in images}
+        errors: list[str] = []
+        warnings: list[str] = []
+        image_count = 0
+        for slot in profile.image_slots:
+            generated = image_by_slot.get(slot.slot_id)
+            if generated is None:
+                continue
+            if self._should_skip_image_slot(slot.label):
+                warnings.append(f"학습 규칙에 따라 비본문 이미지 슬롯은 건너뛰었습니다: {slot.label}")
+                continue
+            image_path = Path(generated.path)
+            if not image_path.exists():
+                errors.append(f"이미지 파일을 찾지 못했습니다: {slot.label} ({image_path.name})")
+                continue
+            anchor_ref = slot.anchor_ref
+            ok = False
+            if slot.anchor_type == "table_cell":
+                table_index = self._parse_anchor_index(anchor_ref.get("table_index"))
+                row_index = self._parse_anchor_index(anchor_ref.get("row"))
+                cell_index = self._parse_anchor_index(anchor_ref.get("cell"))
+                _, reason = self._resolve_table_cell(document, table_index, row_index, cell_index)
+                if reason:
+                    errors.append(f"이미지 표 위치 오류: {slot.label} ({reason})")
+                    continue
+                ok = insert_image_in_cell(
+                    document,
+                    table_index=table_index,
+                    row=row_index,
+                    cell_index=cell_index,
+                    image_path=image_path,
+                    width_cm=float(slot.size_hint.get("width_cm", 12.0)),
+                )
+            else:
+                ok = insert_image_after_paragraph(
+                    document,
+                    anchor_text=str(anchor_ref.get("anchor_text", "")),
+                    image_path=image_path,
+                    width_cm=float(slot.size_hint.get("width_cm", 14.0)),
+                    insert_offset=int(anchor_ref.get("insert_offset", 2)),
+                    allow_create_paragraph=False,
+                )
+            if ok:
+                image_count += 1
+            else:
+                errors.append(f"이미지를 넣지 못했습니다: {slot.label}")
+        document.save(str(docx_path))
+        return {"images_written": image_count, "errors": errors, "warnings": warnings}

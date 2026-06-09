@@ -70,6 +70,7 @@ class EvalLoopReport:
     final_pass_ratio: float
     converged: bool
     announcement_criteria: list[dict[str, Any]]
+    needs_input: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -348,6 +349,7 @@ class EvaluationService:
             "final_max": report.final_max,
             "final_pass_ratio": round(report.final_pass_ratio, 4),
             "converged": report.converged,
+            "needs_input": report.needs_input,
             "announcement_criteria": report.announcement_criteria,
             "iterations": [
                 {

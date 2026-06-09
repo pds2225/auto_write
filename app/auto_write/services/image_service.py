@@ -8,6 +8,7 @@ from typing import Iterable
 from PIL import Image, ImageDraw, ImageFont
 
 from ..models import EvidenceSource, GeneratedImage, ImageSlotProfile
+from .image_providers import generate_infographic
 from .openai_client import OpenAIService
 
 FONT_REGULAR = Path("C:/Windows/Fonts/malgun.ttf")
@@ -67,9 +68,19 @@ class ImageService:
             slot_context = "\n".join(part for part in (note, joined_context) if part)
             prompt = self.openai_service.propose_image_prompt(slot.label, slot_context)
             image_path = output_dir / f"{slot.slot_id}.png"
-            created = self.openai_service.generate_image_file(prompt, image_path)
-            if not created:
-                if evidence and "통계" in slot.label:
+            # 1순위: 승인된 유료 인포그래픽 provider(Gemini Nano Banana → OpenAI)
+            provider = generate_infographic(
+                getattr(self.openai_service, "settings", None),
+                self.openai_service,
+                prompt,
+                image_path,
+            )
+            if not provider:
+                # 무키/실패 시 무료 로컬 인포그래픽 폴백(외부 호출 0)
+                numbers = self._extract_numbers(slot_context)
+                if numbers and self._chart_available():
+                    self._make_chart_card(slot, numbers, image_path)
+                elif evidence and "통계" in slot.label:
                     self._make_stat_card(slot, evidence, image_path)
                 else:
                     self._make_diagram_card(slot, prompt, slot_context, image_path)
@@ -147,3 +158,77 @@ class ImageService:
             draw.text((98, y + 128), source.url[:120], font=_font(18), fill="#475569")
             y += 190
         image.save(output_path)
+
+    _NUMBER_RE = re.compile(
+        r"([가-힣A-Za-z0-9·\s]{1,16}?)\s*[:：]?\s*"
+        r"(\d[\d,]*\.?\d*)\s*(%|％|억원|억|조|만원|백만원|천원|원|명|건|개|배|점|위|년)"
+    )
+
+    @staticmethod
+    def _chart_available() -> bool:
+        try:
+            import matplotlib  # noqa: F401
+            return True
+        except Exception:
+            return False
+
+    def _extract_numbers(self, context: str) -> list[tuple[str, float, str]]:
+        """원문/컨텍스트에 '명시된' 수치만 추출(허위 수치 생성 금지). (라벨, 값, 단위)."""
+        found: list[tuple[str, float, str]] = []
+        seen: set[str] = set()
+        for m in self._NUMBER_RE.finditer(str(context or "")):
+            label = re.sub(r"\s+", " ", m.group(1) or "").strip(" ·:-")
+            raw = m.group(2).replace(",", "")
+            unit = m.group(3)
+            try:
+                value = float(raw)
+            except ValueError:
+                continue
+            if not label or len(label) < 2:
+                label = unit
+            key = f"{label}:{value}:{unit}"
+            if key in seen:
+                continue
+            seen.add(key)
+            found.append((label, value, unit))
+            if len(found) >= 6:
+                break
+        if len(found) >= 2:
+            from collections import Counter
+            top_unit = Counter(u for _, _, u in found).most_common(1)[0][0]
+            same = [(l, v, u) for (l, v, u) in found if u == top_unit]
+            if len(same) >= 2:
+                return same[:6]
+        return []
+
+    def _make_chart_card(self, slot: ImageSlotProfile, numbers: list[tuple[str, float, str]], output_path: Path) -> None:
+        try:
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+            from matplotlib import font_manager
+            if FONT_REGULAR.exists():
+                font_manager.fontManager.addfont(str(FONT_REGULAR))
+                plt.rcParams["font.family"] = font_manager.FontProperties(fname=str(FONT_REGULAR)).get_name()
+            plt.rcParams["axes.unicode_minus"] = False
+        except Exception:
+            self._make_diagram_card(slot, slot.label, "", output_path)
+            return
+        labels = [l for l, _, _ in numbers]
+        values = [v for _, v, _ in numbers]
+        unit = numbers[0][2]
+        fig, ax = plt.subplots(figsize=(10.24, 6.4), dpi=150)
+        bars = ax.bar(labels, values, color="#2563EB")
+        ax.set_title(f"{slot.label} ({unit})", fontsize=16)
+        try:
+            ax.bar_label(bars, fmt="%.0f", fontsize=11)
+        except Exception:
+            pass
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        plt.xticks(rotation=15, fontsize=11)
+        plt.tight_layout()
+        try:
+            fig.savefig(str(output_path))
+        finally:
+            plt.close(fig)

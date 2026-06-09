@@ -132,6 +132,27 @@ class SubmittableFiller:
                     report["overview_filled"] += 1
                     break
 
+    @staticmethod
+    def _iter_all_paragraphs(doc):
+        """본문 직계 단락 + 모든 표 셀(중첩 표 포함) 단락을 순회한다.
+
+        정부 사업계획서 양식은 표 기반이라 앵커가 표 셀 안에 있는 경우가 많다.
+        본문(doc.paragraphs)만 보면 표 셀 앵커를 놓쳐 채움이 누락된다.
+        """
+        for paragraph in doc.paragraphs:
+            yield paragraph
+
+        def _walk(table):
+            for row in table.rows:
+                for cell in row.cells:
+                    for paragraph in cell.paragraphs:
+                        yield paragraph
+                    for nested in cell.tables:
+                        yield from _walk(nested)
+
+        for table in doc.tables:
+            yield from _walk(table)
+
     def _apply_paragraph_fills(self, doc, report) -> None:
         """본문 가이드 문구(예: 'ㅇ ... 세부내용 작성')를 실제 내용 + 하위 불릿으로 교체.
 
@@ -145,12 +166,12 @@ class SubmittableFiller:
             if not anchor or not lines:
                 continue
             target = None
-            for paragraph in doc.paragraphs:
+            for paragraph in self._iter_all_paragraphs(doc):
                 if self._norm(paragraph.text) == anchor:
                     target = paragraph
                     break
             if target is None:
-                report["notes"].append(f"본문 앵커 미발견: {anchor[:30]}")
+                report["notes"].append(f"앵커 미발견(본문/표): {anchor[:30]}")
                 continue
             self._set_paragraph_text(target, lines[0])
             cursor = target

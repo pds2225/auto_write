@@ -1,7 +1,42 @@
 # RESUME.md — 세션 재시작 시 이어하기 진입점
 
 > **새 세션을 시작하면 이 파일을 가장 먼저 읽어라.** auto_write 문서 품질 하네스 작업의
-> 진행 상태·남은 일·재개 명령이 여기 있다. (최종 갱신: 2026-06-09 표 안내 배선)
+> 진행 상태·남은 일·재개 명령이 여기 있다. (최종 갱신: 2026-06-10 제출-100 master 통합 + 위치/NotebookLM 버그 수정)
+
+## 🆕 2026-06-10 제출-100 master 통합 + 버그 2건 수정 (브랜치 feature/submission-100-auto)
+
+기준 골드 스탠다드: 마켓게이트 재도전(추경) 제출본(분석 `workspace/goldstandard_marketgate.md`).
+제출본은 PSST 4단·표 중심이며 "거의 모든 주장 옆에 시각자료"가 핵심 → 시각자료/프롬프트의 **정위치 배치**가 관건.
+
+- **master 통합:** feature/submission-100-auto 가 master보다 24커밋 뒤처져 있던 것을 `git merge master`(ce46d79)로 통합. 충돌은 CLAUDE.md 변경이력 1곳뿐(양쪽 항목 모두 보존). 통합 후 **pytest 128 passed**(master 119 + 브랜치 81 합집합) 회귀 0.
+- **버그① (텍스트가 맞는 위치에 안 들어감) 수정:**
+  - `image_apply.py` — `_find_anchor` 가 `doc.paragraphs`(본문)만 봐서 표 셀/표 헤더 앵커를 못 찾고 프롬프트 블록을 **문서 끝에 덤프**하던 결함. 본문+표 셀(중첩 포함) 순회 + 부분일치(`_anchor_matches`)로 확장하고, `addnext` 로 본문 앵커 바로 뒤/표 앵커는 **표 전체 뒤**에 정위치 삽입(`_insert_paras_after`). 표 안 앵커도 anchors_missing=0.
+  - `submittable_filler.py` — `_apply_paragraph_fills` 도 본문만 봐서 표 셀 앵커를 '미발견'으로 건너뛰던 동일 결함. `_iter_all_paragraphs`(본문+표 셀)로 확장.
+- **버그② (NotebookLM 프롬프트가 안 나옴) 수정:** 신규 submission 파이프라인(`SubmissionPipeline`/`submit.py`)이 PNG 이미지(image_service)만 쓰고 `image_apply`(NotebookLM 프롬프트)를 미연결이라 그 경로로는 프롬프트가 영영 안 나오던 구조 결함. SubmissionPipeline 에 **step6 NotebookLM 프롬프트 삽입**(텍스트/이미지 처리 후 최종본에, 수정된 표-인식 앵커 사용) 추가 + `submit.py --no-notebooklm` 토글(기본 ON).
+- **검증:** pytest **132 passed**(통합 128 + 신규 회귀 4: 표앵커 정위치 / 표셀 본문채움 / submission NotebookLM 삽입 / no-notebooklm 스킵). 스모크: 표 헤더 전용 앵커→표 뒤 정위치 SMOKE_OK.
+- **남은 일:** master 병합(사용자 승인 8h 윈도우) — feature/submission-100-auto → master.
+
+## 🆕 2026-06-08 제출-100 이니셔티브 (브랜치 feature/submission-100-auto, 미병합)
+
+기존 품질 하네스 위에 사용자 목표 3종을 구현했다(별도 브랜치, master 미병합).
+
+- **Phase1 c040370 — 공고 평가 루프 종결:** `eval_loop_runner.py`(채점→취약섹션 재생성→재채점을 목표점수/수렴까지, 보수적 2회채점 하한, 매핑불가/근거부족은 needs_input 게이트로 허위생성 방지) + `project_service` 에 `_render_and_publish` 추출·`regenerate_sections` 신설 + `main.py /evaluate` 를 EvalLoopRunner 로 배선(하드코딩 converged=True 제거) + `config.py` Gemini 키 게이트(has_gemini).
+- **Phase2 973efcd — 요약 인포그래픽 생성+배치:** `image_providers.py`(승인된 유료: Gemini "Nano Banana" gemini-2.5-flash-image 1순위 + OpenAI 2순위, 사진금지·요약 인포그래픽 강제) + `image_service` provider 체인(Gemini→OpenAI→matplotlib 원문수치차트→Pillow 카드, 무키 시 외부호출 0) + requirements(matplotlib, google-genai). 배치는 기존 image_slots→render add_picture 경로.
+- **Phase3 b7f2bfb — end-to-end /goal:** `submission_orchestrator.py`(SubmissionPipeline: generate(텍스트)→평가루프→finalize→서식 quality gate→이미지 최후 삽입) + `plan_builder.py`(organization_profile/overview 라벨기반 자동 plan, 표좌표는 양식별 fill_plan.json 외부화) + `render_service.insert_images_into_docx`(이미지 최후 삽입) + CLI `python -m auto_write.submit`.
+
+**검증:** pytest **81 passed**(기존 72 + 신규 9: eval 3 / image 3 / submission 3). 원본 미변경·백업 유지·무키 유료호출 0.
+
+**실행(복붙):**
+```powershell
+$env:GEMINI_API_KEY="..."   # Nano Banana 인포그래픽용(선택; 없으면 무료 폴백)
+cd D:uto_writepp
+python -m auto_write.submit --project <project_id> --announcement-file "공고.txt" --target 95
+```
+전제: `<project_id>` 는 이미 양식 분석+폼 저장이 끝난 상태여야 함. 산출: `results\제출초안_<id>_품질.docx` + 콘솔 JSON 리포트(steps/eval/needs_input/images). 상세: `docs\submission-pipeline.md`.
+
+**미병합·후속:** 브랜치 `feature/submission-100-auto` 미병합(원격 push/PR 미실행, 사용자 승인 대기). 후속 후보: 양식별 `fill_plan.json` 작성, 실키 end-to-end 1건 검증, NotebookLM 어댑터(현재 보조 위치).
+
+---
 
 ## 0. 30초 컨텍스트
 
