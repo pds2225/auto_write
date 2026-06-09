@@ -8,7 +8,7 @@ from typing import Any
 from docx import Document
 
 from ..models import GeneratedImage, ProjectInput, TemplateProfile
-from .docx_ops import insert_image_after_paragraph, insert_image_in_cell, insert_text_after_paragraph, set_cell_text
+from .docx_ops import insert_image_after_paragraph, insert_image_in_cell, insert_text_after_paragraph, logical_cells, set_cell_text
 
 
 class RenderService:
@@ -31,19 +31,22 @@ class RenderService:
         except (TypeError, ValueError):
             return default
 
-    def _resolve_table_cell(self, document: Document, table_index: int, row_index: int, cell_index: int):
+    def _resolve_table_cell(self, document: Document, table_index: int, row_index: int, cell_index: int, *, logical: bool = False):
         if table_index < 0 or table_index >= len(document.tables):
             return None, f"표 index 범위를 벗어났습니다(table_index={table_index}, tables={len(document.tables)})"
         table = document.tables[table_index]
         if row_index < 0 or row_index >= len(table.rows):
             return None, f"행 index 범위를 벗어났습니다(table_index={table_index}, row={row_index}, rows={len(table.rows)})"
         row = table.rows[row_index]
-        if cell_index < 0 or cell_index >= len(row.cells):
+        # 텍스트 채움(logical=True)은 '논리 셀'(서로 다른 w:tc)로 해석해야 가로 병합 표에서도
+        # 분석이 기록한 좌표와 같은 자리에 들어간다. 이미지 슬롯은 grid 인덱스라 logical=False.
+        cells = logical_cells(row) if logical else list(row.cells)
+        if cell_index < 0 or cell_index >= len(cells):
             return (
                 None,
-                f"열 index 범위를 벗어났습니다(table_index={table_index}, row={row_index}, cell={cell_index}, cells={len(row.cells)})",
+                f"열 index 범위를 벗어났습니다(table_index={table_index}, row={row_index}, cell={cell_index}, cells={len(cells)})",
             )
-        return row.cells[cell_index], ""
+        return cells[cell_index], ""
 
     @classmethod
     def _should_skip_section(cls, label: str) -> bool:
@@ -128,7 +131,9 @@ class RenderService:
                 value = str(answers.get(cell.cell_id, "") or "").strip()
                 if not value:
                     continue
-                target_cell, reason = self._resolve_table_cell(document, table_index, cell.row, cell.cell)
+                target_cell, reason = self._resolve_table_cell(
+                    document, table_index, cell.row, cell.cell, logical=True
+                )
                 if target_cell is None:
                     errors.append(f"표 셀 위치 오류: {table.label} r{cell.row} c{cell.cell} ({reason})")
                     continue

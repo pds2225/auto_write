@@ -104,6 +104,26 @@ def _write_para(para, text: str) -> None:
         element.text = text
 
 
+def logical_cells(row):
+    """행의 '논리 셀'(서로 다른 w:tc)을 등장 순서대로 반환(가로 병합 중복 제거).
+
+    python-docx 의 ``row.cells`` 는 가로 병합된 셀을 grid 칸 수만큼 '중복'해서 돌려준다.
+    반면 템플릿 분석(analysis/docx_template)은 ``<w:tr>`` 안의 ``<w:tc>`` 를 직접 세어
+    (= 논리 인덱스) 셀 좌표(TableCellProfile.cell)를 기록한다. 따라서 **텍스트 채움**은
+    grid 인덱스가 아니라 이 논리 셀 목록으로 해석해야 병합 표에서도 같은 자리에 들어간다.
+    (이미지 슬롯은 enumerate(row.cells) 기반의 grid 인덱스를 쓰므로 이 함수를 쓰지 않는다.)
+    """
+    result = []
+    seen: set[int] = set()
+    for cell in row.cells:
+        cid = id(cell._tc)
+        if cid in seen:
+            continue
+        seen.add(cid)
+        result.append(cell)
+    return result
+
+
 def set_cell_text(cell, text: str) -> None:
     tc = cell._tc
     tc_pr = tc.find(qn("w:tcPr"))
