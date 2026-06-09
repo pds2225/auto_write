@@ -24,9 +24,10 @@ from pathlib import Path
 from typing import Any, Optional
 
 from docx import Document
+from docx.oxml import OxmlElement
 from docx.shared import Pt, RGBColor
+from docx.text.paragraph import Paragraph
 
-from .chart_insert import _next_paragraph
 from .infographic_suggest import ImageSuggestion, suggest_images_ai
 
 _DIVIDER = "─" * 30
@@ -66,28 +67,69 @@ class ImageApplyReport:
         }
 
 
-def _insert_after_anchor(doc: Document, anchor_para, callbacks: list) -> None:
-    """anchor 단락 바로 뒤에 callbacks(각각 para 를 받는 함수)를 순서대로 삽입한다."""
-    next_para = _next_paragraph(anchor_para)
-    if next_para is not None:
-        for cb in callbacks:
-            p = next_para.insert_paragraph_before()
-            cb(p)
-    else:
-        for cb in callbacks:
-            cb(doc.add_paragraph())
+def _iter_anchor_contexts(doc: Document):
+    """(paragraph, top_table) 쌍을 순회한다.
+
+    - 본문 직계 단락: top_table=None
+    - 표 셀 안 단락(중첩 표 포함): 그 셀이 속한 **최상위 표**를 함께 돌려준다.
+      (표 안 앵커는 셀 안이 아니라 표 '뒤'에 블록을 넣기 위함.)
+    """
+    for para in doc.paragraphs:
+        yield para, None
+    for table in doc.tables:
+        yield from _iter_table_contexts(table, table)
+
+
+def _iter_table_contexts(table, top_table):
+    for row in table.rows:
+        for cell in row.cells:
+            for para in cell.paragraphs:
+                yield para, top_table
+            for nested in cell.tables:
+                yield from _iter_table_contexts(nested, top_table)
+
+
+def _anchor_matches(anchor_text: str, para_text: str) -> bool:
+    a = (anchor_text or "").strip()
+    t = (para_text or "").strip()
+    if not a or not t:
+        return False
+    key = a[:40]
+    if key and key in t:
+        return True
+    # 표 헤더처럼 여러 셀을 합쳐 만든 앵커: 셀 텍스트가 앵커의 일부일 때도 매칭.
+    if len(t) >= 4 and t in a:
+        return True
+    return False
 
 
 def _find_anchor(doc: Document, anchor_text: str):
-    if not anchor_text:
-        return None
-    key = anchor_text[:40]
-    if not key:
-        return None
-    for para in doc.paragraphs:
-        if key in para.text:
-            return para
-    return None
+    """anchor_text 와 일치/부분일치하는 단락을 본문 + 표 셀에서 찾는다.
+
+    Returns:
+        (paragraph, top_table). 못 찾으면 (None, None).
+        top_table 가 None 이 아니면 그 단락은 표 안에 있다(삽입은 표 뒤에 한다).
+    """
+    if not (anchor_text or "").strip():
+        return None, None
+    for para, table in _iter_anchor_contexts(doc):
+        if _anchor_matches(anchor_text, para.text):
+            return para, table
+    return None, None
+
+
+def _insert_paras_after(ref_elem, parent, callbacks: list) -> None:
+    """ref_elem(<w:p> 또는 <w:tbl>) 바로 뒤에 새 단락들을 순서대로 끼워넣는다.
+
+    본문/표 셀 어디에 있든 문서 순서상 정확히 ref 다음 위치에 삽입된다
+    (python-docx 의 ``insert_paragraph_before`` 가 못 하는 '마지막 단락 뒤' 도 처리).
+    """
+    ref = ref_elem
+    for cb in callbacks:
+        new_p = OxmlElement("w:p")
+        ref.addnext(new_p)
+        cb(Paragraph(new_p, parent))
+        ref = new_p
 
 
 def _add_divider(paragraph) -> None:
@@ -128,8 +170,13 @@ def _add_prompt_text(paragraph, sug: ImageSuggestion) -> None:
     run.font.size = Pt(10)
 
 
-def _apply_prompt_block(doc: Document, anchor_para, sug: ImageSuggestion) -> None:
-    """anchor 뒤(없으면 문서 끝)에 NotebookLM 프롬프트 블록을 삽입한다."""
+def _apply_prompt_block(doc: Document, anchor_para, table, sug: ImageSuggestion) -> None:
+    """anchor 뒤에 NotebookLM 프롬프트 블록을 삽입한다.
+
+    - 본문 앵커: 그 단락 바로 뒤.
+    - 표 안 앵커: 셀 안이 아니라 **표 전체 뒤**(큰 블록이 셀을 부풀리지 않도록).
+    - 앵커 없음: 문서 끝(최후 폴백).
+    """
     callbacks = [
         _add_divider,
         lambda p: _add_prompt_header(p, sug),
@@ -137,11 +184,13 @@ def _apply_prompt_block(doc: Document, anchor_para, sug: ImageSuggestion) -> Non
         lambda p: _add_prompt_text(p, sug),
         _add_divider,
     ]
-    if anchor_para is not None:
-        _insert_after_anchor(doc, anchor_para, callbacks)
-    else:
+    if anchor_para is None:
         for cb in callbacks:
             cb(doc.add_paragraph())
+    elif table is not None:
+        _insert_paras_after(table._tbl, doc, callbacks)
+    else:
+        _insert_paras_after(anchor_para._p, anchor_para._parent, callbacks)
 
 
 def apply_images(
@@ -182,12 +231,14 @@ def apply_images(
     ).suggestions
 
     for sug in suggestions:
-        anchor_para = _find_anchor(doc, sug.anchor_text)
+        anchor_para, table = _find_anchor(doc, sug.anchor_text)
         anchor_found = anchor_para is not None
 
-        _apply_prompt_block(doc, anchor_para, sug)
+        _apply_prompt_block(doc, anchor_para, table, sug)
         report.prompts_inserted += 1
         note = "NotebookLM 슬라이드 프롬프트 삽입"
+        if anchor_found and table is not None:
+            note += " / 표 뒤 위치"
         if not anchor_found:
             report.anchors_missing += 1
             note += " / anchor 미발견(문서 끝에 추가)"

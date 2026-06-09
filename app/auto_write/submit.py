@@ -47,7 +47,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--announcement-file", default="", help="공고문 파일 경로(txt/docx/pdf)")
     parser.add_argument("--target", type=int, default=92, help="공고 평가 목표 점수(기본 92)")
     parser.add_argument("--max-iter", type=int, default=3, help="평가 보완 최대 반복(기본 3)")
-    parser.add_argument("--no-images", action="store_true", help="이미지 삽입 비활성")
+    parser.add_argument("--no-images", action="store_true", help="이미지(PNG) 삽입 비활성")
+    parser.add_argument(
+        "--no-notebooklm", action="store_true",
+        help="NotebookLM 슬라이드 프롬프트 삽입 비활성(기본: 삽입함)",
+    )
     parser.add_argument("--fill-plan-dir", default="", help="양식별 fill_plan.json 디렉터리")
     args = parser.parse_args(argv)
 
@@ -69,6 +73,7 @@ def main(argv: list[str] | None = None) -> int:
         target_score=args.target,
         max_iterations=args.max_iter,
         enable_images=not args.no_images,
+        enable_notebooklm=not args.no_notebooklm,
         fill_plan_dir=(args.fill_plan_dir or None),
     )
     print(json.dumps(report, ensure_ascii=False, indent=2))

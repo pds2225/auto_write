@@ -1,7 +1,20 @@
 # RESUME.md — 세션 재시작 시 이어하기 진입점
 
 > **새 세션을 시작하면 이 파일을 가장 먼저 읽어라.** auto_write 문서 품질 하네스 작업의
-> 진행 상태·남은 일·재개 명령이 여기 있다. (최종 갱신: 2026-06-09 표 안내 배선)
+> 진행 상태·남은 일·재개 명령이 여기 있다. (최종 갱신: 2026-06-10 제출-100 master 통합 + 위치/NotebookLM 버그 수정)
+
+## 🆕 2026-06-10 제출-100 master 통합 + 버그 2건 수정 (브랜치 feature/submission-100-auto)
+
+기준 골드 스탠다드: 마켓게이트 재도전(추경) 제출본(분석 `workspace/goldstandard_marketgate.md`).
+제출본은 PSST 4단·표 중심이며 "거의 모든 주장 옆에 시각자료"가 핵심 → 시각자료/프롬프트의 **정위치 배치**가 관건.
+
+- **master 통합:** feature/submission-100-auto 가 master보다 24커밋 뒤처져 있던 것을 `git merge master`(ce46d79)로 통합. 충돌은 CLAUDE.md 변경이력 1곳뿐(양쪽 항목 모두 보존). 통합 후 **pytest 128 passed**(master 119 + 브랜치 81 합집합) 회귀 0.
+- **버그① (텍스트가 맞는 위치에 안 들어감) 수정:**
+  - `image_apply.py` — `_find_anchor` 가 `doc.paragraphs`(본문)만 봐서 표 셀/표 헤더 앵커를 못 찾고 프롬프트 블록을 **문서 끝에 덤프**하던 결함. 본문+표 셀(중첩 포함) 순회 + 부분일치(`_anchor_matches`)로 확장하고, `addnext` 로 본문 앵커 바로 뒤/표 앵커는 **표 전체 뒤**에 정위치 삽입(`_insert_paras_after`). 표 안 앵커도 anchors_missing=0.
+  - `submittable_filler.py` — `_apply_paragraph_fills` 도 본문만 봐서 표 셀 앵커를 '미발견'으로 건너뛰던 동일 결함. `_iter_all_paragraphs`(본문+표 셀)로 확장.
+- **버그② (NotebookLM 프롬프트가 안 나옴) 수정:** 신규 submission 파이프라인(`SubmissionPipeline`/`submit.py`)이 PNG 이미지(image_service)만 쓰고 `image_apply`(NotebookLM 프롬프트)를 미연결이라 그 경로로는 프롬프트가 영영 안 나오던 구조 결함. SubmissionPipeline 에 **step6 NotebookLM 프롬프트 삽입**(텍스트/이미지 처리 후 최종본에, 수정된 표-인식 앵커 사용) 추가 + `submit.py --no-notebooklm` 토글(기본 ON).
+- **검증:** pytest **132 passed**(통합 128 + 신규 회귀 4: 표앵커 정위치 / 표셀 본문채움 / submission NotebookLM 삽입 / no-notebooklm 스킵). 스모크: 표 헤더 전용 앵커→표 뒤 정위치 SMOKE_OK.
+- **남은 일:** master 병합(사용자 승인 8h 윈도우) — feature/submission-100-auto → master.
 
 ## 🆕 2026-06-08 제출-100 이니셔티브 (브랜치 feature/submission-100-auto, 미병합)
 

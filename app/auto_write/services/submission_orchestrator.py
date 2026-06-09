@@ -38,6 +38,7 @@ class SubmissionPipeline:
         target_score: int = 92,
         max_iterations: int = 3,
         enable_images: bool = True,
+        enable_notebooklm: bool = True,
         fill_plan_dir: str | Path | None = None,
     ) -> dict[str, Any]:
         report: dict[str, Any] = {"project_id": project_id, "steps": [], "needs_input": []}
@@ -119,6 +120,28 @@ class SubmissionPipeline:
                 "errors": img_report.get("errors", []),
             }
             report["steps"].append("images")
+
+        # 6. NotebookLM 슬라이드 프롬프트 삽입(모든 텍스트/이미지 처리 후 최종본에).
+        #    공개 이미지 API 가 없는 NotebookLM 은 '수동 슬라이드 생성용 프롬프트'를
+        #    그림 위치(표 뒤/본문 앵커)에 넣어, 사용자가 붙여넣어 슬라이드를 만들게 한다.
+        if enable_notebooklm:
+            try:
+                from .image_apply import apply_images
+
+                nlm_out = results_root / f"제출초안_{project_id}_노트북LM.docx"
+                nlm_report = apply_images(
+                    str(final_docx),
+                    str(nlm_out),
+                    openai_service=getattr(self.project_service, "openai_service", None),
+                )
+                report["notebooklm"] = {
+                    "prompts_inserted": nlm_report.prompts_inserted,
+                    "anchors_missing": nlm_report.anchors_missing,
+                }
+                report["steps"].append("notebooklm")
+                final_docx = nlm_out
+            except Exception as exc:
+                report["notebooklm_error"] = f"{type(exc).__name__}: {exc}"
 
         report["final_docx"] = str(final_docx)
         log_line(f"[Submission] project={project_id} final={Path(final_docx).name} steps={report['steps']}")
