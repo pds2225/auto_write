@@ -502,11 +502,12 @@ def run_all(
 ) -> QualityOpsReport:
     """모든 결정론적 후처리를 안전한 순서로 1회 적용하고 집계 리포트를 반환한다.
 
-    순서: 안내삭제 → 글머리표공백 → 표공백 → 빈단락 → 강조 → (옵션)폰트
+    순서: 안내삭제(body+표) → 글머리표공백 → 표공백 → 빈단락 → 강조 → (옵션)폰트
     """
     report = QualityOpsReport()
     if remove_guides:
         report.guide_paragraphs_removed = remove_guide_paragraphs(doc)
+        report.table_guide_rows_removed = remove_table_guide_rows(doc)
     report.bullet_spacing_fixed = normalize_bullet_spacing(doc)
     report.table_cells_cleaned = cleanup_table_whitespace(doc)
     report.empty_paragraphs_removed = remove_empty_paragraphs(doc)

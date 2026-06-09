@@ -1,7 +1,7 @@
 # RESUME.md — 세션 재시작 시 이어하기 진입점
 
 > **새 세션을 시작하면 이 파일을 가장 먼저 읽어라.** auto_write 문서 품질 하네스 작업의
-> 진행 상태·남은 일·재개 명령이 여기 있다. (최종 갱신: 2026-06-06 컴팩트 후)
+> 진행 상태·남은 일·재개 명령이 여기 있다. (최종 갱신: 2026-06-09 표 안내 배선)
 
 ## 0. 30초 컨텍스트
 
@@ -30,6 +30,15 @@
   필요시 `scripts\eval_announcement_score.py` 재실행).
 - 재개 스크립트(영구화): `scripts\{eval_announcement_score, build_chart_improved, extract_doc_data}.py`
   (원래 job tmp=휘발). 출력경로만 환경 맞게 수정 후 `$env:PYTHONPATH='D:\auto_write\app'`로 실행.
+
+**2026-06-09 표 셀 안내문구 제거 배선 완료(table-guide-cleanup 워크트리):**
+- `remove_table_guide_rows`(커밋 b9db76d) — 표 셀에 박힌 양식 안내문구를 보수적으로 삭제
+  (안내전용표 통째삭제 / 혼합표 안내행만 제거 / 데이터표 보존, `_PURE_GUIDE_RE` 일관 기준, 이미지행·max_len 보호).
+- ✅ **run_all 파이프라인 배선**: 함수·테스트(85 passed)는 있었으나 통합 실행기·오케스트레이터에 미연결이라
+  실제 후처리 시 표 안내문구가 제거되지 않고 `table_guide_rows_removed`가 항상 0이던 갭을 해소. 3곳 연결 —
+  `doc_quality_ops.run_all`(remove_guides 블록 호출) + `document_quality_orchestrator`(누적집계 161줄 + md리포트 "삭제한 표 안내 행").
+- 검증: pytest **85 passed**, 배선 미니검증 `WIRING_OK / IDEMPOTENT_OK`(before2→after1, 재실행 추가 0).
+- 남은 일: git 커밋 후 master 병합(사용자 승인 대기) — 브랜치 `worktree-table-guide-cleanup`, origin=github.com/pds2225/auto_write.
 
 ## 1. 빠른 재개 (복붙용)
 
