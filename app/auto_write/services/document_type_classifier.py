@@ -17,6 +17,7 @@ AI 보조 판정을 사용할 수 있다(선택).
 - certification_report : 인증 검토보고서
 - export_report        : 수출컨설팅 보고서
 - field_clinic_report  : 현장클리닉 보고서
+- result_report        : 사업 결과·성과·정산 보고서
 - generic_submission   : 기타 제출문서 (fallback)
 """
 
@@ -60,6 +61,7 @@ _TYPE_LABELS = {
     "certification_report": "인증 검토보고서",
     "export_report": "수출컨설팅 보고서",
     "field_clinic_report": "현장클리닉 보고서",
+    "result_report": "사업 결과·성과 보고서",
     "generic_submission": "기타 제출문서",
 }
 
@@ -101,6 +103,13 @@ _SIGNATURES: dict[str, list[tuple[str, int]]] = {
     "field_clinic_report": [
         ("현장클리닉", 5), ("현장진단", 4), ("클리닉", 4), ("현장방문", 3),
         ("애로사항", 3), ("처방", 3), ("현장지도", 4), ("개선처방", 4),
+    ],
+    # 사업 결과·성과·정산 보고서 — 고유 복합어 위주(bare "결과/성과/실적" 미사용)로
+    # 기존 유형(특히 consulting_report "진단결과", rnd_plan "성능지표")과 충돌 방지.
+    "result_report": [
+        ("결과보고서", 5), ("성과보고서", 5), ("최종보고서", 4), ("완료보고서", 4),
+        ("정산보고서", 4), ("사업비정산", 4), ("추진실적", 3), ("수행실적", 3),
+        ("집행실적", 3), ("성과지표", 2), ("달성도", 2), ("정산", 2),
     ],
 }
 

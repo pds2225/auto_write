@@ -133,6 +133,26 @@ def test_document_type_classification():
     assert generic.type_code == "generic_submission"
 
 
+def test_result_report_classification():
+    """사업 결과·성과·정산 보고서 유형 인식 + 사업계획서 오분류 회귀 가드."""
+    text = (
+        "2024년 창업지원사업 결과보고서\n"
+        "1. 사업 추진실적 및 목표 달성도\n"
+        "2. 주요 성과보고 및 성과지표\n"
+        "3. 사업비 집행실적 및 정산 내역(사업비정산)\n"
+    )
+    r = classify_text(text, filename="결과보고서.docx")
+    assert r.type_code == "result_report"
+    assert r.confidence > 0.5
+
+    # 사업계획서가 결과보고서로 오분류되지 않는지(회귀 가드)
+    plan = classify_text(
+        "사업계획서\n문제인식 실현가능성 성장전략 팀구성 창업아이템 PSST",
+        filename="plan.docx",
+    )
+    assert plan.type_code == "business_plan"
+
+
 # --------------------------------------------------------------------------- 5
 def test_psst_check():
     report = check_psst(_plan_doc())
