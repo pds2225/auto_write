@@ -43,35 +43,36 @@ def test_apply_images_in_equals_out_blocked(tmp_path: Path) -> None:
         apply_images(str(src), str(src))
 
 
-def test_apply_images_inserts_chart_when_table_present(tmp_path: Path) -> None:
+def test_apply_images_inserts_notebooklm_prompt(tmp_path: Path) -> None:
     src = tmp_path / "in.docx"
     out = tmp_path / "out.docx"
     _make_doc(src, with_table=True)
-    report = apply_images(str(src), str(out))
+    report = apply_images(str(src), str(out))  # openai_service=None → 키워드 폴백
     assert out.exists()
     # 원본은 그대로(문단 수 변화 없음)
     assert len(Document(str(src)).paragraphs) < len(Document(str(out)).paragraphs)
-    # 표 실측치가 있으므로 최소 1개 차트가 삽입되어야 한다
-    assert report.charts_inserted >= 1
+    # 그림 위치마다 NotebookLM 슬라이드 프롬프트 블록이 삽입되어야 한다
+    assert report.prompts_inserted >= 1
+    text = "\n".join(p.text for p in Document(str(out)).paragraphs)
+    assert "NotebookLM" in text
 
 
-def test_apply_images_placeholder_only_makes_no_chart(tmp_path: Path) -> None:
+def test_apply_images_placeholder_only_still_inserts_prompt(tmp_path: Path) -> None:
     src = tmp_path / "in.docx"
     out = tmp_path / "out.docx"
     _make_doc(src, with_table=True)
+    # placeholder_only 는 하위호환용(동작에 영향 없음) — 항상 프롬프트 블록 삽입
     report = apply_images(str(src), str(out), placeholder_only=True)
-    assert report.charts_inserted == 0
-    assert report.placeholders_inserted >= 1
+    assert report.prompts_inserted >= 1
 
 
-def test_apply_images_no_table_falls_back_to_placeholder(tmp_path: Path) -> None:
+def test_apply_images_no_table_still_inserts_prompt(tmp_path: Path) -> None:
     src = tmp_path / "in.docx"
     out = tmp_path / "out.docx"
     _make_doc(src, with_table=False)
     report = apply_images(str(src), str(out))
-    # 표(실측치)가 없으니 차트 0, 자리표시만 (숫자 날조 없음)
-    assert report.charts_inserted == 0
-    assert report.placeholders_inserted >= 1
+    # 표가 없어도 키워드 매칭 위치에 슬라이드 프롬프트가 들어간다 (숫자 날조 없음)
+    assert report.prompts_inserted >= 1
 
 
 def test_psst_scaffold_adds_guidance(tmp_path: Path) -> None:
@@ -102,8 +103,8 @@ def test_autopilot_end_to_end(tmp_path: Path) -> None:
     assert out.exists()
     assert report.backup_dir  # 원본 백업이 생성되어야 함
     assert report.score_total > 0
-    # 표가 있으므로 차트가 최소 1개, PSST 보강이 일어났을 것
-    assert report.charts_inserted >= 1
+    # 그림 위치에 NotebookLM 프롬프트가 최소 1개, PSST 보강이 일어났을 것
+    assert report.prompts_inserted >= 1
     assert report.psst_areas_scaffolded >= 1
 
 

@@ -66,8 +66,7 @@ class BizplanReport:
     ai_used: bool = False
     final_quality_score: float = 0.0
     final_gate_passed: bool = False
-    charts_inserted: int = 0
-    placeholders_inserted: int = 0
+    prompts_inserted: int = 0
     ai_areas_written: int = 0
     score_history: list[LoopScore] = field(default_factory=list)
     needs_confirm: list[str] = field(default_factory=list)
@@ -86,8 +85,7 @@ class BizplanReport:
             "ai_used": self.ai_used,
             "final_quality_score": round(self.final_quality_score, 1),
             "final_gate_passed": self.final_gate_passed,
-            "charts_inserted": self.charts_inserted,
-            "placeholders_inserted": self.placeholders_inserted,
+            "prompts_inserted": self.prompts_inserted,
             "ai_areas_written": self.ai_areas_written,
             "score_history": [s.as_dict() for s in self.score_history],
             "needs_confirm": self.needs_confirm,
@@ -228,8 +226,7 @@ def run_bizplan_autopilot(
             report.backup_dir = ap.backup_dir
         report.final_quality_score = ap.score_total
         report.final_gate_passed = ap.passed
-        report.charts_inserted = ap.charts_inserted
-        report.placeholders_inserted = ap.placeholders_inserted
+        report.prompts_inserted = ap.prompts_inserted
         cur = ap.output_docx
 
         # 3) 공고 채점 + 목표 판정
@@ -268,8 +265,11 @@ def _build_todo(report: BizplanReport) -> list[str]:
         )
     for nc in report.needs_confirm:
         todo.append(f"[확인필요] {nc}")
-    if report.placeholders_inserted:
-        todo.append(f"이미지 자리표시 {report.placeholders_inserted}곳 — 표/데이터 입력 시 차트로 교체.")
+    if report.prompts_inserted:
+        todo.append(
+            f"NotebookLM 슬라이드 프롬프트 {report.prompts_inserted}곳 — "
+            f"NotebookLM 에 붙여넣어 슬라이드 생성 후 안내 블록 삭제."
+        )
     if not report.final_gate_passed:
         todo.append(f"서식 품질점수 {report.final_quality_score:.1f} (게이트 미달) — 보완 권장.")
     return todo
@@ -298,7 +298,7 @@ def _write_report(results_root: Path, stem: str, report: BizplanReport) -> str:
     L.append("## 품질/시각화")
     gate = "통과" if report.final_gate_passed else "미달"
     L.append(f"- 서식 품질점수: {report.final_quality_score:.1f}/100 (게이트 {gate})")
-    L.append(f"- 차트 {report.charts_inserted}건 / 자리표시 {report.placeholders_inserted}건")
+    L.append(f"- NotebookLM 슬라이드 프롬프트: {report.prompts_inserted}건")
     L.append(f"- AI 작성 보강 영역: {report.ai_areas_written}개")
     L.append("")
     if report.evidence_used:

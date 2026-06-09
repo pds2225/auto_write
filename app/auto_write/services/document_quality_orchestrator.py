@@ -29,7 +29,7 @@ from . import doc_quality_ops as dq
 from .document_type_classifier import classify_text, DocTypeResult
 from .document_type_classifier import _extract_text as _classify_extract
 from .psst_check import check_psst, PSSTReport
-from .infographic_suggest import suggest_images, InfographicReport
+from .infographic_suggest import suggest_images_ai, InfographicReport
 from .doc_quality_score import score_document, QualityScore
 
 # PSST 검사를 적용할 유형
@@ -174,8 +174,8 @@ class DocumentQualityOrchestrator:
                 psst_report = None
                 psst_ratio = None
 
-            # 이미지 제안
-            info_report = suggest_images(doc)
+            # 이미지 제안(Claude 가용 시 AI, 아니면 키워드 폴백)
+            info_report = suggest_images_ai(doc, openai_service=self.openai_service)
 
             # 점수 (미입력 필수칸 '[확인필요]' 수는 참고용 informational 로 전달)
             confirm_needed = self._count_confirm_markers(doc)
