@@ -1,7 +1,7 @@
 # RESUME.md — 세션 재시작 시 이어하기 진입점
 
 > **새 세션을 시작하면 이 파일을 가장 먼저 읽어라.** auto_write 문서 품질 하네스 작업의
-> 진행 상태·남은 일·재개 명령이 여기 있다. (최종 갱신: 2026-06-06 컴팩트 후)
+> 진행 상태·남은 일·재개 명령이 여기 있다. (최종 갱신: 2026-06-09 표 안내 배선)
 
 ## 🆕 2026-06-08 제출-100 이니셔티브 (브랜치 feature/submission-100-auto, 미병합)
 
@@ -37,6 +37,30 @@ python -m auto_write.submit --project <project_id> --announcement-file "공고.t
 `doc-postprocessor`(안내문구삭제+서식정규화+강조) / `doc-quality-gate`(채점·게이트+회귀검수) / `doc-writer`(문서화).
 기존 12개 삭제. **app/ 코드 무수정 → pytest 72 passed 회귀 없음 확인.** SKILL.md 데이터흐름·담당표,
 커맨드 5개, CLAUDE.md 에이전트목록·변경이력 전부 새 이름으로 동기화(dangling 참조 0). 스킬 11개 평면 .md는 이번 범위 밖(유지).
+
+**2026-06-08 ultrawork(공고 95점 결과물 + 이미지 직접 생성) 진행 중:**
+- 목표: 공고 채점방식대로 95점+ 결과물 도출 + 필요한 이미지 직접 생성 기능 구현.
+- ✅ **이미지 생성 기능 구현**: `app/auto_write/services/chart_generator.py`(간트·막대·꺾은선·조직도, matplotlib)
+  + `chart_insert.py`(DOCX 삽입, in==out시 ValueError). 신규테스트 12 + 회귀 84 passed.
+- ✅ **채점 엔진 연결**: `evaluation_service`로 미래큐러스 AI인재실증형 작성본 채점 = **90/100**(5항목 18/20).
+- ✅ **95점 작성가이드**: `results\미래큐러스_95점_작성가이드_20260608.md`.
+- **핵심결정(불변)**: 케이스A — 원문에 없는 수치 날조 금지(공고상 허위기재=형사처벌·환수·참여제한3년).
+  90→95 갭은 전부 **미기재 실제값**(사업비 금액·시장수치·팀표 더미 `OO학 박사`)이라 **미래큐러스만** 채울 수 있음.
+  차트는 AI텍스트채점엔 무영향(사람 심사위원용 가점). 배점은 공고·양식에 숫자 없어 5항목 균등 20점 적용.
+- ✅ **보완본 생성 완료**: `results\miraequrus_보완_차트_20260608.docx` (간트·조직도 차트를 anchor
+  '추진 일정'/'대표자' 위치에 정확 삽입). 재채점은 미실행(차트=AI텍스트채점 무영향이라 90 유지로 갈음,
+  필요시 `scripts\eval_announcement_score.py` 재실행).
+- 재개 스크립트(영구화): `scripts\{eval_announcement_score, build_chart_improved, extract_doc_data}.py`
+  (원래 job tmp=휘발). 출력경로만 환경 맞게 수정 후 `$env:PYTHONPATH='D:\auto_write\app'`로 실행.
+
+**2026-06-09 표 셀 안내문구 제거 배선 완료(table-guide-cleanup 워크트리):**
+- `remove_table_guide_rows`(커밋 b9db76d) — 표 셀에 박힌 양식 안내문구를 보수적으로 삭제
+  (안내전용표 통째삭제 / 혼합표 안내행만 제거 / 데이터표 보존, `_PURE_GUIDE_RE` 일관 기준, 이미지행·max_len 보호).
+- ✅ **run_all 파이프라인 배선**: 함수·테스트(85 passed)는 있었으나 통합 실행기·오케스트레이터에 미연결이라
+  실제 후처리 시 표 안내문구가 제거되지 않고 `table_guide_rows_removed`가 항상 0이던 갭을 해소. 3곳 연결 —
+  `doc_quality_ops.run_all`(remove_guides 블록 호출) + `document_quality_orchestrator`(누적집계 161줄 + md리포트 "삭제한 표 안내 행").
+- 검증: pytest **85 passed**, 배선 미니검증 `WIRING_OK / IDEMPOTENT_OK`(before2→after1, 재실행 추가 0).
+- 남은 일: git 커밋 후 master 병합(사용자 승인 대기) — 브랜치 `worktree-table-guide-cleanup`, origin=github.com/pds2225/auto_write.
 
 ## 1. 빠른 재개 (복붙용)
 

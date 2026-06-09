@@ -31,7 +31,7 @@ from docx import Document
 from docx.oxml.ns import qn
 
 from .doc_quality_ops import (
-    _BULLET_PREFIX_RE, _MULTI_SPACE_RE, _PURE_GUIDE_RE,
+    _BULLET_PREFIX_RE, _MULTI_SPACE_RE, _PURE_GUIDE_RE, _is_guide_text,
     _text_nodes, _element_has_drawing,
 )
 from .docx_ops import _iter_body_paragraphs, _paragraph_text
@@ -104,8 +104,9 @@ def _scan_guide(doc: Document) -> tuple[int, int]:
     """(critical, general) 잔존 안내문구 — body 직계 단락만 검사.
 
     remove_guide_paragraphs 와 완전히 동일한 범위(body 직계)로 스캔한다.
-    표 셀 내부는 삭제 대상이 아니므로 채점에서도 제외한다.
-    - critical : _PURE_GUIDE_RE 에 매치 (삭제기 기준과 동일)
+    표 셀 내부는 (별도 표 안내 삭제기가 담당하므로) 이 채점에서는 제외한다.
+    - critical : _is_guide_text 에 매치 (삭제기와 동일한 단일 기준 = _PURE_GUIDE_RE
+                 또는 _GUIDE_EXTRA_RE; scan-range == delete-range 로 비대칭 방지)
     - general  : body 직계 단락에 OOO/○○○/000 플레이스홀더가 있는 경우
     """
     critical = general = 0
@@ -113,7 +114,7 @@ def _scan_guide(doc: Document) -> tuple[int, int]:
         t = _paragraph_text(p).strip()
         if not t:
             continue
-        if _PURE_GUIDE_RE.search(t):
+        if _is_guide_text(t):
             critical += 1
         elif _PLACEHOLDER_RE.search(t):
             general += 1
@@ -240,11 +241,14 @@ def score_document(
     psst_ratio: float | None = None,
     image_suggestions: int = 0,
     existing_images: int = 0,
+    empty_required_cells: int = 0,
 ) -> QualityScore:
     """후처리된 문서를 채점한다.
 
     Parameters 는 오케스트레이터가 분류/PSST/이미지제안 단계 결과를 주입한다.
     psst_ratio 가 None 이면 PSST 미적용 유형 → 8번 항목은 보고서 구조 키워드로 대체.
+    empty_required_cells 는 (오케스트레이터가 양식 재분석으로 산출한) 미입력 필수셀 수로,
+    현재는 **참고용(informational, 가중치 0)** 으로만 표기해 85점 게이트를 흔들지 않는다.
     """
     items: list[ScoreItem] = []
     full_text = "\n".join(p.text for p in doc.paragraphs)
@@ -282,8 +286,11 @@ def score_document(
     # 5. 표 내부 품질 (10)
     tw = _scan_table_ws(doc)
     s5 = max(0.0, 10.0 - tw * 1.0)
-    items.append(ScoreItem("table_quality", "표 내부 품질", s5, 10, tw,
-                           f"공백 결함 셀={tw}"))
+    detail5 = f"공백 결함 셀={tw}"
+    if empty_required_cells:
+        # 참고용 표기만(가중치 0) — 게이트 점수에는 반영하지 않는다.
+        detail5 += f" / 미입력 필수셀(참고)={empty_required_cells}"
+    items.append(ScoreItem("table_quality", "표 내부 품질", s5, 10, tw, detail5))
 
     # 6. 주요문장 강조 적정성 (10)
     bold_p = _count_bold_paragraphs(doc)
