@@ -69,7 +69,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"품질 점수 : {report.score_total:.1f}/100 - {report.grade} | 게이트 {gate} "
           f"(반복 {report.iterations}회)")
     print(f"후처리    : {report.ops_summary}")
-    print(f"이미지    : 차트 {report.charts_inserted}건 / 자리표시 {report.placeholders_inserted}건")
+    print(f"이미지    : NotebookLM 슬라이드 프롬프트 {report.prompts_inserted}건")
     print(f"PSST 보강 : {report.psst_areas_scaffolded}영역 / {report.psst_items_added}항목 "
           f"(충족률 {report.psst_overall_ratio*100:.0f}%)")
     print(f"출력 DOCX : {report.output_docx}")

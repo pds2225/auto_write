@@ -5,7 +5,7 @@
   1) 백업 + 서식 수정 + 점수/게이트  — 기존 ``DocumentQualityOrchestrator.run``
      (안내문구 삭제·글머리표/표 공백·빈 단락·핵심문장 강조 + 100점 채점 + 85점 게이트)
   2) 이미지 실제 적용             — ``image_apply.apply_images``
-     (표 실측치로 차트 생성·삽입, 없으면 자리표시 placeholder)
+     (그림 위치에 NotebookLM 슬라이드 생성 프롬프트 블록 삽입; 제안은 Claude, 폴백 키워드)
   3) PSST 보강                   — ``psst_fill.apply_psst_scaffold``
      (누락/미흡 영역에 작성 뼈대+가이드)
   4) 잔존 빈칸 스캔 + 통합 리포트
@@ -54,8 +54,7 @@ class AutopilotReport:
     iterations: int = 0
     ops_summary: str = ""
     # 2단계(이미지)
-    charts_inserted: int = 0
-    placeholders_inserted: int = 0
+    prompts_inserted: int = 0
     # 3단계(PSST)
     psst_overall_ratio: float = 0.0
     psst_areas_scaffolded: int = 0
@@ -77,8 +76,7 @@ class AutopilotReport:
             "passed": self.passed,
             "iterations": self.iterations,
             "ops_summary": self.ops_summary,
-            "charts_inserted": self.charts_inserted,
-            "placeholders_inserted": self.placeholders_inserted,
+            "prompts_inserted": self.prompts_inserted,
             "psst_overall_ratio": round(self.psst_overall_ratio, 3),
             "psst_areas_scaffolded": self.psst_areas_scaffolded,
             "psst_items_added": self.psst_items_added,
@@ -112,17 +110,20 @@ def _scan_residual(docx_path: str, *, limit: int = 20) -> list[str]:
     return found
 
 
-def _make_orchestrator(results_root: Path, *, use_ai: bool = False) -> DocumentQualityOrchestrator:
-    openai_service = None
-    if use_ai:
-        try:
-            from .openai_client import OpenAIService
+def _make_openai_service() -> Optional[Any]:
+    """가용한 OpenAIService 를 만든다(키 없거나 실패하면 None)."""
+    try:
+        from .openai_client import OpenAIService
 
-            settings = get_settings()
-            svc = OpenAIService(settings)
-            openai_service = svc if getattr(svc, "available", False) else None
-        except Exception:
-            openai_service = None
+        settings = get_settings()
+        svc = OpenAIService(settings)
+        return svc if getattr(svc, "available", False) else None
+    except Exception:
+        return None
+
+
+def _make_orchestrator(results_root: Path, *, use_ai: bool = False) -> DocumentQualityOrchestrator:
+    openai_service = _make_openai_service() if use_ai else None
     return DocumentQualityOrchestrator(results_root, openai_service=openai_service)
 
 
@@ -198,14 +199,14 @@ def run_autopilot(
     )
     stage_in = Path(qresult.output_docx)
 
-    # --- 2단계: 이미지 실제 적용 ---
+    # --- 2단계: 이미지 실제 적용(NotebookLM 슬라이드 프롬프트 삽입) ---
     tmp_img = results_root / f"{stem}_ap2_img.docx"
     img: ImageApplyReport = apply_images(
         str(stage_in), str(tmp_img),
         max_items=max_images, placeholder_only=placeholder_only,
+        openai_service=_make_openai_service(),
     )
-    report.charts_inserted = img.charts_inserted
-    report.placeholders_inserted = img.placeholders_inserted
+    report.prompts_inserted = img.prompts_inserted
     stage_in = tmp_img
 
     # --- 3단계: PSST 보강 ---
@@ -238,9 +239,10 @@ def _build_todo(report: AutopilotReport) -> list[str]:
         todo.append(
             f"품질점수 {report.score_total:.1f}점(게이트 미달) — 보완 후 재실행 권장."
         )
-    if report.placeholders_inserted:
+    if report.prompts_inserted:
         todo.append(
-            f"이미지 자리표시 {report.placeholders_inserted}곳 — 표/데이터를 채우면 차트로 교체됩니다."
+            f"NotebookLM 슬라이드 프롬프트 {report.prompts_inserted}곳 — "
+            f"각 프롬프트를 NotebookLM 에 붙여넣어 슬라이드를 만들고, 안내 블록은 삭제하세요."
         )
     for area in report.psst_scaffolded_areas:
         todo.append(f"PSST 작성 보강: {area}")
@@ -269,9 +271,9 @@ def _write_report(results_root: Path, stem: str, report: AutopilotReport) -> str
     )
     lines.append(f"- 후처리: {report.ops_summary}")
     lines.append("")
-    lines.append("## 2) 이미지 적용")
-    lines.append(f"- 차트 삽입(실측치): {report.charts_inserted}건")
-    lines.append(f"- 자리표시(데이터 미입력): {report.placeholders_inserted}건")
+    lines.append("## 2) 이미지 적용 (NotebookLM 슬라이드 프롬프트)")
+    lines.append(f"- 슬라이드 프롬프트 삽입: {report.prompts_inserted}건")
+    lines.append("- 각 프롬프트를 NotebookLM 슬라이드 생성에 붙여넣어 사용하세요.")
     lines.append("")
     lines.append("## 3) PSST 보강")
     lines.append(f"- 전체 충족률: {report.psst_overall_ratio*100:.0f}%")
