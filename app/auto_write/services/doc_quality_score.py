@@ -31,7 +31,7 @@ from docx import Document
 from docx.oxml.ns import qn
 
 from .doc_quality_ops import (
-    _BULLET_PREFIX_RE, _MULTI_SPACE_RE, _PURE_GUIDE_RE,
+    _BULLET_PREFIX_RE, _MULTI_SPACE_RE, _PURE_GUIDE_RE, _is_guide_text,
     _text_nodes, _element_has_drawing,
 )
 from .docx_ops import _iter_body_paragraphs, _paragraph_text
@@ -104,8 +104,9 @@ def _scan_guide(doc: Document) -> tuple[int, int]:
     """(critical, general) 잔존 안내문구 — body 직계 단락만 검사.
 
     remove_guide_paragraphs 와 완전히 동일한 범위(body 직계)로 스캔한다.
-    표 셀 내부는 삭제 대상이 아니므로 채점에서도 제외한다.
-    - critical : _PURE_GUIDE_RE 에 매치 (삭제기 기준과 동일)
+    표 셀 내부는 (별도 표 안내 삭제기가 담당하므로) 이 채점에서는 제외한다.
+    - critical : _is_guide_text 에 매치 (삭제기와 동일한 단일 기준 = _PURE_GUIDE_RE
+                 또는 _GUIDE_EXTRA_RE; scan-range == delete-range 로 비대칭 방지)
     - general  : body 직계 단락에 OOO/○○○/000 플레이스홀더가 있는 경우
     """
     critical = general = 0
@@ -113,7 +114,7 @@ def _scan_guide(doc: Document) -> tuple[int, int]:
         t = _paragraph_text(p).strip()
         if not t:
             continue
-        if _PURE_GUIDE_RE.search(t):
+        if _is_guide_text(t):
             critical += 1
         elif _PLACEHOLDER_RE.search(t):
             general += 1

@@ -53,6 +53,36 @@ _PURE_GUIDE_RE = re.compile(
     r"^\s*(?:[<\(［【]\s*)?(?:작성\s*요령|작성\s*방법|작성\s*예시|기재\s*요령|기재\s*방법|"
     r"유의\s*사항|예\s*시|참고\s*용|※[^。\n]{0,40}(?:작성|기재|예시))"
 )
+# 보강 패턴 — _PURE_GUIDE_RE(줄 시작 고정사전)의 사각지대를 보완한다.
+# (a) 글머리표(○ ㅇ - * 등) 접두가 붙은 안내, (b) 문장 중간/끝의 '명령형 어미'
+# (기재하시오·작성하세요·입력 바랍니다·작성할 것 등) 로 끝나는 안내만 대상으로 한다.
+# 선언형(작성한다/작성합니다/기재하였다)은 어미가 '하시오/하세요/바랍니다'가 아니므로
+# 매칭되지 않아 일반 서술문의 과삭제를 막는다. 동사 앞 텍스트는 {0,80} 으로 제한.
+_GUIDE_EXTRA_RE = re.compile(
+    r"^[\s○●▪◦·•‣⁃\-–—－*ㅇㅁ<\(（［【]*"
+    r"(?:"
+    r"(?:작성|기재|기입|입력)\s*(?:요령|방법|예시|방식|요망)"
+    r"|[^\n]{0,80}?(?:기재|작성|기입|입력|서술|기술)\s*"
+    r"(?:하(?:시오|십시오|세요|시기\s*바랍니다)|해\s*주(?:십시오|시기\s*바랍니다|세요)"
+    r"|하여\s*주(?:십시오|시기\s*바랍니다|세요)|하기\s*바랍니다|할\s*것|바랍니다|바람|요망|요함)"
+    r")"
+)
+
+
+def _is_guide_text(text: str) -> bool:
+    """단락/표행 텍스트가 '명백한 양식 안내문구'인지 단일 판정(삭제·채점 공통 기준).
+
+    삭제(remove_guide_paragraphs / remove_table_guide_rows)와 채점(doc_quality_score._scan_guide)
+    이 동일 기준을 쓰도록 단일 진실원천으로 둔다. ``_PURE_GUIDE_RE``(줄 시작 고정사전) 또는
+    ``_GUIDE_EXTRA_RE``(글머리표 접두·명령형 어미)에 매칭되면 안내문구로 본다.
+
+    주의: ``docx_ops.GUIDE_MARKER_RE`` 는 '셀에 든 기존 텍스트를 덮어써도 되는가'(빈 자리 표시)
+    판단용으로 ``기재``·``<...>`` 등을 모두 잡는 훨씬 광범위한 패턴이다. 삭제 기준에 합치면
+    실제 본문까지 지워질 수 있어 의도적으로 ``_is_guide_text`` 에 포함하지 않는다(과삭제 방지).
+    """
+    if not text:
+        return False
+    return bool(_PURE_GUIDE_RE.search(text) or _GUIDE_EXTRA_RE.search(text))
 
 
 @dataclass
@@ -409,7 +439,7 @@ def remove_guide_paragraphs(doc: Document, *, max_len: int = 120) -> int:
         text = _paragraph_text(para)
         if not text or len(text) > max_len:
             continue
-        if _PURE_GUIDE_RE.search(text):
+        if _is_guide_text(text):
             body.remove(para)
             removed += 1
     return removed
@@ -458,7 +488,7 @@ def remove_table_guide_rows(doc: Document, *, max_len: int = 500) -> int:
                 bool(text)
                 and not has_img
                 and len(text) <= max_len
-                and _PURE_GUIDE_RE.search(text) is not None
+                and _is_guide_text(text)
             )
             flags.append((row, is_guide, bool(text)))
 
@@ -502,11 +532,15 @@ def run_all(
 ) -> QualityOpsReport:
     """모든 결정론적 후처리를 안전한 순서로 1회 적용하고 집계 리포트를 반환한다.
 
-    순서: 안내삭제 → 글머리표공백 → 표공백 → 빈단락 → 강조 → (옵션)폰트
+    순서: 안내삭제(body+표) → 글머리표공백 → 표공백 → 빈단락 → 강조 → (옵션)폰트
     """
     report = QualityOpsReport()
     if remove_guides:
         report.guide_paragraphs_removed = remove_guide_paragraphs(doc)
+        # 표 셀에 박힌 양식 안내문구도 제거(멱등 결함예방). 기존 함수가 run_all 에
+        # 연결돼 있지 않던 사각지대 보완 — 데이터 행이 있는 표는 안내 행만, 안내 전용
+        # 표는 통째 제거되며 데이터 행은 보존된다.
+        report.table_guide_rows_removed = remove_table_guide_rows(doc)
     report.bullet_spacing_fixed = normalize_bullet_spacing(doc)
     report.table_cells_cleaned = cleanup_table_whitespace(doc)
     report.empty_paragraphs_removed = remove_empty_paragraphs(doc)

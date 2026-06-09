@@ -209,3 +209,78 @@ def test_existing_modules_still_import():
     from auto_write.services import evaluation_service, submittable_filler  # noqa
     assert hasattr(qa_service.QAService, "build_report")
     assert hasattr(project_service.ProjectService, "PSST_PROBLEM_RE")
+
+
+# --------------------------------------------------------------------------- STEP1: 안내문구 삭제 강화 (item 3)
+def test_guide_extra_imperative_removal():
+    """글머리표 접두 + 명령형 어미 안내문구를 삭제하고 실제 본문은 보존한다."""
+    d = Document()
+    d.add_paragraph("○ 해당 내용을 구체적으로 기재하시오")   # 글머리표 접두 + 하시오
+    d.add_paragraph("사업 목표를 작성하세요")                  # 명령형 어미(접두 없음)
+    d.add_paragraph("핵심 인력 정보를 입력 바랍니다")          # 바랍니다
+    d.add_paragraph("실제 사업 내용입니다.")                   # 본문 — 보존돼야 함
+    removed = dq.remove_guide_paragraphs(d)
+    remaining = [p.text for p in d.paragraphs if p.text.strip()]
+    assert removed == 3
+    assert remaining == ["실제 사업 내용입니다."]
+
+
+def test_guide_no_false_delete():
+    """선언형 '기재한/작성한다' 와 정량 본문은 절대 삭제하지 않는다(과삭제 트립와이어)."""
+    d = Document()
+    d.add_paragraph("본 사업은 매출 목표를 기재한 바와 같이 달성한다")  # 선언형(기재한)
+    d.add_paragraph("매출 10억원 달성 및 고용 20명 창출")              # 정량 본문
+    d.add_paragraph("사업계획을 작성하였으며 검토를 마쳤다")            # 선언형(작성하였)
+    before = [p.text for p in d.paragraphs]
+    removed = dq.remove_guide_paragraphs(d)
+    after = [p.text for p in d.paragraphs if p.text.strip()]
+    assert removed == 0
+    assert after == before
+
+
+def test_runall_wires_table_guides():
+    """run_all 이 표 안내문구도 제거하고(배선 확인) 데이터 표는 보존한다."""
+    d = Document()
+    d.add_paragraph("실제 본문")
+    # 안내 전용 표 → 통째 제거
+    t1 = d.add_table(rows=1, cols=1)
+    t1.rows[0].cells[0].text = "※ 정부지원사업비는 최대 2억원 한도 이내로 작성"
+    # 데이터 표 → 보존
+    t2 = d.add_table(rows=2, cols=2)
+    t2.rows[0].cells[0].text = "비목"
+    t2.rows[0].cells[1].text = "금액"
+    t2.rows[1].cells[0].text = "인건비"
+    t2.rows[1].cells[1].text = "10,000,000"
+    before_tables = len(d.tables)
+    report = dq.run_all(d)
+    assert report.table_guide_rows_removed >= 1          # run_all 에서 실제 동작
+    assert len(d.tables) == before_tables - 1            # 안내 전용 표 제거
+    texts = [c.text for tb in d.tables for r in tb.rows for c in r.cells]
+    assert "인건비" in texts and "10,000,000" in texts    # 데이터 표 보존
+
+
+def test_table_guide_idempotent_in_runall():
+    """run_all 을 두 번 돌려도(보완 루프 모사) 2회차엔 표 안내 삭제가 0(멱등)."""
+    d = Document()
+    d.add_paragraph("실제 본문 단락입니다")
+    t = d.add_table(rows=1, cols=1)
+    t.rows[0].cells[0].text = "작성요령 : 예시를 삭제하고 작성하시오"
+    r1 = dq.run_all(d)
+    r2 = dq.run_all(d)
+    assert r1.table_guide_rows_removed >= 1
+    assert r2.table_guide_rows_removed == 0
+    assert r2.guide_paragraphs_removed == 0
+
+
+def test_is_guide_text_single_source():
+    """_is_guide_text 단일 기준 — 삭제기·채점기가 동일 판정을 공유함을 확인."""
+    from auto_write.services.doc_quality_score import _scan_guide
+    assert dq._is_guide_text("○ 내용을 기재하시오") is True
+    assert dq._is_guide_text("※ 작성요령: 예시") is True
+    assert dq._is_guide_text("매출 10억원을 달성하였다") is False
+    # 채점기(_scan_guide)도 동일 기준으로 critical 카운트
+    d = Document()
+    d.add_paragraph("사업 내용을 구체적으로 작성하시기 바랍니다")  # 명령형 안내
+    d.add_paragraph("실제 매출 10억원 달성")
+    crit, _gen = _scan_guide(d)
+    assert crit == 1
