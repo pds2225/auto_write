@@ -313,3 +313,67 @@ def test_orchestrator_counts_confirm_markers():
     t.cell(0, 0).text = "사업비"
     t.cell(0, 1).text = "[확인필요]"
     assert DocumentQualityOrchestrator._count_confirm_markers(d) == 2
+
+
+# --------------------------------------------------------------------------- STEP3: 단락별 서식 통일 (item 2)
+def test_unify_paragraph_formatting_dominant():
+    """단락 내 크기가 다른 런을 '지배값(실재 다수값)'으로 통일한다(날조 없음)."""
+    from docx.shared import Pt
+    d = Document()
+    p = d.add_paragraph()
+    p.add_run("첫째 ").font.size = Pt(10)
+    p.add_run("둘째 ").font.size = Pt(14)   # 소수 → 지배값으로 교정
+    p.add_run("셋째").font.size = Pt(10)
+    n = dq.unify_paragraph_formatting(d)
+    assert n == 1
+    assert {r.font.size.pt for r in p.runs} == {10.0}   # 다수값 10pt 로 통일
+
+
+def test_unify_preserves_emphasis():
+    """크기·글꼴만 통일하고 강조(bold)는 보존한다."""
+    from docx.shared import Pt
+    d = Document()
+    p = d.add_paragraph()
+    r1 = p.add_run("강조")
+    r1.font.size = Pt(10)
+    r1.bold = True
+    p.add_run("일반").font.size = Pt(14)
+    dq.unify_paragraph_formatting(d)
+    assert p.runs[0].bold is True                       # 강조 보존
+    assert {r.font.size.pt for r in p.runs} == {10.0}
+
+
+def test_unify_skips_theme_inherited():
+    """명시 크기/글꼴이 전혀 없는 단락은 테마 상속 보존 위해 건드리지 않는다."""
+    d = Document()
+    p = d.add_paragraph()
+    p.add_run("명시 서식 없음 하나")
+    p.add_run("명시 서식 없음 둘")
+    n = dq.unify_paragraph_formatting(d)
+    assert n == 0
+    for r in p.runs:
+        assert r.font.size is None                       # 강제 크기 주입 안 함
+
+
+def test_unify_idempotent():
+    """한 번 통일하면 재실행 시 0(멱등)."""
+    from docx.shared import Pt
+    d = Document()
+    p = d.add_paragraph()
+    p.add_run("a").font.size = Pt(10)
+    p.add_run("b").font.size = Pt(14)
+    n1 = dq.unify_paragraph_formatting(d)
+    n2 = dq.unify_paragraph_formatting(d)
+    assert n1 == 1
+    assert n2 == 0
+
+
+def test_runall_unify_live_default():
+    """run_all 기본 호출(인자 없음)에서 unify 가 live 로 동작한다(죽은코드 아님)."""
+    from docx.shared import Pt
+    d = Document()
+    p = d.add_paragraph()
+    p.add_run("실행 본문 ").font.size = Pt(11)
+    p.add_run("내용").font.size = Pt(15)
+    report = dq.run_all(d)
+    assert report.paragraphs_unified >= 1
