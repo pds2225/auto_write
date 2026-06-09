@@ -24,16 +24,19 @@ from auto_write.services.bizplan_autopilot import run_bizplan_autopilot
 
 
 def _read_text(path: str | None) -> str:
+    """공고/브리프 파일에서 텍스트를 읽는다(DOCX/PDF/HWP/TXT 자동 인식)."""
     if not path:
         return ""
-    p = Path(path)
-    if not p.exists():
+    if not Path(path).exists():
         return ""
     try:
-        return p.read_text(encoding="utf-8")
+        from auto_write.services.doc_text_extract import extract_text
+
+        text, _notes = extract_text(path)
+        return text
     except Exception:
         try:
-            return p.read_text(encoding="cp949")
+            return Path(path).read_text(encoding="utf-8")
         except Exception:
             return ""
 
