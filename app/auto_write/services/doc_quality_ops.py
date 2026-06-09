@@ -53,6 +53,36 @@ _PURE_GUIDE_RE = re.compile(
     r"^\s*(?:[<\(［【]\s*)?(?:작성\s*요령|작성\s*방법|작성\s*예시|기재\s*요령|기재\s*방법|"
     r"유의\s*사항|예\s*시|참고\s*용|※[^。\n]{0,40}(?:작성|기재|예시))"
 )
+# 보강 패턴 — _PURE_GUIDE_RE(줄 시작 고정사전)의 사각지대를 보완한다.
+# (a) 글머리표(○ ㅇ - * 등) 접두가 붙은 안내, (b) 문장 중간/끝의 '명령형 어미'
+# (기재하시오·작성하세요·입력 바랍니다·작성할 것 등) 로 끝나는 안내만 대상으로 한다.
+# 선언형(작성한다/작성합니다/기재하였다)은 어미가 '하시오/하세요/바랍니다'가 아니므로
+# 매칭되지 않아 일반 서술문의 과삭제를 막는다. 동사 앞 텍스트는 {0,80} 으로 제한.
+_GUIDE_EXTRA_RE = re.compile(
+    r"^[\s○●▪◦·•‣⁃\-–—－*ㅇㅁ<\(（［【]*"
+    r"(?:"
+    r"(?:작성|기재|기입|입력)\s*(?:요령|방법|예시|방식|요망)"
+    r"|[^\n]{0,80}?(?:기재|작성|기입|입력|서술|기술)\s*"
+    r"(?:하(?:시오|십시오|세요|시기\s*바랍니다)|해\s*주(?:십시오|시기\s*바랍니다|세요)"
+    r"|하여\s*주(?:십시오|시기\s*바랍니다|세요)|하기\s*바랍니다|할\s*것|바랍니다|바람|요망|요함)"
+    r")"
+)
+
+
+def _is_guide_text(text: str) -> bool:
+    """단락/표행 텍스트가 '명백한 양식 안내문구'인지 단일 판정(삭제·채점 공통 기준).
+
+    삭제(remove_guide_paragraphs / remove_table_guide_rows)와 채점(doc_quality_score._scan_guide)
+    이 동일 기준을 쓰도록 단일 진실원천으로 둔다. ``_PURE_GUIDE_RE``(줄 시작 고정사전) 또는
+    ``_GUIDE_EXTRA_RE``(글머리표 접두·명령형 어미)에 매칭되면 안내문구로 본다.
+
+    주의: ``docx_ops.GUIDE_MARKER_RE`` 는 '셀에 든 기존 텍스트를 덮어써도 되는가'(빈 자리 표시)
+    판단용으로 ``기재``·``<...>`` 등을 모두 잡는 훨씬 광범위한 패턴이다. 삭제 기준에 합치면
+    실제 본문까지 지워질 수 있어 의도적으로 ``_is_guide_text`` 에 포함하지 않는다(과삭제 방지).
+    """
+    if not text:
+        return False
+    return bool(_PURE_GUIDE_RE.search(text) or _GUIDE_EXTRA_RE.search(text))
 
 
 @dataclass
@@ -65,6 +95,7 @@ class QualityOpsReport:
     empty_paragraphs_removed: int = 0
     paragraphs_emphasized: int = 0
     font_sizes_normalized: int = 0
+    paragraphs_unified: int = 0
     notes: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict:
@@ -76,6 +107,7 @@ class QualityOpsReport:
             "empty_paragraphs_removed": self.empty_paragraphs_removed,
             "paragraphs_emphasized": self.paragraphs_emphasized,
             "font_sizes_normalized": self.font_sizes_normalized,
+            "paragraphs_unified": self.paragraphs_unified,
             "notes": list(self.notes),
         }
 
@@ -386,6 +418,169 @@ def normalize_font_sizes(
 
 
 # ---------------------------------------------------------------------------
+# 5-b. 단락별 텍스트 서식 통일 (크기·글꼴) — 지배값 기반·날조 없음
+# ---------------------------------------------------------------------------
+
+def _dominant(values: list[str | None]) -> str | None:
+    """문서 순서를 유지하며 '가장 빈도 높은 실제 값'을 반환(동률은 첫 등장 우선).
+
+    None(명시값 없음=테마 상속)은 후보에서 제외한다. 모든 값이 None 이면 None.
+    """
+    counts: dict[str, int] = {}
+    order: list[str] = []
+    for v in values:
+        if v is None:
+            continue
+        if v not in counts:
+            counts[v] = 0
+            order.append(v)
+        counts[v] += 1
+    if not order:
+        return None
+    best = order[0]
+    for v in order:
+        if counts[v] > counts[best]:  # strictly greater → 동률 시 첫 등장 유지
+            best = v
+    return best
+
+
+def _set_rpr_size(rpr, half_pt_val: str) -> bool:
+    """rPr 의 w:sz / w:szCs 를 half_pt_val 로 맞춘다. 변경이 있으면 True."""
+    changed = False
+    for tag in ("w:sz", "w:szCs"):
+        el = rpr.find(qn(tag))
+        if el is None:
+            el = rpr.makeelement(qn(tag), {})
+            rpr.append(el)
+            changed = True
+        if el.get(qn("w:val")) != half_pt_val:
+            el.set(qn("w:val"), half_pt_val)
+            changed = True
+    return changed
+
+
+def _set_rpr_fonts(rpr, ascii_val: str | None, ea_val: str | None) -> bool:
+    """rPr 의 w:rFonts 글꼴(ascii/hAnsi/eastAsia/cs)을 지배값으로 맞춘다. 변경 시 True."""
+    changed = False
+    rfonts = rpr.find(qn("w:rFonts"))
+    if rfonts is None:
+        rfonts = rpr.makeelement(qn("w:rFonts"), {})
+        rpr.insert(0, rfonts)  # w:rFonts 는 rPr 의 첫 자식이어야 한다
+        changed = True
+
+    def _apply(attr: str, val: str | None) -> None:
+        nonlocal changed
+        if val is None:
+            return
+        if rfonts.get(qn(attr)) != val:
+            rfonts.set(qn(attr), val)
+            changed = True
+
+    if ascii_val is not None:
+        _apply("w:ascii", ascii_val)
+        _apply("w:hAnsi", ascii_val)
+    if ea_val is not None:
+        _apply("w:eastAsia", ea_val)
+        _apply("w:cs", ea_val)
+    return changed
+
+
+def _para_style_name(para) -> str:
+    try:
+        return para.style.name or ""
+    except Exception:
+        return ""
+
+
+def unify_paragraph_formatting(
+    doc: Document,
+    *,
+    scope: str = "body+tables",
+    preserve_emphasis: bool = True,
+    enable: bool = True,
+) -> int:
+    """단락별로 텍스트 런의 글자 크기·글꼴(font family)을 '그 단락의 지배값'으로 통일.
+
+    "단락별 서식 통일" — 한 단락 안에서 런마다 크기/글꼴이 들쭉날쭉한 것을 그 단락에서
+    가장 많이 쓰인 '이미 존재하는 값(지배값)'으로 맞춘다.
+
+    안전 원칙:
+    - 날조 금지: 어떤 런에도 명시 크기/글꼴이 없으면(전부 테마·스타일 상속) 그 단락은
+      건드리지 않는다(테마 상속 보존). 지배값은 문서에 실재하는 값 중에서만 고른다.
+    - 강조 보존(preserve_emphasis): w:b / w:u 는 손대지 않는다(크기·글꼴만 통일).
+    - 제목/소제목(스타일명이 Heading/Title/제목)·이미지/도형 포함 단락은 건너뛴다.
+    - 멱등성: 한 번 통일하면 재실행 시 0(이미 단일 값).
+    - ``enable=False`` 면 0(비활성). 단, run_all 기본은 활성(normalize_font_sizes 처럼
+      죽은 코드가 되지 않도록 live 기본값).
+
+    scope 에 'tables' 가 포함되면 표 셀 단락까지 대상(병합셀 중복 제외).
+    """
+    if not enable:
+        return 0
+
+    paragraphs = list(doc.paragraphs)
+    if "tables" in scope:
+        seen: set[int] = set()
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    cid = id(cell._tc)
+                    if cid in seen:
+                        continue
+                    seen.add(cid)
+                    paragraphs.extend(cell.paragraphs)
+
+    changed = 0
+    for para in paragraphs:
+        if _element_has_drawing(para._p):
+            continue
+        style_name = _para_style_name(para)
+        if style_name.startswith(("Heading", "Title")) or "제목" in style_name:
+            continue
+        text_runs = [r for r in para.runs if _run_has_text(r._element)]
+        if not text_runs:
+            continue
+
+        sizes: list[str | None] = []
+        ascii_fonts: list[str | None] = []
+        ea_fonts: list[str | None] = []
+        for r in text_runs:
+            rpr = r._element.find(qn("w:rPr"))
+            sz = asc = ea = None
+            if rpr is not None:
+                sz_el = rpr.find(qn("w:sz"))
+                if sz_el is not None:
+                    sz = sz_el.get(qn("w:val"))
+                rfonts = rpr.find(qn("w:rFonts"))
+                if rfonts is not None:
+                    asc = rfonts.get(qn("w:ascii"))
+                    ea = rfonts.get(qn("w:eastAsia"))
+            sizes.append(sz)
+            ascii_fonts.append(asc)
+            ea_fonts.append(ea)
+
+        dom_sz = _dominant(sizes)
+        dom_asc = _dominant(ascii_fonts)
+        dom_ea = _dominant(ea_fonts)
+        if dom_sz is None and dom_asc is None and dom_ea is None:
+            continue  # 전부 테마 상속 → 보존(날조 금지)
+
+        para_changed = False
+        for r in text_runs:
+            rpr = r._element.find(qn("w:rPr"))
+            if rpr is None:
+                rpr = r._element.makeelement(qn("w:rPr"), {})
+                r._element.insert(0, rpr)
+            if dom_sz is not None and _set_rpr_size(rpr, dom_sz):
+                para_changed = True
+            if (dom_asc is not None or dom_ea is not None) and _set_rpr_fonts(rpr, dom_asc, dom_ea):
+                para_changed = True
+        if para_changed:
+            changed += 1
+    return changed
+
+
+# ---------------------------------------------------------------------------
 # 6. 명백한 양식 안내 단락 삭제 (보수적)
 # ---------------------------------------------------------------------------
 
@@ -409,7 +604,7 @@ def remove_guide_paragraphs(doc: Document, *, max_len: int = 120) -> int:
         text = _paragraph_text(para)
         if not text or len(text) > max_len:
             continue
-        if _PURE_GUIDE_RE.search(text):
+        if _is_guide_text(text):
             body.remove(para)
             removed += 1
     return removed
@@ -458,7 +653,7 @@ def remove_table_guide_rows(doc: Document, *, max_len: int = 500) -> int:
                 bool(text)
                 and not has_img
                 and len(text) <= max_len
-                and _PURE_GUIDE_RE.search(text) is not None
+                and _is_guide_text(text)
             )
             flags.append((row, is_guide, bool(text)))
 
@@ -499,18 +694,26 @@ def run_all(
     emphasize: bool = True,
     underline: bool = False,
     normalize_fonts: bool = False,
+    unify_formatting: bool = True,
 ) -> QualityOpsReport:
     """모든 결정론적 후처리를 안전한 순서로 1회 적용하고 집계 리포트를 반환한다.
 
-    순서: 안내삭제(body+표) → 글머리표공백 → 표공백 → 빈단락 → 강조 → (옵션)폰트
+    순서: 안내삭제(body+표) → 글머리표공백 → 표공백 → 빈단락 → 서식통일 → 강조 → (옵션)폰트
+
+    ``unify_formatting`` 은 기본 활성(live) — 단락별 크기/글꼴을 지배값으로 통일한다.
+    강조(emphasize)보다 먼저 실행해 굵게 처리한 런의 서식이 덮이지 않게 한다.
     """
     report = QualityOpsReport()
     if remove_guides:
         report.guide_paragraphs_removed = remove_guide_paragraphs(doc)
+        # 표 셀에 박힌 양식 안내문구도 제거(멱등 결함예방). 기존 함수가 run_all 에
+        # 연결돼 있지 않던 사각지대 보완 — 데이터 행이 있는 표는 안내 행만, 안내 전용
+        # 표는 통째 제거되며 데이터 행은 보존된다.
         report.table_guide_rows_removed = remove_table_guide_rows(doc)
     report.bullet_spacing_fixed = normalize_bullet_spacing(doc)
     report.table_cells_cleaned = cleanup_table_whitespace(doc)
     report.empty_paragraphs_removed = remove_empty_paragraphs(doc)
+    report.paragraphs_unified = unify_paragraph_formatting(doc, enable=unify_formatting)
     if emphasize:
         report.paragraphs_emphasized = emphasize_key_sentences(doc, underline=underline)
     report.font_sizes_normalized = normalize_font_sizes(doc, enable=normalize_fonts)

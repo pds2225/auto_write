@@ -177,7 +177,8 @@ class DocumentQualityOrchestrator:
             # 이미지 제안
             info_report = suggest_images(doc)
 
-            # 점수
+            # 점수 (미입력 필수칸 '[확인필요]' 수는 참고용 informational 로 전달)
+            confirm_needed = self._count_confirm_markers(doc)
             score = score_document(
                 doc,
                 doc_type=doc_type.type_code,
@@ -185,6 +186,7 @@ class DocumentQualityOrchestrator:
                 psst_ratio=psst_ratio,
                 image_suggestions=len(info_report.suggestions),
                 existing_images=info_report.existing_images,
+                empty_required_cells=confirm_needed,
             )
 
             # 수렴 판정: 합격이거나 점수 개선이 없으면 종료
@@ -200,6 +202,12 @@ class DocumentQualityOrchestrator:
 
         # 5) 수동 확인 항목 도출
         manual_review = self._collect_manual_review(score, psst_report)
+        confirm_needed = self._count_confirm_markers(doc)
+        if confirm_needed:
+            manual_review.append(
+                f"[미입력 필수칸] '[확인필요]' 표시 {confirm_needed}곳 — 생성 단계가 채우지 못한 "
+                f"필수 항목이므로 사용자가 직접 값을 입력해야 합니다(날조 금지 정책)."
+            )
 
         result = HarnessResult(
             input_docx=str(input_path),
@@ -233,6 +241,28 @@ class DocumentQualityOrchestrator:
     # ------------------------------------------------------------------
     # 리포트 / 보조
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _count_confirm_markers(doc: Document) -> int:
+        """문서 내 '[확인필요]' 마커(생성 단계가 채우지 못한 필수칸) 수를 센다.
+
+        STEP2(빈셀 미입력)에서 날조 대신 표시하는 마커로, 미입력 필수칸의 신뢰 가능한
+        신호다. body 단락 + 표 셀(병합셀 중복 제외) 양쪽을 합산한다.
+        """
+        marker = "[확인필요]"
+        n = 0
+        for p in doc.paragraphs:
+            n += p.text.count(marker)
+        for table in doc.tables:
+            for row in table.rows:
+                seen: set[int] = set()
+                for cell in row.cells:
+                    cid = id(cell._tc)
+                    if cid in seen:
+                        continue
+                    seen.add(cid)
+                    n += cell.text.count(marker)
+        return n
 
     @staticmethod
     def _collect_manual_review(score: QualityScore, psst: PSSTReport | None) -> list[str]:
