@@ -73,6 +73,41 @@ def test_guide_paragraph_removal():
     assert "실제 사업 내용입니다." in remaining
 
 
+def test_table_guide_row_removal():
+    """표 셀에 박힌 양식 안내문구 삭제: 안내전용표는 통째, 혼합표는 안내행만, 데이터표는 보존."""
+    d = Document()
+    # 1) 안내 전용 표 → 표 통째 삭제 대상
+    t1 = d.add_table(rows=1, cols=1)
+    t1.rows[0].cells[0].text = "※ 정부지원사업비는 최대 2억원 한도 이내로 작성"
+    # 2) 데이터 표 → 보존돼야 함
+    t2 = d.add_table(rows=2, cols=3)
+    t2.rows[0].cells[0].text = "비목"
+    t2.rows[0].cells[1].text = "집행 계획"
+    t2.rows[0].cells[2].text = "금액"
+    t2.rows[1].cells[0].text = "인건비"
+    t2.rows[1].cells[1].text = "AI 전문인력 인건비"
+    t2.rows[1].cells[2].text = "10,000,000"
+    # 3) 혼합 표 → 안내 행만 삭제, 데이터 행 보존
+    t3 = d.add_table(rows=2, cols=2)
+    t3.rows[0].cells[0].text = "작성요령 : 예시를 삭제하고 작성"
+    t3.rows[1].cells[0].text = "1"
+    t3.rows[1].cells[1].text = "실제 데이터 행"
+
+    before_tables = len(d.tables)
+    removed = dq.remove_table_guide_rows(d)
+
+    # 안내 전용 표(t1)는 통째 삭제 → 표 1개 감소
+    assert len(d.tables) == before_tables - 1
+    texts = [c.text for tb in d.tables for r in tb.rows for c in r.cells]
+    # 데이터 표 보존
+    assert "인건비" in texts and "10,000,000" in texts
+    # 혼합 표: 데이터 행 보존 + 안내 행 제거
+    assert "실제 데이터 행" in texts
+    assert not any("작성요령" in x for x in texts)
+    # 안내 전용 표 + 혼합표 안내행 = 최소 2건 제거
+    assert removed >= 2
+
+
 def test_empty_paragraph_removal():
     d = Document()
     d.add_paragraph("내용")

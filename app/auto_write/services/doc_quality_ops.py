@@ -59,6 +59,7 @@ _PURE_GUIDE_RE = re.compile(
 class QualityOpsReport:
     """후처리 연산 결과 집계."""
     guide_paragraphs_removed: int = 0
+    table_guide_rows_removed: int = 0
     bullet_spacing_fixed: int = 0
     table_cells_cleaned: int = 0
     empty_paragraphs_removed: int = 0
@@ -69,6 +70,7 @@ class QualityOpsReport:
     def as_dict(self) -> dict:
         return {
             "guide_paragraphs_removed": self.guide_paragraphs_removed,
+            "table_guide_rows_removed": self.table_guide_rows_removed,
             "bullet_spacing_fixed": self.bullet_spacing_fixed,
             "table_cells_cleaned": self.table_cells_cleaned,
             "empty_paragraphs_removed": self.empty_paragraphs_removed,
@@ -410,6 +412,79 @@ def remove_guide_paragraphs(doc: Document, *, max_len: int = 120) -> int:
         if _PURE_GUIDE_RE.search(text):
             body.remove(para)
             removed += 1
+    return removed
+
+
+# ---------------------------------------------------------------------------
+# 6-b. 표 셀에 박힌 양식 안내문구 삭제 (보수적) — body 직계 사각지대 보완
+# ---------------------------------------------------------------------------
+
+def _cell_row_text(row) -> str:
+    """행의 모든 셀 텍스트를 합쳐 공백 정규화한 문자열. 병합셀 중복은 1회만."""
+    parts: list[str] = []
+    seen: set[int] = set()
+    for cell in row.cells:
+        tc_id = id(cell._tc)
+        if tc_id in seen:
+            continue
+        seen.add(tc_id)
+        parts.append(cell.text)
+    return re.sub(r"\s+", " ", " ".join(parts)).strip()
+
+
+def remove_table_guide_rows(doc: Document, *, max_len: int = 500) -> int:
+    """표 셀에 박힌 '명백한 양식 안내문구'를 삭제한다(보수적).
+
+    ``remove_guide_paragraphs`` 가 body 직계 단락만 보던 사각지대(표 셀)를 보완하되,
+    동일한 ``_PURE_GUIDE_RE`` 기준만 사용해 일관성을 유지한다.
+
+    - 표의 '비어있지 않은 모든 행' 이 ``_PURE_GUIDE_RE`` 로 시작 매칭되면
+      (= 안내 전용 표) 표를 통째 제거한다.
+    - 데이터 행과 안내 행이 섞인 표에서는 ``_PURE_GUIDE_RE`` 매칭 안내 행만 제거하되,
+      데이터 행이 1개 이상 남는 경우에만 수행한다(표 골격 보존).
+
+    오삭제 방지:
+    - ``※``/``작성요령``/``예시`` 등으로 '시작' 하는 행만 대상(본문 데이터 행은 보존)
+    - 이미지/도형이 든 행은 보존
+    - 행 텍스트가 ``max_len`` 초과면 실제 내용일 수 있어 보존
+    """
+    removed = 0
+    for table in list(doc.tables):
+        flags: list[tuple] = []  # (row, is_guide, has_text)
+        for row in table.rows:
+            has_img = any(_element_has_drawing(cell._tc) for cell in row.cells)
+            text = _cell_row_text(row)
+            is_guide = (
+                bool(text)
+                and not has_img
+                and len(text) <= max_len
+                and _PURE_GUIDE_RE.search(text) is not None
+            )
+            flags.append((row, is_guide, bool(text)))
+
+        nonempty = [f for f in flags if f[2]]
+        if not nonempty:
+            continue
+
+        if all(f[1] for f in nonempty):
+            # 안내 전용 표 → 통째 제거
+            tbl = table._tbl
+            parent = tbl.getparent()
+            if parent is not None:
+                parent.remove(tbl)
+                removed += len(nonempty)
+            continue
+
+        # 혼합 표: 데이터 행이 남을 때만 안내 행 제거
+        if not any((not f[1]) for f in nonempty):
+            continue
+        for row, is_guide, _has_text in flags:
+            if is_guide:
+                tr = row._tr
+                tp = tr.getparent()
+                if tp is not None:
+                    tp.remove(tr)
+                    removed += 1
     return removed
 
 
