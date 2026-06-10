@@ -46,3 +46,7 @@ tmp_render_check/
 .bkit/
 .claude/worktrees/
 RESUME.md
+
+# Session artifacts / 제출본 산출물 (커밋 금지)
+.resume_tick
+app/*제출본*.docx
