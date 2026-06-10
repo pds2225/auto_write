@@ -52,6 +52,7 @@ _TYPE_STRUCTURE_KEYWORDS: dict[str, tuple[str, ...]] = {
     "certification_report": ("요건", "충족", "보완", "서류"),
     "export_report": ("수출", "시장", "바이어", "전략"),
     "field_clinic_report": ("현황", "진단", "애로", "처방", "개선"),
+    "result_report": ("추진", "실적", "성과", "목표", "정산", "결과"),
     "generic_submission": (),
 }
 
