@@ -40,6 +40,7 @@ class SubmissionPipeline:
         enable_images: bool = True,
         enable_notebooklm: bool = True,
         fill_plan_dir: str | Path | None = None,
+        acceptance_gate: bool = True,
     ) -> dict[str, Any]:
         report: dict[str, Any] = {"project_id": project_id, "steps": [], "needs_input": []}
         results_root = Path(self.settings.results_root)
@@ -142,6 +143,35 @@ class SubmissionPipeline:
                 final_docx = nlm_out
             except Exception as exc:
                 report["notebooklm_error"] = f"{type(exc).__name__}: {exc}"
+
+        # 7. 실사용 수용검사 게이트(R7/R8) — fail 결함이 있으면 '제출' 이름으로
+        #    내보내지 않고 파일명에 _DRAFT 를 강제한다(autopilot 4단계와 동일 정책).
+        #    NotebookLM 프롬프트가 삽입된 출력은 작업용 중간본이라 DRAFT 가 정상이다.
+        if acceptance_gate:
+            try:
+                from .usage_acceptance import SEV_FAIL, run_acceptance
+
+                acc = run_acceptance(str(final_docx))
+                report["acceptance"] = {
+                    "submittable": acc.submittable,
+                    "verdict": "제출가능" if acc.submittable else "제출불가(DRAFT)",
+                    "fail_defects": acc.fail_defects,
+                    "failed_checks": [
+                        f"{r.label}: {r.detail}"
+                        for r in acc.results if r.severity == SEV_FAIL and not r.passed
+                    ],
+                }
+                report["steps"].append("acceptance")
+                fp = Path(final_docx)
+                if not acc.submittable and not fp.stem.endswith("_DRAFT"):
+                    draft = fp.with_name(f"{fp.stem}_DRAFT{fp.suffix}")
+                    fp.replace(draft)
+                    final_docx = draft
+                    report["needs_input"].append(
+                        f"수용검사 fail {acc.fail_defects}건 — 결함 해결 전 제출 금지(_DRAFT 표시)."
+                    )
+            except Exception as exc:
+                report["acceptance_error"] = f"{type(exc).__name__}: {exc}"
 
         report["final_docx"] = str(final_docx)
         log_line(f"[Submission] project={project_id} final={Path(final_docx).name} steps={report['steps']}")

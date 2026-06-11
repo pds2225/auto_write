@@ -53,6 +53,8 @@ def main(argv: list[str] | None = None) -> int:
         help="NotebookLM 슬라이드 프롬프트 삽입 비활성(기본: 삽입함)",
     )
     parser.add_argument("--fill-plan-dir", default="", help="양식별 fill_plan.json 디렉터리")
+    parser.add_argument("--no-acceptance", action="store_true",
+                        help="실사용 수용검사 게이트(DRAFT 마킹) 생략")
     args = parser.parse_args(argv)
 
     settings, storage, project_service, evaluation_service = _make()
@@ -75,9 +77,13 @@ def main(argv: list[str] | None = None) -> int:
         enable_images=not args.no_images,
         enable_notebooklm=not args.no_notebooklm,
         fill_plan_dir=(args.fill_plan_dir or None),
+        acceptance_gate=not args.no_acceptance,
     )
     print(json.dumps(report, ensure_ascii=False, indent=2))
     print("\n최종 제출초안:", report.get("final_docx", ""))
+    acc = report.get("acceptance") or {}
+    if acc:
+        print(f"수용검사: {acc.get('verdict', '')} (fail {acc.get('fail_defects', 0)}건)")
     if report.get("needs_input"):
         print("[보완 필요 - 근거 부족, 직접 입력 권장]:", ", ".join(report["needs_input"]))
     return 0
