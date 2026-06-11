@@ -162,12 +162,49 @@ def test_autopilot_end_to_end(tmp_path: Path) -> None:
     out = tmp_path / "out.docx"
     _make_doc(src, with_table=True)
     report = run_autopilot(str(src), str(out), write_report=False)
-    assert out.exists()
+    assert Path(report.output_docx).exists()
     assert report.backup_dir  # 원본 백업이 생성되어야 함
     assert report.score_total > 0
     # 그림 위치에 NotebookLM 프롬프트가 최소 1개, PSST 보강이 일어났을 것
     assert report.prompts_inserted >= 1
     assert report.psst_areas_scaffolded >= 1
+    # R8 게이트: NotebookLM 작업용 블록이 삽입된 출력은 '제출본'이 아니다 —
+    # 수용검사 fail → 파일명 _DRAFT 강제, 원래 이름으로는 내보내지 않는다.
+    assert report.acceptance_submittable is False
+    assert report.draft_marked is True
+    assert report.output_docx.endswith("_DRAFT.docx")
+    assert not out.exists()
+
+
+def test_autopilot_acceptance_gate_passes_clean_doc(tmp_path: Path) -> None:
+    """R8: 수용검사를 통과하는 출력은 지정한 이름 그대로 내보낸다."""
+    from auto_write.services.autopilot_pipeline import run_autopilot
+
+    src = tmp_path / "clean.docx"
+    out = tmp_path / "clean_out.docx"
+    doc = Document()
+    doc.add_paragraph("개요: 본 문서는 게이트 검증용입니다.")  # 이미지/PSST 트리거 없음
+    doc.save(str(src))
+    report = run_autopilot(
+        str(src), str(out), max_images=0, psst_scaffold=False, write_report=False
+    )
+    assert report.acceptance_submittable is True
+    assert report.acceptance_verdict == "제출가능"
+    assert report.draft_marked is False
+    assert report.output_docx == str(out) and out.exists()
+
+
+def test_autopilot_acceptance_gate_can_be_disabled(tmp_path: Path) -> None:
+    """acceptance_gate=False 면 기존 동작 그대로(이름 유지, 판정 없음)."""
+    from auto_write.services.autopilot_pipeline import run_autopilot
+
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    _make_doc(src, with_table=True)
+    report = run_autopilot(str(src), str(out), acceptance_gate=False, write_report=False)
+    assert report.acceptance_verdict == ""
+    assert report.draft_marked is False
+    assert report.output_docx == str(out) and out.exists()
 
 
 def test_autopilot_in_equals_out_blocked(tmp_path: Path) -> None:

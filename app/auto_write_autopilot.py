@@ -42,6 +42,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--placeholder-only", action="store_true",
                         help="차트 생성 없이 자리표시만 삽입(가장 안전)")
     parser.add_argument("--no-psst", action="store_true", help="PSST 작성 보강 생략")
+    parser.add_argument("--no-acceptance", action="store_true",
+                        help="실사용 수용검사 게이트(DRAFT 마킹) 생략")
     parser.add_argument("--no-report", action="store_true", help="통합 리포트(md) 생성 생략")
     parser.add_argument("--json", action="store_true", help="결과를 JSON 으로 출력")
     args = parser.parse_args(argv)
@@ -56,6 +58,7 @@ def main(argv: list[str] | None = None) -> int:
         max_images=args.max_images,
         placeholder_only=args.placeholder_only,
         psst_scaffold=not args.no_psst,
+        acceptance_gate=not args.no_acceptance,
         write_report=not args.no_report,
     )
 
@@ -72,6 +75,9 @@ def main(argv: list[str] | None = None) -> int:
     print(f"이미지    : NotebookLM 슬라이드 프롬프트 {report.prompts_inserted}건")
     print(f"PSST 보강 : {report.psst_areas_scaffolded}영역 / {report.psst_items_added}항목 "
           f"(충족률 {report.psst_overall_ratio*100:.0f}%)")
+    if report.acceptance_verdict:
+        print(f"수용검사  : {report.acceptance_verdict} (fail {report.acceptance_fail_defects}건)"
+              + (" → 출력명에 _DRAFT 표시" if report.draft_marked else ""))
     print(f"출력 DOCX : {report.output_docx}")
     print(f"원본 백업 : {report.backup_dir}")
     if report.report_md:
