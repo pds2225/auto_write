@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -25,10 +26,12 @@ from typing import Any, Optional
 
 from docx import Document
 from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 from docx.shared import Pt, RGBColor
 from docx.text.paragraph import Paragraph
 
 from .infographic_suggest import ImageSuggestion, suggest_images_ai
+from .usage_acceptance import SELF_BLOCK_RE as _SELF_BLOCK_RE
 
 _DIVIDER = "─" * 30
 
@@ -269,3 +272,105 @@ def apply_images_docx(
         placeholder_only=placeholder_only,
         openai_service=openai_service,
     )
+
+
+# --- NotebookLM 블록 제거 (삽입의 역연산) -------------------------------------
+
+_PROMPT_INTRO_RE = re.compile(r"슬라이드\s*생성에\s*붙여넣으세요")
+
+
+@dataclass
+class StripReport:
+    markers_removed: int = 0      # 헤더·안내 등 검출 마커 단락 수(usage_acceptance 결함 수와 대응)
+    paragraphs_removed: int = 0   # 구분선·프롬프트 본문 포함 총 삭제 단락 수
+    output_docx: str = ""
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "markers_removed": self.markers_removed,
+            "paragraphs_removed": self.paragraphs_removed,
+            "output_docx": self.output_docx,
+        }
+
+
+def _p_text(elem) -> str:
+    return "".join(elem.itertext())
+
+
+def _is_p(elem) -> bool:
+    return elem is not None and elem.tag == qn("w:p")
+
+
+def _is_divider_p(elem) -> bool:
+    t = _p_text(elem).strip()
+    return len(t) >= 10 and set(t) <= {"─"}
+
+
+def strip_notebooklm_blocks(in_docx: str, out_docx: str) -> StripReport:
+    """잔존한 NotebookLM 작업용 블록을 제거한 '제출용 사본'을 만든다.
+
+    ``apply_images`` 가 삽입한 블록(구분선·헤더·안내·프롬프트·구분선 5단락)을
+    ``usage_acceptance`` 의 self_inserted_blocks 검출과 **같은 패턴**으로 찾아 지운다.
+    실본문 오삭제 방지를 위해 프롬프트 본문 단락은 '안내문 바로 다음 + 구분선 직전'
+    구조가 확인될 때만 함께 지운다(구조가 깨졌으면 마커·구분선만 지운다).
+
+    원본은 절대 덮어쓰지 않는다(``out_docx == in_docx`` 면 ``ValueError``).
+    """
+    in_path = Path(in_docx)
+    out_path = Path(out_docx)
+    if in_path.resolve() == out_path.resolve():
+        raise ValueError("in_docx 와 out_docx 가 같습니다. 원본 덮어쓰기는 금지입니다.")
+    if not in_path.exists():
+        raise FileNotFoundError(f"입력 DOCX 가 없습니다: {in_docx}")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(str(in_path), str(out_path))
+
+    doc = Document(str(out_path))
+    report = StripReport(output_docx=str(out_path))
+
+    contexts = list(_iter_anchor_contexts(doc))   # 단락 proxy 보관(lxml id 재사용 방지)
+    marked: list = []
+    seen: set[int] = set()
+    seen_markers: set[int] = set()
+
+    def _mark(elem) -> None:
+        if elem is not None and id(elem) not in seen:
+            seen.add(id(elem))
+            marked.append(elem)
+
+    for para, _tbl in contexts:
+        p = para._p
+        text = para.text or ""
+        if not _SELF_BLOCK_RE.search(text):
+            continue
+        if id(p) in seen_markers:                 # 병합 셀 중복 방문 방지
+            continue
+        seen_markers.add(id(p))
+        _mark(p)
+        prev = p.getprevious()
+        if _is_p(prev) and _is_divider_p(prev):
+            _mark(prev)
+        nxt = p.getnext()
+        if _is_p(nxt) and _is_divider_p(nxt):
+            _mark(nxt)
+        elif (_PROMPT_INTRO_RE.search(text) and _is_p(nxt)
+              and not _SELF_BLOCK_RE.search(_p_text(nxt))):
+            # 안내문 다음 단락 = 프롬프트 본문. 바로 뒤가 구분선일 때만 본문으로 확정.
+            nxt2 = nxt.getnext()
+            if _is_p(nxt2) and _is_divider_p(nxt2):
+                _mark(nxt)
+                _mark(nxt2)
+
+    for elem in marked:
+        parent = elem.getparent()
+        if parent is None:
+            continue
+        parent.remove(elem)
+        # 표 셀은 단락이 최소 1개 있어야 유효한 DOCX — 다 비면 빈 단락을 채운다.
+        if parent.tag == qn("w:tc") and parent.find(qn("w:p")) is None:
+            parent.append(OxmlElement("w:p"))
+
+    report.markers_removed = len(seen_markers)
+    report.paragraphs_removed = len(marked)
+    doc.save(str(out_path))
+    return report

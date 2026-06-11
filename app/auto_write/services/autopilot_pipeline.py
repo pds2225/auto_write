@@ -8,7 +8,10 @@
      (그림 위치에 NotebookLM 슬라이드 생성 프롬프트 블록 삽입; 제안은 Claude, 폴백 키워드)
   3) PSST 보강                   — ``psst_fill.apply_psst_scaffold``
      (누락/미흡 영역에 작성 뼈대+가이드)
-  4) 잔존 빈칸 스캔 + 통합 리포트
+  4) 실사용 수용검사 게이트(R8)   — ``usage_acceptance.run_acceptance``
+     (심사위원 관점 하드페일 검사. fail 결함이 있으면 출력 파일명을
+      ``_DRAFT`` 로 강제해 '제출본' 이름으로 내보내지 않는다)
+  5) 잔존 빈칸 스캔 + 통합 리포트
 
 설계 원칙
 ---------
@@ -33,6 +36,7 @@ from ..config import ensure_directories, get_settings
 from .document_quality_orchestrator import DocumentQualityOrchestrator
 from .image_apply import ImageApplyReport, apply_images
 from .psst_fill import PSSTFillReport, apply_psst_scaffold
+from .usage_acceptance import SEV_FAIL, run_acceptance
 
 # 잔존 빈칸(placeholder) 보수적 탐지 패턴
 _RESIDUAL_RE = re.compile(
@@ -60,7 +64,13 @@ class AutopilotReport:
     psst_areas_scaffolded: int = 0
     psst_items_added: int = 0
     psst_scaffolded_areas: list[str] = field(default_factory=list)
-    # 4단계(잔존)
+    # 4단계(수용검사 게이트 — R8)
+    acceptance_submittable: bool = False
+    acceptance_verdict: str = ""
+    acceptance_fail_defects: int = 0
+    acceptance_failed_checks: list[str] = field(default_factory=list)
+    draft_marked: bool = False
+    # 5단계(잔존)
     residual_placeholders: list[str] = field(default_factory=list)
     manual_todo: list[str] = field(default_factory=list)
 
@@ -81,6 +91,11 @@ class AutopilotReport:
             "psst_areas_scaffolded": self.psst_areas_scaffolded,
             "psst_items_added": self.psst_items_added,
             "psst_scaffolded_areas": self.psst_scaffolded_areas,
+            "acceptance_submittable": self.acceptance_submittable,
+            "acceptance_verdict": self.acceptance_verdict,
+            "acceptance_fail_defects": self.acceptance_fail_defects,
+            "acceptance_failed_checks": self.acceptance_failed_checks,
+            "draft_marked": self.draft_marked,
             "residual_placeholders": self.residual_placeholders,
             "manual_todo": self.manual_todo,
         }
@@ -138,6 +153,7 @@ def run_autopilot(
     max_images: int = 8,
     placeholder_only: bool = False,
     psst_scaffold: bool = True,
+    acceptance_gate: bool = True,
     write_report: bool = True,
 ) -> AutopilotReport:
     """문서 품질 수정 전 단계를 무인 연속 실행한다.
@@ -149,6 +165,8 @@ def run_autopilot(
         max_images: 이미지 적용 최대 개수(2단계).
         placeholder_only: True 면 차트 생성 없이 자리표시만 삽입(2단계, 가장 안전).
         psst_scaffold: True 면 PSST 누락/미흡 영역에 작성 가이드 삽입(3단계).
+        acceptance_gate: True 면 실사용 수용검사(usage_acceptance)를 실행하고,
+            fail 결함이 있으면 출력 파일명을 ``_DRAFT`` 로 강제한다(4단계, R8).
         write_report: True 면 통합 리포트(md/json) 생성.
 
     Returns:
@@ -223,7 +241,25 @@ def run_autopilot(
         final_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(str(stage_in), str(final_path))
 
-    # --- 4단계: 잔존 빈칸 스캔 + To-Do ---
+    # --- 4단계: 실사용 수용검사 게이트(R8) — fail 결함이 있으면 DRAFT 마킹 ---
+    if acceptance_gate:
+        acc = run_acceptance(str(final_path))
+        report.acceptance_submittable = acc.submittable
+        report.acceptance_verdict = "제출가능" if acc.submittable else "제출불가(DRAFT)"
+        report.acceptance_fail_defects = acc.fail_defects
+        report.acceptance_failed_checks = [
+            f"{r.label}: {r.detail}"
+            for r in acc.results if r.severity == SEV_FAIL and not r.passed
+        ]
+        if not acc.submittable and not final_path.stem.endswith("_DRAFT"):
+            draft_path = final_path.with_name(f"{final_path.stem}_DRAFT{final_path.suffix}")
+            if draft_path.resolve() != in_path.resolve():
+                final_path.replace(draft_path)     # '제출본' 이름으로 내보내지 않는다
+                final_path = draft_path
+                report.output_docx = str(final_path)
+                report.draft_marked = True
+
+    # --- 5단계: 잔존 빈칸 스캔 + To-Do ---
     report.residual_placeholders = _scan_residual(str(final_path))
     report.manual_todo = _build_todo(report)
 
@@ -239,6 +275,12 @@ def _build_todo(report: AutopilotReport) -> list[str]:
         todo.append(
             f"품질점수 {report.score_total:.1f}점(게이트 미달) — 보완 후 재실행 권장."
         )
+    if report.acceptance_verdict and not report.acceptance_submittable:
+        todo.append(
+            f"수용검사 {report.acceptance_verdict} (fail {report.acceptance_fail_defects}건) — "
+            f"아래 결함을 해결해야 제출 가능합니다."
+        )
+        todo.extend(f"  · {c}" for c in report.acceptance_failed_checks)
     if report.prompts_inserted:
         todo.append(
             f"NotebookLM 슬라이드 프롬프트 {report.prompts_inserted}곳 — "
@@ -283,7 +325,19 @@ def _write_report(results_root: Path, stem: str, report: AutopilotReport) -> str
     if report.psst_scaffolded_areas:
         lines.append(f"- 대상: {', '.join(report.psst_scaffolded_areas)}")
     lines.append("")
-    lines.append("## 4) 수동 보완 To-Do")
+    lines.append("## 4) 실사용 수용검사 (제출 가능성 게이트)")
+    if report.acceptance_verdict:
+        lines.append(
+            f"- 판정: **{report.acceptance_verdict}** (fail 결함 {report.acceptance_fail_defects}건)"
+        )
+        for c in report.acceptance_failed_checks:
+            lines.append(f"  - {c}")
+        if report.draft_marked:
+            lines.append("- fail 결함이 있어 출력 파일명에 `_DRAFT` 를 붙였습니다 — 결함 해결 전에는 제출하지 마세요.")
+    else:
+        lines.append("- (게이트 생략됨 — acceptance_gate=False)")
+    lines.append("")
+    lines.append("## 5) 수동 보완 To-Do")
     if report.manual_todo:
         for t in report.manual_todo:
             lines.append(f"- [ ] {t}")

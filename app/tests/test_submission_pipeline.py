@@ -216,6 +216,68 @@ class SubmissionPipelineTest(unittest.TestCase):
             )
             self.assertNotIn("notebooklm", report["steps"])
 
+    def test_pipeline_acceptance_gate_drafts_notebooklm_output(self):
+        """R7: NotebookLM 작업용 블록이 든 최종본은 '제출' 이름으로 내보내지 않고
+        _DRAFT 를 강제해야 한다(수용검사 fail → 파일명 차단)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            settings = _settings(tmp_path)
+            storage = _FakeStorage(tmp_path)
+            oa = OpenAIService(settings)
+            prof = _profile(tmp_path)
+
+            class _PSWithKeyword(_FakeProjectService):
+                def generate(self, pid):
+                    out = self.storage.project_dir(pid) / "output" / "output.docx"
+                    out.parent.mkdir(parents=True, exist_ok=True)
+                    doc = Document()
+                    doc.add_paragraph("나. 추진일정 로드맵 — 단계별 마일스톤.")  # 간트 트리거
+                    doc.save(str(out))
+                    return None
+
+            ps = _PSWithKeyword(storage, prof, oa)
+            pi = ProjectInput(
+                template_id="t1",
+                organization_profile={"기업명": "테스트(주)"},
+                project_meta={},
+            )
+            storage.save_project_input("p1", pi)
+            pipeline = SubmissionPipeline(ps, EvaluationService(oa), storage, settings)
+            report = pipeline.run(
+                "p1", announcement_text="",
+                enable_images=False, enable_notebooklm=True,
+            )
+            self.assertIn("acceptance", report["steps"])
+            self.assertFalse(report["acceptance"]["submittable"])
+            self.assertTrue(report["final_docx"].endswith("_DRAFT.docx"))
+            self.assertTrue(Path(report["final_docx"]).exists())
+            self.assertTrue(any("제출 금지" in n for n in report["needs_input"]))
+
+    def test_pipeline_acceptance_gate_disabled(self):
+        """acceptance_gate=False 면 게이트 단계 없이 기존 동작을 유지한다."""
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            settings = _settings(tmp_path)
+            storage = _FakeStorage(tmp_path)
+            oa = OpenAIService(settings)
+            prof = _profile(tmp_path)
+            ps = _FakeProjectService(storage, prof, oa)
+            pi = ProjectInput(
+                template_id="t1",
+                organization_profile={"기업명": "테스트(주)"},
+                project_meta={},
+            )
+            storage.save_project_input("p1", pi)
+            pipeline = SubmissionPipeline(ps, EvaluationService(oa), storage, settings)
+            report = pipeline.run(
+                "p1", announcement_text="",
+                enable_images=False, enable_notebooklm=False,
+                acceptance_gate=False,
+            )
+            self.assertNotIn("acceptance", report["steps"])
+            self.assertNotIn("acceptance", report)
+            self.assertFalse(report["final_docx"].endswith("_DRAFT.docx"))
+
 
 if __name__ == "__main__":
     unittest.main()
