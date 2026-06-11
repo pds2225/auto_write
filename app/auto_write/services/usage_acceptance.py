@@ -40,6 +40,9 @@ _MARKER_RE = re.compile(r"\[확인필요[^\]]*\]|\[산출근거[^\]]*\]\s*\?|\[T
 _SELF_BLOCK_RE = re.compile(
     r"NotebookLM\s*슬라이드\s*생성용\s*프롬프트|이\s*블록은\s*삭제하세요|슬라이드\s*생성에\s*붙여넣으세요"
 )
+# 제거기(image_apply.strip_notebooklm_blocks)가 같은 정의를 쓰도록 공개한다 —
+# 검출과 제거의 패턴이 어긋나면 '지웠는데 검출됨' 류의 재발이 생긴다.
+SELF_BLOCK_RE = _SELF_BLOCK_RE
 _PLACEHOLDER_RES = (
     re.compile(r"<\s*사진\s*\(이미지\)[^>]*>"),
     re.compile(r"<[^<>\n]{0,30}제목\s*>"),

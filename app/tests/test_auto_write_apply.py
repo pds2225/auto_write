@@ -15,8 +15,9 @@ from pathlib import Path
 import pytest
 from docx import Document
 
-from auto_write.services.image_apply import apply_images
+from auto_write.services.image_apply import apply_images, strip_notebooklm_blocks
 from auto_write.services.psst_fill import apply_psst_scaffold
+from auto_write.services.usage_acceptance import run_acceptance
 
 
 def _make_doc(path: Path, *, with_table: bool = True) -> None:
@@ -212,3 +213,69 @@ def test_bizplan_in_equals_out_blocked(tmp_path: Path) -> None:
     _make_doc(src)
     with pytest.raises(ValueError):
         run_bizplan_autopilot(str(src), str(src), use_ai=False)
+
+
+# --- NotebookLM 블록 제거 (R5 오답노트: 제출본에 작업용 블록 잔존 재발 방지) ---
+
+def _check(path: Path, check_id: str):
+    return next(r for r in run_acceptance(path).results if r.check_id == check_id)
+
+
+def test_strip_notebooklm_in_equals_out_blocked(tmp_path: Path) -> None:
+    src = tmp_path / "in.docx"
+    _make_doc(src)
+    with pytest.raises(ValueError):
+        strip_notebooklm_blocks(str(src), str(src))
+
+
+def test_strip_notebooklm_removes_all_blocks(tmp_path: Path) -> None:
+    """apply_images 가 넣은 블록이 strip 후 0이어야 하고(검출=usage_acceptance),
+    실본문은 한 글자도 사라지면 안 된다."""
+    src = tmp_path / "in.docx"
+    mid = tmp_path / "with_blocks.docx"
+    out = tmp_path / "stripped.docx"
+    _make_doc(src, with_table=True)
+
+    report = apply_images(str(src), str(mid))            # openai_service=None → 키워드 폴백
+    assert report.prompts_inserted >= 1
+    assert _check(mid, "self_inserted_blocks").defects >= 1   # 삽입본은 FAIL 상태
+
+    strip = strip_notebooklm_blocks(str(mid), str(out))
+    assert strip.markers_removed >= 1
+    assert strip.paragraphs_removed >= strip.markers_removed  # 구분선·프롬프트도 삭제
+    assert _check(out, "self_inserted_blocks").defects == 0
+
+    # 블록 5단락이 전부 제거되어 본문이 원본과 동일해야 함(오삭제·잔여물 모두 불가)
+    src_texts = [p.text for p in Document(str(src)).paragraphs if p.text.strip()]
+    out_texts = [p.text for p in Document(str(out)).paragraphs if p.text.strip()]
+    assert out_texts == src_texts
+
+
+def test_strip_notebooklm_partial_block_marker_only(tmp_path: Path) -> None:
+    """실문서 재현: 사용자가 일부만 지워 헤더·안내만 남은 경우에도 마커는 제거하고
+    인접 실본문은 건드리지 않는다(구조 미확인 시 보수적으로 마커만 삭제)."""
+    src = tmp_path / "partial.docx"
+    out = tmp_path / "stripped.docx"
+    doc = Document()
+    doc.add_paragraph("실제 본문 내용 A")
+    doc.add_paragraph("📊 [NotebookLM 슬라이드 생성용 프롬프트] · 유형: pie")
+    doc.add_paragraph("↓ 아래 문장을 NotebookLM 슬라이드 생성에 붙여넣으세요")
+    doc.add_paragraph("실제 본문 내용 B")
+    doc.save(str(src))
+
+    strip = strip_notebooklm_blocks(str(src), str(out))
+    assert strip.markers_removed == 2
+    texts = [p.text for p in Document(str(out)).paragraphs if p.text.strip()]
+    assert texts == ["실제 본문 내용 A", "실제 본문 내용 B"]
+    assert _check(out, "self_inserted_blocks").defects == 0
+
+
+def test_strip_notebooklm_no_blocks_noop_copy(tmp_path: Path) -> None:
+    src = tmp_path / "clean.docx"
+    out = tmp_path / "out.docx"
+    _make_doc(src)
+    strip = strip_notebooklm_blocks(str(src), str(out))
+    assert strip.markers_removed == 0
+    assert strip.paragraphs_removed == 0
+    assert [p.text for p in Document(str(out)).paragraphs] == \
+        [p.text for p in Document(str(src)).paragraphs]
