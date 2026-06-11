@@ -1,4 +1,4 @@
-"""strip_notebooklm.py — 제출 직전, 문서에 남은 NotebookLM 작업용 블록을 제거한다.
+r"""strip_notebooklm.py — 제출 직전, 문서에 남은 NotebookLM 작업용 블록을 제거한다.
 
 apply_images 가 삽입한 슬라이드 프롬프트 블록(구분선·헤더·안내·프롬프트)을
 usage_acceptance 의 self_inserted_blocks 검출과 같은 정의로 찾아 지운 '제출용 사본'을
