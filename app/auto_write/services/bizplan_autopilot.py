@@ -68,6 +68,12 @@ class BizplanReport:
     final_gate_passed: bool = False
     prompts_inserted: int = 0
     ai_areas_written: int = 0
+    # 수용검사 게이트(R8) — autopilot 의 판정을 최종 산출까지 전파
+    acceptance_submittable: bool = False
+    acceptance_verdict: str = ""
+    acceptance_fail_defects: int = 0
+    acceptance_failed_checks: list[str] = field(default_factory=list)
+    draft_marked: bool = False
     score_history: list[LoopScore] = field(default_factory=list)
     needs_confirm: list[str] = field(default_factory=list)
     evidence_used: list[str] = field(default_factory=list)
@@ -87,6 +93,11 @@ class BizplanReport:
             "final_gate_passed": self.final_gate_passed,
             "prompts_inserted": self.prompts_inserted,
             "ai_areas_written": self.ai_areas_written,
+            "acceptance_submittable": self.acceptance_submittable,
+            "acceptance_verdict": self.acceptance_verdict,
+            "acceptance_fail_defects": self.acceptance_fail_defects,
+            "acceptance_failed_checks": self.acceptance_failed_checks,
+            "draft_marked": self.draft_marked,
             "score_history": [s.as_dict() for s in self.score_history],
             "needs_confirm": self.needs_confirm,
             "evidence_used": self.evidence_used,
@@ -227,6 +238,10 @@ def run_bizplan_autopilot(
         report.final_quality_score = ap.score_total
         report.final_gate_passed = ap.passed
         report.prompts_inserted = ap.prompts_inserted
+        report.acceptance_submittable = ap.acceptance_submittable
+        report.acceptance_verdict = ap.acceptance_verdict
+        report.acceptance_fail_defects = ap.acceptance_fail_defects
+        report.acceptance_failed_checks = list(ap.acceptance_failed_checks)
         cur = ap.output_docx
 
         # 3) 공고 채점 + 목표 판정
@@ -242,7 +257,12 @@ def run_bizplan_autopilot(
         else:
             break  # 공고 없음 → 목표 반복 없이 1회 완성
 
-    # 최종본 저장
+    # 최종본 저장 — 수용검사 fail 이면 '제출' 이름으로 내보내지 않는다.
+    # (중간본 _DRAFT 를 깨끗한 이름으로 복사하면 마킹이 소실되므로 최종 이름에도 강제)
+    if (report.acceptance_verdict and not report.acceptance_submittable
+            and not final_path.stem.endswith("_DRAFT")):
+        final_path = final_path.with_name(f"{final_path.stem}_DRAFT{final_path.suffix}")
+        report.draft_marked = True
     final_path.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(cur, str(final_path))
     report.output_docx = str(final_path)
@@ -263,6 +283,12 @@ def _build_todo(report: BizplanReport) -> list[str]:
             f"공고 충족률 {last.pass_ratio*100:.0f}% (목표 {report.target_ratio*100:.0f}% 미달) — "
             f"약점 섹션 보완 후 재실행: {', '.join(last.weak_sections) or '심사 피드백 참고'}"
         )
+    if report.acceptance_verdict and not report.acceptance_submittable:
+        todo.append(
+            f"수용검사 {report.acceptance_verdict} (fail {report.acceptance_fail_defects}건) — "
+            f"결함 해결 전 제출 금지(출력명 _DRAFT)."
+        )
+        todo.extend(f"  · {c}" for c in report.acceptance_failed_checks)
     for nc in report.needs_confirm:
         todo.append(f"[확인필요] {nc}")
     if report.prompts_inserted:
@@ -298,6 +324,12 @@ def _write_report(results_root: Path, stem: str, report: BizplanReport) -> str:
     L.append("## 품질/시각화")
     gate = "통과" if report.final_gate_passed else "미달"
     L.append(f"- 서식 품질점수: {report.final_quality_score:.1f}/100 (게이트 {gate})")
+    if report.acceptance_verdict:
+        L.append(
+            f"- 실사용 수용검사: **{report.acceptance_verdict}** "
+            f"(fail {report.acceptance_fail_defects}건"
+            + (", 출력명 _DRAFT 표시" if report.draft_marked else "") + ")"
+        )
     L.append(f"- NotebookLM 슬라이드 프롬프트: {report.prompts_inserted}건")
     L.append(f"- AI 작성 보강 영역: {report.ai_areas_written}개")
     L.append("")
