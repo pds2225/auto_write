@@ -362,3 +362,26 @@ def run_acceptance(path: str | Path) -> AcceptanceReport:
     for check in _ALL_CHECKS:
         report.results.append(check(doc))
     return report
+
+
+def force_draft_name(path: Path, *, avoid: Path | None = None) -> tuple[Path, str]:
+    """게이트 정책(R7/R8) 파일명 유틸 — 제출불가 판정 파일에 ``_DRAFT`` 를 강제한다.
+
+    검사(run_acceptance)는 읽기 전용이고, 이 헬퍼는 게이트(파이프라인)만 호출한다.
+    이미 ``_DRAFT`` 이름이면 그대로 둔다. 목표 이름이 ``avoid``(예: 입력 원본)와
+    겹치면 덮어쓰지 않고 ``_DRAFT2`` 로 마킹한다(원본 보존).
+
+    Returns:
+        (최종 경로, 오류 문자열). rename 실패(파일 잠금 등) 시 경로는 원래대로
+        남고 오류 문자열이 채워진다 — 호출자는 이를 사용자에게 반드시 알려야 한다.
+    """
+    if path.stem.endswith("_DRAFT") or path.stem.endswith("_DRAFT2"):
+        return path, ""
+    draft = path.with_name(f"{path.stem}_DRAFT{path.suffix}")
+    if avoid is not None and draft.resolve() == avoid.resolve():
+        draft = path.with_name(f"{path.stem}_DRAFT2{path.suffix}")
+    try:
+        path.replace(draft)
+    except OSError as exc:
+        return path, f"{type(exc).__name__}: {exc}"
+    return draft, ""

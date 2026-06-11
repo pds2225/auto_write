@@ -84,6 +84,10 @@ def main(argv: list[str] | None = None) -> int:
     acc = report.get("acceptance") or {}
     if acc:
         print(f"수용검사: {acc.get('verdict', '')} (fail {acc.get('fail_defects', 0)}건)")
+    if report.get("acceptance_error"):
+        print(f"수용검사 실행 실패(판정 불가 — 제출 금지): {report['acceptance_error']}")
+    if report.get("draft_mark_error"):
+        print(f"_DRAFT 마킹 실패 — 파일명 직접 변경 전 제출 금지: {report['draft_mark_error']}")
     if report.get("needs_input"):
         print("[보완 필요 - 근거 부족, 직접 입력 권장]:", ", ".join(report["needs_input"]))
     return 0

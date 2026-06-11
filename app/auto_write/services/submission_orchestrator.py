@@ -21,6 +21,7 @@ from .document_quality_orchestrator import DocumentQualityOrchestrator
 from .eval_loop_runner import EvalLoopRunner
 from .plan_builder import build_fill_plan
 from .submittable_filler import SubmittableFiller
+from .usage_acceptance import SEV_FAIL, force_draft_name, run_acceptance
 
 
 class SubmissionPipeline:
@@ -147,11 +148,17 @@ class SubmissionPipeline:
         # 7. 실사용 수용검사 게이트(R7/R8) — fail 결함이 있으면 '제출' 이름으로
         #    내보내지 않고 파일명에 _DRAFT 를 강제한다(autopilot 4단계와 동일 정책).
         #    NotebookLM 프롬프트가 삽입된 출력은 작업용 중간본이라 DRAFT 가 정상이다.
+        #    게이트 자신이 죽어도 통과로 취급하지 않는다(fail-closed): 판정 불가 = 제출 금지.
         if acceptance_gate:
+            acc = None
             try:
-                from .usage_acceptance import SEV_FAIL, run_acceptance
-
                 acc = run_acceptance(str(final_docx))
+            except Exception as exc:
+                report["acceptance_error"] = f"{type(exc).__name__}: {exc}"
+                report["needs_input"].append(
+                    f"수용검사 실행 실패({type(exc).__name__}) — 판정 불가 상태이므로 제출 금지(_DRAFT 표시)."
+                )
+            if acc is not None:
                 report["acceptance"] = {
                     "submittable": acc.submittable,
                     "verdict": "제출가능" if acc.submittable else "제출불가(DRAFT)",
@@ -160,18 +167,33 @@ class SubmissionPipeline:
                         f"{r.label}: {r.detail}"
                         for r in acc.results if r.severity == SEV_FAIL and not r.passed
                     ],
+                    "draft_marked": False,
                 }
                 report["steps"].append("acceptance")
-                fp = Path(final_docx)
-                if not acc.submittable and not fp.stem.endswith("_DRAFT"):
-                    draft = fp.with_name(f"{fp.stem}_DRAFT{fp.suffix}")
-                    fp.replace(draft)
-                    final_docx = draft
+                if not acc.submittable:
                     report["needs_input"].append(
                         f"수용검사 fail {acc.fail_defects}건 — 결함 해결 전 제출 금지(_DRAFT 표시)."
                     )
-            except Exception as exc:
-                report["acceptance_error"] = f"{type(exc).__name__}: {exc}"
+            if acc is None or not acc.submittable:
+                old = Path(final_docx)
+                new_path, mark_error = force_draft_name(old)
+                if mark_error:
+                    # rename 실패(파일 잠금 등)도 조용히 넘기지 않는다 — 보고와 실제
+                    # 파일명이 어긋나는 것을 사용자에게 명시한다.
+                    report["draft_mark_error"] = mark_error
+                    report["needs_input"].append(
+                        f"_DRAFT 마킹 실패({mark_error}) — 파일명이 제출 이름 그대로이니 "
+                        f"직접 변경 전 제출 금지: {old.name}"
+                    )
+                else:
+                    if new_path != old:
+                        # 같은 파일을 가리키던 리포트 경로도 함께 갱신(댕글링 방지).
+                        for key in ("submit_docx", "quality_docx"):
+                            if report.get(key) == str(old):
+                                report[key] = str(new_path)
+                    final_docx = new_path
+                    if acc is not None:
+                        report["acceptance"]["draft_marked"] = True
 
         report["final_docx"] = str(final_docx)
         log_line(f"[Submission] project={project_id} final={Path(final_docx).name} steps={report['steps']}")

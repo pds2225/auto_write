@@ -207,6 +207,45 @@ def test_autopilot_acceptance_gate_can_be_disabled(tmp_path: Path) -> None:
     assert report.output_docx == str(out) and out.exists()
 
 
+def test_autopilot_gate_fail_closed_on_acceptance_error(tmp_path: Path, monkeypatch) -> None:
+    """R9: 게이트 자신이 죽어도 통과로 취급하지 않는다(fail-closed) —
+    예외가 전파되지 않고 acceptance_error 기록 + _DRAFT 강제 + 리포트 보존."""
+    from auto_write.services import autopilot_pipeline
+
+    def _boom(path):
+        raise RuntimeError("acceptance crashed")
+
+    monkeypatch.setattr(autopilot_pipeline, "run_acceptance", _boom)
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    _make_doc(src)
+    report = autopilot_pipeline.run_autopilot(
+        str(src), str(out), max_images=0, psst_scaffold=False, write_report=False
+    )
+    assert "RuntimeError" in report.acceptance_error
+    assert report.acceptance_verdict == ""          # 판정 자체는 없었음
+    assert report.draft_marked is True              # 판정 불가 = 제출 금지
+    assert report.output_docx.endswith("_DRAFT.docx")
+    assert Path(report.output_docx).exists() and not out.exists()
+    assert any("수용검사 실행 실패" in t for t in report.manual_todo)
+
+
+def test_autopilot_draft_collision_uses_alternate_name(tmp_path: Path) -> None:
+    """R9: 입력이 '<출력>_DRAFT.docx' 인 재실행 흐름에서도 침묵 스킵 없이
+    _DRAFT2 대체 이름으로 마킹한다(원본 보존 + 제출본 이름 차단)."""
+    from auto_write.services.autopilot_pipeline import run_autopilot
+
+    src = tmp_path / "X_DRAFT.docx"
+    out = tmp_path / "X.docx"
+    _make_doc(src, with_table=True)  # NotebookLM 블록 삽입 → 수용검사 fail 유도
+    report = run_autopilot(str(src), str(out), write_report=False)
+    assert report.acceptance_submittable is False
+    assert report.draft_marked is True
+    assert report.output_docx.endswith("X_DRAFT2.docx")
+    assert src.exists()                             # 입력 원본 보존
+    assert Path(report.output_docx).exists() and not out.exists()
+
+
 def test_autopilot_in_equals_out_blocked(tmp_path: Path) -> None:
     from auto_write.services.autopilot_pipeline import run_autopilot
 

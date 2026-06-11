@@ -2,6 +2,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from docx import Document
 
@@ -277,6 +278,72 @@ class SubmissionPipelineTest(unittest.TestCase):
             self.assertNotIn("acceptance", report["steps"])
             self.assertNotIn("acceptance", report)
             self.assertFalse(report["final_docx"].endswith("_DRAFT.docx"))
+
+    def test_pipeline_gate_fail_closed_on_acceptance_error(self):
+        """R9: 게이트 자신이 죽어도 통과로 취급하지 않는다(fail-closed) —
+        acceptance_error 기록 + needs_input 경고 + _DRAFT 강제."""
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            settings = _settings(tmp_path)
+            storage = _FakeStorage(tmp_path)
+            oa = OpenAIService(settings)
+            prof = _profile(tmp_path)
+            ps = _FakeProjectService(storage, prof, oa)
+            pi = ProjectInput(
+                template_id="t1",
+                organization_profile={"기업명": "테스트(주)"},
+                project_meta={},
+            )
+            storage.save_project_input("p1", pi)
+            pipeline = SubmissionPipeline(ps, EvaluationService(oa), storage, settings)
+            with mock.patch(
+                "auto_write.services.submission_orchestrator.run_acceptance",
+                side_effect=RuntimeError("boom"),
+            ):
+                report = pipeline.run(
+                    "p1", announcement_text="",
+                    enable_images=False, enable_notebooklm=False,
+                )
+            self.assertIn("acceptance_error", report)
+            self.assertNotIn("acceptance", report["steps"])
+            self.assertTrue(report["final_docx"].endswith("_DRAFT.docx"))
+            self.assertTrue(Path(report["final_docx"]).exists())
+            self.assertTrue(any("제출 금지" in n for n in report["needs_input"]))
+
+    def test_pipeline_gate_updates_report_paths_after_draft(self):
+        """R9: fail 로 최종본이 _DRAFT 로 rename 되면, 같은 파일을 가리키던
+        submit_docx/quality_docx 리포트 경로도 갱신된다(댕글링 금지)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            settings = _settings(tmp_path)
+            storage = _FakeStorage(tmp_path)
+            oa = OpenAIService(settings)
+            prof = _profile(tmp_path)
+            ps = _FakeProjectService(storage, prof, oa)
+            pi = ProjectInput(
+                template_id="t1",
+                organization_profile={"기업명": "테스트(주)"},
+                project_meta={},
+            )
+            storage.save_project_input("p1", pi)
+            pipeline = SubmissionPipeline(ps, EvaluationService(oa), storage, settings)
+            fake = mock.Mock(submittable=False, fail_defects=2, results=[])
+            with mock.patch(
+                "auto_write.services.submission_orchestrator.run_acceptance",
+                return_value=fake,
+            ):
+                report = pipeline.run(
+                    "p1", announcement_text="",
+                    enable_images=False, enable_notebooklm=False,
+                )
+            self.assertTrue(report["final_docx"].endswith("_DRAFT.docx"))
+            self.assertTrue(report["acceptance"]["draft_marked"])
+            for key in ("submit_docx", "quality_docx"):
+                if key in report:
+                    self.assertTrue(
+                        Path(report[key]).exists(),
+                        f"{key} 가 존재하지 않는 경로를 가리킴: {report[key]}",
+                    )
 
 
 if __name__ == "__main__":
