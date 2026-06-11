@@ -36,7 +36,7 @@ from ..config import ensure_directories, get_settings
 from .document_quality_orchestrator import DocumentQualityOrchestrator
 from .image_apply import ImageApplyReport, apply_images
 from .psst_fill import PSSTFillReport, apply_psst_scaffold
-from .usage_acceptance import SEV_FAIL, run_acceptance
+from .usage_acceptance import SEV_FAIL, force_draft_name, run_acceptance
 
 # 잔존 빈칸(placeholder) 보수적 탐지 패턴
 _RESIDUAL_RE = re.compile(
@@ -69,7 +69,9 @@ class AutopilotReport:
     acceptance_verdict: str = ""
     acceptance_fail_defects: int = 0
     acceptance_failed_checks: list[str] = field(default_factory=list)
+    acceptance_error: str = ""
     draft_marked: bool = False
+    draft_mark_error: str = ""
     # 5단계(잔존)
     residual_placeholders: list[str] = field(default_factory=list)
     manual_todo: list[str] = field(default_factory=list)
@@ -95,7 +97,9 @@ class AutopilotReport:
             "acceptance_verdict": self.acceptance_verdict,
             "acceptance_fail_defects": self.acceptance_fail_defects,
             "acceptance_failed_checks": self.acceptance_failed_checks,
+            "acceptance_error": self.acceptance_error,
             "draft_marked": self.draft_marked,
+            "draft_mark_error": self.draft_mark_error,
             "residual_placeholders": self.residual_placeholders,
             "manual_todo": self.manual_todo,
         }
@@ -242,20 +246,31 @@ def run_autopilot(
         shutil.copyfile(str(stage_in), str(final_path))
 
     # --- 4단계: 실사용 수용검사 게이트(R8) — fail 결함이 있으면 DRAFT 마킹 ---
+    #     게이트 자신이 죽어도 통과로 취급하지 않고(fail-closed: 판정 불가 = 제출 금지),
+    #     검사 예외로 리포트·백업 정보가 유실되지 않게 보호한다(submit 게이트와 동일 정책).
     if acceptance_gate:
-        acc = run_acceptance(str(final_path))
-        report.acceptance_submittable = acc.submittable
-        report.acceptance_verdict = "제출가능" if acc.submittable else "제출불가(DRAFT)"
-        report.acceptance_fail_defects = acc.fail_defects
-        report.acceptance_failed_checks = [
-            f"{r.label}: {r.detail}"
-            for r in acc.results if r.severity == SEV_FAIL and not r.passed
-        ]
-        if not acc.submittable and not final_path.stem.endswith("_DRAFT"):
-            draft_path = final_path.with_name(f"{final_path.stem}_DRAFT{final_path.suffix}")
-            if draft_path.resolve() != in_path.resolve():
-                final_path.replace(draft_path)     # '제출본' 이름으로 내보내지 않는다
-                final_path = draft_path
+        acc = None
+        try:
+            acc = run_acceptance(str(final_path))
+        except Exception as exc:
+            report.acceptance_error = f"{type(exc).__name__}: {exc}"
+        if acc is not None:
+            report.acceptance_submittable = acc.submittable
+            report.acceptance_verdict = "제출가능" if acc.submittable else "제출불가(DRAFT)"
+            report.acceptance_fail_defects = acc.fail_defects
+            report.acceptance_failed_checks = [
+                f"{r.label}: {r.detail}"
+                for r in acc.results if r.severity == SEV_FAIL and not r.passed
+            ]
+        if acc is None or not acc.submittable:
+            # '제출본' 이름으로 내보내지 않는다. 출력의 _DRAFT 이름이 입력 원본과
+            # 겹치면 _DRAFT2 로 대체 마킹하고(원본 보존·침묵 스킵 금지),
+            # rename 실패(파일 잠금 등)도 기록해 사용자에게 알린다.
+            new_path, mark_error = force_draft_name(final_path, avoid=in_path)
+            if mark_error:
+                report.draft_mark_error = mark_error
+            else:
+                final_path = new_path
                 report.output_docx = str(final_path)
                 report.draft_marked = True
 
@@ -281,6 +296,16 @@ def _build_todo(report: AutopilotReport) -> list[str]:
             f"아래 결함을 해결해야 제출 가능합니다."
         )
         todo.extend(f"  · {c}" for c in report.acceptance_failed_checks)
+    if report.acceptance_error:
+        todo.append(
+            f"수용검사 실행 실패({report.acceptance_error}) — 판정 불가. "
+            f"self_diagnose 로 수동 진단 전 제출 금지(_DRAFT 표시)."
+        )
+    if report.draft_mark_error:
+        todo.append(
+            f"_DRAFT 마킹 실패({report.draft_mark_error}) — 출력 파일명이 제출 이름 "
+            f"그대로이니 직접 변경 전 제출 금지."
+        )
     if report.prompts_inserted:
         todo.append(
             f"NotebookLM 슬라이드 프롬프트 {report.prompts_inserted}곳 — "

@@ -281,7 +281,8 @@ _PROMPT_INTRO_RE = re.compile(r"슬라이드\s*생성에\s*붙여넣으세요")
 
 @dataclass
 class StripReport:
-    markers_removed: int = 0      # 헤더·안내 등 검출 마커 단락 수(usage_acceptance 결함 수와 대응)
+    markers_removed: int = 0      # 헤더·안내 등 검출 마커 '단락' 수(usage_acceptance 는 표 셀
+                                  # 단위로 세므로 셀 안 다중 마커면 수치가 다를 수 있음)
     paragraphs_removed: int = 0   # 구분선·프롬프트 본문 포함 총 삭제 단락 수
     output_docx: str = ""
 
