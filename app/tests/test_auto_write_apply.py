@@ -237,10 +237,17 @@ def test_bizplan_no_ai_completes(tmp_path: Path) -> None:
     out = tmp_path / "out.docx"
     _make_doc(src, with_table=True)
     r = run_bizplan_autopilot(str(src), str(out), use_ai=False, write_report=False)
-    assert out.exists()
+    assert Path(r.output_docx).exists()
     assert r.loops_run == 1           # 공고 없음 → 1회 완성
     assert r.ai_used is False
     assert r.backup_dir               # 원본 백업 생성
+    # R8 전파: NotebookLM 블록이 든 중간본이 fail 이면 최종 복사본도 _DRAFT 를 유지해야
+    # 한다 (이전 버그: shutil.copyfile 이 깨끗한 이름으로 복사해 DRAFT 마킹 소실).
+    assert r.acceptance_submittable is False
+    assert r.draft_marked is True
+    assert r.output_docx.endswith("_DRAFT.docx")
+    assert not out.exists()           # '제출' 이름으로는 내보내지 않는다
+    assert any("제출 금지" in t for t in r.manual_todo)
 
 
 def test_bizplan_in_equals_out_blocked(tmp_path: Path) -> None:

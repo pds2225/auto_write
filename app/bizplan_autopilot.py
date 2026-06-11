@@ -96,6 +96,9 @@ def main(argv: list[str] | None = None) -> int:
         print("공고 채점 : 생략(공고 미제공 또는 AI 미연결)")
     gate = "통과" if report.final_gate_passed else "미달"
     print(f"서식 품질 : {report.final_quality_score:.1f}/100 (게이트 {gate})")
+    if report.acceptance_verdict:
+        print(f"수용검사  : {report.acceptance_verdict} (fail {report.acceptance_fail_defects}건)"
+              + (" → 출력명에 _DRAFT 표시" if report.draft_marked else ""))
     print(f"이미지    : NotebookLM 슬라이드 프롬프트 {report.prompts_inserted}건")
     print(f"AI 보강   : {report.ai_areas_written}영역")
     print(f"출력 DOCX : {report.output_docx}")
