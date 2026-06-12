@@ -5,7 +5,12 @@ doc_quality_score(서식 청소 점수)와 측정 대상이 다르다.
 fail 등급 결함이 1개라도 있으면 제출불가(DRAFT) 판정이다.
 
 - AI 호출 없음. 동일 입력 → 동일 결과(결정론).
-- 본문 직계 단락 + 표 셀(중첩 포함) 전체를 검사한다.
+- 텍스트 검사는 본문 직계 단락 + 표 셀(중첩 포함) + 머리글·바닥글·텍스트박스의
+  표시 텍스트를 모두 본다(숨은 영역의 마커·자리표시 미탐 방지).
+- 폰트 검사(_iter_all_runs)는 본문·표만 본다 — 머리글/바닥글은 양식 고정 영역이라
+  포함하면 정상 문서가 혼용 오탐(fail)되는 위험이 더 크다(오탐 0 우선).
+- 공고 조건부 요건(블라인드 마스킹·요구 산출형식·분량 등)은 AcceptanceConfig 로
+  묶어 전달한다. config 미지정이면 전부 기본값 = 현행 동작.
 
 검사 항목 (check_id / 등급)
 ---------------------------------
@@ -18,6 +23,7 @@ font_name_mixing       폰트 이름 혼용(표 포함, 허용 4종 초과)     
 font_size_spread       글자크기 과다 분산(7종 초과)·이상치(<8/>18pt)   warn
 empty_table_rows       완전히 빈 표 행                                 warn
 recruit_date_conflict  채용시기 표기 상호 모순                         warn
+masking_violation      블라인드 마스킹 위반(실명 잔존) — blind_review 시만 fail(조건부)
 """
 
 from __future__ import annotations
@@ -29,6 +35,7 @@ from typing import Any, Iterator
 
 from docx import Document
 from docx.oxml.ns import qn
+from docx.text.paragraph import Paragraph
 
 SEV_FAIL = "fail"
 SEV_WARN = "warn"
@@ -43,11 +50,20 @@ _SELF_BLOCK_RE = re.compile(
 # 제거기(image_apply.strip_notebooklm_blocks)가 같은 정의를 쓰도록 공개한다 —
 # 검출과 제거의 패턴이 어긋나면 '지웠는데 검출됨' 류의 재발이 생긴다.
 SELF_BLOCK_RE = _SELF_BLOCK_RE
+# ○○○/OOO 는 '빈 자리표시'이기도 하지만 블라인드 공고에서는 '올바른 마스킹'이다.
+# blind_review=True 면 placeholder 검사에서 제외된다(ACC-1 오탐 방지).
+_MASK_PLACEHOLDER_RE = re.compile(r"(?<!\w)(OOO|○○○)(?!\w)")
 _PLACEHOLDER_RES = (
     re.compile(r"<\s*사진\s*\(이미지\)[^>]*>"),
     re.compile(r"<[^<>\n]{0,30}제목\s*>"),
-    re.compile(r"(?<!\w)(OOO|○○○)(?!\w)"),
+    _MASK_PLACEHOLDER_RE,
 )
+# 블라인드 평가에서 마스킹해야 하는 라벨(공백·콜론 정규화 후 비교)
+_BLIND_LABEL_NORM = {"성명", "대표자성명", "대표자명", "직장명", "대학명"}
+_BLIND_INLINE_RE = re.compile(
+    r"(대표자\s*성명|대표자명|성명|직장명|대학명)\s*[:：]\s*([^\s,/|·]{1,20})"
+)
+_HANGUL_NAME_RE = re.compile(r"[가-힣]{2,10}")
 _CHECKBOX_ROW_RE = re.compile(r"택\s*1|해당\s*여부")
 _CHECKED_MARKS = ("■", "☑", "✔", "▣", "☒", "√")
 _LABEL_FIELDS = ("명 칭", "명칭", "기업명", "대표자명", "창업아이템명")
@@ -55,6 +71,21 @@ _DATE_TOKEN_RE = re.compile(r"[’'‘]\s?(\d{2})\s*\.\s*(\d{1,2})")
 # 템플릿이 정상적으로 쓰는 폰트 조합(KISED 양식 기준) — 이 수를 넘으면 혼용으로 본다.
 _ALLOWED_FONT_KINDS = 4
 _ALLOWED_SIZE_KINDS = 7
+
+
+@dataclass(frozen=True)
+class AcceptanceConfig:
+    """공고 조건부 수용 요건 묶음 — 기본값은 전부 현행 동작(보수적, 오탐 0).
+
+    required_format 은 여기 '보관'만 한다. 판정은 run_acceptance(DOCX 내부 검사)가
+    아니라 파이프라인 레벨의 최종 산출 파일 확장자 게이트에서 한다 — 그렇지 않으면
+    변환 전 DOCX 가 HWP 요구 공고에서 영구 fail 이 된다.
+    """
+    blind_review: bool = False          # True: ○○○ 마스킹 허용 + 실명 잔존 검출(fail)
+    required_format: str | None = None  # 예: "hwp" — 파이프라인 레벨에서 판정
+    max_pages: int | None = None        # 본문 분량 제한 — None 이면 검사 안 함
+    ai_section_max: int | None = None   # AI활용계획 등 섹션 분량 제한
+    allowed_fonts: int = _ALLOWED_FONT_KINDS
 
 
 @dataclass
@@ -142,8 +173,32 @@ def _dedup_cells(doc: Document):
 dedup_cells = _dedup_cells
 
 
+def _iter_extra_paragraphs(doc: Document) -> Iterator[tuple[str, Paragraph]]:
+    """머리글·바닥글 단락(표 셀 포함) — 본문 밖에 숨은 표시 텍스트(ACC-9).
+
+    명시 정의가 있을 때만 본다 — is_linked_to_previous 인 빈 머리글에 접근하면
+    python-docx 가 part 를 새로 만드는 부작용이 있어(읽기 전용 위반) 건너뛴다.
+    """
+    for section in doc.sections:
+        for label, hf in (("머리글", section.header), ("바닥글", section.footer)):
+            if hf is None or hf.is_linked_to_previous:
+                continue
+            for p in hf.paragraphs:
+                yield (label, p)
+            for cell in _iter_cells(hf.tables):
+                for p in cell.paragraphs:
+                    yield (label, p)
+
+
+def _iter_textbox_paragraphs(doc: Document) -> Iterator[Paragraph]:
+    """본문 내 텍스트박스(w:txbxContent) 단락 — 그림틀 안 텍스트도 표시 영역이다."""
+    for txbx in doc.element.body.iter(qn("w:txbxContent")):
+        for p_el in txbx.iter(qn("w:p")):
+            yield Paragraph(p_el, doc)
+
+
 def _iter_all_texts(doc: Document) -> Iterator[tuple[str, str]]:
-    """(위치, 텍스트) — 본문 단락과 표 셀(중첩 포함)을 모두 낸다."""
+    """(위치, 텍스트) — 본문 단락·표 셀(중첩)·머리글·바닥글·텍스트박스를 모두 낸다."""
     for p in doc.paragraphs:
         t = p.text.strip()
         if t:
@@ -152,9 +207,19 @@ def _iter_all_texts(doc: Document) -> Iterator[tuple[str, str]]:
         t = cell.text.strip()
         if t:
             yield ("표", t)
+    for where, p in _iter_extra_paragraphs(doc):
+        t = p.text.strip()
+        if t:
+            yield (where, t)
+    for p in _iter_textbox_paragraphs(doc):
+        t = p.text.strip()
+        if t:
+            yield ("텍스트박스", t)
 
 
 def _iter_all_runs(doc: Document):
+    # 의도적으로 본문·표만 — 머리글/바닥글 폰트는 양식 고정 영역이라 포함 시
+    # 정상 문서가 font_name_mixing(fail) 오탐될 위험이 크다(모듈 docstring 참조).
     for p in doc.paragraphs:
         yield from p.runs
     for cell in _dedup_cells(doc):
@@ -190,13 +255,13 @@ def _scan_regex(doc: Document, regexes) -> tuple[int, list[str]]:
 
 # --- 개별 검사 ---------------------------------------------------------------
 
-def check_unresolved_markers(doc: Document) -> CheckResult:
+def check_unresolved_markers(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
     n, s = _scan_regex(doc, (_MARKER_RE,))
     return CheckResult("unresolved_markers", "[확인필요] 등 미해결 마커", SEV_FAIL, n, s,
                        f"마커 {n}개 — 전부 실제 값으로 치환해야 제출 가능")
 
 
-def check_self_inserted_blocks(doc: Document) -> CheckResult:
+def check_self_inserted_blocks(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
     n = 0
     samples: list[str] = []
     for where, text in _iter_all_texts(doc):
@@ -208,13 +273,20 @@ def check_self_inserted_blocks(doc: Document) -> CheckResult:
                        f"파이프라인이 삽입한 작업용 블록 {n}개 잔존 — 제출본에서는 0이어야 함")
 
 
-def check_template_placeholders(doc: Document) -> CheckResult:
-    """자리표시 검출 — 패턴이 겹쳐도(동일 구간 이중매치) 1건으로 센다."""
+def check_template_placeholders(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
+    """자리표시 검출 — 패턴이 겹쳐도(동일 구간 이중매치) 1건으로 센다.
+
+    blind_review=True 면 ○○○/OOO 패턴을 제외한다 — 블라인드 공고에서 그것은
+    빈 자리표시가 아니라 '올바른 마스킹'이다(실명 잔존은 masking_violation 이 잡음).
+    """
+    blind = config is not None and config.blind_review
+    regexes = tuple(rx for rx in _PLACEHOLDER_RES
+                    if not (blind and rx is _MASK_PLACEHOLDER_RE))
     n = 0
     samples: list[str] = []
     for where, text in _iter_all_texts(doc):
         spans: list[tuple[int, int]] = []
-        for rx in _PLACEHOLDER_RES:
+        for rx in regexes:
             spans.extend(m.span() for m in rx.finditer(text))
         if not spans:
             continue
@@ -234,7 +306,7 @@ def check_template_placeholders(doc: Document) -> CheckResult:
                        f"<사진(이미지)>·OOO 등 자리표시 {n}개")
 
 
-def check_unchecked_choices(doc: Document) -> CheckResult:
+def check_unchecked_choices(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
     defects = 0
     samples: list[str] = []
     seen_labels: set[str] = set()
@@ -263,7 +335,7 @@ def check_unchecked_choices(doc: Document) -> CheckResult:
                        f"체크 표시(■ 등) 없는 선택 행 {defects}개")
 
 
-def check_empty_label_fields(doc: Document) -> CheckResult:
+def check_empty_label_fields(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
     defects = 0
     samples: list[str] = []
     def _walk(tables):
@@ -285,25 +357,89 @@ def check_empty_label_fields(doc: Document) -> CheckResult:
                        f"공란 필수칸 {defects}개")
 
 
-def check_font_name_mixing(doc: Document) -> CheckResult:
-    names: set[str] = set()
+def _is_masked_value(v: str) -> bool:
+    return ("○" in v) or bool(re.fullmatch(r"O+", v))
+
+
+def check_masking_violation(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
+    """블라인드 평가 위반(실명·기관명 잔존) — config.blind_review=True 일 때만 활성.
+
+    블라인드 공고는 성명·직장명·대학명을 ○ 마스킹해야 하며 실명 기재는 공고
+    위반(탈락 사유)이다. 비블라인드(기본)에서는 defects=0 — 오탐 0 원칙.
+    값이 통째로 한글 2~10자일 때만 잡는 보수적 패턴(라벨 옆 칸 / '라벨: 값' 한정).
+    """
+    label = "블라인드 마스킹 위반(실명 잔존)"
+    if config is None or not config.blind_review:
+        return CheckResult("masking_violation", label, SEV_FAIL, 0, [],
+                           "비블라인드 공고 — 검사 비활성(blind_review 시 활성)")
+    defects = 0
+    samples: list[str] = []
+
+    def _flag(where: str, lbl: str, value: str) -> None:
+        nonlocal defects
+        defects += 1
+        if len(samples) < _MAX_SAMPLES:
+            samples.append(f"[{where}] '{lbl}' 칸 실명 의심({value[0]}…) — ○ 마스킹 필요")
+
+    for where, text in _iter_all_texts(doc):
+        for lbl, value in _BLIND_INLINE_RE.findall(text):
+            v = value.strip()
+            if _is_masked_value(v):
+                continue
+            if _HANGUL_NAME_RE.fullmatch(v):
+                _flag(where, lbl, v)
+
+    def _walk(tables):
+        for table in tables:
+            for row in table.rows:
+                cells = _row_cells_dedup(row)
+                for i, c in enumerate(cells[:-1]):
+                    if re.sub(r"[\s:：]", "", c) not in _BLIND_LABEL_NORM:
+                        continue
+                    v = cells[i + 1].strip()
+                    if not v or _is_masked_value(v):
+                        continue
+                    if _HANGUL_NAME_RE.fullmatch(v):
+                        _flag("표", c, v)
+            for row in table.rows:
+                for cell in row.cells:
+                    if cell.tables:
+                        _walk(cell.tables)
+    _walk(doc.tables)
+    return CheckResult("masking_violation", label, SEV_FAIL, defects, samples,
+                       f"마스킹 안 된 실명 의심 {defects}건 — 블라인드 공고 위반(탈락 사유)")
+
+
+def check_font_name_mixing(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
+    """폰트 혼용 검사 — ascii(영문)와 eastAsia(한글) 슬롯을 분리 집계한다.
+
+    한글 문서는 run 하나가 정상적으로 (ascii=Arial, eastAsia=맑은 고딕) 페어를
+    갖는다. 두 슬롯을 한 집합에 합산하면 페어가 2종으로 부풀어 정상 문서가
+    fail 오탐된다(ACC-8). 슬롯별로 허용 종수를 따로 적용해 페어 오탐을 없애되,
+    슬롯 안의 진짜 혼용(예: 한글 폰트 6종)은 그대로 잡는다.
+    """
+    allowed = config.allowed_fonts if config is not None else _ALLOWED_FONT_KINDS
+    ascii_names: set[str] = set()
+    ea_names: set[str] = set()
     for run in _iter_all_runs(doc):
         if not (run.text or "").strip():
             continue
         if run.font.name:
-            names.add(run.font.name)
+            ascii_names.add(run.font.name)
         rpr = run._element.rPr
         if rpr is not None and rpr.rFonts is not None:
             ea = rpr.rFonts.get(qn("w:eastAsia"))
             if ea:
-                names.add(ea)
-    over = max(0, len(names) - _ALLOWED_FONT_KINDS)
+                ea_names.add(ea)
+    over = max(0, len(ascii_names) - allowed) + max(0, len(ea_names) - allowed)
+    samples = [f"ascii:{n}" for n in sorted(ascii_names)[:_MAX_SAMPLES]] + \
+              [f"eastAsia:{n}" for n in sorted(ea_names)[:_MAX_SAMPLES]]
     return CheckResult("font_name_mixing", "폰트 이름 혼용(표 포함)", SEV_FAIL, over,
-                       sorted(names)[:_MAX_SAMPLES + 4],
-                       f"사용 폰트 {len(names)}종 (허용 {_ALLOWED_FONT_KINDS}종)")
+                       samples,
+                       f"ascii {len(ascii_names)}종 / eastAsia {len(ea_names)}종 (허용 슬롯별 {allowed}종)")
 
 
-def check_font_size_spread(doc: Document) -> CheckResult:
+def check_font_size_spread(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
     sizes: set[float] = set()
     outliers = 0
     for run in _iter_all_runs(doc):
@@ -319,7 +455,7 @@ def check_font_size_spread(doc: Document) -> CheckResult:
                        f"크기 {len(sizes)}종, 이상치(8pt 미만/18pt 초과) {outliers}개")
 
 
-def check_empty_table_rows(doc: Document) -> CheckResult:
+def check_empty_table_rows(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
     defects = 0
     for table in doc.tables:
         for row in table.rows:
@@ -330,7 +466,7 @@ def check_empty_table_rows(doc: Document) -> CheckResult:
                        f"빈 행 {defects}개")
 
 
-def check_recruit_date_conflict(doc: Document) -> CheckResult:
+def check_recruit_date_conflict(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
     tokens: set[str] = set()
     samples: list[str] = []
     for where, text in _iter_all_texts(doc):
@@ -352,6 +488,7 @@ _ALL_CHECKS = (
     check_template_placeholders,
     check_unchecked_choices,
     check_empty_label_fields,
+    check_masking_violation,
     check_font_name_mixing,
     check_font_size_spread,
     check_empty_table_rows,
@@ -359,13 +496,17 @@ _ALL_CHECKS = (
 )
 
 
-def run_acceptance(path: str | Path) -> AcceptanceReport:
-    """DOCX 1개에 대해 전체 수용 검사를 실행한다 (읽기 전용)."""
+def run_acceptance(path: str | Path, config: AcceptanceConfig | None = None) -> AcceptanceReport:
+    """DOCX 1개에 대해 전체 수용 검사를 실행한다 (읽기 전용).
+
+    config 미지정(None)이면 AcceptanceConfig 기본값으로 동작한다 — 현행과 동일.
+    """
+    cfg = config if config is not None else AcceptanceConfig()
     path = Path(path)
     doc = Document(str(path))
     report = AcceptanceReport(source=str(path))
     for check in _ALL_CHECKS:
-        report.results.append(check(doc))
+        report.results.append(check(doc, cfg))
     return report
 
 

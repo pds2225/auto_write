@@ -10,7 +10,7 @@ import pytest
 from docx import Document
 
 from auto_write.services.usage_acceptance import (
-    run_acceptance,
+    AcceptanceConfig, run_acceptance,
     check_unresolved_markers, check_self_inserted_blocks,
     check_template_placeholders, check_unchecked_choices,
     check_empty_label_fields, check_font_name_mixing,
@@ -108,3 +108,137 @@ def test_defective_document_blocked(tmp_path):
     rep = run_acceptance(p)
     assert not rep.submittable
     assert rep.fail_defects >= 2
+
+
+# --- US-1: 순회 범위 확장(ACC-9) + AcceptanceConfig ---------------------------
+
+def test_header_and_footer_markers_detected(tmp_path):
+    d = _doc()
+    d.add_paragraph("본문은 정상")
+    d.sections[0].header.paragraphs[0].text = "[확인필요] 머리글에 숨은 마커"
+    d.sections[0].footer.paragraphs[0].text = "대표자 OOO"
+    p = tmp_path / "hf.docx"
+    d.save(str(p))
+    rep = run_acceptance(p)
+    by_id = {r.check_id: r for r in rep.results}
+    assert by_id["unresolved_markers"].defects >= 1
+    assert by_id["template_placeholders"].defects >= 1
+    assert not rep.submittable
+
+
+_TEXTBOX_PICT_XML = (
+    '<w:pict xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
+    'xmlns:v="urn:schemas-microsoft-com:vml">'
+    '<v:shape><v:textbox><w:txbxContent>'
+    '<w:p><w:r><w:t>[확인필요] 텍스트박스 안 마커</w:t></w:r></w:p>'
+    '</w:txbxContent></v:textbox></v:shape></w:pict>'
+)
+
+
+def test_textbox_marker_detected(tmp_path):
+    from docx.oxml import parse_xml
+    d = _doc()
+    run = d.add_paragraph("그림 영역:").add_run("")
+    run._r.append(parse_xml(_TEXTBOX_PICT_XML))
+    p = tmp_path / "tb.docx"
+    d.save(str(p))
+    r = check_unresolved_markers(Document(str(p)))
+    assert r.defects == 1
+
+
+# --- US-2: 블라인드 마스킹 방향 역전(ACC-1·ACC-2, R10) -------------------------
+
+def _blind_cfg() -> AcceptanceConfig:
+    return AcceptanceConfig(blind_review=True)
+
+
+def test_blind_review_allows_masking(tmp_path):
+    """블라인드 모드: 올바른 ○○○ 마스킹 문서는 제출가능 (ACC-1 오탐 해소)."""
+    d = _doc()
+    d.add_paragraph("대표자 성명: ○○○ (블라인드 마스킹 완료)")
+    t = d.add_table(rows=1, cols=2)
+    t.cell(0, 0).text = "직장명"
+    t.cell(0, 1).text = "○○○"
+    p = tmp_path / "masked.docx"
+    d.save(str(p))
+    rep = run_acceptance(p, _blind_cfg())
+    by_id = {r.check_id: r for r in rep.results}
+    assert by_id["template_placeholders"].defects == 0
+    assert by_id["masking_violation"].defects == 0
+    assert rep.submittable, [c.as_dict() for c in rep.results if not c.passed]
+
+
+def test_blind_review_detects_real_names(tmp_path):
+    """블라인드 모드: 실명 잔존(진짜 위반)을 fail 로 검출 (ACC-2 미탐 해소)."""
+    d = _doc()
+    d.add_paragraph("대표자 성명: 홍길동 / 직장명: 삼성전자 / 대학명: 서울대학교")
+    t = d.add_table(rows=1, cols=2)
+    t.cell(0, 0).text = "성명"
+    t.cell(0, 1).text = "김철수"
+    p = tmp_path / "names.docx"
+    d.save(str(p))
+    rep = run_acceptance(p, _blind_cfg())
+    mv = next(r for r in rep.results if r.check_id == "masking_violation")
+    assert mv.severity == "fail" and mv.defects >= 4
+    assert not rep.submittable
+
+
+def test_default_masking_behavior_unchanged(tmp_path):
+    """기본(비블라인드): ○○○는 여전히 자리표시 fail, 실명 검사는 비활성."""
+    d = _doc()
+    d.add_paragraph("대표자 성명: ○○○")
+    d.add_paragraph("성명: 홍길동")
+    p = tmp_path / "default.docx"
+    d.save(str(p))
+    rep = run_acceptance(p)
+    by_id = {r.check_id: r for r in rep.results}
+    assert by_id["template_placeholders"].defects >= 1  # ○○○ = 빈 자리표시(현행 유지)
+    assert by_id["masking_violation"].defects == 0      # 비활성(오탐 0 원칙)
+
+
+def test_blind_review_still_catches_other_placeholders(tmp_path):
+    """블라인드 모드에서도 ○○○ 외 자리표시(<사진(이미지)>)는 그대로 fail."""
+    d = _doc()
+    d.add_paragraph("< 사진(이미지) 또는 설계도 제목 >")
+    p = tmp_path / "ph.docx"
+    d.save(str(p))
+    rep = run_acceptance(p, _blind_cfg())
+    ph = next(r for r in rep.results if r.check_id == "template_placeholders")
+    assert ph.defects >= 1
+
+
+# --- US-3b: 폰트 ascii/eastAsia 이중집계 오탐 수정(ACC-8) ----------------------
+
+def test_font_pairs_not_double_counted():
+    """정상 한·영 페어 3쌍 — 슬롯 분리 집계로 오탐(fail) 없어야 한다."""
+    from docx.oxml.ns import qn
+    d = _doc()
+    pairs = (("Arial", "맑은 고딕"), ("Times New Roman", "바탕"), ("Calibri", "돋움"))
+    for ascii_name, ea in pairs:
+        run = d.add_paragraph().add_run("혼합 본문 텍스트")
+        run.font.name = ascii_name
+        run._element.rPr.rFonts.set(qn("w:eastAsia"), ea)
+    r = check_font_name_mixing(d)
+    assert r.defects == 0, r.as_dict()
+
+
+def test_font_allowed_kinds_configurable():
+    """AcceptanceConfig.allowed_fonts 로 허용 종수를 조정할 수 있다."""
+    d = _doc()
+    for name in ("Arial", "Times New Roman", "Calibri"):
+        d.add_paragraph().add_run("텍스트").font.name = name
+    assert check_font_name_mixing(d).defects == 0  # 기본 4종 허용
+    r = check_font_name_mixing(d, AcceptanceConfig(allowed_fonts=1))
+    assert r.defects == 2
+
+
+def test_acceptance_config_default_is_noop(tmp_path):
+    d = _doc()
+    d.add_paragraph("본 사업은 정상 문서다.")
+    p = tmp_path / "cfg.docx"
+    d.save(str(p))
+    base = run_acceptance(p)
+    with_cfg = run_acceptance(p, AcceptanceConfig())
+    assert base.submittable is True and with_cfg.submittable is True
+    assert base.fail_defects == with_cfg.fail_defects == 0
+    assert [r.check_id for r in base.results] == [r.check_id for r in with_cfg.results]

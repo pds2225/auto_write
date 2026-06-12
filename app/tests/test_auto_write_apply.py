@@ -212,7 +212,7 @@ def test_autopilot_gate_fail_closed_on_acceptance_error(tmp_path: Path, monkeypa
     예외가 전파되지 않고 acceptance_error 기록 + _DRAFT 강제 + 리포트 보존."""
     from auto_write.services import autopilot_pipeline
 
-    def _boom(path):
+    def _boom(*_args, **_kwargs):  # 실제 시그니처(path, config) 변화에 둔감하게
         raise RuntimeError("acceptance crashed")
 
     monkeypatch.setattr(autopilot_pipeline, "run_acceptance", _boom)

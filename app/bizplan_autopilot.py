@@ -61,6 +61,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-ai", action="store_true", help="AI 작성/채점 비활성(구조·서식만)")
     parser.add_argument("--placeholder-only", action="store_true", help="이미지를 자리표시만 삽입")
     parser.add_argument("--underline", action="store_true", help="강조 시 밑줄 추가")
+    parser.add_argument("--blind-review", action="store_true",
+                        help="블라인드 공고 모드 — ○○○ 마스킹 허용 + 실명 잔존 검출(fail)")
     parser.add_argument("--no-report", action="store_true", help="통합 리포트(md) 생략")
     parser.add_argument("--json", action="store_true", help="결과 JSON 출력")
     args = parser.parse_args(argv)
@@ -78,6 +80,7 @@ def main(argv: list[str] | None = None) -> int:
         use_ai=not args.no_ai,
         placeholder_only=args.placeholder_only,
         underline=args.underline,
+        blind_review=args.blind_review,
         write_report=not args.no_report,
     )
 

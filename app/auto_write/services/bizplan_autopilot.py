@@ -170,6 +170,7 @@ def run_bizplan_autopilot(
     use_ai: bool = True,
     placeholder_only: bool = False,
     underline: bool = False,
+    blind_review: bool = False,
     write_report: bool = True,
 ) -> BizplanReport:
     """초안 DOCX 를 목표 점수까지 생성·완성한다.
@@ -231,6 +232,7 @@ def run_bizplan_autopilot(
             underline=underline,
             placeholder_only=placeholder_only,
             psst_scaffold=not ai_wrote,
+            blind_review=blind_review,
             write_report=False,
         )
         if i == 1:

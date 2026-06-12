@@ -36,7 +36,7 @@ from ..config import ensure_directories, get_settings
 from .document_quality_orchestrator import DocumentQualityOrchestrator
 from .image_apply import ImageApplyReport, apply_images
 from .psst_fill import PSSTFillReport, apply_psst_scaffold
-from .usage_acceptance import SEV_FAIL, force_draft_name, run_acceptance
+from .usage_acceptance import AcceptanceConfig, SEV_FAIL, force_draft_name, run_acceptance
 
 # 잔존 빈칸(placeholder) 보수적 탐지 패턴
 _RESIDUAL_RE = re.compile(
@@ -158,6 +158,7 @@ def run_autopilot(
     placeholder_only: bool = False,
     psst_scaffold: bool = True,
     acceptance_gate: bool = True,
+    blind_review: bool = False,
     write_report: bool = True,
 ) -> AutopilotReport:
     """문서 품질 수정 전 단계를 무인 연속 실행한다.
@@ -171,6 +172,8 @@ def run_autopilot(
         psst_scaffold: True 면 PSST 누락/미흡 영역에 작성 가이드 삽입(3단계).
         acceptance_gate: True 면 실사용 수용검사(usage_acceptance)를 실행하고,
             fail 결함이 있으면 출력 파일명을 ``_DRAFT`` 로 강제한다(4단계, R8).
+        blind_review: 블라인드 공고 모드 — ○○○ 마스킹을 허용하고 실명 잔존을
+            fail 로 검출한다(R10). 기본 False.
         write_report: True 면 통합 리포트(md/json) 생성.
 
     Returns:
@@ -251,7 +254,7 @@ def run_autopilot(
     if acceptance_gate:
         acc = None
         try:
-            acc = run_acceptance(str(final_path))
+            acc = run_acceptance(str(final_path), AcceptanceConfig(blind_review=blind_review))
         except Exception as exc:
             report.acceptance_error = f"{type(exc).__name__}: {exc}"
         if acc is not None:

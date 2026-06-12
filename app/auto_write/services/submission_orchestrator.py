@@ -21,7 +21,7 @@ from .document_quality_orchestrator import DocumentQualityOrchestrator
 from .eval_loop_runner import EvalLoopRunner
 from .plan_builder import build_fill_plan
 from .submittable_filler import SubmittableFiller
-from .usage_acceptance import SEV_FAIL, force_draft_name, run_acceptance
+from .usage_acceptance import AcceptanceConfig, SEV_FAIL, force_draft_name, run_acceptance
 
 
 class SubmissionPipeline:
@@ -42,6 +42,7 @@ class SubmissionPipeline:
         enable_notebooklm: bool = True,
         fill_plan_dir: str | Path | None = None,
         acceptance_gate: bool = True,
+        blind_review: bool = False,
     ) -> dict[str, Any]:
         report: dict[str, Any] = {"project_id": project_id, "steps": [], "needs_input": []}
         results_root = Path(self.settings.results_root)
@@ -157,7 +158,7 @@ class SubmissionPipeline:
         if acceptance_gate:
             acc = None
             try:
-                acc = run_acceptance(str(final_docx))
+                acc = run_acceptance(str(final_docx), AcceptanceConfig(blind_review=blind_review))
             except Exception as exc:
                 report["acceptance_error"] = f"{type(exc).__name__}: {exc}"
                 report["needs_input"].append(
