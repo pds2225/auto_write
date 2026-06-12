@@ -63,6 +63,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--underline", action="store_true", help="강조 시 밑줄 추가")
     parser.add_argument("--blind-review", action="store_true",
                         help="블라인드 공고 모드 — ○○○ 마스킹 허용 + 실명 잔존 검출(fail)")
+    parser.add_argument("--strict", action="store_true",
+                        help="종료코드 계약 활성: 0=제출가능/2=제출불가 (기본은 항상 0)")
     parser.add_argument("--no-report", action="store_true", help="통합 리포트(md) 생략")
     parser.add_argument("--json", action="store_true", help="결과 JSON 출력")
     args = parser.parse_args(argv)
@@ -84,9 +86,15 @@ def main(argv: list[str] | None = None) -> int:
         write_report=not args.no_report,
     )
 
+    def _strict_exit() -> int:
+        if (args.strict and report.acceptance_verdict
+                and not report.acceptance_submittable):
+            return 2
+        return 0
+
     if args.json:
         print(json.dumps(report.as_dict(), ensure_ascii=False, indent=2))
-        return 0
+        return _strict_exit()
 
     print("=" * 64)
     print(f"AI 사용   : {'예' if report.ai_used else '아니오(키 미연결)'}")
@@ -113,7 +121,7 @@ def main(argv: list[str] | None = None) -> int:
         for t in report.manual_todo:
             print(f"  - {t}")
     print("=" * 64)
-    return 0
+    return _strict_exit()
 
 
 if __name__ == "__main__":

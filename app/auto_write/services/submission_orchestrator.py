@@ -21,7 +21,9 @@ from .document_quality_orchestrator import DocumentQualityOrchestrator
 from .eval_loop_runner import EvalLoopRunner
 from .plan_builder import build_fill_plan
 from .submittable_filler import SubmittableFiller
-from .usage_acceptance import AcceptanceConfig, SEV_FAIL, force_draft_name, run_acceptance
+from .usage_acceptance import (
+    AcceptanceConfig, SEV_FAIL, backup_existing_output, force_draft_name, run_acceptance,
+)
 
 
 class SubmissionPipeline:
@@ -48,6 +50,12 @@ class SubmissionPipeline:
         report: dict[str, Any] = {"project_id": project_id, "steps": [], "needs_input": []}
         results_root = Path(self.settings.results_root)
         results_root.mkdir(parents=True, exist_ok=True)
+
+        def _protect_output(p: Path) -> None:
+            # 재실행 보호(PIPE-2): 고정 산출명이 이전 산출물을 무경고 파괴하지 않게 백업
+            bak = backup_existing_output(p)
+            if bak:
+                report.setdefault("overwrite_backups", []).append(bak)
 
         # 1. 텍스트 생성(이미지는 최후에 별도 삽입하므로 generate 단계는 이미지 끔)
         project_input = self.storage.load_project_input(project_id)
@@ -80,6 +88,7 @@ class SubmissionPipeline:
         project_input = self.storage.load_project_input(project_id)
         plan = build_fill_plan(profile, project_input, external_plan_dir=fill_plan_dir)
         submit_path = results_root / f"제출초안_{project_id}.docx"
+        _protect_output(submit_path)
         fill_report = SubmittableFiller(plan).finalize(output_docx, submit_path)
         report["submit_docx"] = str(submit_path)
         report["finalize"] = {k: v for k, v in fill_report.items() if k != "residual_remaining"}
@@ -94,6 +103,7 @@ class SubmissionPipeline:
                 results_root, openai_service=getattr(self.project_service, "openai_service", None)
             )
             quality_out = results_root / f"제출초안_{project_id}_품질.docx"
+            _protect_output(quality_out)
             q_result = quality.run(submit_path, quality_out, write_report=False)
             report["quality_docx"] = str(quality_out)
             try:
@@ -106,24 +116,29 @@ class SubmissionPipeline:
             report["quality_error"] = f"{type(exc).__name__}: {exc}"
 
         # 5. 이미지 최후 삽입(모든 텍스트 처리 후)
+        #    이미지 단계 예외가 비싼 generate/eval 결과 리포트 전체를 날리지 않게
+        #    보호한다(PIPE-8) — 실패해도 images_error 만 남기고 수용검사로 진행.
         if enable_images:
             try:
-                evidence = self.project_service.evidence_service.search(project_input.evidence_requests)
-            except Exception:
-                evidence = []
-            assets_dir = self.storage.project_dir(project_id) / "generated_assets"
-            images = self.project_service.image_service.build_images(
-                profile.image_slots, project_input.answers, evidence, assets_dir
-            )
-            img_report = self.project_service.render_service.insert_images_into_docx(
-                profile, images, final_docx
-            )
-            report["images"] = {
-                "generated": len(images),
-                "inserted": int(img_report.get("images_written", 0)),
-                "errors": img_report.get("errors", []),
-            }
-            report["steps"].append("images")
+                try:
+                    evidence = self.project_service.evidence_service.search(project_input.evidence_requests)
+                except Exception:
+                    evidence = []
+                assets_dir = self.storage.project_dir(project_id) / "generated_assets"
+                images = self.project_service.image_service.build_images(
+                    profile.image_slots, project_input.answers, evidence, assets_dir
+                )
+                img_report = self.project_service.render_service.insert_images_into_docx(
+                    profile, images, final_docx
+                )
+                report["images"] = {
+                    "generated": len(images),
+                    "inserted": int(img_report.get("images_written", 0)),
+                    "errors": img_report.get("errors", []),
+                }
+                report["steps"].append("images")
+            except Exception as exc:
+                report["images_error"] = f"{type(exc).__name__}: {exc}"
 
         # 6. NotebookLM 슬라이드 프롬프트 삽입(모든 텍스트/이미지 처리 후 최종본에).
         #    공개 이미지 API 가 없는 NotebookLM 은 '수동 슬라이드 생성용 프롬프트'를
@@ -133,6 +148,7 @@ class SubmissionPipeline:
                 from .image_apply import apply_images
 
                 nlm_out = results_root / f"제출초안_{project_id}_노트북LM.docx"
+                _protect_output(nlm_out)
                 nlm_report = apply_images(
                     str(final_docx),
                     str(nlm_out),

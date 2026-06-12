@@ -158,6 +158,34 @@ class SubmissionPipelineTest(unittest.TestCase):
             self.assertTrue((storage.project_dir("p1") / "output" / "output.docx").exists())
             self.assertGreaterEqual(report["images"]["inserted"], 1)
 
+    def test_pipeline_images_error_does_not_kill_report(self):
+        """PIPE-8: 이미지 단계 예외가 비싼 generate/eval 리포트를 날리지 않는다 —
+        images_error 만 기록하고 수용검사 단계까지 진행."""
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            settings = _settings(tmp_path)
+            storage = _FakeStorage(tmp_path)
+            oa = OpenAIService(settings)
+            prof = _profile(tmp_path)
+            ps = _FakeProjectService(storage, prof, oa)
+            pi = ProjectInput(
+                template_id="t1",
+                organization_profile={"기업명": "테스트(주)"},
+                project_meta={},
+            )
+            storage.save_project_input("p1", pi)
+            pipeline = SubmissionPipeline(ps, EvaluationService(oa), storage, settings)
+            with mock.patch.object(ps.image_service, "build_images",
+                                   side_effect=RuntimeError("boom")):
+                report = pipeline.run(
+                    "p1", announcement_text="",
+                    enable_images=True, enable_notebooklm=False,
+                )
+            self.assertIn("images_error", report)
+            self.assertIn("RuntimeError", report["images_error"])
+            self.assertIn("acceptance", report)  # 후속 게이트 도달
+            self.assertTrue(Path(report["final_docx"]).exists())
+
     def test_pipeline_inserts_notebooklm_prompts(self):
         """버그② 회귀: submit 파이프라인이 NotebookLM 슬라이드 프롬프트를
         최종본에 삽입해야 한다(이전엔 image_service(PNG)만 쓰고 미연결이라 안 나옴)."""

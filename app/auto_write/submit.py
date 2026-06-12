@@ -59,18 +59,20 @@ def main(argv: list[str] | None = None) -> int:
                         help="블라인드 공고 모드 — ○○○ 마스킹 허용 + 실명 잔존 검출(fail)")
     parser.add_argument("--required-format", default=None,
                         help="공고 요구 산출 형식(예: hwp) — 다르면 제출명 차단(_DRAFT)+변환 안내")
+    parser.add_argument("--strict", action="store_true",
+                        help="종료코드 계약 활성: 0=제출가능/1=입력오류/2=제출불가/3=검사불능 (기본은 항상 0)")
     args = parser.parse_args(argv)
 
     settings, storage, project_service, evaluation_service = _make()
 
-    ann = (args.announcement or "").strip()
-    if not ann and args.announcement_file:
-        p = Path(args.announcement_file)
-        if p.exists():
-            try:
-                ann = project_service.extract_reference_text(p)
-            except Exception:
-                ann = p.read_text(encoding="utf-8", errors="ignore")
+    ann, ann_warn = _read_announcement(
+        args.announcement, args.announcement_file, project_service.extract_reference_text
+    )
+    if ann_warn:
+        # PIPE-7: 공고 파일 오타/부재를 침묵하지 않는다 — 평가 루프 생략을 명시 경고
+        print(f"[경고] {ann_warn}")
+        if args.strict:
+            return 1
 
     pipeline = SubmissionPipeline(project_service, evaluation_service, storage, settings)
     report = pipeline.run(
@@ -96,7 +98,30 @@ def main(argv: list[str] | None = None) -> int:
         print(f"_DRAFT 마킹 실패 — 파일명 직접 변경 전 제출 금지: {report['draft_mark_error']}")
     if report.get("needs_input"):
         print("[보완 필요 - 근거 부족, 직접 입력 권장]:", ", ".join(report["needs_input"]))
+    if args.strict:
+        # 종료코드 4분류(ralplan v2 P2): 검사불능(환경) > 문서 결함 순으로 판정
+        if report.get("acceptance_error") or report.get("draft_mark_error"):
+            return 3
+        if (acc and not acc.get("submittable")) or report.get("format_mismatch"):
+            return 2
     return 0
+
+
+def _read_announcement(announcement: str, announcement_file: str, extract) -> tuple[str, str]:
+    """공고 텍스트 로드 — (텍스트, 경고) 반환. 파일 부재/추출 실패를 침묵하지 않는다(PIPE-7)."""
+    ann = (announcement or "").strip()
+    if ann or not announcement_file:
+        return ann, ""
+    p = Path(announcement_file)
+    if not p.exists():
+        return "", f"공고 파일을 찾을 수 없음: {p} — 공고 평가 루프가 통째로 생략됩니다."
+    try:
+        return extract(p), ""
+    except Exception:
+        try:
+            return p.read_text(encoding="utf-8", errors="ignore"), ""
+        except Exception as exc:
+            return "", f"공고 파일 읽기 실패({type(exc).__name__}) — 평가 루프 생략: {p}"
 
 
 if __name__ == "__main__":

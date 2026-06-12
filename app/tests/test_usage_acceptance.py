@@ -392,3 +392,30 @@ def test_acceptance_config_default_is_noop(tmp_path):
     assert base.submittable is True and with_cfg.submittable is True
     assert base.fail_defects == with_cfg.fail_defects == 0
     assert [r.check_id for r in base.results] == [r.check_id for r in with_cfg.results]
+
+
+# --- US-4: 재실행 덮어쓰기 보호(PIPE-2) ----------------------------------------
+
+def test_backup_existing_output(tmp_path):
+    from pathlib import Path
+    from auto_write.services.usage_acceptance import backup_existing_output
+    assert backup_existing_output(tmp_path / "none.docx") == ""
+    f = tmp_path / "a.docx"
+    f.write_text("이전 산출물", encoding="utf-8")
+    bak = backup_existing_output(f)
+    assert bak and Path(bak).exists() and not f.exists()
+    assert Path(bak).read_text(encoding="utf-8") == "이전 산출물"
+
+
+def test_force_draft_name_preserves_existing_draft(tmp_path):
+    """기존 _DRAFT(사용자 수정본일 수 있음)를 Path.replace 로 파괴하지 않는다."""
+    from auto_write.services.usage_acceptance import force_draft_name
+    old_draft = tmp_path / "out_DRAFT.docx"
+    old_draft.write_text("사용자 수정본", encoding="utf-8")
+    cur = tmp_path / "out.docx"
+    cur.write_text("새 산출물", encoding="utf-8")
+    new_path, err = force_draft_name(cur)
+    assert err == "" and new_path.name == "out_DRAFT.docx"
+    assert new_path.read_text(encoding="utf-8") == "새 산출물"
+    baks = list(tmp_path.glob("out_DRAFT_prev*.docx"))
+    assert len(baks) == 1 and baks[0].read_text(encoding="utf-8") == "사용자 수정본"

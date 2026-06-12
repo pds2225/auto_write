@@ -36,7 +36,9 @@ from ..config import ensure_directories, get_settings
 from .document_quality_orchestrator import DocumentQualityOrchestrator
 from .image_apply import ImageApplyReport, apply_images
 from .psst_fill import PSSTFillReport, apply_psst_scaffold
-from .usage_acceptance import AcceptanceConfig, SEV_FAIL, force_draft_name, run_acceptance
+from .usage_acceptance import (
+    AcceptanceConfig, SEV_FAIL, backup_existing_output, force_draft_name, run_acceptance,
+)
 
 # 잔존 빈칸(placeholder) 보수적 탐지 패턴
 _RESIDUAL_RE = re.compile(
@@ -73,6 +75,7 @@ class AutopilotReport:
     draft_marked: bool = False
     draft_mark_error: str = ""
     format_mismatch: str = ""  # 산출 형식 게이트(ACC-5) — 요구 형식과 다르면 사유 기록
+    overwrite_backup: str = ""  # 재실행 보호(PIPE-2) — 기존 산출물 백업 경로
     # 5단계(잔존)
     residual_placeholders: list[str] = field(default_factory=list)
     manual_todo: list[str] = field(default_factory=list)
@@ -102,6 +105,7 @@ class AutopilotReport:
             "draft_marked": self.draft_marked,
             "draft_mark_error": self.draft_mark_error,
             "format_mismatch": self.format_mismatch,
+            "overwrite_backup": self.overwrite_backup,
             "residual_placeholders": self.residual_placeholders,
             "manual_todo": self.manual_todo,
         }
@@ -203,6 +207,10 @@ def run_autopilot(
         raise ValueError("출력이 입력과 같습니다. 원본 덮어쓰기는 금지입니다.")
 
     report = AutopilotReport(input_docx=str(in_path), output_docx=str(final_path))
+
+    # 재실행 보호(PIPE-2): 같은 산출명이 이미 있으면(이전 실행 결과·사용자 수정본)
+    # 덮어쓰기 전에 타임스탬프 백업으로 보존한다. _DRAFT 변형 이름도 함께 본다.
+    report.overwrite_backup = backup_existing_output(final_path)
 
     # --- 1단계: 백업 + 서식 수정 + 점수/게이트 ---
     tmp_quality = results_root / f"{stem}_ap1_quality.docx"
