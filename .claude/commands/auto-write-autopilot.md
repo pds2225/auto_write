@@ -1,6 +1,6 @@
 ---
 description: 문서 품질 '수정'을 무인 연속 실행한다 - 백업+서식수정 → 이미지 실제 적용 → PSST 보강 → 점수/게이트 → 통합 리포트.
-argument-hint: <입력DOCX경로> [--output 결과.docx] [--underline] [--placeholder-only] [--no-psst] [--max-images N] [--json]
+argument-hint: <입력DOCX경로> [--output 결과.docx] [--underline] [--placeholder-only] [--no-psst] [--max-images N] [--submit-clean] [--blind-review] [--required-format hwp] [--strict] [--no-acceptance] [--json]
 ---
 
 # /auto-write-autopilot
@@ -16,7 +16,18 @@ argument-hint: <입력DOCX경로> [--output 결과.docx] [--underline] [--placeh
    (표 실측치가 있으면 차트 생성·삽입, 없으면 자리표시 placeholder — 숫자 날조 없음)
 3. **PSST 보강** — `psst_fill.apply_psst_scaffold`
    (누락/미흡 영역에 작성 뼈대 + 빠진 항목 체크리스트)
-4. **잔존 빈칸 스캔 + 통합 리포트(md/json)**
+3.5 **(옵션) 제출 정리** — `--submit-clean`: NotebookLM 프롬프트를
+   `<이름>_슬라이드프롬프트.md` 로 보존한 뒤 작업용 블록을 제거(손실 0)
+4. **실사용 수용검사 게이트(R8)** — `usage_acceptance.run_acceptance`
+   ([확인필요] 마커·자기삽입 블록·자리표시·미체크 선택란·공란 필수칸·유색 텍스트·
+   폰트 혼용 등 **fail 결함이 1개라도 있으면 출력 파일명에 `_DRAFT` 를 강제**.
+   `_DRAFT` = 제출불가 판정이니 그 이름 그대로/이름만 바꿔 제출하면 안 된다)
+4.5 **(옵션) 산출 형식 게이트** — `--required-format hwp`: 최종 산출이 .docx 면
+   `_DRAFT` 차단 + docx2hwp 변환 안내
+5. **잔존 빈칸 스캔 + 통합 리포트(md/json)**
+
+> ⚠ 수용검사·DRAFT 마킹으로 **최종 파일명이 `--output` 지정 경로와 달라질 수 있다**
+> — 항상 리포트의 `output_docx` 를 최종 경로로 읽어라.
 
 쉽게 말하면: 문서 하나를 넣으면 서식 정리·그림 삽입·빠진 작성 안내까지 알아서 해주고,
 사람이 더 해야 할 일(To-Do)만 목록으로 돌려준다.
@@ -41,13 +52,20 @@ argument-hint: <입력DOCX경로> [--output 결과.docx] [--underline] [--placeh
 - `--no-psst` (선택): PSST 작성 보강 생략.
 - `--no-report` (선택): 통합 리포트(md) 생략.
 - `--json` (선택): 결과 JSON 출력.
+- `--submit-clean` (선택): NotebookLM 프롬프트를 md 로 보존 후 작업용 블록 제거(제출 정리).
+- `--blind-review` (선택): 블라인드 공고 모드 — ○○○ 마스킹 허용 + 실명 잔존 검출(fail).
+- `--required-format hwp` (선택): 요구 산출형식과 다르면 제출명 차단(_DRAFT)+변환 안내.
+- `--strict` (선택): 종료코드 계약 — 0=제출가능 / 2=제출불가·게이트미달·형식불일치 /
+  **3=검사불능(환경 문제 — 재시도·의존성 확인, 문서 수정 아님)**. 미지정 시 항상 0.
+- `--no-acceptance` (선택): 수용검사 게이트(_DRAFT 마킹) 생략 — 작업 중간본 용도로만.
 
 ## 실행 워크플로우(단계)
 
 1. 입력 DOCX 존재 확인. 없으면 "실행 막힘" 보고.
 2. `cd D:\auto_write\app` 후 `python auto_write_autopilot.py "<입력>" [옵션]` 실행.
 3. 산출물 확인: 결과 DOCX, 백업 폴더, 통합 리포트(md).
-4. 통합 리포트의 총점·게이트·차트/자리표시·PSST 보강·수동 To-Do 를 사용자에게 정리.
+4. 통합 리포트의 총점·게이트·**수용검사 판정(제출가능/제출불가)**·차트/자리표시·
+   PSST 보강·수동 To-Do 를 사용자에게 정리. 최종 경로는 리포트의 `output_docx`.
 
 ## 호출 에이전트
 
@@ -83,6 +101,10 @@ python document_quality_orchestrator.py --rollback "D:\auto_write\results\backup
 - 입력 없음 → "실행 막힘" 보고, 절대경로 재요청.
 - 출력=입력 동일(`ValueError`) → `--output` 다른 경로 지정 안내.
 - 게이트 미달(70 미만) → 리포트 감점 사유 보고, 보완 후 재실행 안내.
+- 수용검사 제출불가(`_DRAFT`) → fail 결함 목록 해결 후 재실행. NotebookLM 블록만
+  원인이면 `--submit-clean` 으로 정리 후 재검사.
+- `--strict` exit 3(검사불능) → **문서가 아니라 환경 문제**(의존성·파일잠금) — 재시도
+  또는 `python self_diagnose.py` 수동 진단. exit 2 는 문서 결함(내용 수정).
 - matplotlib/한글 폰트 경고는 치명적이지 않음(차트 None 이면 자리표시로 폴백).
 
 ## 보고 형식
@@ -92,5 +114,6 @@ python document_quality_orchestrator.py --rollback "D:\auto_write\results\backup
 2. 백업 폴더 경로
 3. 통합 리포트 경로(md)
 4. 총점·게이트(우수/통과/보완/실패)
-5. 차트 N건 / 자리표시 M건 · PSST 보강 영역
-6. 수동 보완 To-Do 목록
+5. **수용검사 판정(제출가능 / 제출불가(DRAFT) + fail 결함 목록)** — `_DRAFT` 면 제출 금지
+6. 차트 N건 / 자리표시 M건 · PSST 보강 영역
+7. 수동 보완 To-Do 목록

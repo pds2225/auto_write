@@ -6,11 +6,17 @@
 > **🔄 세션을 새로 시작했다면 `RESUME.md` 를 먼저 읽어라** — 진행 상태·남은 일·재개 명령이 있다.
 > 작업을 잠시 멈추거나 컨텍스트가 무거워지면 "체크포인트 저장"으로 RESUME.md 를 갱신하고,
 > 새 세션에서 "이어서"로 복원한다(session-resume 스킬).
+>
+> **현재 상태(2026-06-12):** 실사용 39건 수정 트랙(US-0~US-8) 완료 — 수용검사 게이트
+> (R8/R9)·블라인드 마스킹(`--blind-review`)·제출 정리(`--submit-clean`)·HWP 형식 게이트
+> (`--required-format`)·`--strict` 종료코드(0/1/2/3) 배선. 변경이력 표가 잘려 보여도
+> 이 줄이 최신이다. 테스트는 반드시 `py -3.11 -m pytest` (기본 3.14 는 matplotlib 부재).
 
 ## 프로젝트 개요
 
 - 핵심: 양식 DOCX 분석 → AI 작성 → DOCX 렌더링 → 검수(`app/auto_write/services/`).
-- 실행: 시스템 Python 3.11~3.13(venv 없음). `app/` 이 import 기준. AI 키 없어도 동작.
+- 실행: 시스템 Python(venv 없음) — **테스트·실행은 `py -3.11` 권장**(PATH 기본 3.14 는
+  matplotlib 부재로 pytest 수집 에러). `app/` 이 import 기준. AI 키 없어도 동작.
 - 진단 CLI: `app/_build_chochang.py inspect|analyze|generate|finalize|struct|heads`.
 
 ---
@@ -35,8 +41,10 @@ python document_quality_orchestrator.py "C:\경로\문서.docx"            # 전
 python document_quality_orchestrator.py 문서.docx -o 결과.docx --underline
 python document_quality_orchestrator.py --rollback "..\results\backup\<ts>" 결과.docx
 python _build_chochang.py inspect "결과.docx"                          # 진단만
-# 테스트
-python -m pytest tests/test_document_quality_harness.py -q
+python auto_write_autopilot.py "문서.docx" --submit-clean --strict     # 무인 수정+수용검사 게이트
+python self_diagnose.py "제출본.docx"                                  # 제출 가능성 진단(0/1/2/3)
+# 테스트 (반드시 py -3.11 — 기본 3.14 는 matplotlib 부재로 수집 에러)
+py -3.11 -m pytest tests/ -q
 ```
 
 ### 에이전트 (`.claude/agents/`) — 6개 (2026-06-07 슬림화: 12→6)
@@ -61,18 +69,30 @@ backup-and-rollback · document-quality-inspection
 ### 커맨드 (`.claude/commands/`)
 
 `/improve-doc-quality` · `/auto-write-quality` · `/auto-write-inspect` ·
-`/auto-write-psst` · `/auto-write-images` · `/auto-write-finalize`
+`/auto-write-psst` · `/auto-write-images` · `/auto-write-finalize` ·
+`/auto-write-autopilot` · `/auto-write-bizplan` · `/auto-write-analyze` · `/auto-write-selfdev`
 
 ### 핵심 코드 (`app/auto_write/services/`)
 
 doc_quality_ops · document_type_classifier · psst_check · infographic_suggest ·
 doc_quality_score · document_quality_orchestrator (진입: `app/document_quality_orchestrator.py`,
-`scripts/run_document_quality_harness.py`)
+`scripts/run_document_quality_harness.py`) ·
+**usage_acceptance**(수용검사 엔진+AcceptanceConfig+force_draft_name) ·
+**autopilot_pipeline**(무인 수정+게이트, 진입: `app/auto_write_autopilot.py`) ·
+**submission_orchestrator**(제출 end-to-end, 진입: `python -m auto_write.submit`) ·
+self_diagnose(진단 CLI: `app/self_diagnose.py`) · image_apply(NotebookLM 삽입/추출/제거) ·
+hwp_docx_convert(HWP↔DOCX 변환, COM 대화형 전용)
 
 ### 품질 게이트
 
 100점 만점, 9항목(안내문구15/글머리표10/문단공백10/글자크기15/표10/강조10/유형구조15/PSST10/이미지5).
 **90 우수 / 85 통과 / 70 보완 / 미만 실패.** 미달 시 최대 10회 보완 루프, 수렴 시 조기종료 후 수동확인 항목 명시.
+
+**⚠ 이중 게이트:** 점수 게이트는 '서식 품질'만 본다. 제출 가능성은 별도의
+**수용검사 게이트(usage_acceptance, R7/R8/R9)** 가 판정한다 — fail 결함(마커·자기삽입
+블록·자리표시·미체크 선택란·공란 필수칸·유색 텍스트·폰트 혼용 등) 1개라도 있으면
+출력명에 `_DRAFT` 강제(제출 금지). 점수 99 라도 `_DRAFT` 면 제출불가다.
+진단: `python self_diagnose.py` (exit 0=제출가능/1=입력오류/2=제출불가/3=검사불능).
 
 ### 백업·롤백
 
@@ -109,3 +129,4 @@ doc_quality_score · document_quality_orchestrator (진입: `app/document_qualit
 | 2026-06-11 | 통합 검증 + R7 종결: PR#9/#10/#11 통합 브랜치 + submit 게이트 (autopilot 오케스트레이션) | 머지 selfdev/strip-notebooklm-blocks·feature/hwp-docx-convert·selfdev/r8-acceptance-gate / 수정 app/auto_write/services/submission_orchestrator.py·app/auto_write/submit.py(--no-acceptance) / 테스트 app/tests/test_submission_pipeline.py(신규 2) / 원장 R7 달성 | 사용자 요청 '과거 요청사항(채팅·최초 요구사항) 모두 실사용 기준 정상작동'. 흩어진 PR 3건을 integration/all-requirements 로 합쳐 전체 동작 검증(이력 충돌만 수동 보존) 후 마지막 격차 R7 종결: SubmissionPipeline 7단계에 수용검사 게이트 — fail 결함 시 final_docx _DRAFT 강제 + needs_input 안내(acceptance_gate=True 기본). 검증: **pytest 163 passed**(통합 161+신규 2) + 통합 시나리오 E2E(autopilot DRAFT → strip 마커16/37단락 제거 → 재진단 자기삽입 0, 잔여 fail 3 = 전부 사용자 입력 영역). 원장 R2/R3/R5/R6/R7/R8 달성·R1/R4 부분달성(사용자 입력 대기) |
 | 2026-06-11 | bizplan 최종 복사 시 DRAFT 마킹 소실 수정 (R8 정신 전파 완결) | 수정 app/auto_write/services/bizplan_autopilot.py·app/bizplan_autopilot.py(CLI) / 테스트 app/tests/test_auto_write_apply.py(사양 강화 1) | 병렬 세션 발견 갭: bizplan_autopilot 이 마지막에 shutil.copyfile 로 최종본을 깨끗한 이름으로 복사해 중간본의 _DRAFT 판정이 소실되고 BizplanReport 에 acceptance 필드도 없었음 → 이 경로로는 제출불가 문서가 제출용 이름으로 나갈 수 있었음. 수정: ap 의 acceptance 5필드를 BizplanReport 로 전파 + 최종 이름에도 _DRAFT 강제 + To-Do/리포트/CLI 판정 표시. 검증: pytest 163 passed(test_bizplan_no_ai_completes 를 DRAFT 전파 사양으로 강화) |
 | 2026-06-11 | selfdev 루프 #4: 수용검사 게이트 견고화 — fail-closed·DRAFT 마킹 보장·경로 정합 (R9) | 수정 app/auto_write/services/{usage_acceptance,submission_orchestrator,autopilot_pipeline}.py·app/auto_write/submit.py / 표면수정 app/strip_notebooklm.py(raw docstring)·app/auto_write/services/image_apply.py(주석) / 테스트 app/tests/{test_auto_write_apply,test_submission_pipeline}.py(신규 4) / 원장 R9 신설 | 멀티에이전트 코드리뷰(cb85307..a3dfb1d, 52에이전트)가 검출하고 코드 대조로 확인한 게이트 무력화 경로 4종 차단: ①submit 게이트 fail-open(게이트 예외 시 제출 이름 그대로 통과)→fail-closed(판정 불가=_DRAFT 강제+needs_input) ②DRAFT rename 실패(파일 잠금)가 침묵 속에 보고-실파일명 불일치→draft_mark_error/draft_marked 명시 ③rename 후 report submit_docx/quality_docx 댕글링→경로 동기 갱신 ④autopilot draft_path==in_path 침묵 스킵→_DRAFT2 대체 마킹(원본 보존) + run_acceptance 예외 보호(리포트·백업정보 유실 방지). 정책 헬퍼 force_draft_name 을 usage_acceptance 에 단일화(양 게이트 공유). 검증: **pytest 167 passed**(신규 4)·DOC_OK(docstring BEL 제거). 잔여(저위험, 원장 R9 비고): 중간 산출물 제출초안_* 이름 잔존·셀단위/단락단위 검출 불일치·사용자 구분선 인접 오삭제 엣지 |
+| 2026-06-12 | 실사용 39건 수정 트랙(US-0~US-8, ralplan v2 합의·승인 실행) | PR #15~#24: app/auto_write/services/{usage_acceptance,autopilot_pipeline,submission_orchestrator,bizplan_autopilot,image_apply,psst_fill,bizplan_ai_writer}.py·app/{self_diagnose,auto_write_autopilot,bizplan_autopilot,strip_notebooklm}.py·auto_write/submit.py·tests 3종·.claude/commands 3종·CLAUDE.md / 원장(R10~R14 등록·R2/3/4/5 정합) | 2026-06-11 실사용 진단 39건(architect 승인) 전수 수정: ①US-1 AcceptanceConfig+머리글/바닥글/텍스트박스 순회(ACC-9) ②US-3b 폰트 ascii/eastAsia 이중집계 오탐(ACC-8) ③US-2 블라인드 마스킹 방향 역전 — --blind-review(○○○ 허용+실명검출, ACC-1/2) ④US-3a 색상·psst스캐폴드·한국식날짜·스타일폰트 검사+R8 __all__ 재정의(ACC-3/6/13/7, LEDGER-1) ⑤US-3c warn 선도입(괄호선택란·라벨확장·빈그림칸·분량)+HWP 형식 게이트 --required-format(ACC-4/5/10/11/12) ⑥US-4 재실행 백업·--strict(0/1/2/3)·공고파일 경고·이미지 단계 보호(PIPE-2/3/7/8) ⑦US-5 self_diagnose cp949 크래시+exit 계약(ENC-1/2) ⑧US-6 extract_notebooklm_prompts+--submit-clean(프롬프트 md 보존→strip→재검사, 상호배타 명명, PIPE-6/LEDG-4) ⑨US-7 원장 정합(LEDG-5/6/7) ⑩US-8 문서 동기화(DRIFT-1~5). pytest 167→202 passed(신규 35, 회귀 0). PR #14(R9 fail-closed)는 병렬 세션 기병합 확인 후 그 위에 작업 |
