@@ -419,3 +419,51 @@ def test_force_draft_name_preserves_existing_draft(tmp_path):
     assert new_path.read_text(encoding="utf-8") == "새 산출물"
     baks = list(tmp_path.glob("out_DRAFT_prev*.docx"))
     assert len(baks) == 1 and baks[0].read_text(encoding="utf-8") == "사용자 수정본"
+
+
+# --- US-5: self_diagnose 인코딩·종료코드 계약(ENC-1/2) --------------------------
+
+def test_self_diagnose_cli_exit_codes(tmp_path):
+    """ENC-1/2: cp949 캡처 환경에서 크래시 없이 완주(exit 2 + JSON 생성), 없는 파일 exit 1."""
+    import os
+    import subprocess
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    app_dir = _Path(__file__).resolve().parent.parent
+    env = dict(os.environ)
+    env.pop("PYTHONUTF8", None)
+    env.pop("PYTHONIOENCODING", None)
+    env["PYTHONPATH"] = str(app_dir)
+
+    bad = tmp_path / "bad.docx"
+    d = _doc()
+    d.add_paragraph("사업비 [확인필요] 원 — 검사용(em-dash 포함)")
+    d.save(str(bad))
+    out_json = tmp_path / "diag.json"
+    r = subprocess.run(
+        [_sys.executable, str(app_dir / "self_diagnose.py"), str(bad), "--json", str(out_json)],
+        capture_output=True, env=env, cwd=str(app_dir),
+    )
+    assert r.returncode == 2, r.stderr.decode("utf-8", "replace")
+    assert out_json.exists()
+
+    r1 = subprocess.run(
+        [_sys.executable, str(app_dir / "self_diagnose.py"), str(tmp_path / "없음.docx")],
+        capture_output=True, env=env, cwd=str(app_dir),
+    )
+    assert r1.returncode == 1
+
+
+def test_self_diagnose_exit3_on_checker_crash(tmp_path, monkeypatch):
+    """검사기 예외 = 판정 불가 → exit 3 (문서 결함 2 와 구분, fail-closed)."""
+    import self_diagnose as sd
+
+    src = tmp_path / "x.docx"
+    _doc().save(str(src))
+
+    def _boom(*_a, **_k):
+        raise RuntimeError("checker down")
+
+    monkeypatch.setattr(sd, "run_acceptance", _boom)
+    assert sd.main([str(src)]) == 3
