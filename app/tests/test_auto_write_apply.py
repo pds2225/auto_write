@@ -441,3 +441,74 @@ def test_submit_announcement_missing_warns(tmp_path: Path) -> None:
     assert ann == "" and "찾을 수 없음" in warn
     ann2, warn2 = _read_announcement("직접 텍스트", "ignored.txt", lambda p: "x")
     assert ann2 == "직접 텍스트" and warn2 == ""
+
+
+# --- US-6: extract+strip(--submit-clean) — PIPE-6/LEDG-4 -----------------------
+
+def test_extract_matches_strip_identification(tmp_path: Path) -> None:
+    """extract 와 strip 이 같은 식별을 공유 — 추출 후 strip 하면 블록 0, 본문서 프롬프트 소멸."""
+    from auto_write.services.image_apply import extract_notebooklm_prompts
+
+    src = tmp_path / "in.docx"
+    mid = tmp_path / "mid.docx"
+    out = tmp_path / "stripped.docx"
+    _make_doc(src, with_table=True)
+    apply_images(str(src), str(mid))
+    prompts = extract_notebooklm_prompts(str(mid))
+    assert prompts, "삽입된 프롬프트 본문이 추출돼야 한다"
+    strip_notebooklm_blocks(str(mid), str(out))
+    assert extract_notebooklm_prompts(str(out)) == []          # 동치: 지운 뒤 추출 0
+    assert _check(out, "self_inserted_blocks").defects == 0    # 게이트 기준으로도 잔존 0
+    text_after = "\n".join(p.text for p in Document(str(out)).paragraphs)
+    for pr in prompts:
+        assert pr[:20] not in text_after                       # 추출분이 문서에 안 남음
+
+
+def test_autopilot_submit_clean_passes_gate(tmp_path: Path) -> None:
+    """--submit-clean: 프롬프트 md 보존 + 블록 제거 후 게이트 통과 — '항상 _DRAFT' 해소."""
+    from auto_write.services.autopilot_pipeline import run_autopilot
+
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    _make_doc(src, with_table=True)
+    report = run_autopilot(
+        str(src), str(out), psst_scaffold=False, submit_clean=True, write_report=False
+    )
+    assert report.prompts_inserted >= 1 and report.strip_removed >= 1
+    assert report.prompt_md and Path(report.prompt_md).exists()
+    assert len(Path(report.prompt_md).read_text(encoding="utf-8")) > 10  # 내용 보존
+    assert report.acceptance_submittable is True
+    assert report.output_docx == str(out) and out.exists()
+
+
+def test_strip_cli_gates_final_name(tmp_path: Path) -> None:
+    """strip CLI: fail 잔존 문서는 '_제출용' 명명 차단(_DRAFT), 깨끗하면 _제출용 (LEDG-4)."""
+    import strip_notebooklm as cli
+    from auto_write.services.image_apply import apply_images as _ai
+
+    # (a) 블록 + 다른 fail(빈 명칭 칸) 잔존 → _DRAFT, '_제출용' 금지
+    bad = tmp_path / "bad.docx"
+    doc = Document()
+    doc.add_paragraph("다. 목표 시장규모 TAM SAM SOM 성장률 전망.")
+    t = doc.add_table(rows=1, cols=2)
+    t.cell(0, 0).text = "명 칭"
+    t.cell(0, 1).text = ""
+    doc.save(str(bad))
+    mid = tmp_path / "bad_nlm.docx"
+    _ai(str(bad), str(mid))
+    rc = cli.main([str(mid)])
+    assert rc == 2
+    assert not list(tmp_path.glob("*_제출용.docx"))
+    assert list(tmp_path.glob("*_정리본_DRAFT.docx"))
+
+    # (b) 깨끗한 문서 + 블록 → strip 후 통과 → _제출용
+    good = tmp_path / "good.docx"
+    doc2 = Document()
+    doc2.add_paragraph("다. 목표 시장규모 TAM SAM SOM 성장률 전망.")
+    doc2.save(str(good))
+    mid2 = tmp_path / "good_nlm.docx"
+    _ai(str(good), str(mid2))
+    rc2 = cli.main([str(mid2)])
+    assert rc2 == 0
+    assert list(tmp_path.glob("good_nlm_제출용.docx"))
+    assert list(tmp_path.glob("good_nlm_슬라이드프롬프트.md"))

@@ -307,30 +307,18 @@ def _is_divider_p(elem) -> bool:
     return len(t) >= 10 and set(t) <= {"─"}
 
 
-def strip_notebooklm_blocks(in_docx: str, out_docx: str) -> StripReport:
-    """잔존한 NotebookLM 작업용 블록을 제거한 '제출용 사본'을 만든다.
+def _collect_block_elements(doc) -> tuple[list, list, int]:
+    """자기삽입 블록 요소 수집 — strip(삭제)과 extract(보존)가 **같은 식별**을 공유한다.
 
-    ``apply_images`` 가 삽입한 블록(구분선·헤더·안내·프롬프트·구분선 5단락)을
-    ``usage_acceptance`` 의 self_inserted_blocks 검출과 **같은 패턴**으로 찾아 지운다.
-    실본문 오삭제 방지를 위해 프롬프트 본문 단락은 '안내문 바로 다음 + 구분선 직전'
-    구조가 확인될 때만 함께 지운다(구조가 깨졌으면 마커·구분선만 지운다).
+    같은 함수를 쓰므로 '문서에서는 지웠는데 추출(md)에는 빠진' 비대칭(잔존/손실)이
+    구조적으로 불가능하다(ralplan v2 Architect P1-a, R5 의 패턴 공유 원칙).
 
-    원본은 절대 덮어쓰지 않는다(``out_docx == in_docx`` 면 ``ValueError``).
+    Returns:
+        (제거 대상 요소 전체, 프롬프트 본문 요소들, 마커 단락 수)
     """
-    in_path = Path(in_docx)
-    out_path = Path(out_docx)
-    if in_path.resolve() == out_path.resolve():
-        raise ValueError("in_docx 와 out_docx 가 같습니다. 원본 덮어쓰기는 금지입니다.")
-    if not in_path.exists():
-        raise FileNotFoundError(f"입력 DOCX 가 없습니다: {in_docx}")
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(str(in_path), str(out_path))
-
-    doc = Document(str(out_path))
-    report = StripReport(output_docx=str(out_path))
-
     contexts = list(_iter_anchor_contexts(doc))   # 단락 proxy 보관(lxml id 재사용 방지)
     marked: list = []
+    bodies: list = []
     seen: set[int] = set()
     seen_markers: set[int] = set()
 
@@ -360,7 +348,53 @@ def strip_notebooklm_blocks(in_docx: str, out_docx: str) -> StripReport:
             nxt2 = nxt.getnext()
             if _is_p(nxt2) and _is_divider_p(nxt2):
                 _mark(nxt)
+                bodies.append(nxt)
                 _mark(nxt2)
+    return marked, bodies, len(seen_markers)
+
+
+def extract_notebooklm_prompts(docx: str | Path) -> list[str]:
+    """삭제 전에 보존해야 할 NotebookLM 프롬프트 본문 텍스트를 추출한다(US-6).
+
+    ``strip_notebooklm_blocks`` 와 같은 식별(_collect_block_elements)을 쓴다 —
+    strip 이 지울 프롬프트 본문은 반드시 여기서도 나온다(정보 손실 0 보장).
+    읽기 전용 — 문서를 수정하지 않는다.
+    """
+    doc = Document(str(docx))
+    _, bodies, _ = _collect_block_elements(doc)
+    out: list[str] = []
+    for b in bodies:
+        t = _p_text(b).strip()
+        if t:
+            out.append(t)
+    return out
+
+
+def strip_notebooklm_blocks(in_docx: str, out_docx: str) -> StripReport:
+    """잔존한 NotebookLM 작업용 블록을 제거한 '제출용 사본'을 만든다.
+
+    ``apply_images`` 가 삽입한 블록(구분선·헤더·안내·프롬프트·구분선 5단락)을
+    ``usage_acceptance`` 의 self_inserted_blocks 검출과 **같은 패턴**으로 찾아 지운다.
+    실본문 오삭제 방지를 위해 프롬프트 본문 단락은 '안내문 바로 다음 + 구분선 직전'
+    구조가 확인될 때만 함께 지운다(구조가 깨졌으면 마커·구분선만 지운다).
+    프롬프트 보존이 필요하면 strip 전에 ``extract_notebooklm_prompts`` 를 호출하라
+    — 두 함수는 같은 식별(_collect_block_elements)을 공유한다.
+
+    원본은 절대 덮어쓰지 않는다(``out_docx == in_docx`` 면 ``ValueError``).
+    """
+    in_path = Path(in_docx)
+    out_path = Path(out_docx)
+    if in_path.resolve() == out_path.resolve():
+        raise ValueError("in_docx 와 out_docx 가 같습니다. 원본 덮어쓰기는 금지입니다.")
+    if not in_path.exists():
+        raise FileNotFoundError(f"입력 DOCX 가 없습니다: {in_docx}")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(str(in_path), str(out_path))
+
+    doc = Document(str(out_path))
+    report = StripReport(output_docx=str(out_path))
+
+    marked, _bodies, marker_count = _collect_block_elements(doc)
 
     for elem in marked:
         parent = elem.getparent()
@@ -371,7 +405,7 @@ def strip_notebooklm_blocks(in_docx: str, out_docx: str) -> StripReport:
         if parent.tag == qn("w:tc") and parent.find(qn("w:p")) is None:
             parent.append(OxmlElement("w:p"))
 
-    report.markers_removed = len(seen_markers)
+    report.markers_removed = marker_count
     report.paragraphs_removed = len(marked)
     doc.save(str(out_path))
     return report
