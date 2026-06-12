@@ -467,3 +467,16 @@ def test_self_diagnose_exit3_on_checker_crash(tmp_path, monkeypatch):
 
     monkeypatch.setattr(sd, "run_acceptance", _boom)
     assert sd.main([str(src)]) == 3
+
+
+# --- US-7: 원장 판정 로직(LEDG-5/6) --------------------------------------------
+
+def test_requirement_status_rules():
+    """check_ids 공백=정적 상태 복창 / 매핑 검사 fail=부분·미달성 (LEDG-6)."""
+    import self_diagnose as sd
+
+    assert sd._requirement_status({"check_ids": [], "상태": "부분달성"}, set(), True) == "부분달성"
+    req = {"check_ids": ["unresolved_markers", "self_inserted_blocks"]}
+    assert sd._requirement_status(req, {"unresolved_markers"}, False) == "부분달성"
+    assert sd._requirement_status(req, set(), True) == "달성"
+    assert sd._requirement_status(req, {"unresolved_markers", "self_inserted_blocks"}, False) == "미달성"
