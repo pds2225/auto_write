@@ -22,7 +22,7 @@
    날조 0, 기존 기능 삭제 금지. 새 검사가 필요하면 usage_acceptance.py 에 check 추가.
 5. **검증** — 신규/기존 pytest 전체 + 대상 DOCX 재진단으로 before/after 비교:
    ```powershell
-   python -m pytest tests/ -q
+   py -3.11 -m pytest tests/ -q
    python self_diagnose.py "<대상.docx>"
    ```
 6. **원장 갱신** — requirements_ledger.json 의 해당 요구 `상태`/`근거` 갱신,

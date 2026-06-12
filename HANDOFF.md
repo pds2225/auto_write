@@ -47,7 +47,7 @@ backup-and-rollback · document-quality-inspection
 
 document-quality-harness.md (17단계 순서 + 병렬/순차 구분)
 
-## 6. Command 목록 (`.claude/commands/`, 6)
+## 6. Command 목록 (`.claude/commands/`, 10 — autopilot·bizplan·analyze·selfdev 추가됨)
 
 `/improve-doc-quality` · `/auto-write-quality` · `/auto-write-inspect` ·
 `/auto-write-psst` · `/auto-write-images` · `/auto-write-finalize`
@@ -70,11 +70,11 @@ cd D:\auto_write\app
 ```powershell
 $py = "C:\Users\ekth3\AppData\Local\Programs\Python\Python311\python.exe"
 $env:PYTHONPATH = 'D:\auto_write\app'
-& $py -m pytest D:\auto_write\app\tests -q          # 전체 72개
+py -3.11 -m pytest D:\auto_write\app\tests -q      # 2026-06-12 기준 202 passed (기본 3.14 금지)
 & $py -m pytest D:\auto_write\app\tests\test_document_quality_harness.py -q  # 하네스 11개
 ```
 
-현재 상태: **72 passed** (회귀 포함). 하네스 신규 11개 포함.
+현재 상태(2026-06-12): **202 passed**. 이 문서의 수치·상태는 작성 시점(06-06) 스냅샷이 많다 — **최신 상태는 RESUME.md·CLAUDE.md 상단을 우선하라.**
 
 ## 9. 품질점수 기준
 
@@ -91,12 +91,12 @@ $env:PYTHONPATH = 'D:\auto_write\app'
 
 ## 11. 남은 문제 / 한계
 
-- **git 미초기화**: 버전관리 없음. 커밋하려면 `git init` 필요(사용자 결정 대기).
-- **실제 사용자 DOCX 검증 미수행**: 합성 샘플로만 end-to-end 확인. 실제 사업계획서 1건으로 검증 권장.
+- ~~git 미초기화~~ → (해소) GitHub 원격 + PR 워크플로 운영 중(2026-06-12 PR #24까지 병합). master 직접 push 금지.
+- ~~실제 사용자 DOCX 검증 미수행~~ → (해소) 미래큐러스·마켓게이트 실문서 E2E 다수 수행(원장 근거 참조).
 - **HWP/PDF 후처리 범위 외**: 후처리는 DOCX 단계만. HWP/PDF 변환 후 결과에는 미적용.
 - **폰트 표준화 기본 비활성**: 서식 파손 위험으로 `--normalize-fonts` 옵션에서만 동작(보수적).
 - **AI 분류 보조**: 키 있을 때만(모호 케이스). 키 없으면 규칙기반 분류.
-- **이미지 실제 삽입 미수행**: 제안만 생성. 삽입은 `docx_ops.insert_image_*` 별도 호출 필요.
+- ~~이미지 실제 삽입 미수행~~ → (해소) image_apply 가 NotebookLM 프롬프트 삽입/추출(extract)/제거(strip)를 수행하고 autopilot 2단계에 연결됨.
 
 ## 12. 다음 AI 에게 줄 프롬프트
 
