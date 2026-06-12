@@ -336,21 +336,32 @@ def check_empty_label_fields(doc: Document, config: AcceptanceConfig | None = No
 
 
 def check_font_name_mixing(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
-    names: set[str] = set()
+    """폰트 혼용 검사 — ascii(영문)와 eastAsia(한글) 슬롯을 분리 집계한다.
+
+    한글 문서는 run 하나가 정상적으로 (ascii=Arial, eastAsia=맑은 고딕) 페어를
+    갖는다. 두 슬롯을 한 집합에 합산하면 페어가 2종으로 부풀어 정상 문서가
+    fail 오탐된다(ACC-8). 슬롯별로 허용 종수를 따로 적용해 페어 오탐을 없애되,
+    슬롯 안의 진짜 혼용(예: 한글 폰트 6종)은 그대로 잡는다.
+    """
+    allowed = config.allowed_fonts if config is not None else _ALLOWED_FONT_KINDS
+    ascii_names: set[str] = set()
+    ea_names: set[str] = set()
     for run in _iter_all_runs(doc):
         if not (run.text or "").strip():
             continue
         if run.font.name:
-            names.add(run.font.name)
+            ascii_names.add(run.font.name)
         rpr = run._element.rPr
         if rpr is not None and rpr.rFonts is not None:
             ea = rpr.rFonts.get(qn("w:eastAsia"))
             if ea:
-                names.add(ea)
-    over = max(0, len(names) - _ALLOWED_FONT_KINDS)
+                ea_names.add(ea)
+    over = max(0, len(ascii_names) - allowed) + max(0, len(ea_names) - allowed)
+    samples = [f"ascii:{n}" for n in sorted(ascii_names)[:_MAX_SAMPLES]] + \
+              [f"eastAsia:{n}" for n in sorted(ea_names)[:_MAX_SAMPLES]]
     return CheckResult("font_name_mixing", "폰트 이름 혼용(표 포함)", SEV_FAIL, over,
-                       sorted(names)[:_MAX_SAMPLES + 4],
-                       f"사용 폰트 {len(names)}종 (허용 {_ALLOWED_FONT_KINDS}종)")
+                       samples,
+                       f"ascii {len(ascii_names)}종 / eastAsia {len(ea_names)}종 (허용 슬롯별 {allowed}종)")
 
 
 def check_font_size_spread(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
