@@ -146,6 +146,31 @@ def test_textbox_marker_detected(tmp_path):
     assert r.defects == 1
 
 
+# --- US-3b: 폰트 ascii/eastAsia 이중집계 오탐 수정(ACC-8) ----------------------
+
+def test_font_pairs_not_double_counted():
+    """정상 한·영 페어 3쌍 — 슬롯 분리 집계로 오탐(fail) 없어야 한다."""
+    from docx.oxml.ns import qn
+    d = _doc()
+    pairs = (("Arial", "맑은 고딕"), ("Times New Roman", "바탕"), ("Calibri", "돋움"))
+    for ascii_name, ea in pairs:
+        run = d.add_paragraph().add_run("혼합 본문 텍스트")
+        run.font.name = ascii_name
+        run._element.rPr.rFonts.set(qn("w:eastAsia"), ea)
+    r = check_font_name_mixing(d)
+    assert r.defects == 0, r.as_dict()
+
+
+def test_font_allowed_kinds_configurable():
+    """AcceptanceConfig.allowed_fonts 로 허용 종수를 조정할 수 있다."""
+    d = _doc()
+    for name in ("Arial", "Times New Roman", "Calibri"):
+        d.add_paragraph().add_run("텍스트").font.name = name
+    assert check_font_name_mixing(d).defects == 0  # 기본 4종 허용
+    r = check_font_name_mixing(d, AcceptanceConfig(allowed_fonts=1))
+    assert r.defects == 2
+
+
 def test_acceptance_config_default_is_noop(tmp_path):
     d = _doc()
     d.add_paragraph("본 사업은 정상 문서다.")
