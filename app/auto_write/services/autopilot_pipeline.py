@@ -36,7 +36,9 @@ from ..config import ensure_directories, get_settings
 from .document_quality_orchestrator import DocumentQualityOrchestrator
 from .image_apply import ImageApplyReport, apply_images
 from .psst_fill import PSSTFillReport, apply_psst_scaffold
-from .usage_acceptance import AcceptanceConfig, SEV_FAIL, force_draft_name, run_acceptance
+from .usage_acceptance import (
+    AcceptanceConfig, SEV_FAIL, backup_existing_output, force_draft_name, run_acceptance,
+)
 
 # 잔존 빈칸(placeholder) 보수적 탐지 패턴
 _RESIDUAL_RE = re.compile(
@@ -72,6 +74,8 @@ class AutopilotReport:
     acceptance_error: str = ""
     draft_marked: bool = False
     draft_mark_error: str = ""
+    format_mismatch: str = ""  # 산출 형식 게이트(ACC-5) — 요구 형식과 다르면 사유 기록
+    overwrite_backup: str = ""  # 재실행 보호(PIPE-2) — 기존 산출물 백업 경로
     # 5단계(잔존)
     residual_placeholders: list[str] = field(default_factory=list)
     manual_todo: list[str] = field(default_factory=list)
@@ -100,6 +104,8 @@ class AutopilotReport:
             "acceptance_error": self.acceptance_error,
             "draft_marked": self.draft_marked,
             "draft_mark_error": self.draft_mark_error,
+            "format_mismatch": self.format_mismatch,
+            "overwrite_backup": self.overwrite_backup,
             "residual_placeholders": self.residual_placeholders,
             "manual_todo": self.manual_todo,
         }
@@ -159,6 +165,7 @@ def run_autopilot(
     psst_scaffold: bool = True,
     acceptance_gate: bool = True,
     blind_review: bool = False,
+    required_format: Optional[str] = None,
     write_report: bool = True,
 ) -> AutopilotReport:
     """문서 품질 수정 전 단계를 무인 연속 실행한다.
@@ -174,6 +181,9 @@ def run_autopilot(
             fail 결함이 있으면 출력 파일명을 ``_DRAFT`` 로 강제한다(4단계, R8).
         blind_review: 블라인드 공고 모드 — ○○○ 마스킹을 허용하고 실명 잔존을
             fail 로 검출한다(R10). 기본 False.
+        required_format: 공고 요구 산출 형식(예: "hwp"). 최종 산출 확장자가 다르면
+            제출명을 차단(_DRAFT)하고 변환 안내를 남긴다(ACC-5 — 판정은 이
+            파이프라인 레벨에서만, run_acceptance 내부 아님). 기본 None=무검사.
         write_report: True 면 통합 리포트(md/json) 생성.
 
     Returns:
@@ -197,6 +207,10 @@ def run_autopilot(
         raise ValueError("출력이 입력과 같습니다. 원본 덮어쓰기는 금지입니다.")
 
     report = AutopilotReport(input_docx=str(in_path), output_docx=str(final_path))
+
+    # 재실행 보호(PIPE-2): 같은 산출명이 이미 있으면(이전 실행 결과·사용자 수정본)
+    # 덮어쓰기 전에 타임스탬프 백업으로 보존한다. _DRAFT 변형 이름도 함께 본다.
+    report.overwrite_backup = backup_existing_output(final_path)
 
     # --- 1단계: 백업 + 서식 수정 + 점수/게이트 ---
     tmp_quality = results_root / f"{stem}_ap1_quality.docx"
@@ -277,6 +291,23 @@ def run_autopilot(
                 report.output_docx = str(final_path)
                 report.draft_marked = True
 
+    # --- 4.5단계: 산출 형식 게이트(ACC-5) — 요구 형식(hwp 등)과 다르면 제출명 차단 ---
+    #     판정은 파이프라인 레벨(최종 파일 확장자)에서만 한다 — run_acceptance 내부에
+    #     넣으면 변환 전 DOCX 가 영구 fail 이 된다(설계 결정, ralplan v2).
+    if required_format and final_path.suffix.lstrip(".").lower() != required_format.lstrip(".").lower():
+        report.format_mismatch = (
+            f"요구 산출형식 .{required_format.lstrip('.')} ↔ 실제 {final_path.suffix} — "
+            f"scripts\\docx2hwp.py(대화형 PowerShell)로 변환 후 제출"
+        )
+        if not final_path.stem.endswith(("_DRAFT", "_DRAFT2")):
+            new_path, mark_error = force_draft_name(final_path, avoid=in_path)
+            if mark_error:
+                report.draft_mark_error = report.draft_mark_error or mark_error
+            else:
+                final_path = new_path
+                report.output_docx = str(final_path)
+                report.draft_marked = True
+
     # --- 5단계: 잔존 빈칸 스캔 + To-Do ---
     report.residual_placeholders = _scan_residual(str(final_path))
     report.manual_todo = _build_todo(report)
@@ -309,6 +340,8 @@ def _build_todo(report: AutopilotReport) -> list[str]:
             f"_DRAFT 마킹 실패({report.draft_mark_error}) — 출력 파일명이 제출 이름 "
             f"그대로이니 직접 변경 전 제출 금지."
         )
+    if report.format_mismatch:
+        todo.append(f"산출 형식 불일치 — {report.format_mismatch}")
     if report.prompts_inserted:
         todo.append(
             f"NotebookLM 슬라이드 프롬프트 {report.prompts_inserted}곳 — "

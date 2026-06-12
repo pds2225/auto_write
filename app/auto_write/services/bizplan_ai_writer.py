@@ -24,6 +24,8 @@ from docx import Document
 from docx.shared import Pt, RGBColor
 
 from .psst_check import check_psst
+# 검출기(usage_acceptance._SELF_BLOCK_RE)와 동일 정의의 표준 문구(패턴 공유 원칙)
+from .usage_acceptance import AI_SECTION_DELETE_NOTICE, AI_SECTION_HEADING
 
 _TARGET_GRADES = ("누락", "미흡")
 
@@ -171,12 +173,8 @@ def ai_write_areas(
         if not paragraphs:
             continue
         if not wrote_any:
-            _add_heading(doc, "■ [AI 작성 보강] PSST 영역 초안 (근거 명시 · 검토 필수)")
-            _add_note(
-                doc,
-                "아래는 AI 가 입력 정보 기반으로 작성한 초안입니다. 수치의 [산출근거]·[확인필요] 를 "
-                "반드시 검토하고, 본문 해당 절로 옮긴 뒤 이 섹션은 삭제하세요.",
-            )
+            _add_heading(doc, AI_SECTION_HEADING)
+            _add_note(doc, AI_SECTION_DELETE_NOTICE)
             wrote_any = True
         _add_area_title(doc, f"▶ {area.label}")
         for para in paragraphs[:max_paras_per_area]:

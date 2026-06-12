@@ -44,6 +44,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-psst", action="store_true", help="PSST 작성 보강 생략")
     parser.add_argument("--blind-review", action="store_true",
                         help="블라인드 공고 모드 — ○○○ 마스킹 허용 + 실명 잔존 검출(fail)")
+    parser.add_argument("--required-format", default=None,
+                        help="공고 요구 산출 형식(예: hwp) — 다르면 제출명 차단(_DRAFT)+변환 안내")
+    parser.add_argument("--strict", action="store_true",
+                        help="종료코드 계약 활성: 0=제출가능/2=제출불가·게이트미달/3=검사불능 (기본은 항상 0)")
     parser.add_argument("--no-acceptance", action="store_true",
                         help="실사용 수용검사 게이트(DRAFT 마킹) 생략")
     parser.add_argument("--no-report", action="store_true", help="통합 리포트(md) 생성 생략")
@@ -62,12 +66,24 @@ def main(argv: list[str] | None = None) -> int:
         psst_scaffold=not args.no_psst,
         acceptance_gate=not args.no_acceptance,
         blind_review=args.blind_review,
+        required_format=args.required_format,
         write_report=not args.no_report,
     )
 
+    def _strict_exit() -> int:
+        if not args.strict:
+            return 0
+        # 종료코드 4분류(ralplan v2 P2): 검사불능(환경 문제) > 문서 결함 순
+        if report.acceptance_error or report.draft_mark_error:
+            return 3
+        if ((report.acceptance_verdict and not report.acceptance_submittable)
+                or report.format_mismatch or not report.passed):
+            return 2
+        return 0
+
     if args.json:
         print(json.dumps(report.as_dict(), ensure_ascii=False, indent=2))
-        return 0
+        return _strict_exit()
 
     print("=" * 64)
     print(f"문서 유형 : {report.doc_type}")
@@ -90,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
         for t in report.manual_todo:
             print(f"  - {t}")
     print("=" * 64)
-    return 0
+    return _strict_exit()
 
 
 if __name__ == "__main__":

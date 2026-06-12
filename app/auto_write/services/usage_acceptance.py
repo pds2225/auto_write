@@ -24,12 +24,18 @@ font_size_spread       글자크기 과다 분산(7종 초과)·이상치(<8/>18
 empty_table_rows       완전히 빈 표 행                                 warn
 recruit_date_conflict  채용시기 표기 상호 모순                         warn
 masking_violation      블라인드 마스킹 위반(실명 잔존) — blind_review 시만 fail(조건부)
+residual_colored_runs  검정 아닌 유색 텍스트 잔존(파란 안내문구 등)      fail
+paren_choices          괄호형 ( ) 선택란 미선택 의심                    warn(선도입)
+empty_label_fields_ext 라벨 변형·확장 목록 공란 의심                    warn(선도입)
+empty_image_slots      빈 그림/사진 칸 의심                             warn(선도입)
+page_overflow          분량 제한 초과 의심(근사) — config 지정 시만     warn(조건부)
 """
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -46,10 +52,26 @@ _MAX_SAMPLES = 5
 _MARKER_RE = re.compile(r"\[확인필요[^\]]*\]|\[산출근거[^\]]*\]\s*\?|\[TODO[^\]]*\]")
 _SELF_BLOCK_RE = re.compile(
     r"NotebookLM\s*슬라이드\s*생성용\s*프롬프트|이\s*블록은\s*삭제하세요|슬라이드\s*생성에\s*붙여넣으세요"
+    r"|\[작성\s*보강\s*가이드\]|\[AI\s*작성\s*보강\]|섹션은\s*삭제하세요|\(작성\s*필요\s*—"
 )
 # 제거기(image_apply.strip_notebooklm_blocks)가 같은 정의를 쓰도록 공개한다 —
 # 검출과 제거의 패턴이 어긋나면 '지웠는데 검출됨' 류의 재발이 생긴다.
 SELF_BLOCK_RE = _SELF_BLOCK_RE
+
+# 쓰기 모듈(psst_fill·bizplan_ai_writer)이 import 해 쓰는 표준 문구 —
+# 검출(_SELF_BLOCK_RE)과 동일한 곳에서 정의해 '문구가 갈라져 검출 실패'(ACC-6)
+# 재발을 막는다(R5 의 검출-제거 패턴 공유 원칙).
+SCAFFOLD_HEADING = "■ [작성 보강 가이드] PSST 미흡·누락 영역"
+SCAFFOLD_DELETE_NOTICE = (
+    "아래는 자동 점검 결과 보강이 필요한 영역입니다. 각 항목을 본문 해당 절에 "
+    "구체적으로 작성한 뒤 이 가이드 섹션은 삭제하세요. (내용은 자동 생성되지 않습니다)"
+)
+SCAFFOLD_ITEM_SUFFIX = "(작성 필요 — 구체 내용·근거 수치 기입)"
+AI_SECTION_HEADING = "■ [AI 작성 보강] PSST 영역 초안 (근거 명시 · 검토 필수)"
+AI_SECTION_DELETE_NOTICE = (
+    "아래는 AI 가 입력 정보 기반으로 작성한 초안입니다. 수치의 [산출근거]·[확인필요] 를 "
+    "반드시 검토하고, 본문 해당 절로 옮긴 뒤 이 섹션은 삭제하세요."
+)
 # ○○○/OOO 는 '빈 자리표시'이기도 하지만 블라인드 공고에서는 '올바른 마스킹'이다.
 # blind_review=True 면 placeholder 검사에서 제외된다(ACC-1 오탐 방지).
 _MASK_PLACEHOLDER_RE = re.compile(r"(?<!\w)(OOO|○○○)(?!\w)")
@@ -68,6 +90,18 @@ _CHECKBOX_ROW_RE = re.compile(r"택\s*1|해당\s*여부")
 _CHECKED_MARKS = ("■", "☑", "✔", "▣", "☒", "√")
 _LABEL_FIELDS = ("명 칭", "명칭", "기업명", "대표자명", "창업아이템명")
 _DATE_TOKEN_RE = re.compile(r"[’'‘]\s?(\d{2})\s*\.\s*(\d{1,2})")
+_DATE_TOKEN_KR_RE = re.compile(r"(\d{4})\s*년\s*(\d{1,2})\s*월")  # '2026년 3월' 한국식 표기
+# docx_ops._PRESERVE_COLORS 와 동일(흰색 계열 보존색) — 검정/무지정 외 허용 색
+_COLOR_PRESERVE = {"ffffff", "fffffe", "f2f2f2"}
+# --- US-3c warn 선도입 검사용(오탐 표면적 큼 — 음성 코퍼스 검증 후 차기 fail 승격) ---
+_LABEL_FIELDS_EXT = ("사업자등록번호", "생년월일", "연락처", "신청분야")
+_norm_label = lambda s: re.sub(r"[\s:：]", "", s)  # noqa: E731 — 라벨 비교 정규화
+_LABEL_NORM_ALL = ({_norm_label(x) for x in _LABEL_FIELDS}
+                   | {_norm_label(x) for x in _LABEL_FIELDS_EXT})
+_IMAGE_LABEL_RE = re.compile(r"사진|이미지|그림|로고")
+_EMPTY_PAREN_RE = re.compile(r"\(\s*\)")
+_FILLED_PAREN_RE = re.compile(r"\(\s*[VvOX○●√■]\s*\)")
+_STANDALONE_V_RE = re.compile(r"(?<![A-Za-z0-9])[V√●](?![A-Za-z0-9])")  # 'TV' 의 V 는 제외
 # 템플릿이 정상적으로 쓰는 폰트 조합(KISED 양식 기준) — 이 수를 넘으면 혼용으로 본다.
 _ALLOWED_FONT_KINDS = 4
 _ALLOWED_SIZE_KINDS = 7
@@ -322,7 +356,9 @@ def check_unchecked_choices(doc: Document, config: AcceptanceConfig | None = Non
                 if label in seen_labels:
                     continue
                 seen_labels.add(label)
-                if "□" in row_text and not any(m in row_text for m in _CHECKED_MARKS):
+                checked = (any(m in row_text for m in _CHECKED_MARKS)
+                           or _STANDALONE_V_RE.search(row_text))  # 'V' 표기 체크 인정(오탐 방지)
+                if "□" in row_text and not checked:
                     defects += 1
                     if len(samples) < _MAX_SAMPLES:
                         samples.append(f"[표] {row_text[:40]}")
@@ -359,6 +395,49 @@ def check_empty_label_fields(doc: Document, config: AcceptanceConfig | None = No
 
 def _is_masked_value(v: str) -> bool:
     return ("○" in v) or bool(re.fullmatch(r"O+", v))
+
+
+def check_residual_colored_runs(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
+    """검정 아닌 유색 본문 텍스트 잔존(파란 안내문구·회색 가이드 등) — fail (ACC-3).
+
+    공고 규칙: 양식의 색 있는 안내문구는 삭제하고 본문은 검정 글씨.
+    - 색 미지정(상속)·검정(000000)·흰색 계열(_COLOR_PRESERVE)은 통과.
+    - 자기삽입 블록(_SELF_BLOCK_RE 단락)은 self_inserted_blocks 가 잡으므로 제외
+      (이중 집계 방지). 단락 단위로 센다.
+    """
+    defects = 0
+    samples: list[str] = []
+
+    def _scan_para(where: str, p) -> None:
+        nonlocal defects
+        text = (p.text or "").strip()
+        if not text or _SELF_BLOCK_RE.search(text):
+            return
+        for run in p.runs:
+            if not (run.text or "").strip():
+                continue
+            try:
+                color = run.font.color
+                rgb = color.rgb if (color is not None and color.type is not None) else None
+            except Exception:
+                rgb = None
+            if rgb is None:
+                continue
+            hexv = str(rgb).lower()
+            if hexv == "000000" or hexv in _COLOR_PRESERVE:
+                continue
+            defects += 1
+            if len(samples) < _MAX_SAMPLES:
+                samples.append(f"[{where}] #{hexv} '{text[:30]}'")
+            return  # 단락당 1건
+
+    for p in doc.paragraphs:
+        _scan_para("본문", p)
+    for cell in _dedup_cells(doc):
+        for p in cell.paragraphs:
+            _scan_para("표", p)
+    return CheckResult("residual_colored_runs", "검정 아닌 유색 텍스트 잔존", SEV_FAIL, defects, samples,
+                       f"유색 텍스트 단락 {defects}개 — 안내문구 삭제·본문 검정 규칙 위반 의심")
 
 
 def check_masking_violation(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
@@ -421,22 +500,207 @@ def check_font_name_mixing(doc: Document, config: AcceptanceConfig | None = None
     allowed = config.allowed_fonts if config is not None else _ALLOWED_FONT_KINDS
     ascii_names: set[str] = set()
     ea_names: set[str] = set()
-    for run in _iter_all_runs(doc):
-        if not (run.text or "").strip():
-            continue
-        if run.font.name:
-            ascii_names.add(run.font.name)
-        rpr = run._element.rPr
-        if rpr is not None and rpr.rFonts is not None:
-            ea = rpr.rFonts.get(qn("w:eastAsia"))
-            if ea:
-                ea_names.add(ea)
+
+    def _style_fonts(style) -> tuple[str | None, str | None]:
+        """단락 스타일 체인(base_style 포함)에서 명시된 ascii/eastAsia 폰트를 찾는다."""
+        asc = ea = None
+        seen: set[str] = set()
+        st = style
+        while st is not None and getattr(st, "style_id", None) not in seen:
+            seen.add(st.style_id)
+            try:
+                if asc is None:
+                    asc = st.font.name
+                rpr = st.element.rPr
+                if ea is None and rpr is not None and rpr.rFonts is not None:
+                    ea = rpr.rFonts.get(qn("w:eastAsia"))
+            except Exception:
+                pass
+            st = getattr(st, "base_style", None)
+        return asc, ea
+
+    def _scan_para(p) -> None:
+        style_asc = style_ea = None
+        style_resolved = False
+        for run in p.runs:
+            if not (run.text or "").strip():
+                continue
+            r_asc = run.font.name
+            r_ea = None
+            rpr = run._element.rPr
+            if rpr is not None and rpr.rFonts is not None:
+                r_ea = rpr.rFonts.get(qn("w:eastAsia"))
+            # run 에 직접 지정이 없으면 단락 스타일 체인의 유효 폰트로 해석한다(ACC-7)
+            if (r_asc is None or r_ea is None) and not style_resolved:
+                style_asc, style_ea = _style_fonts(getattr(p, "style", None))
+                style_resolved = True
+            if r_asc is None:
+                r_asc = style_asc
+            if r_ea is None:
+                r_ea = style_ea
+            if r_asc:
+                ascii_names.add(r_asc)
+            if r_ea:
+                ea_names.add(r_ea)
+
+    for p in doc.paragraphs:
+        _scan_para(p)
+    for cell in _dedup_cells(doc):
+        for p in cell.paragraphs:
+            _scan_para(p)
+
     over = max(0, len(ascii_names) - allowed) + max(0, len(ea_names) - allowed)
     samples = [f"ascii:{n}" for n in sorted(ascii_names)[:_MAX_SAMPLES]] + \
               [f"eastAsia:{n}" for n in sorted(ea_names)[:_MAX_SAMPLES]]
     return CheckResult("font_name_mixing", "폰트 이름 혼용(표 포함)", SEV_FAIL, over,
                        samples,
                        f"ascii {len(ascii_names)}종 / eastAsia {len(ea_names)}종 (허용 슬롯별 {allowed}종)")
+
+
+def check_paren_choices(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
+    """괄호형 선택란 미선택 의심 — warn (ACC-10, 선도입).
+
+    '택 1/해당여부' 행에 □ 가 없고 '( )' 빈 괄호만 있으면 미선택 의심.
+    채움 괄호 '(V)/(O)/(○)' 가 하나라도 있으면 통과. □ 형은 기존 fail 검사 담당.
+    """
+    defects = 0
+    samples: list[str] = []
+
+    def _walk(tables):
+        nonlocal defects
+        for table in tables:
+            for row in table.rows:
+                row_text = " ".join(_row_cells_dedup(row))
+                if not _CHECKBOX_ROW_RE.search(row_text) or "□" in row_text:
+                    continue
+                if _EMPTY_PAREN_RE.search(row_text) and not _FILLED_PAREN_RE.search(row_text):
+                    defects += 1
+                    if len(samples) < _MAX_SAMPLES:
+                        samples.append(f"[표] {row_text[:40]}")
+            for row in table.rows:
+                for cell in row.cells:
+                    if cell.tables:
+                        _walk(cell.tables)
+    _walk(doc.tables)
+    return CheckResult("paren_choices", "괄호형 선택란 미선택 의심", SEV_WARN, defects, samples,
+                       f"빈 괄호 선택 행 {defects}개 — ( ) 안에 V/○ 표기 필요")
+
+
+def check_empty_label_fields_ext(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
+    """필수 라벨 옆 칸 공란(확장) — warn (ACC-11, 선도입).
+
+    기존 fail 검사(정확일치 5종)가 놓치는 라벨 변형('기 업 명', '명칭 :')과
+    확장 라벨(사업자등록번호·생년월일·연락처·신청분야)을 정규화 비교로 잡는다.
+    기존 fail 검사가 이미 센 항목(정확일치)은 제외해 이중 집계를 막는다.
+    """
+    defects = 0
+    samples: list[str] = []
+
+    def _walk(tables):
+        nonlocal defects
+        for table in tables:
+            for row in table.rows:
+                cells = _row_cells_dedup(row)
+                for i, c in enumerate(cells[:-1]):
+                    if c in _LABEL_FIELDS:        # 기존 fail 검사 담당분 제외
+                        continue
+                    if _norm_label(c) in _LABEL_NORM_ALL and not cells[i + 1]:
+                        defects += 1
+                        if len(samples) < _MAX_SAMPLES:
+                            samples.append(f"[표] '{c}' 옆 칸 공란(확장 검사)")
+            for row in table.rows:
+                for cell in row.cells:
+                    if cell.tables:
+                        _walk(cell.tables)
+    _walk(doc.tables)
+    return CheckResult("empty_label_fields_ext", "필수 라벨 옆 칸 공란(확장)", SEV_WARN, defects, samples,
+                       f"공란 의심 {defects}개 — 라벨 변형·확장 목록 기준(warn 선도입)")
+
+
+def check_empty_image_slots(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
+    """빈 그림/사진 칸 의심 — warn (ACC-12, 선도입).
+
+    '사진/이미지/그림/로고' 짧은 라벨 셀의 옆 칸에 텍스트도 그림(w:drawing/w:pict)도
+    없으면 미첨부 의심. 자리표시 텍스트(<사진(이미지)>)는 placeholder 검사 담당.
+    """
+    defects = 0
+    samples: list[str] = []
+
+    def _cell_has_image(cell) -> bool:
+        tc = cell._tc
+        return bool(tc.findall(".//" + qn("w:drawing")) or tc.findall(".//" + qn("w:pict")))
+
+    def _walk(tables):
+        nonlocal defects
+        for table in tables:
+            for row in table.rows:
+                # 병합 중복 제거하되 그림 검사를 위해 셀 객체가 필요하다
+                seen: list = []
+                cells = []
+                for cell in row.cells:
+                    if any(cell._tc is s for s in seen):
+                        continue
+                    seen.append(cell._tc)
+                    cells.append(cell)
+                for i, cell in enumerate(cells[:-1]):
+                    t = cell.text.strip()
+                    if not t or len(t) > 12 or not _IMAGE_LABEL_RE.search(t):
+                        continue
+                    nxt = cells[i + 1]
+                    if not nxt.text.strip() and not _cell_has_image(nxt):
+                        defects += 1
+                        if len(samples) < _MAX_SAMPLES:
+                            samples.append(f"[표] '{t}' 옆 칸에 텍스트·그림 없음")
+            for row in table.rows:
+                for cell in row.cells:
+                    if cell.tables:
+                        _walk(cell.tables)
+    _walk(doc.tables)
+    return CheckResult("empty_image_slots", "빈 그림/사진 칸 의심", SEV_WARN, defects, samples,
+                       f"그림 미첨부 의심 칸 {defects}개")
+
+
+_HEADING_LIKE_RE = re.compile(r"^\s*(?:[ⅠⅡⅢⅣⅤ]|\d+\s*[.)]|■|□\s*[가-힣]+\s*:)")
+_AI_SECTION_RE = re.compile(r"AI.{0,10}(활용|인재).{0,8}계획")
+
+
+def check_page_overflow(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
+    """분량 제한 초과 의심(근사) — warn (ACC-4, config 지정 시에만 활성).
+
+    python-docx 는 페이지를 정확히 못 세므로 본문 글자수 기반 근사(1p ≈ 1,500자)로
+    경고만 한다. 정확 판정은 파이프라인 레벨의 미리보기 렌더러(page PNG) 몫.
+    config.max_pages / ai_section_max 미지정(기본)이면 검사 비활성 — 오탐 0.
+    """
+    label = "분량 제한 초과 의심(근사)"
+    if config is None or (config.max_pages is None and config.ai_section_max is None):
+        return CheckResult("page_overflow", label, SEV_WARN, 0, [],
+                           "분량 제한 미지정 — 검사 비활성")
+    defects = 0
+    samples: list[str] = []
+    total_chars = sum(len(t) for _, t in _iter_all_texts(doc))
+    est = max(1, -(-total_chars // 1500))
+    if config.max_pages is not None and est > config.max_pages:
+        defects += 1
+        samples.append(f"본문 약 {total_chars:,}자 ≈ {est}p > 제한 {config.max_pages}p")
+    if config.ai_section_max is not None:
+        chars = 0
+        in_section = False
+        for p in doc.paragraphs:
+            t = p.text.strip()
+            if not in_section:
+                if t and _AI_SECTION_RE.search(t):
+                    in_section = True
+                continue
+            if t and _HEADING_LIKE_RE.match(t) and not _AI_SECTION_RE.search(t):
+                break
+            chars += len(t)
+        if in_section:
+            est_ai = max(1, -(-chars // 1500))
+            if est_ai > config.ai_section_max:
+                defects += 1
+                samples.append(f"AI 계획 섹션 약 {chars:,}자 ≈ {est_ai}p > 제한 {config.ai_section_max}p")
+    return CheckResult("page_overflow", label, SEV_WARN, defects, samples,
+                       f"분량 초과 의심 {defects}건 — 근사 추정(정확 판정은 렌더러 필요)")
 
 
 def check_font_size_spread(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
@@ -472,7 +736,9 @@ def check_recruit_date_conflict(doc: Document, config: AcceptanceConfig | None =
     for where, text in _iter_all_texts(doc):
         if "채용" not in text:
             continue
-        for y, m in _DATE_TOKEN_RE.findall(text):
+        found = [(y, m) for y, m in _DATE_TOKEN_RE.findall(text)]
+        found += [(y[-2:], m) for y, m in _DATE_TOKEN_KR_RE.findall(text)]  # '2026년 3월' → '26.3
+        for y, m in found:
             tok = f"'{y}.{int(m)}"
             if tok not in tokens and len(samples) < _MAX_SAMPLES:
                 samples.append(f"[{where}] {tok} ← {text[:30]}")
@@ -489,10 +755,15 @@ _ALL_CHECKS = (
     check_unchecked_choices,
     check_empty_label_fields,
     check_masking_violation,
+    check_residual_colored_runs,
     check_font_name_mixing,
     check_font_size_spread,
     check_empty_table_rows,
     check_recruit_date_conflict,
+    check_paren_choices,
+    check_empty_label_fields_ext,
+    check_empty_image_slots,
+    check_page_overflow,
 )
 
 
@@ -508,6 +779,25 @@ def run_acceptance(path: str | Path, config: AcceptanceConfig | None = None) -> 
     for check in _ALL_CHECKS:
         report.results.append(check(doc, cfg))
     return report
+
+
+def backup_existing_output(target: str | Path) -> str:
+    """고정 산출명이 기존 파일을 덮어쓰기 전에 타임스탬프 백업으로 보존한다(PIPE-2).
+
+    재실행이 이전 산출물(사용자가 수정했을 수 있는 _DRAFT 포함)을 무경고로
+    파괴하지 않게 한다. 백업했으면 백업 경로, 대상이 없으면 빈 문자열.
+    """
+    target = Path(target)
+    if not target.exists():
+        return ""
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    bak = target.with_name(f"{target.stem}_prev{stamp}{target.suffix}")
+    i = 0
+    while bak.exists():
+        i += 1
+        bak = target.with_name(f"{target.stem}_prev{stamp}_{i}{target.suffix}")
+    target.replace(bak)
+    return str(bak)
 
 
 def force_draft_name(path: Path, *, avoid: Path | None = None) -> tuple[Path, str]:
@@ -526,6 +816,9 @@ def force_draft_name(path: Path, *, avoid: Path | None = None) -> tuple[Path, st
     draft = path.with_name(f"{path.stem}_DRAFT{path.suffix}")
     if avoid is not None and draft.resolve() == avoid.resolve():
         draft = path.with_name(f"{path.stem}_DRAFT2{path.suffix}")
+    if draft.exists():
+        # 기존 _DRAFT(사용자가 수정 중일 수 있는 파일)를 무경고로 파괴하지 않는다(PIPE-2)
+        backup_existing_output(draft)
     try:
         path.replace(draft)
     except OSError as exc:

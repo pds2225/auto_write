@@ -23,6 +23,9 @@ from docx import Document
 from docx.shared import Pt, RGBColor
 
 from .psst_check import check_psst
+# 검출기(usage_acceptance._SELF_BLOCK_RE)와 같은 곳에서 정의된 표준 문구 —
+# 문구를 바꾸면 검출 패턴과 함께 바뀌어 '넣었는데 게이트가 못 보는' 재발을 막는다.
+from .usage_acceptance import SCAFFOLD_DELETE_NOTICE, SCAFFOLD_HEADING, SCAFFOLD_ITEM_SUFFIX
 
 _DEFAULT_TARGET_GRADES = ("누락", "미흡")
 
@@ -124,12 +127,8 @@ def apply_psst_scaffold(
         doc.save(str(out_path))
         return report
 
-    _add_heading(doc, "■ [작성 보강 가이드] PSST 미흡·누락 영역")
-    _add_note(
-        doc,
-        "아래는 자동 점검 결과 보강이 필요한 영역입니다. 각 항목을 본문 해당 절에 "
-        "구체적으로 작성한 뒤 이 가이드 섹션은 삭제하세요. (내용은 자동 생성되지 않습니다)",
-    )
+    _add_heading(doc, SCAFFOLD_HEADING)
+    _add_note(doc, SCAFFOLD_DELETE_NOTICE)
 
     for area in weak:
         section_state = "섹션 없음" if not area.section_present else "섹션 있음"
@@ -146,7 +145,7 @@ def apply_psst_scaffold(
             _add_checkitem(doc, "  □ (세부 항목 보강: 내용을 더 구체화하세요)")
             report.items_added += 1
         for item in targets:
-            _add_checkitem(doc, f"  □ {item}: (작성 필요 — 구체 내용·근거 수치 기입)")
+            _add_checkitem(doc, f"  □ {item}: {SCAFFOLD_ITEM_SUFFIX}")
             report.items_added += 1
         report.areas_scaffolded += 1
         report.scaffolded_areas.append(area.label)

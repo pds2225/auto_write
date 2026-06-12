@@ -426,3 +426,82 @@ def test_strip_notebooklm_preserves_user_divider(tmp_path: Path) -> None:
     texts = [p.text for p in Document(str(out)).paragraphs if p.text.strip()]
     assert texts == ["─" * 15, "─" * 12, "실제 본문"]           # 구분선·본문 보존
     assert _check(out, "self_inserted_blocks").defects == 0
+
+
+# --- US-3c: 산출 형식 게이트(ACC-5) -------------------------------------------
+
+def test_autopilot_required_format_gate(tmp_path: Path) -> None:
+    """ACC-5: 요구 형식(hwp)과 산출(docx)이 다르면 제출명 차단 + 변환 안내."""
+    from auto_write.services.autopilot_pipeline import run_autopilot
+
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    _make_doc(src, with_table=False)
+    report = run_autopilot(
+        str(src), str(out), max_images=0, psst_scaffold=False,
+        required_format="hwp", write_report=False,
+    )
+    assert report.format_mismatch
+    assert report.output_docx.endswith("_DRAFT.docx") or report.output_docx.endswith("_DRAFT2.docx")
+    assert any("산출 형식 불일치" in t for t in report.manual_todo)
+
+
+def test_autopilot_required_format_match_no_gate(tmp_path: Path) -> None:
+    """요구 형식이 docx 로 일치하면 형식 게이트가 개입하지 않는다."""
+    from auto_write.services.autopilot_pipeline import run_autopilot
+
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    _make_doc(src, with_table=False)
+    report = run_autopilot(
+        str(src), str(out), max_images=0, psst_scaffold=False,
+        required_format="docx", write_report=False,
+    )
+    assert report.format_mismatch == ""
+
+
+# --- US-4: 재실행 보호·--strict 종료코드·공고파일 경고(PIPE-2/3/7) --------------
+
+def test_autopilot_rerun_preserves_previous_output(tmp_path: Path) -> None:
+    from auto_write.services.autopilot_pipeline import run_autopilot
+
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    doc = Document()
+    doc.add_paragraph("개요: 게이트 통과용 깨끗한 문서.")
+    doc.save(str(src))
+    r1 = run_autopilot(str(src), str(out), max_images=0, psst_scaffold=False, write_report=False)
+    assert r1.overwrite_backup == "" and Path(r1.output_docx) == out
+    r2 = run_autopilot(str(src), str(out), max_images=0, psst_scaffold=False, write_report=False)
+    assert r2.overwrite_backup and Path(r2.overwrite_backup).exists()  # 1회차 산출물 보존
+
+
+def test_cli_strict_exit_codes(tmp_path: Path, monkeypatch) -> None:
+    """PIPE-3: --strict 시 0/2/3 계약, 미지정 시 기존 exit 0 호환."""
+    import auto_write_autopilot as cli
+
+    src = tmp_path / "bad.docx"
+    doc = Document()
+    doc.add_paragraph("사업비 [확인필요] 원")
+    doc.save(str(src))
+    common = ["--no-psst", "--max-images", "0", "--no-report"]
+    assert cli.main([str(src), "-o", str(tmp_path / "o1.docx")] + common) == 0
+    assert cli.main([str(src), "-o", str(tmp_path / "o2.docx"), "--strict"] + common) == 2
+
+    from auto_write.services import autopilot_pipeline
+
+    def _boom(*_a, **_k):
+        raise RuntimeError("crash")
+
+    monkeypatch.setattr(autopilot_pipeline, "run_acceptance", _boom)
+    assert cli.main([str(src), "-o", str(tmp_path / "o3.docx"), "--strict"] + common) == 3
+
+
+def test_submit_announcement_missing_warns(tmp_path: Path) -> None:
+    """PIPE-7: 공고 파일 부재를 침묵하지 않는다."""
+    from auto_write.submit import _read_announcement
+
+    ann, warn = _read_announcement("", str(tmp_path / "없는공고.txt"), lambda p: "x")
+    assert ann == "" and "찾을 수 없음" in warn
+    ann2, warn2 = _read_announcement("직접 텍스트", "ignored.txt", lambda p: "x")
+    assert ann2 == "직접 텍스트" and warn2 == ""

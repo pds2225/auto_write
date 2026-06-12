@@ -15,6 +15,9 @@ from auto_write.services.usage_acceptance import (
     check_template_placeholders, check_unchecked_choices,
     check_empty_label_fields, check_font_name_mixing,
     check_empty_table_rows, check_recruit_date_conflict,
+    check_residual_colored_runs,
+    check_paren_choices, check_empty_label_fields_ext,
+    check_empty_image_slots, check_page_overflow,
 )
 
 
@@ -146,6 +149,153 @@ def test_textbox_marker_detected(tmp_path):
     assert r.defects == 1
 
 
+# --- US-3c: warn 선도입(괄호 선택란·라벨 확장·빈 그림칸·분량) -------------------
+
+def test_paren_choices_warn():
+    """( ) 괄호형 선택란 미선택은 warn, (V) 채움은 통과 (ACC-10)."""
+    d = _doc()
+    t = d.add_table(rows=1, cols=2)
+    t.cell(0, 0).text = "지원 분야(택 1)"
+    t.cell(0, 1).text = "( ) 제조  ( ) 지식서비스"
+    r = check_paren_choices(d)
+    assert r.severity == "warn" and r.defects == 1
+    t.cell(0, 1).text = "(V) 제조  ( ) 지식서비스"
+    assert check_paren_choices(d).defects == 0
+
+
+def test_v_mark_counts_as_checked():
+    """□ 행에 'V' 표기로 체크해도 미선택 오탐하지 않는다(ACC-10 오탐 방향 수정)."""
+    d = _doc()
+    t = d.add_table(rows=1, cols=2)
+    t.cell(0, 0).text = "지방우대 해당여부"
+    t.cell(0, 1).text = "□ 해당  V 비해당"
+    assert check_unchecked_choices(d).defects == 0
+
+
+def test_empty_label_fields_ext_warn():
+    """라벨 변형('기 업 명')·확장 라벨(사업자등록번호) 공란은 warn (ACC-11)."""
+    d = _doc()
+    t = d.add_table(rows=2, cols=2)
+    t.cell(0, 0).text = "기 업 명"
+    t.cell(0, 1).text = ""
+    t.cell(1, 0).text = "사업자등록번호"
+    t.cell(1, 1).text = ""
+    r = check_empty_label_fields_ext(d)
+    assert r.severity == "warn" and r.defects == 2
+    # 기존 fail 검사 담당분(정확일치 라벨)은 ext 에서 제외 — 이중 집계 방지
+    d2 = _doc()
+    t2 = d2.add_table(rows=1, cols=2)
+    t2.cell(0, 0).text = "명 칭"
+    t2.cell(0, 1).text = ""
+    assert check_empty_label_fields_ext(d2).defects == 0
+    assert check_empty_label_fields(d2).defects == 1
+
+
+def test_empty_image_slots_warn():
+    """'사진' 라벨 옆 칸에 텍스트도 그림도 없으면 warn (ACC-12)."""
+    d = _doc()
+    t = d.add_table(rows=2, cols=2)
+    t.cell(0, 0).text = "대표 사진"
+    t.cell(0, 1).text = ""
+    t.cell(1, 0).text = "회사 로고"
+    t.cell(1, 1).text = "첨부함"
+    r = check_empty_image_slots(d)
+    assert r.severity == "warn" and r.defects == 1
+
+
+def test_page_overflow_config_gated():
+    """분량 검사는 config 지정 시에만 — 근사 추정 warn (ACC-4)."""
+    d = _doc()
+    for _ in range(40):
+        d.add_paragraph("가" * 100)  # 약 4,000자 ≈ 3p
+    assert check_page_overflow(d).defects == 0  # 기본: 비활성
+    r = check_page_overflow(d, AcceptanceConfig(max_pages=1))
+    assert r.severity == "warn" and r.defects == 1
+    assert check_page_overflow(d, AcceptanceConfig(max_pages=10)).defects == 0
+
+
+# --- US-3a: 색상·스캐폴드·날짜·스타일폰트 + R8 재정의 --------------------------
+
+def test_residual_colored_runs_detected():
+    """파란 잔존 텍스트는 fail, 검정·색 미지정은 통과 (ACC-3)."""
+    from docx.shared import RGBColor
+    d = _doc()
+    run = d.add_paragraph().add_run("※ 본 항목은 작성 후 파란 안내를 지우고 제출")
+    run.font.color.rgb = RGBColor(0x00, 0x00, 0xFF)
+    r = check_residual_colored_runs(d)
+    assert r.severity == "fail" and r.defects == 1
+
+    d2 = _doc()
+    rr = d2.add_paragraph().add_run("검정 본문")
+    rr.font.color.rgb = RGBColor(0, 0, 0)
+    d2.add_paragraph("색 미지정 본문")
+    assert check_residual_colored_runs(d2).defects == 0
+
+
+def test_colored_self_block_not_double_counted():
+    """자기삽입 블록의 유색 run 은 색상 검사에서 제외(이중 집계 방지)."""
+    from docx.shared import RGBColor
+    d = _doc()
+    p = d.add_paragraph()
+    run = p.add_run("(슬라이드 생성 후 이 블록은 삭제하세요)")
+    run.font.color.rgb = RGBColor(0x80, 0x80, 0x80)
+    assert check_residual_colored_runs(d).defects == 0
+    assert check_self_inserted_blocks(d).defects == 1
+
+
+def test_psst_scaffold_blocks_detected():
+    """psst_fill 이 넣는 스캐폴드 문구를 자기삽입 블록으로 검출 (ACC-6)."""
+    from auto_write.services import usage_acceptance as ua
+    d = _doc()
+    d.add_paragraph(ua.SCAFFOLD_HEADING)
+    d.add_paragraph(ua.SCAFFOLD_DELETE_NOTICE)
+    d.add_paragraph(f"  □ 시장분석: {ua.SCAFFOLD_ITEM_SUFFIX}")
+    r = check_self_inserted_blocks(d)
+    assert r.defects == 3
+
+
+def test_scaffold_phrases_are_detectable():
+    """쓰기 모듈이 import 하는 표준 문구 전부가 검출 패턴에 걸린다(패턴 공유 보증)."""
+    from auto_write.services import usage_acceptance as ua
+    from auto_write.services import psst_fill, bizplan_ai_writer
+    # 쓰기 모듈이 같은 상수를 쓰는지(동일 객체) + 패턴 매치 여부
+    assert psst_fill.SCAFFOLD_HEADING is ua.SCAFFOLD_HEADING
+    assert bizplan_ai_writer.AI_SECTION_DELETE_NOTICE is ua.AI_SECTION_DELETE_NOTICE
+    for s in (ua.SCAFFOLD_HEADING, ua.SCAFFOLD_DELETE_NOTICE,
+              f"□ x: {ua.SCAFFOLD_ITEM_SUFFIX}",
+              ua.AI_SECTION_HEADING, ua.AI_SECTION_DELETE_NOTICE):
+        assert ua.SELF_BLOCK_RE.search(s), s
+
+
+def test_recruit_date_conflict_korean_format():
+    """'2026년 3월' 한국식 표기와 ’26.7 표기의 모순을 검출 (ACC-13, warn)."""
+    d = _doc()
+    d.add_paragraph("AI 인재 채용 시기는 2026년 3월 예정")
+    d.add_paragraph("채용은 ’26.7월 협약 후 진행")
+    assert check_recruit_date_conflict(d).defects == 1
+
+
+def test_style_inherited_font_mixing_detected():
+    """run 직접 지정 없이 스타일로만 6종 혼용해도 검출 (ACC-7)."""
+    from docx.enum.style import WD_STYLE_TYPE
+    d = _doc()
+    for i, name in enumerate(("맑은 고딕", "나눔명조", "함초롬바탕", "굴림", "함초롬돋움", "HY헤드라인M")):
+        st = d.styles.add_style(f"TestStyle{i}", WD_STYLE_TYPE.PARAGRAPH)
+        st.font.name = name
+        p = d.add_paragraph("스타일 상속 폰트 텍스트")
+        p.style = st
+    r = check_font_name_mixing(d)
+    assert r.defects >= 1, r.as_dict()
+
+
+def test_requirement_status_all_is_static():
+    """R8(__all__)은 문서 상태가 아니라 원장의 정적 상태를 따른다 (LEDGER-1)."""
+    import self_diagnose as sd
+    req = {"check_ids": ["__all__"], "상태": "달성"}
+    assert sd._requirement_status(req, {"unresolved_markers"}, False) == "달성"
+    assert sd._requirement_status(req, set(), True) == "달성"
+
+
 # --- US-2: 블라인드 마스킹 방향 역전(ACC-1·ACC-2, R10) -------------------------
 
 def _blind_cfg() -> AcceptanceConfig:
@@ -242,3 +392,30 @@ def test_acceptance_config_default_is_noop(tmp_path):
     assert base.submittable is True and with_cfg.submittable is True
     assert base.fail_defects == with_cfg.fail_defects == 0
     assert [r.check_id for r in base.results] == [r.check_id for r in with_cfg.results]
+
+
+# --- US-4: 재실행 덮어쓰기 보호(PIPE-2) ----------------------------------------
+
+def test_backup_existing_output(tmp_path):
+    from pathlib import Path
+    from auto_write.services.usage_acceptance import backup_existing_output
+    assert backup_existing_output(tmp_path / "none.docx") == ""
+    f = tmp_path / "a.docx"
+    f.write_text("이전 산출물", encoding="utf-8")
+    bak = backup_existing_output(f)
+    assert bak and Path(bak).exists() and not f.exists()
+    assert Path(bak).read_text(encoding="utf-8") == "이전 산출물"
+
+
+def test_force_draft_name_preserves_existing_draft(tmp_path):
+    """기존 _DRAFT(사용자 수정본일 수 있음)를 Path.replace 로 파괴하지 않는다."""
+    from auto_write.services.usage_acceptance import force_draft_name
+    old_draft = tmp_path / "out_DRAFT.docx"
+    old_draft.write_text("사용자 수정본", encoding="utf-8")
+    cur = tmp_path / "out.docx"
+    cur.write_text("새 산출물", encoding="utf-8")
+    new_path, err = force_draft_name(cur)
+    assert err == "" and new_path.name == "out_DRAFT.docx"
+    assert new_path.read_text(encoding="utf-8") == "새 산출물"
+    baks = list(tmp_path.glob("out_DRAFT_prev*.docx"))
+    assert len(baks) == 1 and baks[0].read_text(encoding="utf-8") == "사용자 수정본"

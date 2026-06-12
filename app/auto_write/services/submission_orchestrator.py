@@ -21,7 +21,9 @@ from .document_quality_orchestrator import DocumentQualityOrchestrator
 from .eval_loop_runner import EvalLoopRunner
 from .plan_builder import build_fill_plan
 from .submittable_filler import SubmittableFiller
-from .usage_acceptance import AcceptanceConfig, SEV_FAIL, force_draft_name, run_acceptance
+from .usage_acceptance import (
+    AcceptanceConfig, SEV_FAIL, backup_existing_output, force_draft_name, run_acceptance,
+)
 
 
 class SubmissionPipeline:
@@ -43,10 +45,17 @@ class SubmissionPipeline:
         fill_plan_dir: str | Path | None = None,
         acceptance_gate: bool = True,
         blind_review: bool = False,
+        required_format: str | None = None,
     ) -> dict[str, Any]:
         report: dict[str, Any] = {"project_id": project_id, "steps": [], "needs_input": []}
         results_root = Path(self.settings.results_root)
         results_root.mkdir(parents=True, exist_ok=True)
+
+        def _protect_output(p: Path) -> None:
+            # 재실행 보호(PIPE-2): 고정 산출명이 이전 산출물을 무경고 파괴하지 않게 백업
+            bak = backup_existing_output(p)
+            if bak:
+                report.setdefault("overwrite_backups", []).append(bak)
 
         # 1. 텍스트 생성(이미지는 최후에 별도 삽입하므로 generate 단계는 이미지 끔)
         project_input = self.storage.load_project_input(project_id)
@@ -79,6 +88,7 @@ class SubmissionPipeline:
         project_input = self.storage.load_project_input(project_id)
         plan = build_fill_plan(profile, project_input, external_plan_dir=fill_plan_dir)
         submit_path = results_root / f"제출초안_{project_id}.docx"
+        _protect_output(submit_path)
         fill_report = SubmittableFiller(plan).finalize(output_docx, submit_path)
         report["submit_docx"] = str(submit_path)
         report["finalize"] = {k: v for k, v in fill_report.items() if k != "residual_remaining"}
@@ -96,6 +106,7 @@ class SubmissionPipeline:
                 results_root, openai_service=getattr(self.project_service, "openai_service", None)
             )
             quality_out = results_root / f"제출초안_{project_id}_품질.docx"
+            _protect_output(quality_out)
             q_result = quality.run(submit_path, quality_out, write_report=False)
             report["quality_docx"] = str(quality_out)
             try:
@@ -109,30 +120,36 @@ class SubmissionPipeline:
             report["quality_error"] = f"{type(exc).__name__}: {exc}"
 
         # 5. 이미지 최후 삽입(모든 텍스트 처리 후)
+        #    이미지 단계 예외가 비싼 generate/eval 결과 리포트 전체를 날리지 않게
+        #    보호한다(PIPE-8) — 실패해도 images_error 만 남기고 수용검사로 진행.
         if enable_images:
             try:
-                evidence = self.project_service.evidence_service.search(project_input.evidence_requests)
-            except Exception:
-                evidence = []
-            assets_dir = self.storage.project_dir(project_id) / "generated_assets"
-            images = self.project_service.image_service.build_images(
-                profile.image_slots, project_input.answers, evidence, assets_dir
-            )
-            img_report = self.project_service.render_service.insert_images_into_docx(
-                profile, images, final_docx
-            )
-            report["images"] = {
-                "generated": len(images),
-                "inserted": int(img_report.get("images_written", 0)),
-                "errors": img_report.get("errors", []),
-            }
-            report["steps"].append("images")
+                try:
+                    evidence = self.project_service.evidence_service.search(project_input.evidence_requests)
+                except Exception:
+                    evidence = []
+                assets_dir = self.storage.project_dir(project_id) / "generated_assets"
+                images = self.project_service.image_service.build_images(
+                    profile.image_slots, project_input.answers, evidence, assets_dir
+                )
+                img_report = self.project_service.render_service.insert_images_into_docx(
+                    profile, images, final_docx
+                )
+                report["images"] = {
+                    "generated": len(images),
+                    "inserted": int(img_report.get("images_written", 0)),
+                    "errors": img_report.get("errors", []),
+                }
+                report["steps"].append("images")
+            except Exception as exc:
+                report["images_error"] = f"{type(exc).__name__}: {exc}"
 
         # 6. NotebookLM 슬라이드 프롬프트 삽입(모든 텍스트/이미지 처리 후 최종본에).
         #    공개 이미지 API 가 없는 NotebookLM 은 '수동 슬라이드 생성용 프롬프트'를
         #    그림 위치(표 뒤/본문 앵커)에 넣어, 사용자가 붙여넣어 슬라이드를 만들게 한다.
         if enable_notebooklm:
             nlm_out = results_root / f"제출초안_{project_id}_노트북LM.docx"
+            _protect_output(nlm_out)
             # 호출 '전'에 산출물 목록에 올린다 — apply_images 가 파일 생성 후 죽으면
             # 부분 생성본이 제출 이름의 고아로 남는 것을 막는다(미생성이면 게이트가
             # exists() 로 건너뛴다).
@@ -220,6 +237,25 @@ class SubmissionPipeline:
                         final_docx = new_path
                         if acc is not None:
                             report["acceptance"]["draft_marked"] = True
+
+        # 7.5 산출 형식 게이트(ACC-5) — 요구 형식(hwp 등)과 다르면 제출명 차단.
+        #     판정은 이 파이프라인 레벨(최종 확장자)에서만 — run_acceptance 내부가 아님.
+        fp = Path(final_docx)
+        if required_format and fp.suffix.lstrip(".").lower() != required_format.lstrip(".").lower():
+            report["format_mismatch"] = (
+                f"요구 산출형식 .{required_format.lstrip('.')} ↔ 실제 {fp.suffix} — "
+                f"scripts\\docx2hwp.py(대화형 PowerShell)로 변환 후 제출"
+            )
+            report["needs_input"].append(report["format_mismatch"])
+            if not fp.stem.endswith(("_DRAFT", "_DRAFT2")):
+                new_path, mark_error = force_draft_name(fp)
+                if mark_error:
+                    report["draft_mark_error"] = report.get("draft_mark_error") or mark_error
+                else:
+                    for key in ("submit_docx", "quality_docx"):
+                        if report.get(key) == str(fp):
+                            report[key] = str(new_path)
+                    final_docx = new_path
 
         report["final_docx"] = str(final_docx)
         log_line(f"[Submission] project={project_id} final={Path(final_docx).name} steps={report['steps']}")
