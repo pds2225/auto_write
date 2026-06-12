@@ -23,6 +23,7 @@ font_name_mixing       폰트 이름 혼용(표 포함, 허용 4종 초과)     
 font_size_spread       글자크기 과다 분산(7종 초과)·이상치(<8/>18pt)   warn
 empty_table_rows       완전히 빈 표 행                                 warn
 recruit_date_conflict  채용시기 표기 상호 모순                         warn
+masking_violation      블라인드 마스킹 위반(실명 잔존) — blind_review 시만 fail(조건부)
 """
 
 from __future__ import annotations
@@ -49,11 +50,20 @@ _SELF_BLOCK_RE = re.compile(
 # 제거기(image_apply.strip_notebooklm_blocks)가 같은 정의를 쓰도록 공개한다 —
 # 검출과 제거의 패턴이 어긋나면 '지웠는데 검출됨' 류의 재발이 생긴다.
 SELF_BLOCK_RE = _SELF_BLOCK_RE
+# ○○○/OOO 는 '빈 자리표시'이기도 하지만 블라인드 공고에서는 '올바른 마스킹'이다.
+# blind_review=True 면 placeholder 검사에서 제외된다(ACC-1 오탐 방지).
+_MASK_PLACEHOLDER_RE = re.compile(r"(?<!\w)(OOO|○○○)(?!\w)")
 _PLACEHOLDER_RES = (
     re.compile(r"<\s*사진\s*\(이미지\)[^>]*>"),
     re.compile(r"<[^<>\n]{0,30}제목\s*>"),
-    re.compile(r"(?<!\w)(OOO|○○○)(?!\w)"),
+    _MASK_PLACEHOLDER_RE,
 )
+# 블라인드 평가에서 마스킹해야 하는 라벨(공백·콜론 정규화 후 비교)
+_BLIND_LABEL_NORM = {"성명", "대표자성명", "대표자명", "직장명", "대학명"}
+_BLIND_INLINE_RE = re.compile(
+    r"(대표자\s*성명|대표자명|성명|직장명|대학명)\s*[:：]\s*([^\s,/|·]{1,20})"
+)
+_HANGUL_NAME_RE = re.compile(r"[가-힣]{2,10}")
 _CHECKBOX_ROW_RE = re.compile(r"택\s*1|해당\s*여부")
 _CHECKED_MARKS = ("■", "☑", "✔", "▣", "☒", "√")
 _LABEL_FIELDS = ("명 칭", "명칭", "기업명", "대표자명", "창업아이템명")
@@ -259,12 +269,19 @@ def check_self_inserted_blocks(doc: Document, config: AcceptanceConfig | None = 
 
 
 def check_template_placeholders(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
-    """자리표시 검출 — 패턴이 겹쳐도(동일 구간 이중매치) 1건으로 센다."""
+    """자리표시 검출 — 패턴이 겹쳐도(동일 구간 이중매치) 1건으로 센다.
+
+    blind_review=True 면 ○○○/OOO 패턴을 제외한다 — 블라인드 공고에서 그것은
+    빈 자리표시가 아니라 '올바른 마스킹'이다(실명 잔존은 masking_violation 이 잡음).
+    """
+    blind = config is not None and config.blind_review
+    regexes = tuple(rx for rx in _PLACEHOLDER_RES
+                    if not (blind and rx is _MASK_PLACEHOLDER_RE))
     n = 0
     samples: list[str] = []
     for where, text in _iter_all_texts(doc):
         spans: list[tuple[int, int]] = []
-        for rx in _PLACEHOLDER_RES:
+        for rx in regexes:
             spans.extend(m.span() for m in rx.finditer(text))
         if not spans:
             continue
@@ -333,6 +350,59 @@ def check_empty_label_fields(doc: Document, config: AcceptanceConfig | None = No
     _walk(doc.tables)
     return CheckResult("empty_label_fields", "필수 라벨 옆 칸 공란", SEV_FAIL, defects, samples,
                        f"공란 필수칸 {defects}개")
+
+
+def _is_masked_value(v: str) -> bool:
+    return ("○" in v) or bool(re.fullmatch(r"O+", v))
+
+
+def check_masking_violation(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
+    """블라인드 평가 위반(실명·기관명 잔존) — config.blind_review=True 일 때만 활성.
+
+    블라인드 공고는 성명·직장명·대학명을 ○ 마스킹해야 하며 실명 기재는 공고
+    위반(탈락 사유)이다. 비블라인드(기본)에서는 defects=0 — 오탐 0 원칙.
+    값이 통째로 한글 2~10자일 때만 잡는 보수적 패턴(라벨 옆 칸 / '라벨: 값' 한정).
+    """
+    label = "블라인드 마스킹 위반(실명 잔존)"
+    if config is None or not config.blind_review:
+        return CheckResult("masking_violation", label, SEV_FAIL, 0, [],
+                           "비블라인드 공고 — 검사 비활성(blind_review 시 활성)")
+    defects = 0
+    samples: list[str] = []
+
+    def _flag(where: str, lbl: str, value: str) -> None:
+        nonlocal defects
+        defects += 1
+        if len(samples) < _MAX_SAMPLES:
+            samples.append(f"[{where}] '{lbl}' 칸 실명 의심({value[0]}…) — ○ 마스킹 필요")
+
+    for where, text in _iter_all_texts(doc):
+        for lbl, value in _BLIND_INLINE_RE.findall(text):
+            v = value.strip()
+            if _is_masked_value(v):
+                continue
+            if _HANGUL_NAME_RE.fullmatch(v):
+                _flag(where, lbl, v)
+
+    def _walk(tables):
+        for table in tables:
+            for row in table.rows:
+                cells = _row_cells_dedup(row)
+                for i, c in enumerate(cells[:-1]):
+                    if re.sub(r"[\s:：]", "", c) not in _BLIND_LABEL_NORM:
+                        continue
+                    v = cells[i + 1].strip()
+                    if not v or _is_masked_value(v):
+                        continue
+                    if _HANGUL_NAME_RE.fullmatch(v):
+                        _flag("표", c, v)
+            for row in table.rows:
+                for cell in row.cells:
+                    if cell.tables:
+                        _walk(cell.tables)
+    _walk(doc.tables)
+    return CheckResult("masking_violation", label, SEV_FAIL, defects, samples,
+                       f"마스킹 안 된 실명 의심 {defects}건 — 블라인드 공고 위반(탈락 사유)")
 
 
 def check_font_name_mixing(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
@@ -413,6 +483,7 @@ _ALL_CHECKS = (
     check_template_placeholders,
     check_unchecked_choices,
     check_empty_label_fields,
+    check_masking_violation,
     check_font_name_mixing,
     check_font_size_spread,
     check_empty_table_rows,

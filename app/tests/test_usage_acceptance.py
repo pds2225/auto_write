@@ -146,6 +146,67 @@ def test_textbox_marker_detected(tmp_path):
     assert r.defects == 1
 
 
+# --- US-2: 블라인드 마스킹 방향 역전(ACC-1·ACC-2, R10) -------------------------
+
+def _blind_cfg() -> AcceptanceConfig:
+    return AcceptanceConfig(blind_review=True)
+
+
+def test_blind_review_allows_masking(tmp_path):
+    """블라인드 모드: 올바른 ○○○ 마스킹 문서는 제출가능 (ACC-1 오탐 해소)."""
+    d = _doc()
+    d.add_paragraph("대표자 성명: ○○○ (블라인드 마스킹 완료)")
+    t = d.add_table(rows=1, cols=2)
+    t.cell(0, 0).text = "직장명"
+    t.cell(0, 1).text = "○○○"
+    p = tmp_path / "masked.docx"
+    d.save(str(p))
+    rep = run_acceptance(p, _blind_cfg())
+    by_id = {r.check_id: r for r in rep.results}
+    assert by_id["template_placeholders"].defects == 0
+    assert by_id["masking_violation"].defects == 0
+    assert rep.submittable, [c.as_dict() for c in rep.results if not c.passed]
+
+
+def test_blind_review_detects_real_names(tmp_path):
+    """블라인드 모드: 실명 잔존(진짜 위반)을 fail 로 검출 (ACC-2 미탐 해소)."""
+    d = _doc()
+    d.add_paragraph("대표자 성명: 홍길동 / 직장명: 삼성전자 / 대학명: 서울대학교")
+    t = d.add_table(rows=1, cols=2)
+    t.cell(0, 0).text = "성명"
+    t.cell(0, 1).text = "김철수"
+    p = tmp_path / "names.docx"
+    d.save(str(p))
+    rep = run_acceptance(p, _blind_cfg())
+    mv = next(r for r in rep.results if r.check_id == "masking_violation")
+    assert mv.severity == "fail" and mv.defects >= 4
+    assert not rep.submittable
+
+
+def test_default_masking_behavior_unchanged(tmp_path):
+    """기본(비블라인드): ○○○는 여전히 자리표시 fail, 실명 검사는 비활성."""
+    d = _doc()
+    d.add_paragraph("대표자 성명: ○○○")
+    d.add_paragraph("성명: 홍길동")
+    p = tmp_path / "default.docx"
+    d.save(str(p))
+    rep = run_acceptance(p)
+    by_id = {r.check_id: r for r in rep.results}
+    assert by_id["template_placeholders"].defects >= 1  # ○○○ = 빈 자리표시(현행 유지)
+    assert by_id["masking_violation"].defects == 0      # 비활성(오탐 0 원칙)
+
+
+def test_blind_review_still_catches_other_placeholders(tmp_path):
+    """블라인드 모드에서도 ○○○ 외 자리표시(<사진(이미지)>)는 그대로 fail."""
+    d = _doc()
+    d.add_paragraph("< 사진(이미지) 또는 설계도 제목 >")
+    p = tmp_path / "ph.docx"
+    d.save(str(p))
+    rep = run_acceptance(p, _blind_cfg())
+    ph = next(r for r in rep.results if r.check_id == "template_placeholders")
+    assert ph.defects >= 1
+
+
 # --- US-3b: 폰트 ascii/eastAsia 이중집계 오탐 수정(ACC-8) ----------------------
 
 def test_font_pairs_not_double_counted():
