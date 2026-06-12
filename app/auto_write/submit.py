@@ -57,6 +57,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="실사용 수용검사 게이트(DRAFT 마킹) 생략")
     parser.add_argument("--blind-review", action="store_true",
                         help="블라인드 공고 모드 — ○○○ 마스킹 허용 + 실명 잔존 검출(fail)")
+    parser.add_argument("--required-format", default=None,
+                        help="공고 요구 산출 형식(예: hwp) — 다르면 제출명 차단(_DRAFT)+변환 안내")
     args = parser.parse_args(argv)
 
     settings, storage, project_service, evaluation_service = _make()
@@ -81,6 +83,7 @@ def main(argv: list[str] | None = None) -> int:
         fill_plan_dir=(args.fill_plan_dir or None),
         acceptance_gate=not args.no_acceptance,
         blind_review=args.blind_review,
+        required_format=args.required_format,
     )
     print(json.dumps(report, ensure_ascii=False, indent=2))
     print("\n최종 제출초안:", report.get("final_docx", ""))

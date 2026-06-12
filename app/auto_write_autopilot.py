@@ -44,6 +44,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-psst", action="store_true", help="PSST 작성 보강 생략")
     parser.add_argument("--blind-review", action="store_true",
                         help="블라인드 공고 모드 — ○○○ 마스킹 허용 + 실명 잔존 검출(fail)")
+    parser.add_argument("--required-format", default=None,
+                        help="공고 요구 산출 형식(예: hwp) — 다르면 제출명 차단(_DRAFT)+변환 안내")
     parser.add_argument("--no-acceptance", action="store_true",
                         help="실사용 수용검사 게이트(DRAFT 마킹) 생략")
     parser.add_argument("--no-report", action="store_true", help="통합 리포트(md) 생성 생략")
@@ -62,6 +64,7 @@ def main(argv: list[str] | None = None) -> int:
         psst_scaffold=not args.no_psst,
         acceptance_gate=not args.no_acceptance,
         blind_review=args.blind_review,
+        required_format=args.required_format,
         write_report=not args.no_report,
     )
 

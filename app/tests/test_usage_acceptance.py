@@ -16,6 +16,8 @@ from auto_write.services.usage_acceptance import (
     check_empty_label_fields, check_font_name_mixing,
     check_empty_table_rows, check_recruit_date_conflict,
     check_residual_colored_runs,
+    check_paren_choices, check_empty_label_fields_ext,
+    check_empty_image_slots, check_page_overflow,
 )
 
 
@@ -145,6 +147,71 @@ def test_textbox_marker_detected(tmp_path):
     d.save(str(p))
     r = check_unresolved_markers(Document(str(p)))
     assert r.defects == 1
+
+
+# --- US-3c: warn 선도입(괄호 선택란·라벨 확장·빈 그림칸·분량) -------------------
+
+def test_paren_choices_warn():
+    """( ) 괄호형 선택란 미선택은 warn, (V) 채움은 통과 (ACC-10)."""
+    d = _doc()
+    t = d.add_table(rows=1, cols=2)
+    t.cell(0, 0).text = "지원 분야(택 1)"
+    t.cell(0, 1).text = "( ) 제조  ( ) 지식서비스"
+    r = check_paren_choices(d)
+    assert r.severity == "warn" and r.defects == 1
+    t.cell(0, 1).text = "(V) 제조  ( ) 지식서비스"
+    assert check_paren_choices(d).defects == 0
+
+
+def test_v_mark_counts_as_checked():
+    """□ 행에 'V' 표기로 체크해도 미선택 오탐하지 않는다(ACC-10 오탐 방향 수정)."""
+    d = _doc()
+    t = d.add_table(rows=1, cols=2)
+    t.cell(0, 0).text = "지방우대 해당여부"
+    t.cell(0, 1).text = "□ 해당  V 비해당"
+    assert check_unchecked_choices(d).defects == 0
+
+
+def test_empty_label_fields_ext_warn():
+    """라벨 변형('기 업 명')·확장 라벨(사업자등록번호) 공란은 warn (ACC-11)."""
+    d = _doc()
+    t = d.add_table(rows=2, cols=2)
+    t.cell(0, 0).text = "기 업 명"
+    t.cell(0, 1).text = ""
+    t.cell(1, 0).text = "사업자등록번호"
+    t.cell(1, 1).text = ""
+    r = check_empty_label_fields_ext(d)
+    assert r.severity == "warn" and r.defects == 2
+    # 기존 fail 검사 담당분(정확일치 라벨)은 ext 에서 제외 — 이중 집계 방지
+    d2 = _doc()
+    t2 = d2.add_table(rows=1, cols=2)
+    t2.cell(0, 0).text = "명 칭"
+    t2.cell(0, 1).text = ""
+    assert check_empty_label_fields_ext(d2).defects == 0
+    assert check_empty_label_fields(d2).defects == 1
+
+
+def test_empty_image_slots_warn():
+    """'사진' 라벨 옆 칸에 텍스트도 그림도 없으면 warn (ACC-12)."""
+    d = _doc()
+    t = d.add_table(rows=2, cols=2)
+    t.cell(0, 0).text = "대표 사진"
+    t.cell(0, 1).text = ""
+    t.cell(1, 0).text = "회사 로고"
+    t.cell(1, 1).text = "첨부함"
+    r = check_empty_image_slots(d)
+    assert r.severity == "warn" and r.defects == 1
+
+
+def test_page_overflow_config_gated():
+    """분량 검사는 config 지정 시에만 — 근사 추정 warn (ACC-4)."""
+    d = _doc()
+    for _ in range(40):
+        d.add_paragraph("가" * 100)  # 약 4,000자 ≈ 3p
+    assert check_page_overflow(d).defects == 0  # 기본: 비활성
+    r = check_page_overflow(d, AcceptanceConfig(max_pages=1))
+    assert r.severity == "warn" and r.defects == 1
+    assert check_page_overflow(d, AcceptanceConfig(max_pages=10)).defects == 0
 
 
 # --- US-3a: 색상·스캐폴드·날짜·스타일폰트 + R8 재정의 --------------------------

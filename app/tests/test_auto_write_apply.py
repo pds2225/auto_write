@@ -362,3 +362,35 @@ def test_strip_notebooklm_no_blocks_noop_copy(tmp_path: Path) -> None:
     assert strip.paragraphs_removed == 0
     assert [p.text for p in Document(str(out)).paragraphs] == \
         [p.text for p in Document(str(src)).paragraphs]
+
+
+# --- US-3c: 산출 형식 게이트(ACC-5) -------------------------------------------
+
+def test_autopilot_required_format_gate(tmp_path: Path) -> None:
+    """ACC-5: 요구 형식(hwp)과 산출(docx)이 다르면 제출명 차단 + 변환 안내."""
+    from auto_write.services.autopilot_pipeline import run_autopilot
+
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    _make_doc(src, with_table=False)
+    report = run_autopilot(
+        str(src), str(out), max_images=0, psst_scaffold=False,
+        required_format="hwp", write_report=False,
+    )
+    assert report.format_mismatch
+    assert report.output_docx.endswith("_DRAFT.docx") or report.output_docx.endswith("_DRAFT2.docx")
+    assert any("산출 형식 불일치" in t for t in report.manual_todo)
+
+
+def test_autopilot_required_format_match_no_gate(tmp_path: Path) -> None:
+    """요구 형식이 docx 로 일치하면 형식 게이트가 개입하지 않는다."""
+    from auto_write.services.autopilot_pipeline import run_autopilot
+
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    _make_doc(src, with_table=False)
+    report = run_autopilot(
+        str(src), str(out), max_images=0, psst_scaffold=False,
+        required_format="docx", write_report=False,
+    )
+    assert report.format_mismatch == ""
