@@ -46,6 +46,7 @@ class SubmissionPipeline:
         acceptance_gate: bool = True,
         blind_review: bool = False,
         required_format: str | None = None,
+        submit_clean: bool = False,
     ) -> dict[str, Any]:
         report: dict[str, Any] = {"project_id": project_id, "steps": [], "needs_input": []}
         results_root = Path(self.settings.results_root)
@@ -163,6 +164,28 @@ class SubmissionPipeline:
             except Exception as exc:
                 report["notebooklm_error"] = f"{type(exc).__name__}: {exc}"
 
+        # 6.5 (옵션) 제출 정리(--submit-clean, US-6): 프롬프트를 md 로 보존(손실 0)한
+        #     뒤 작업용 블록을 제거한다. 산출은 중립명(_정리본) — 최종 이름은 게이트
+        #     결과가 결정한다(통과 시에만 _제출용, '_제출용_DRAFT' 모순명 금지).
+        if submit_clean:
+            try:
+                from .image_apply import extract_notebooklm_prompts, strip_notebooklm_blocks
+
+                prompts = extract_notebooklm_prompts(str(final_docx))
+                if prompts:
+                    md_path = results_root / f"제출초안_{project_id}_슬라이드프롬프트.md"
+                    _protect_output(md_path)
+                    md_path.write_text("\n\n---\n\n".join(prompts), encoding="utf-8")
+                    report["prompt_md"] = str(md_path)
+                clean_out = results_root / f"제출초안_{project_id}_정리본.docx"
+                _protect_output(clean_out)
+                strip_rep = strip_notebooklm_blocks(str(final_docx), str(clean_out))
+                report["strip_removed"] = strip_rep.paragraphs_removed
+                report["steps"].append("submit_clean")
+                final_docx = clean_out
+            except Exception as exc:
+                report["submit_clean_error"] = f"{type(exc).__name__}: {exc}"
+
         # 7. 실사용 수용검사 게이트(R7/R8) — fail 결함이 있으면 '제출' 이름으로
         #    내보내지 않고 파일명에 _DRAFT 를 강제한다(autopilot 4단계와 동일 정책).
         #    NotebookLM 프롬프트가 삽입된 출력은 작업용 중간본이라 DRAFT 가 정상이다.
@@ -212,6 +235,18 @@ class SubmissionPipeline:
                     final_docx = new_path
                     if acc is not None:
                         report["acceptance"]["draft_marked"] = True
+
+        # 제출 정리 경로의 최종 명명(US-6) — 게이트 '통과'가 확인된 경우에만
+        # 중립명(_정리본)을 '_제출용' 으로 올린다(게이트 결과의 상호배타 단일 결정).
+        if submit_clean and acceptance_gate:
+            fp_clean = Path(final_docx)
+            acc_ok = (bool((report.get("acceptance") or {}).get("submittable"))
+                      and not report.get("acceptance_error"))
+            if acc_ok and fp_clean.stem.endswith("_정리본"):
+                submit_name = fp_clean.with_name(fp_clean.name.replace("_정리본", "_제출용"))
+                _protect_output(submit_name)
+                fp_clean.replace(submit_name)
+                final_docx = submit_name
 
         # 7.5 산출 형식 게이트(ACC-5) — 요구 형식(hwp 등)과 다르면 제출명 차단.
         #     판정은 이 파이프라인 레벨(최종 확장자)에서만 — run_acceptance 내부가 아님.
