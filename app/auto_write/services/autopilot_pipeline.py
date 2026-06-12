@@ -26,6 +26,7 @@
 from __future__ import annotations
 
 import re
+import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -267,8 +268,6 @@ def run_autopilot(
         report.psst_scaffolded_areas = list(psst.scaffolded_areas)
     else:
         # PSST 보강 생략 시 2단계 결과를 최종으로 복사
-        import shutil
-
         final_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(str(stage_in), str(final_path))
 
@@ -285,9 +284,8 @@ def run_autopilot(
         tmp_clean = results_root / f"{stem}_ap3_clean.docx"
         strip_rep = strip_notebooklm_blocks(str(final_path), str(tmp_clean))
         report.strip_removed = strip_rep.paragraphs_removed
-        import shutil as _sh
         # Path.replace 는 드라이브가 다르면 실패(WinError 17) — 복사로 대체
-        _sh.copyfile(str(tmp_clean), str(final_path))
+        shutil.copyfile(str(tmp_clean), str(final_path))
 
     # --- 4단계: 실사용 수용검사 게이트(R8) — fail 결함이 있으면 DRAFT 마킹 ---
     #     게이트 자신이 죽어도 통과로 취급하지 않고(fail-closed: 판정 불가 = 제출 금지),
