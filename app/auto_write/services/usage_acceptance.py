@@ -25,6 +25,10 @@ empty_table_rows       완전히 빈 표 행                                 war
 recruit_date_conflict  채용시기 표기 상호 모순                         warn
 masking_violation      블라인드 마스킹 위반(실명 잔존) — blind_review 시만 fail(조건부)
 residual_colored_runs  검정 아닌 유색 텍스트 잔존(파란 안내문구 등)      fail
+paren_choices          괄호형 ( ) 선택란 미선택 의심                    warn(선도입)
+empty_label_fields_ext 라벨 변형·확장 목록 공란 의심                    warn(선도입)
+empty_image_slots      빈 그림/사진 칸 의심                             warn(선도입)
+page_overflow          분량 제한 초과 의심(근사) — config 지정 시만     warn(조건부)
 """
 
 from __future__ import annotations
@@ -88,6 +92,15 @@ _DATE_TOKEN_RE = re.compile(r"[’'‘]\s?(\d{2})\s*\.\s*(\d{1,2})")
 _DATE_TOKEN_KR_RE = re.compile(r"(\d{4})\s*년\s*(\d{1,2})\s*월")  # '2026년 3월' 한국식 표기
 # docx_ops._PRESERVE_COLORS 와 동일(흰색 계열 보존색) — 검정/무지정 외 허용 색
 _COLOR_PRESERVE = {"ffffff", "fffffe", "f2f2f2"}
+# --- US-3c warn 선도입 검사용(오탐 표면적 큼 — 음성 코퍼스 검증 후 차기 fail 승격) ---
+_LABEL_FIELDS_EXT = ("사업자등록번호", "생년월일", "연락처", "신청분야")
+_norm_label = lambda s: re.sub(r"[\s:：]", "", s)  # noqa: E731 — 라벨 비교 정규화
+_LABEL_NORM_ALL = ({_norm_label(x) for x in _LABEL_FIELDS}
+                   | {_norm_label(x) for x in _LABEL_FIELDS_EXT})
+_IMAGE_LABEL_RE = re.compile(r"사진|이미지|그림|로고")
+_EMPTY_PAREN_RE = re.compile(r"\(\s*\)")
+_FILLED_PAREN_RE = re.compile(r"\(\s*[VvOX○●√■]\s*\)")
+_STANDALONE_V_RE = re.compile(r"(?<![A-Za-z0-9])[V√●](?![A-Za-z0-9])")  # 'TV' 의 V 는 제외
 # 템플릿이 정상적으로 쓰는 폰트 조합(KISED 양식 기준) — 이 수를 넘으면 혼용으로 본다.
 _ALLOWED_FONT_KINDS = 4
 _ALLOWED_SIZE_KINDS = 7
@@ -337,7 +350,9 @@ def check_unchecked_choices(doc: Document, config: AcceptanceConfig | None = Non
                 if label in seen_labels:
                     continue
                 seen_labels.add(label)
-                if "□" in row_text and not any(m in row_text for m in _CHECKED_MARKS):
+                checked = (any(m in row_text for m in _CHECKED_MARKS)
+                           or _STANDALONE_V_RE.search(row_text))  # 'V' 표기 체크 인정(오탐 방지)
+                if "□" in row_text and not checked:
                     defects += 1
                     if len(samples) < _MAX_SAMPLES:
                         samples.append(f"[표] {row_text[:40]}")
@@ -536,6 +551,152 @@ def check_font_name_mixing(doc: Document, config: AcceptanceConfig | None = None
                        f"ascii {len(ascii_names)}종 / eastAsia {len(ea_names)}종 (허용 슬롯별 {allowed}종)")
 
 
+def check_paren_choices(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
+    """괄호형 선택란 미선택 의심 — warn (ACC-10, 선도입).
+
+    '택 1/해당여부' 행에 □ 가 없고 '( )' 빈 괄호만 있으면 미선택 의심.
+    채움 괄호 '(V)/(O)/(○)' 가 하나라도 있으면 통과. □ 형은 기존 fail 검사 담당.
+    """
+    defects = 0
+    samples: list[str] = []
+
+    def _walk(tables):
+        nonlocal defects
+        for table in tables:
+            for row in table.rows:
+                row_text = " ".join(_row_cells_dedup(row))
+                if not _CHECKBOX_ROW_RE.search(row_text) or "□" in row_text:
+                    continue
+                if _EMPTY_PAREN_RE.search(row_text) and not _FILLED_PAREN_RE.search(row_text):
+                    defects += 1
+                    if len(samples) < _MAX_SAMPLES:
+                        samples.append(f"[표] {row_text[:40]}")
+            for row in table.rows:
+                for cell in row.cells:
+                    if cell.tables:
+                        _walk(cell.tables)
+    _walk(doc.tables)
+    return CheckResult("paren_choices", "괄호형 선택란 미선택 의심", SEV_WARN, defects, samples,
+                       f"빈 괄호 선택 행 {defects}개 — ( ) 안에 V/○ 표기 필요")
+
+
+def check_empty_label_fields_ext(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
+    """필수 라벨 옆 칸 공란(확장) — warn (ACC-11, 선도입).
+
+    기존 fail 검사(정확일치 5종)가 놓치는 라벨 변형('기 업 명', '명칭 :')과
+    확장 라벨(사업자등록번호·생년월일·연락처·신청분야)을 정규화 비교로 잡는다.
+    기존 fail 검사가 이미 센 항목(정확일치)은 제외해 이중 집계를 막는다.
+    """
+    defects = 0
+    samples: list[str] = []
+
+    def _walk(tables):
+        nonlocal defects
+        for table in tables:
+            for row in table.rows:
+                cells = _row_cells_dedup(row)
+                for i, c in enumerate(cells[:-1]):
+                    if c in _LABEL_FIELDS:        # 기존 fail 검사 담당분 제외
+                        continue
+                    if _norm_label(c) in _LABEL_NORM_ALL and not cells[i + 1]:
+                        defects += 1
+                        if len(samples) < _MAX_SAMPLES:
+                            samples.append(f"[표] '{c}' 옆 칸 공란(확장 검사)")
+            for row in table.rows:
+                for cell in row.cells:
+                    if cell.tables:
+                        _walk(cell.tables)
+    _walk(doc.tables)
+    return CheckResult("empty_label_fields_ext", "필수 라벨 옆 칸 공란(확장)", SEV_WARN, defects, samples,
+                       f"공란 의심 {defects}개 — 라벨 변형·확장 목록 기준(warn 선도입)")
+
+
+def check_empty_image_slots(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
+    """빈 그림/사진 칸 의심 — warn (ACC-12, 선도입).
+
+    '사진/이미지/그림/로고' 짧은 라벨 셀의 옆 칸에 텍스트도 그림(w:drawing/w:pict)도
+    없으면 미첨부 의심. 자리표시 텍스트(<사진(이미지)>)는 placeholder 검사 담당.
+    """
+    defects = 0
+    samples: list[str] = []
+
+    def _cell_has_image(cell) -> bool:
+        tc = cell._tc
+        return bool(tc.findall(".//" + qn("w:drawing")) or tc.findall(".//" + qn("w:pict")))
+
+    def _walk(tables):
+        nonlocal defects
+        for table in tables:
+            for row in table.rows:
+                # 병합 중복 제거하되 그림 검사를 위해 셀 객체가 필요하다
+                seen: list = []
+                cells = []
+                for cell in row.cells:
+                    if any(cell._tc is s for s in seen):
+                        continue
+                    seen.append(cell._tc)
+                    cells.append(cell)
+                for i, cell in enumerate(cells[:-1]):
+                    t = cell.text.strip()
+                    if not t or len(t) > 12 or not _IMAGE_LABEL_RE.search(t):
+                        continue
+                    nxt = cells[i + 1]
+                    if not nxt.text.strip() and not _cell_has_image(nxt):
+                        defects += 1
+                        if len(samples) < _MAX_SAMPLES:
+                            samples.append(f"[표] '{t}' 옆 칸에 텍스트·그림 없음")
+            for row in table.rows:
+                for cell in row.cells:
+                    if cell.tables:
+                        _walk(cell.tables)
+    _walk(doc.tables)
+    return CheckResult("empty_image_slots", "빈 그림/사진 칸 의심", SEV_WARN, defects, samples,
+                       f"그림 미첨부 의심 칸 {defects}개")
+
+
+_HEADING_LIKE_RE = re.compile(r"^\s*(?:[ⅠⅡⅢⅣⅤ]|\d+\s*[.)]|■|□\s*[가-힣]+\s*:)")
+_AI_SECTION_RE = re.compile(r"AI.{0,10}(활용|인재).{0,8}계획")
+
+
+def check_page_overflow(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
+    """분량 제한 초과 의심(근사) — warn (ACC-4, config 지정 시에만 활성).
+
+    python-docx 는 페이지를 정확히 못 세므로 본문 글자수 기반 근사(1p ≈ 1,500자)로
+    경고만 한다. 정확 판정은 파이프라인 레벨의 미리보기 렌더러(page PNG) 몫.
+    config.max_pages / ai_section_max 미지정(기본)이면 검사 비활성 — 오탐 0.
+    """
+    label = "분량 제한 초과 의심(근사)"
+    if config is None or (config.max_pages is None and config.ai_section_max is None):
+        return CheckResult("page_overflow", label, SEV_WARN, 0, [],
+                           "분량 제한 미지정 — 검사 비활성")
+    defects = 0
+    samples: list[str] = []
+    total_chars = sum(len(t) for _, t in _iter_all_texts(doc))
+    est = max(1, -(-total_chars // 1500))
+    if config.max_pages is not None and est > config.max_pages:
+        defects += 1
+        samples.append(f"본문 약 {total_chars:,}자 ≈ {est}p > 제한 {config.max_pages}p")
+    if config.ai_section_max is not None:
+        chars = 0
+        in_section = False
+        for p in doc.paragraphs:
+            t = p.text.strip()
+            if not in_section:
+                if t and _AI_SECTION_RE.search(t):
+                    in_section = True
+                continue
+            if t and _HEADING_LIKE_RE.match(t) and not _AI_SECTION_RE.search(t):
+                break
+            chars += len(t)
+        if in_section:
+            est_ai = max(1, -(-chars // 1500))
+            if est_ai > config.ai_section_max:
+                defects += 1
+                samples.append(f"AI 계획 섹션 약 {chars:,}자 ≈ {est_ai}p > 제한 {config.ai_section_max}p")
+    return CheckResult("page_overflow", label, SEV_WARN, defects, samples,
+                       f"분량 초과 의심 {defects}건 — 근사 추정(정확 판정은 렌더러 필요)")
+
+
 def check_font_size_spread(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
     sizes: set[float] = set()
     outliers = 0
@@ -593,6 +754,10 @@ _ALL_CHECKS = (
     check_font_size_spread,
     check_empty_table_rows,
     check_recruit_date_conflict,
+    check_paren_choices,
+    check_empty_label_fields_ext,
+    check_empty_image_slots,
+    check_page_overflow,
 )
 
 

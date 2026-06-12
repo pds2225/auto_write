@@ -43,6 +43,7 @@ class SubmissionPipeline:
         fill_plan_dir: str | Path | None = None,
         acceptance_gate: bool = True,
         blind_review: bool = False,
+        required_format: str | None = None,
     ) -> dict[str, Any]:
         report: dict[str, Any] = {"project_id": project_id, "steps": [], "needs_input": []}
         results_root = Path(self.settings.results_root)
@@ -195,6 +196,25 @@ class SubmissionPipeline:
                     final_docx = new_path
                     if acc is not None:
                         report["acceptance"]["draft_marked"] = True
+
+        # 7.5 산출 형식 게이트(ACC-5) — 요구 형식(hwp 등)과 다르면 제출명 차단.
+        #     판정은 이 파이프라인 레벨(최종 확장자)에서만 — run_acceptance 내부가 아님.
+        fp = Path(final_docx)
+        if required_format and fp.suffix.lstrip(".").lower() != required_format.lstrip(".").lower():
+            report["format_mismatch"] = (
+                f"요구 산출형식 .{required_format.lstrip('.')} ↔ 실제 {fp.suffix} — "
+                f"scripts\\docx2hwp.py(대화형 PowerShell)로 변환 후 제출"
+            )
+            report["needs_input"].append(report["format_mismatch"])
+            if not fp.stem.endswith(("_DRAFT", "_DRAFT2")):
+                new_path, mark_error = force_draft_name(fp)
+                if mark_error:
+                    report["draft_mark_error"] = report.get("draft_mark_error") or mark_error
+                else:
+                    for key in ("submit_docx", "quality_docx"):
+                        if report.get(key) == str(fp):
+                            report[key] = str(new_path)
+                    final_docx = new_path
 
         report["final_docx"] = str(final_docx)
         log_line(f"[Submission] project={project_id} final={Path(final_docx).name} steps={report['steps']}")
