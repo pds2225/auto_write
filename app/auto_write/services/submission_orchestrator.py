@@ -85,6 +85,9 @@ class SubmissionPipeline:
         report["steps"].append("finalize")
 
         final_docx = submit_path
+        # 이 실행이 만든 '제출 이름' 산출물 목록 — 게이트 fail/판정불가 시 최종본만이
+        # 아니라 전부 _DRAFT 마킹한다(중간본이 제출용 이름으로 잔존하는 것 차단).
+        artifacts: list[Path] = [submit_path]
 
         # 4. 서식 품질 게이트(내부 백업 수행)
         try:
@@ -100,6 +103,7 @@ class SubmissionPipeline:
                 report["quality"] = {}
             report["steps"].append("quality")
             final_docx = quality_out
+            artifacts.append(quality_out)
         except Exception as exc:
             report["quality_error"] = f"{type(exc).__name__}: {exc}"
 
@@ -142,6 +146,7 @@ class SubmissionPipeline:
                 }
                 report["steps"].append("notebooklm")
                 final_docx = nlm_out
+                artifacts.append(nlm_out)
             except Exception as exc:
                 report["notebooklm_error"] = f"{type(exc).__name__}: {exc}"
 
@@ -175,25 +180,33 @@ class SubmissionPipeline:
                         f"수용검사 fail {acc.fail_defects}건 — 결함 해결 전 제출 금지(_DRAFT 표시)."
                     )
             if acc is None or not acc.submittable:
-                old = Path(final_docx)
-                new_path, mark_error = force_draft_name(old)
-                if mark_error:
-                    # rename 실패(파일 잠금 등)도 조용히 넘기지 않는다 — 보고와 실제
-                    # 파일명이 어긋나는 것을 사용자에게 명시한다.
-                    report["draft_mark_error"] = mark_error
-                    report["needs_input"].append(
-                        f"_DRAFT 마킹 실패({mark_error}) — 파일명이 제출 이름 그대로이니 "
-                        f"직접 변경 전 제출 금지: {old.name}"
-                    )
-                else:
+                # 최종본만이 아니라 이 실행이 만든 중간 산출물(제출초안_*)에도 _DRAFT 를
+                # 전파한다 — fail 실행의 중간본이 '제출' 이름으로 남으면 사용자가 그것을
+                # 집어 제출할 수 있다(R9 잔여 #9: 중간본 명명 정책).
+                final_old = Path(final_docx)
+                for old in artifacts:
+                    if not old.exists():
+                        continue
+                    new_path, mark_error = force_draft_name(old)
+                    if mark_error:
+                        # rename 실패(파일 잠금 등)도 조용히 넘기지 않는다 — 보고와 실제
+                        # 파일명이 어긋나는 것을 사용자에게 명시한다.
+                        if old == final_old:
+                            report["draft_mark_error"] = mark_error
+                        report["needs_input"].append(
+                            f"_DRAFT 마킹 실패({mark_error}) — 파일명이 제출 이름 그대로이니 "
+                            f"직접 변경 전 제출 금지: {old.name}"
+                        )
+                        continue
                     if new_path != old:
                         # 같은 파일을 가리키던 리포트 경로도 함께 갱신(댕글링 방지).
                         for key in ("submit_docx", "quality_docx"):
                             if report.get(key) == str(old):
                                 report[key] = str(new_path)
-                    final_docx = new_path
-                    if acc is not None:
-                        report["acceptance"]["draft_marked"] = True
+                    if old == final_old:
+                        final_docx = new_path
+                        if acc is not None:
+                            report["acceptance"]["draft_marked"] = True
 
         report["final_docx"] = str(final_docx)
         log_line(f"[Submission] project={project_id} final={Path(final_docx).name} steps={report['steps']}")

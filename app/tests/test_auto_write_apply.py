@@ -362,3 +362,67 @@ def test_strip_notebooklm_no_blocks_noop_copy(tmp_path: Path) -> None:
     assert strip.paragraphs_removed == 0
     assert [p.text for p in Document(str(out)).paragraphs] == \
         [p.text for p in Document(str(src)).paragraphs]
+
+
+# --- R9 잔여 회귀 (findings #10·#11: 검출·제거 불일치 엣지, 구분선 오삭제 엣지) ---
+
+def test_strip_notebooklm_cell_split_marker_removed(tmp_path: Path) -> None:
+    """#10: 검출은 셀 텍스트(단락 \\n 결합)에 매칭하므로 셀 안에서 마커가 두 단락으로
+    갈라져도 잡는다 — 제거도 같은 결합 방식으로 지워 '지웠는데 검출됨'이 없어야 한다."""
+    src = tmp_path / "split.docx"
+    out = tmp_path / "stripped.docx"
+    doc = Document()
+    doc.add_paragraph("실제 본문")
+    cell = doc.add_table(rows=1, cols=1).rows[0].cells[0]
+    cell.paragraphs[0].add_run("📊 [NotebookLM")
+    cell.add_paragraph("슬라이드 생성용 프롬프트] · 유형: bar")
+    cell.add_paragraph("셀 안 실제 내용")
+    doc.save(str(src))
+    assert _check(src, "self_inserted_blocks").defects >= 1     # 갈라져도 검출됨
+
+    strip = strip_notebooklm_blocks(str(src), str(out))
+    assert strip.markers_removed == 2                           # 갈라진 두 조각
+    assert _check(out, "self_inserted_blocks").defects == 0     # 제거 후 검출 0
+    cell_texts = [p.text for p in
+                  Document(str(out)).tables[0].rows[0].cells[0].paragraphs if p.text.strip()]
+    assert cell_texts == ["셀 안 실제 내용"]                    # 셀 실내용 보존
+
+
+def test_strip_notebooklm_cell_cross_match_real_content_preserved(tmp_path: Path) -> None:
+    """#10 안전핀: 실본문 문장이 우연히 단락 경계에서 패턴을 이루면(삽입 헤더 시그니처
+    없음) 지우지 않고 보존한다 — 게이트가 fail 로 사람에게 넘기는 것이 맞다."""
+    src = tmp_path / "real.docx"
+    out = tmp_path / "stripped.docx"
+    doc = Document()
+    cell = doc.add_table(rows=1, cols=1).rows[0].cells[0]
+    cell.paragraphs[0].add_run("당사는 NotebookLM")
+    cell.add_paragraph("슬라이드 생성용 프롬프트를 활용한 콘텐츠 제작 역량을 보유.")
+    doc.save(str(src))
+    assert _check(src, "self_inserted_blocks").defects >= 1     # 검출은 됨(보수적)
+
+    strip = strip_notebooklm_blocks(str(src), str(out))
+    assert strip.paragraphs_removed == 0                        # 오삭제 금지
+    cell_texts = [p.text for p in
+                  Document(str(out)).tables[0].rows[0].cells[0].paragraphs if p.text.strip()]
+    assert cell_texts == ["당사는 NotebookLM",
+                          "슬라이드 생성용 프롬프트를 활용한 콘텐츠 제작 역량을 보유."]
+    assert _check(out, "self_inserted_blocks").defects >= 1     # 사람 검토 영역으로 잔존
+
+
+def test_strip_notebooklm_preserves_user_divider(tmp_path: Path) -> None:
+    """#11: 마커에 인접한 '사용자' 구분선(임의 길이 ─)은 지우지 않는다 —
+    삽입기가 넣는 정확한 구분선(─×30)만 블록의 일부로 제거한다."""
+    src = tmp_path / "divider.docx"
+    out = tmp_path / "stripped.docx"
+    doc = Document()
+    doc.add_paragraph("─" * 15)                                 # 사용자 구분선(길이 다름)
+    doc.add_paragraph("📊 [NotebookLM 슬라이드 생성용 프롬프트] · 유형: pie")
+    doc.add_paragraph("─" * 12)                                 # 사용자 구분선
+    doc.add_paragraph("실제 본문")
+    doc.save(str(src))
+
+    strip = strip_notebooklm_blocks(str(src), str(out))
+    assert strip.markers_removed == 1
+    texts = [p.text for p in Document(str(out)).paragraphs if p.text.strip()]
+    assert texts == ["─" * 15, "─" * 12, "실제 본문"]           # 구분선·본문 보존
+    assert _check(out, "self_inserted_blocks").defects == 0

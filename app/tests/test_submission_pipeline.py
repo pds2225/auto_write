@@ -345,6 +345,53 @@ class SubmissionPipelineTest(unittest.TestCase):
                         f"{key} 가 존재하지 않는 경로를 가리킴: {report[key]}",
                     )
 
+    def test_pipeline_gate_drafts_intermediate_artifacts(self):
+        """R9 잔여 #9: 게이트 fail 시 최종본만이 아니라 중간 산출물(제출초안_*·_품질)도
+        _DRAFT 마킹되어 results 에 '제출' 이름(비 DRAFT) 파일이 남지 않는다."""
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            settings = _settings(tmp_path)
+            storage = _FakeStorage(tmp_path)
+            oa = OpenAIService(settings)
+            prof = _profile(tmp_path)
+
+            class _PSWithKeyword(_FakeProjectService):
+                def generate(self, pid):
+                    out = self.storage.project_dir(pid) / "output" / "output.docx"
+                    out.parent.mkdir(parents=True, exist_ok=True)
+                    doc = Document()
+                    doc.add_paragraph("나. 추진일정 로드맵 — 단계별 마일스톤.")  # 간트 트리거
+                    doc.save(str(out))
+                    return None
+
+            ps = _PSWithKeyword(storage, prof, oa)
+            pi = ProjectInput(
+                template_id="t1",
+                organization_profile={"기업명": "테스트(주)"},
+                project_meta={},
+            )
+            storage.save_project_input("p1", pi)
+            pipeline = SubmissionPipeline(ps, EvaluationService(oa), storage, settings)
+            report = pipeline.run(
+                "p1", announcement_text="",
+                enable_images=False, enable_notebooklm=True,   # NotebookLM 블록 → 게이트 fail
+            )
+            self.assertFalse(report["acceptance"]["submittable"])
+            # 리포트 경로가 _DRAFT 로 바뀐 실파일을 가리킨다
+            for key in ("submit_docx", "quality_docx"):
+                if key in report:
+                    p = Path(report[key])
+                    self.assertTrue(
+                        p.stem.endswith(("_DRAFT", "_DRAFT2")), f"{key} 미마킹: {p.name}"
+                    )
+                    self.assertTrue(p.exists(), f"{key} 경로 없음: {p}")
+            # results 최상위에 '제출' 이름(비 DRAFT) 산출물 잔존 0
+            leftovers = [
+                p.name for p in Path(settings.results_root).glob("제출초안_*.docx")
+                if not p.stem.endswith(("_DRAFT", "_DRAFT2"))
+            ]
+            self.assertEqual(leftovers, [])
+
 
 if __name__ == "__main__":
     unittest.main()
