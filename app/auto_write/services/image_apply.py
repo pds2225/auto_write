@@ -279,7 +279,9 @@ def apply_images_docx(
 
 _PROMPT_INTRO_RE = re.compile(r"슬라이드\s*생성에\s*붙여넣으세요")
 # 삽입 헤더(_add_prompt_header) 고유 흔적 — 셀 단위 제거에서 실본문 오삭제를 막는 안전핀.
-_HEADER_SIG_RE = re.compile(r"📊|\[\s*NotebookLM|·\s*유형\s*:")
+# 단독 📊 는 실문서(차트 언급 등)에도 나올 수 있어 제외 — 대괄호 헤더/유형 표기만 인정.
+# (헤더가 어디서 갈라져도 [NotebookLM 또는 · 유형: 중 하나는 조각에 남는다.)
+_HEADER_SIG_RE = re.compile(r"\[\s*NotebookLM|·\s*유형\s*:")
 
 
 @dataclass

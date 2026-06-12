@@ -132,10 +132,14 @@ class SubmissionPipeline:
         #    공개 이미지 API 가 없는 NotebookLM 은 '수동 슬라이드 생성용 프롬프트'를
         #    그림 위치(표 뒤/본문 앵커)에 넣어, 사용자가 붙여넣어 슬라이드를 만들게 한다.
         if enable_notebooklm:
+            nlm_out = results_root / f"제출초안_{project_id}_노트북LM.docx"
+            # 호출 '전'에 산출물 목록에 올린다 — apply_images 가 파일 생성 후 죽으면
+            # 부분 생성본이 제출 이름의 고아로 남는 것을 막는다(미생성이면 게이트가
+            # exists() 로 건너뛴다).
+            artifacts.append(nlm_out)
             try:
                 from .image_apply import apply_images
 
-                nlm_out = results_root / f"제출초안_{project_id}_노트북LM.docx"
                 nlm_report = apply_images(
                     str(final_docx),
                     str(nlm_out),
@@ -147,9 +151,17 @@ class SubmissionPipeline:
                 }
                 report["steps"].append("notebooklm")
                 final_docx = nlm_out
-                artifacts.append(nlm_out)
             except Exception as exc:
                 report["notebooklm_error"] = f"{type(exc).__name__}: {exc}"
+                if nlm_out.exists():
+                    # 생성 도중 실패한 부분 생성본은 게이트 결과와 무관하게 제출 이름을
+                    # 박탈한다(내용 미완·자가삽입 블록 잔존 가능). 마킹 실패도 알린다.
+                    _np, _err = force_draft_name(nlm_out)
+                    if _err:
+                        report["needs_input"].append(
+                            f"노트북LM 부분 생성본 _DRAFT 마킹 실패({_err}) — "
+                            f"제출 금지: {nlm_out.name}"
+                        )
 
         # 7. 실사용 수용검사 게이트(R7/R8) — fail 결함이 있으면 '제출' 이름으로
         #    내보내지 않고 파일명에 _DRAFT 를 강제한다(autopilot 4단계와 동일 정책).
