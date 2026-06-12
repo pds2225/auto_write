@@ -15,6 +15,7 @@ from auto_write.services.usage_acceptance import (
     check_template_placeholders, check_unchecked_choices,
     check_empty_label_fields, check_font_name_mixing,
     check_empty_table_rows, check_recruit_date_conflict,
+    check_residual_colored_runs,
 )
 
 
@@ -144,6 +145,88 @@ def test_textbox_marker_detected(tmp_path):
     d.save(str(p))
     r = check_unresolved_markers(Document(str(p)))
     assert r.defects == 1
+
+
+# --- US-3a: 색상·스캐폴드·날짜·스타일폰트 + R8 재정의 --------------------------
+
+def test_residual_colored_runs_detected():
+    """파란 잔존 텍스트는 fail, 검정·색 미지정은 통과 (ACC-3)."""
+    from docx.shared import RGBColor
+    d = _doc()
+    run = d.add_paragraph().add_run("※ 본 항목은 작성 후 파란 안내를 지우고 제출")
+    run.font.color.rgb = RGBColor(0x00, 0x00, 0xFF)
+    r = check_residual_colored_runs(d)
+    assert r.severity == "fail" and r.defects == 1
+
+    d2 = _doc()
+    rr = d2.add_paragraph().add_run("검정 본문")
+    rr.font.color.rgb = RGBColor(0, 0, 0)
+    d2.add_paragraph("색 미지정 본문")
+    assert check_residual_colored_runs(d2).defects == 0
+
+
+def test_colored_self_block_not_double_counted():
+    """자기삽입 블록의 유색 run 은 색상 검사에서 제외(이중 집계 방지)."""
+    from docx.shared import RGBColor
+    d = _doc()
+    p = d.add_paragraph()
+    run = p.add_run("(슬라이드 생성 후 이 블록은 삭제하세요)")
+    run.font.color.rgb = RGBColor(0x80, 0x80, 0x80)
+    assert check_residual_colored_runs(d).defects == 0
+    assert check_self_inserted_blocks(d).defects == 1
+
+
+def test_psst_scaffold_blocks_detected():
+    """psst_fill 이 넣는 스캐폴드 문구를 자기삽입 블록으로 검출 (ACC-6)."""
+    from auto_write.services import usage_acceptance as ua
+    d = _doc()
+    d.add_paragraph(ua.SCAFFOLD_HEADING)
+    d.add_paragraph(ua.SCAFFOLD_DELETE_NOTICE)
+    d.add_paragraph(f"  □ 시장분석: {ua.SCAFFOLD_ITEM_SUFFIX}")
+    r = check_self_inserted_blocks(d)
+    assert r.defects == 3
+
+
+def test_scaffold_phrases_are_detectable():
+    """쓰기 모듈이 import 하는 표준 문구 전부가 검출 패턴에 걸린다(패턴 공유 보증)."""
+    from auto_write.services import usage_acceptance as ua
+    from auto_write.services import psst_fill, bizplan_ai_writer
+    # 쓰기 모듈이 같은 상수를 쓰는지(동일 객체) + 패턴 매치 여부
+    assert psst_fill.SCAFFOLD_HEADING is ua.SCAFFOLD_HEADING
+    assert bizplan_ai_writer.AI_SECTION_DELETE_NOTICE is ua.AI_SECTION_DELETE_NOTICE
+    for s in (ua.SCAFFOLD_HEADING, ua.SCAFFOLD_DELETE_NOTICE,
+              f"□ x: {ua.SCAFFOLD_ITEM_SUFFIX}",
+              ua.AI_SECTION_HEADING, ua.AI_SECTION_DELETE_NOTICE):
+        assert ua.SELF_BLOCK_RE.search(s), s
+
+
+def test_recruit_date_conflict_korean_format():
+    """'2026년 3월' 한국식 표기와 ’26.7 표기의 모순을 검출 (ACC-13, warn)."""
+    d = _doc()
+    d.add_paragraph("AI 인재 채용 시기는 2026년 3월 예정")
+    d.add_paragraph("채용은 ’26.7월 협약 후 진행")
+    assert check_recruit_date_conflict(d).defects == 1
+
+
+def test_style_inherited_font_mixing_detected():
+    """run 직접 지정 없이 스타일로만 6종 혼용해도 검출 (ACC-7)."""
+    from docx.enum.style import WD_STYLE_TYPE
+    d = _doc()
+    for i, name in enumerate(("맑은 고딕", "나눔명조", "함초롬바탕", "굴림", "함초롬돋움", "HY헤드라인M")):
+        st = d.styles.add_style(f"TestStyle{i}", WD_STYLE_TYPE.PARAGRAPH)
+        st.font.name = name
+        p = d.add_paragraph("스타일 상속 폰트 텍스트")
+        p.style = st
+    r = check_font_name_mixing(d)
+    assert r.defects >= 1, r.as_dict()
+
+
+def test_requirement_status_all_is_static():
+    """R8(__all__)은 문서 상태가 아니라 원장의 정적 상태를 따른다 (LEDGER-1)."""
+    import self_diagnose as sd
+    req = {"check_ids": ["__all__"], "상태": "달성"}
+    assert sd._requirement_status(req, {"unresolved_markers"}, False) == "달성"
+    assert sd._requirement_status(req, set(), True) == "달성"
 
 
 # --- US-2: 블라인드 마스킹 방향 역전(ACC-1·ACC-2, R10) -------------------------
