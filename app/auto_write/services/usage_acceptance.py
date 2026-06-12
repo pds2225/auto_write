@@ -24,6 +24,7 @@ font_size_spread       글자크기 과다 분산(7종 초과)·이상치(<8/>18
 empty_table_rows       완전히 빈 표 행                                 warn
 recruit_date_conflict  채용시기 표기 상호 모순                         warn
 masking_violation      블라인드 마스킹 위반(실명 잔존) — blind_review 시만 fail(조건부)
+residual_colored_runs  검정 아닌 유색 텍스트 잔존(파란 안내문구 등)      fail
 """
 
 from __future__ import annotations
@@ -46,10 +47,26 @@ _MAX_SAMPLES = 5
 _MARKER_RE = re.compile(r"\[확인필요[^\]]*\]|\[산출근거[^\]]*\]\s*\?|\[TODO[^\]]*\]")
 _SELF_BLOCK_RE = re.compile(
     r"NotebookLM\s*슬라이드\s*생성용\s*프롬프트|이\s*블록은\s*삭제하세요|슬라이드\s*생성에\s*붙여넣으세요"
+    r"|\[작성\s*보강\s*가이드\]|\[AI\s*작성\s*보강\]|섹션은\s*삭제하세요|\(작성\s*필요\s*—"
 )
 # 제거기(image_apply.strip_notebooklm_blocks)가 같은 정의를 쓰도록 공개한다 —
 # 검출과 제거의 패턴이 어긋나면 '지웠는데 검출됨' 류의 재발이 생긴다.
 SELF_BLOCK_RE = _SELF_BLOCK_RE
+
+# 쓰기 모듈(psst_fill·bizplan_ai_writer)이 import 해 쓰는 표준 문구 —
+# 검출(_SELF_BLOCK_RE)과 동일한 곳에서 정의해 '문구가 갈라져 검출 실패'(ACC-6)
+# 재발을 막는다(R5 의 검출-제거 패턴 공유 원칙).
+SCAFFOLD_HEADING = "■ [작성 보강 가이드] PSST 미흡·누락 영역"
+SCAFFOLD_DELETE_NOTICE = (
+    "아래는 자동 점검 결과 보강이 필요한 영역입니다. 각 항목을 본문 해당 절에 "
+    "구체적으로 작성한 뒤 이 가이드 섹션은 삭제하세요. (내용은 자동 생성되지 않습니다)"
+)
+SCAFFOLD_ITEM_SUFFIX = "(작성 필요 — 구체 내용·근거 수치 기입)"
+AI_SECTION_HEADING = "■ [AI 작성 보강] PSST 영역 초안 (근거 명시 · 검토 필수)"
+AI_SECTION_DELETE_NOTICE = (
+    "아래는 AI 가 입력 정보 기반으로 작성한 초안입니다. 수치의 [산출근거]·[확인필요] 를 "
+    "반드시 검토하고, 본문 해당 절로 옮긴 뒤 이 섹션은 삭제하세요."
+)
 # ○○○/OOO 는 '빈 자리표시'이기도 하지만 블라인드 공고에서는 '올바른 마스킹'이다.
 # blind_review=True 면 placeholder 검사에서 제외된다(ACC-1 오탐 방지).
 _MASK_PLACEHOLDER_RE = re.compile(r"(?<!\w)(OOO|○○○)(?!\w)")
@@ -68,6 +85,9 @@ _CHECKBOX_ROW_RE = re.compile(r"택\s*1|해당\s*여부")
 _CHECKED_MARKS = ("■", "☑", "✔", "▣", "☒", "√")
 _LABEL_FIELDS = ("명 칭", "명칭", "기업명", "대표자명", "창업아이템명")
 _DATE_TOKEN_RE = re.compile(r"[’'‘]\s?(\d{2})\s*\.\s*(\d{1,2})")
+_DATE_TOKEN_KR_RE = re.compile(r"(\d{4})\s*년\s*(\d{1,2})\s*월")  # '2026년 3월' 한국식 표기
+# docx_ops._PRESERVE_COLORS 와 동일(흰색 계열 보존색) — 검정/무지정 외 허용 색
+_COLOR_PRESERVE = {"ffffff", "fffffe", "f2f2f2"}
 # 템플릿이 정상적으로 쓰는 폰트 조합(KISED 양식 기준) — 이 수를 넘으면 혼용으로 본다.
 _ALLOWED_FONT_KINDS = 4
 _ALLOWED_SIZE_KINDS = 7
@@ -356,6 +376,49 @@ def _is_masked_value(v: str) -> bool:
     return ("○" in v) or bool(re.fullmatch(r"O+", v))
 
 
+def check_residual_colored_runs(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
+    """검정 아닌 유색 본문 텍스트 잔존(파란 안내문구·회색 가이드 등) — fail (ACC-3).
+
+    공고 규칙: 양식의 색 있는 안내문구는 삭제하고 본문은 검정 글씨.
+    - 색 미지정(상속)·검정(000000)·흰색 계열(_COLOR_PRESERVE)은 통과.
+    - 자기삽입 블록(_SELF_BLOCK_RE 단락)은 self_inserted_blocks 가 잡으므로 제외
+      (이중 집계 방지). 단락 단위로 센다.
+    """
+    defects = 0
+    samples: list[str] = []
+
+    def _scan_para(where: str, p) -> None:
+        nonlocal defects
+        text = (p.text or "").strip()
+        if not text or _SELF_BLOCK_RE.search(text):
+            return
+        for run in p.runs:
+            if not (run.text or "").strip():
+                continue
+            try:
+                color = run.font.color
+                rgb = color.rgb if (color is not None and color.type is not None) else None
+            except Exception:
+                rgb = None
+            if rgb is None:
+                continue
+            hexv = str(rgb).lower()
+            if hexv == "000000" or hexv in _COLOR_PRESERVE:
+                continue
+            defects += 1
+            if len(samples) < _MAX_SAMPLES:
+                samples.append(f"[{where}] #{hexv} '{text[:30]}'")
+            return  # 단락당 1건
+
+    for p in doc.paragraphs:
+        _scan_para("본문", p)
+    for cell in _dedup_cells(doc):
+        for p in cell.paragraphs:
+            _scan_para("표", p)
+    return CheckResult("residual_colored_runs", "검정 아닌 유색 텍스트 잔존", SEV_FAIL, defects, samples,
+                       f"유색 텍스트 단락 {defects}개 — 안내문구 삭제·본문 검정 규칙 위반 의심")
+
+
 def check_masking_violation(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
     """블라인드 평가 위반(실명·기관명 잔존) — config.blind_review=True 일 때만 활성.
 
@@ -416,16 +479,55 @@ def check_font_name_mixing(doc: Document, config: AcceptanceConfig | None = None
     allowed = config.allowed_fonts if config is not None else _ALLOWED_FONT_KINDS
     ascii_names: set[str] = set()
     ea_names: set[str] = set()
-    for run in _iter_all_runs(doc):
-        if not (run.text or "").strip():
-            continue
-        if run.font.name:
-            ascii_names.add(run.font.name)
-        rpr = run._element.rPr
-        if rpr is not None and rpr.rFonts is not None:
-            ea = rpr.rFonts.get(qn("w:eastAsia"))
-            if ea:
-                ea_names.add(ea)
+
+    def _style_fonts(style) -> tuple[str | None, str | None]:
+        """단락 스타일 체인(base_style 포함)에서 명시된 ascii/eastAsia 폰트를 찾는다."""
+        asc = ea = None
+        seen: set[str] = set()
+        st = style
+        while st is not None and getattr(st, "style_id", None) not in seen:
+            seen.add(st.style_id)
+            try:
+                if asc is None:
+                    asc = st.font.name
+                rpr = st.element.rPr
+                if ea is None and rpr is not None and rpr.rFonts is not None:
+                    ea = rpr.rFonts.get(qn("w:eastAsia"))
+            except Exception:
+                pass
+            st = getattr(st, "base_style", None)
+        return asc, ea
+
+    def _scan_para(p) -> None:
+        style_asc = style_ea = None
+        style_resolved = False
+        for run in p.runs:
+            if not (run.text or "").strip():
+                continue
+            r_asc = run.font.name
+            r_ea = None
+            rpr = run._element.rPr
+            if rpr is not None and rpr.rFonts is not None:
+                r_ea = rpr.rFonts.get(qn("w:eastAsia"))
+            # run 에 직접 지정이 없으면 단락 스타일 체인의 유효 폰트로 해석한다(ACC-7)
+            if (r_asc is None or r_ea is None) and not style_resolved:
+                style_asc, style_ea = _style_fonts(getattr(p, "style", None))
+                style_resolved = True
+            if r_asc is None:
+                r_asc = style_asc
+            if r_ea is None:
+                r_ea = style_ea
+            if r_asc:
+                ascii_names.add(r_asc)
+            if r_ea:
+                ea_names.add(r_ea)
+
+    for p in doc.paragraphs:
+        _scan_para(p)
+    for cell in _dedup_cells(doc):
+        for p in cell.paragraphs:
+            _scan_para(p)
+
     over = max(0, len(ascii_names) - allowed) + max(0, len(ea_names) - allowed)
     samples = [f"ascii:{n}" for n in sorted(ascii_names)[:_MAX_SAMPLES]] + \
               [f"eastAsia:{n}" for n in sorted(ea_names)[:_MAX_SAMPLES]]
@@ -467,7 +569,9 @@ def check_recruit_date_conflict(doc: Document, config: AcceptanceConfig | None =
     for where, text in _iter_all_texts(doc):
         if "채용" not in text:
             continue
-        for y, m in _DATE_TOKEN_RE.findall(text):
+        found = [(y, m) for y, m in _DATE_TOKEN_RE.findall(text)]
+        found += [(y[-2:], m) for y, m in _DATE_TOKEN_KR_RE.findall(text)]  # '2026년 3월' → '26.3
+        for y, m in found:
             tok = f"'{y}.{int(m)}"
             if tok not in tokens and len(samples) < _MAX_SAMPLES:
                 samples.append(f"[{where}] {tok} ← {text[:30]}")
@@ -484,6 +588,7 @@ _ALL_CHECKS = (
     check_unchecked_choices,
     check_empty_label_fields,
     check_masking_violation,
+    check_residual_colored_runs,
     check_font_name_mixing,
     check_font_size_spread,
     check_empty_table_rows,

@@ -42,7 +42,11 @@ def _requirement_status(req: dict, failed_ids: set[str], all_pass: bool) -> str:
     if not ids:
         return req.get("상태", "수동확인")
     if "__all__" in ids:
-        return "달성" if all_pass else "미달성"
+        # LEDGER-1: '이 문서가 전부 통과했는가'(문서 상태)를 '요구가 구현됐는가'
+        # (기능 달성)로 쓰면, 결함 문서를 진단할 때마다 이미 구현 완료된 요구(R8)가
+        # 미달성으로 오인돼 selfdev 가 같은 개발을 재제안한다. 기능 달성 여부는
+        # 원장의 정적 '상태'가 진실이고, 문서 상태는 위의 판정(verdict)이 따로 보고한다.
+        return req.get("상태", "수동확인")
     hit = [i for i in ids if i in failed_ids]
     if not hit:
         return "달성"
