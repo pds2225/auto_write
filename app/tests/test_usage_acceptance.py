@@ -10,7 +10,7 @@ import pytest
 from docx import Document
 
 from auto_write.services.usage_acceptance import (
-    run_acceptance,
+    AcceptanceConfig, run_acceptance,
     check_unresolved_markers, check_self_inserted_blocks,
     check_template_placeholders, check_unchecked_choices,
     check_empty_label_fields, check_font_name_mixing,
@@ -108,3 +108,51 @@ def test_defective_document_blocked(tmp_path):
     rep = run_acceptance(p)
     assert not rep.submittable
     assert rep.fail_defects >= 2
+
+
+# --- US-1: 순회 범위 확장(ACC-9) + AcceptanceConfig ---------------------------
+
+def test_header_and_footer_markers_detected(tmp_path):
+    d = _doc()
+    d.add_paragraph("본문은 정상")
+    d.sections[0].header.paragraphs[0].text = "[확인필요] 머리글에 숨은 마커"
+    d.sections[0].footer.paragraphs[0].text = "대표자 OOO"
+    p = tmp_path / "hf.docx"
+    d.save(str(p))
+    rep = run_acceptance(p)
+    by_id = {r.check_id: r for r in rep.results}
+    assert by_id["unresolved_markers"].defects >= 1
+    assert by_id["template_placeholders"].defects >= 1
+    assert not rep.submittable
+
+
+_TEXTBOX_PICT_XML = (
+    '<w:pict xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
+    'xmlns:v="urn:schemas-microsoft-com:vml">'
+    '<v:shape><v:textbox><w:txbxContent>'
+    '<w:p><w:r><w:t>[확인필요] 텍스트박스 안 마커</w:t></w:r></w:p>'
+    '</w:txbxContent></v:textbox></v:shape></w:pict>'
+)
+
+
+def test_textbox_marker_detected(tmp_path):
+    from docx.oxml import parse_xml
+    d = _doc()
+    run = d.add_paragraph("그림 영역:").add_run("")
+    run._r.append(parse_xml(_TEXTBOX_PICT_XML))
+    p = tmp_path / "tb.docx"
+    d.save(str(p))
+    r = check_unresolved_markers(Document(str(p)))
+    assert r.defects == 1
+
+
+def test_acceptance_config_default_is_noop(tmp_path):
+    d = _doc()
+    d.add_paragraph("본 사업은 정상 문서다.")
+    p = tmp_path / "cfg.docx"
+    d.save(str(p))
+    base = run_acceptance(p)
+    with_cfg = run_acceptance(p, AcceptanceConfig())
+    assert base.submittable is True and with_cfg.submittable is True
+    assert base.fail_defects == with_cfg.fail_defects == 0
+    assert [r.check_id for r in base.results] == [r.check_id for r in with_cfg.results]
