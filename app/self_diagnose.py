@@ -25,7 +25,7 @@ import json
 import sys
 from pathlib import Path
 
-from auto_write.services.usage_acceptance import run_acceptance
+from auto_write.services.usage_acceptance import AcceptanceConfig, run_acceptance
 
 _LEDGER_DEFAULT = Path(__file__).resolve().parent.parent / "workspace" / "requirements_ledger.json"
 
@@ -56,6 +56,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("docx", help="진단할 DOCX 경로")
     ap.add_argument("--json", dest="json_out", help="결과 JSON 저장 경로")
     ap.add_argument("--ledger", default=str(_LEDGER_DEFAULT), help="요구사항 원장 경로")
+    ap.add_argument("--blind-review", action="store_true",
+                    help="블라인드 공고 모드 — ○○○ 마스킹 허용 + 실명 잔존 검출(fail)")
     args = ap.parse_args(argv)
 
     src = Path(args.docx)
@@ -63,7 +65,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[오류] 파일 없음: {src}")
         return 1
 
-    report = run_acceptance(src)
+    report = run_acceptance(src, AcceptanceConfig(blind_review=args.blind_review))
     data = report.as_dict()
 
     print(f"\n=== 실사용 자가진단: {src.name} ===")

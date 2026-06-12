@@ -55,6 +55,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--fill-plan-dir", default="", help="양식별 fill_plan.json 디렉터리")
     parser.add_argument("--no-acceptance", action="store_true",
                         help="실사용 수용검사 게이트(DRAFT 마킹) 생략")
+    parser.add_argument("--blind-review", action="store_true",
+                        help="블라인드 공고 모드 — ○○○ 마스킹 허용 + 실명 잔존 검출(fail)")
     args = parser.parse_args(argv)
 
     settings, storage, project_service, evaluation_service = _make()
@@ -78,6 +80,7 @@ def main(argv: list[str] | None = None) -> int:
         enable_notebooklm=not args.no_notebooklm,
         fill_plan_dir=(args.fill_plan_dir or None),
         acceptance_gate=not args.no_acceptance,
+        blind_review=args.blind_review,
     )
     print(json.dumps(report, ensure_ascii=False, indent=2))
     print("\n최종 제출초안:", report.get("final_docx", ""))
