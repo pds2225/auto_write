@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -775,6 +776,25 @@ def run_acceptance(path: str | Path, config: AcceptanceConfig | None = None) -> 
     return report
 
 
+def backup_existing_output(target: str | Path) -> str:
+    """고정 산출명이 기존 파일을 덮어쓰기 전에 타임스탬프 백업으로 보존한다(PIPE-2).
+
+    재실행이 이전 산출물(사용자가 수정했을 수 있는 _DRAFT 포함)을 무경고로
+    파괴하지 않게 한다. 백업했으면 백업 경로, 대상이 없으면 빈 문자열.
+    """
+    target = Path(target)
+    if not target.exists():
+        return ""
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    bak = target.with_name(f"{target.stem}_prev{stamp}{target.suffix}")
+    i = 0
+    while bak.exists():
+        i += 1
+        bak = target.with_name(f"{target.stem}_prev{stamp}_{i}{target.suffix}")
+    target.replace(bak)
+    return str(bak)
+
+
 def force_draft_name(path: Path, *, avoid: Path | None = None) -> tuple[Path, str]:
     """게이트 정책(R7/R8) 파일명 유틸 — 제출불가 판정 파일에 ``_DRAFT`` 를 강제한다.
 
@@ -791,6 +811,9 @@ def force_draft_name(path: Path, *, avoid: Path | None = None) -> tuple[Path, st
     draft = path.with_name(f"{path.stem}_DRAFT{path.suffix}")
     if avoid is not None and draft.resolve() == avoid.resolve():
         draft = path.with_name(f"{path.stem}_DRAFT2{path.suffix}")
+    if draft.exists():
+        # 기존 _DRAFT(사용자가 수정 중일 수 있는 파일)를 무경고로 파괴하지 않는다(PIPE-2)
+        backup_existing_output(draft)
     try:
         path.replace(draft)
     except OSError as exc:
