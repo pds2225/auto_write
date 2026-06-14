@@ -373,6 +373,126 @@ class SubmissionPipelineTest(unittest.TestCase):
                         f"{key} 가 존재하지 않는 경로를 가리킴: {report[key]}",
                     )
 
+    def test_pipeline_gate_drafts_intermediate_artifacts(self):
+        """R9 잔여 #9: 게이트 fail 시 최종본만이 아니라 중간 산출물(제출초안_*·_품질)도
+        _DRAFT 마킹되어 results 에 '제출' 이름(비 DRAFT) 파일이 남지 않는다."""
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            settings = _settings(tmp_path)
+            storage = _FakeStorage(tmp_path)
+            oa = OpenAIService(settings)
+            prof = _profile(tmp_path)
+
+            class _PSWithKeyword(_FakeProjectService):
+                def generate(self, pid):
+                    out = self.storage.project_dir(pid) / "output" / "output.docx"
+                    out.parent.mkdir(parents=True, exist_ok=True)
+                    doc = Document()
+                    doc.add_paragraph("나. 추진일정 로드맵 — 단계별 마일스톤.")  # 간트 트리거
+                    doc.save(str(out))
+                    return None
+
+            ps = _PSWithKeyword(storage, prof, oa)
+            pi = ProjectInput(
+                template_id="t1",
+                organization_profile={"기업명": "테스트(주)"},
+                project_meta={},
+            )
+            storage.save_project_input("p1", pi)
+            pipeline = SubmissionPipeline(ps, EvaluationService(oa), storage, settings)
+            report = pipeline.run(
+                "p1", announcement_text="",
+                enable_images=False, enable_notebooklm=True,   # NotebookLM 블록 → 게이트 fail
+            )
+            self.assertFalse(report["acceptance"]["submittable"])
+            # 리포트 경로가 _DRAFT 로 바뀐 실파일을 가리킨다
+            for key in ("submit_docx", "quality_docx"):
+                if key in report:
+                    p = Path(report[key])
+                    self.assertTrue(
+                        p.stem.endswith(("_DRAFT", "_DRAFT2")), f"{key} 미마킹: {p.name}"
+                    )
+                    self.assertTrue(p.exists(), f"{key} 경로 없음: {p}")
+            # results 최상위에 '제출' 이름(비 DRAFT) 산출물 잔존 0
+            leftovers = [
+                p.name for p in Path(settings.results_root).glob("제출초안_*.docx")
+                if not p.stem.endswith(("_DRAFT", "_DRAFT2"))
+            ]
+            self.assertEqual(leftovers, [])
+
+    def test_pipeline_gate_pass_keeps_submit_names(self):
+        """R9 잔여 #9 반대 사양: 게이트 PASS 면 어떤 산출물도 _DRAFT 로 바뀌지 않는다
+        (마킹은 'fail/판정불가 시만' — 조건이 망가지면 이 테스트가 잡는다)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            settings = _settings(tmp_path)
+            storage = _FakeStorage(tmp_path)
+            oa = OpenAIService(settings)
+            prof = _profile(tmp_path)
+            ps = _FakeProjectService(storage, prof, oa)
+            pi = ProjectInput(
+                template_id="t1",
+                organization_profile={"기업명": "테스트(주)"},
+                project_meta={},
+            )
+            storage.save_project_input("p1", pi)
+            pipeline = SubmissionPipeline(ps, EvaluationService(oa), storage, settings)
+            fake = mock.Mock(submittable=True, fail_defects=0, results=[])
+            with mock.patch(
+                "auto_write.services.submission_orchestrator.run_acceptance",
+                return_value=fake,
+            ):
+                report = pipeline.run(
+                    "p1", announcement_text="",
+                    enable_images=False, enable_notebooklm=False,
+                )
+            self.assertTrue(report["acceptance"]["submittable"])
+            self.assertFalse(report["acceptance"]["draft_marked"])
+            self.assertFalse(report["final_docx"].endswith("_DRAFT.docx"))
+            for key in ("submit_docx", "quality_docx"):
+                if key in report:
+                    p = Path(report[key])
+                    self.assertFalse(
+                        p.stem.endswith(("_DRAFT", "_DRAFT2")), f"{key} 오마킹: {p.name}"
+                    )
+                    self.assertTrue(p.exists(), f"{key} 경로 없음: {p}")
+
+    def test_pipeline_notebooklm_partial_output_loses_submit_name(self):
+        """R9 잔여 보강: apply_images 가 파일 생성 '후' 죽으면 부분 생성본이
+        제출 이름의 고아로 남지 않는다(즉시 _DRAFT 박탈 + 게이트 artifacts 등재)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            settings = _settings(tmp_path)
+            storage = _FakeStorage(tmp_path)
+            oa = OpenAIService(settings)
+            prof = _profile(tmp_path)
+            ps = _FakeProjectService(storage, prof, oa)
+            pi = ProjectInput(
+                template_id="t1",
+                organization_profile={"기업명": "테스트(주)"},
+                project_meta={},
+            )
+            storage.save_project_input("p1", pi)
+            pipeline = SubmissionPipeline(ps, EvaluationService(oa), storage, settings)
+
+            def _boom(in_docx, out_docx, **kw):
+                Path(out_docx).write_bytes(Path(in_docx).read_bytes())  # 파일 생성 후 사망
+                raise RuntimeError("nlm crashed")
+
+            with mock.patch(
+                "auto_write.services.image_apply.apply_images", side_effect=_boom
+            ):
+                report = pipeline.run(
+                    "p1", announcement_text="",
+                    enable_images=False, enable_notebooklm=True,
+                )
+            self.assertIn("notebooklm_error", report)
+            leftovers = [
+                p.name for p in Path(settings.results_root).glob("제출초안_*노트북LM*.docx")
+                if not p.stem.endswith(("_DRAFT", "_DRAFT2"))
+            ]
+            self.assertEqual(leftovers, [], "부분 생성본이 제출 이름으로 잔존")
+
 
 if __name__ == "__main__":
     unittest.main()

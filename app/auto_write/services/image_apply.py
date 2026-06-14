@@ -32,6 +32,7 @@ from docx.text.paragraph import Paragraph
 
 from .infographic_suggest import ImageSuggestion, suggest_images_ai
 from .usage_acceptance import SELF_BLOCK_RE as _SELF_BLOCK_RE
+from .usage_acceptance import dedup_cells as _dedup_cells
 
 _DIVIDER = "─" * 30
 
@@ -277,6 +278,10 @@ def apply_images_docx(
 # --- NotebookLM 블록 제거 (삽입의 역연산) -------------------------------------
 
 _PROMPT_INTRO_RE = re.compile(r"슬라이드\s*생성에\s*붙여넣으세요")
+# 삽입 헤더(_add_prompt_header) 고유 흔적 — 셀 단위 제거에서 실본문 오삭제를 막는 안전핀.
+# 단독 📊 는 실문서(차트 언급 등)에도 나올 수 있어 제외 — 대괄호 헤더/유형 표기만 인정.
+# (헤더가 어디서 갈라져도 [NotebookLM 또는 · 유형: 중 하나는 조각에 남는다.)
+_HEADER_SIG_RE = re.compile(r"\[\s*NotebookLM|·\s*유형\s*:")
 
 
 @dataclass
@@ -295,7 +300,9 @@ class StripReport:
 
 
 def _p_text(elem) -> str:
-    return "".join(elem.itertext())
+    # itertext() 는 python-docx 커스텀 엘리먼트(w:r 등)의 text 프로퍼티와 겹쳐 같은
+    # 텍스트를 중복 반환한다(30자 구분선이 90자로 나옴) — w:t 노드만 이어 붙인다.
+    return "".join(t.text or "" for t in elem.iter(qn("w:t")))
 
 
 def _is_p(elem) -> bool:
@@ -303,8 +310,9 @@ def _is_p(elem) -> bool:
 
 
 def _is_divider_p(elem) -> bool:
-    t = _p_text(elem).strip()
-    return len(t) >= 10 and set(t) <= {"─"}
+    # 삽입기(_add_divider)가 넣는 구분선(_DIVIDER)과 정확히 일치할 때만 블록의 일부로
+    # 본다 — 길이가 다른 사용자 구분선('─' 임의 반복)을 오삭제하지 않기 위함.
+    return _p_text(elem).strip() == _DIVIDER
 
 
 def _collect_block_elements(doc) -> tuple[list, list, int]:
@@ -395,6 +403,41 @@ def strip_notebooklm_blocks(in_docx: str, out_docx: str) -> StripReport:
     report = StripReport(output_docx=str(out_path))
 
     marked, _bodies, marker_count = _collect_block_elements(doc)
+    _seen_ids = {id(e) for e in marked}   # 이미 수집된 요소(셀 보강 중복 추가 방지)
+    _cell_markers = 0                     # 셀 보강으로 추가 제거한 마커 단락 수
+
+    # 셀 단위 보강: 검출(usage_acceptance)은 셀 텍스트(단락을 \n 결합)에 매칭하므로
+    # 마커가 셀 안에서 여러 단락으로 갈라져도 잡는다. 위 단락 패스만으로는
+    # '지웠는데 검출됨'이 남으므로, 같은 결합 방식으로 매치 구간에 걸친 단락을 지운다.
+    # 안전핀: 걸린 단락들의 결합 텍스트에 삽입 헤더 시그니처(_HEADER_SIG_RE)가 있을 때만
+    # 지운다 — 실본문 문장이 우연히 단락 경계에서 패턴을 이룬 경우는 보존하고
+    # 게이트(fail)가 사람에게 넘기게 한다.
+    cell_refs: list = []          # 단락 proxy 생존 유지(lxml id 재사용 → 과소 제거 방지)
+    for cell in _dedup_cells(doc):
+        paras = cell.paragraphs
+        cell_refs.append(paras)
+        texts = [p.text or "" for p in paras]
+        joined = "\n".join(texts)
+        if not _SELF_BLOCK_RE.search(joined):
+            continue
+        spans: list[tuple[int, int]] = []
+        pos = 0
+        for t in texts:
+            spans.append((pos, pos + len(t)))
+            pos += len(t) + 1
+        for m in _SELF_BLOCK_RE.finditer(joined):
+            hit = [para for (a, b), para in zip(spans, paras)
+                   if a < m.end() and m.start() < b]
+            if len(hit) < 2:                      # 단일 단락 매치는 단락 패스가 처리
+                continue
+            if not _HEADER_SIG_RE.search("\n".join(p.text or "" for p in hit)):
+                continue
+            for para in hit:
+                p = para._p
+                if id(p) not in _seen_ids:
+                    _seen_ids.add(id(p))
+                    marked.append(p)
+                    _cell_markers += 1
 
     for elem in marked:
         parent = elem.getparent()
@@ -405,7 +448,7 @@ def strip_notebooklm_blocks(in_docx: str, out_docx: str) -> StripReport:
         if parent.tag == qn("w:tc") and parent.find(qn("w:p")) is None:
             parent.append(OxmlElement("w:p"))
 
-    report.markers_removed = marker_count
+    report.markers_removed = marker_count + _cell_markers
     report.paragraphs_removed = len(marked)
     doc.save(str(out_path))
     return report

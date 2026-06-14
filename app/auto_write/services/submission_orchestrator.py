@@ -97,6 +97,9 @@ class SubmissionPipeline:
         report["steps"].append("finalize")
 
         final_docx = submit_path
+        # 이 실행이 만든 '제출 이름' 산출물 목록 — 게이트 fail/판정불가 시 최종본만이
+        # 아니라 전부 _DRAFT 마킹한다(중간본이 제출용 이름으로 잔존하는 것 차단).
+        artifacts: list[Path] = [submit_path]
 
         # 4. 서식 품질 게이트(내부 백업 수행)
         try:
@@ -113,6 +116,7 @@ class SubmissionPipeline:
                 report["quality"] = {}
             report["steps"].append("quality")
             final_docx = quality_out
+            artifacts.append(quality_out)
         except Exception as exc:
             report["quality_error"] = f"{type(exc).__name__}: {exc}"
 
@@ -145,11 +149,15 @@ class SubmissionPipeline:
         #    공개 이미지 API 가 없는 NotebookLM 은 '수동 슬라이드 생성용 프롬프트'를
         #    그림 위치(표 뒤/본문 앵커)에 넣어, 사용자가 붙여넣어 슬라이드를 만들게 한다.
         if enable_notebooklm:
+            nlm_out = results_root / f"제출초안_{project_id}_노트북LM.docx"
+            _protect_output(nlm_out)
+            # 호출 '전'에 산출물 목록에 올린다 — apply_images 가 파일 생성 후 죽으면
+            # 부분 생성본이 제출 이름의 고아로 남는 것을 막는다(미생성이면 게이트가
+            # exists() 로 건너뛴다).
+            artifacts.append(nlm_out)
             try:
                 from .image_apply import apply_images
 
-                nlm_out = results_root / f"제출초안_{project_id}_노트북LM.docx"
-                _protect_output(nlm_out)
                 nlm_report = apply_images(
                     str(final_docx),
                     str(nlm_out),
@@ -163,6 +171,15 @@ class SubmissionPipeline:
                 final_docx = nlm_out
             except Exception as exc:
                 report["notebooklm_error"] = f"{type(exc).__name__}: {exc}"
+                if nlm_out.exists():
+                    # 생성 도중 실패한 부분 생성본은 게이트 결과와 무관하게 제출 이름을
+                    # 박탈한다(내용 미완·자가삽입 블록 잔존 가능). 마킹 실패도 알린다.
+                    _np, _err = force_draft_name(nlm_out)
+                    if _err:
+                        report["needs_input"].append(
+                            f"노트북LM 부분 생성본 _DRAFT 마킹 실패({_err}) — "
+                            f"제출 금지: {nlm_out.name}"
+                        )
 
         # 6.5 (옵션) 제출 정리(--submit-clean, US-6): 프롬프트를 md 로 보존(손실 0)한
         #     뒤 작업용 블록을 제거한다. 산출은 중립명(_정리본) — 최종 이름은 게이트
@@ -216,25 +233,33 @@ class SubmissionPipeline:
                         f"수용검사 fail {acc.fail_defects}건 — 결함 해결 전 제출 금지(_DRAFT 표시)."
                     )
             if acc is None or not acc.submittable:
-                old = Path(final_docx)
-                new_path, mark_error = force_draft_name(old)
-                if mark_error:
-                    # rename 실패(파일 잠금 등)도 조용히 넘기지 않는다 — 보고와 실제
-                    # 파일명이 어긋나는 것을 사용자에게 명시한다.
-                    report["draft_mark_error"] = mark_error
-                    report["needs_input"].append(
-                        f"_DRAFT 마킹 실패({mark_error}) — 파일명이 제출 이름 그대로이니 "
-                        f"직접 변경 전 제출 금지: {old.name}"
-                    )
-                else:
+                # 최종본만이 아니라 이 실행이 만든 중간 산출물(제출초안_*)에도 _DRAFT 를
+                # 전파한다 — fail 실행의 중간본이 '제출' 이름으로 남으면 사용자가 그것을
+                # 집어 제출할 수 있다(R9 잔여 #9: 중간본 명명 정책).
+                final_old = Path(final_docx)
+                for old in artifacts:
+                    if not old.exists():
+                        continue
+                    new_path, mark_error = force_draft_name(old)
+                    if mark_error:
+                        # rename 실패(파일 잠금 등)도 조용히 넘기지 않는다 — 보고와 실제
+                        # 파일명이 어긋나는 것을 사용자에게 명시한다.
+                        if old == final_old:
+                            report["draft_mark_error"] = mark_error
+                        report["needs_input"].append(
+                            f"_DRAFT 마킹 실패({mark_error}) — 파일명이 제출 이름 그대로이니 "
+                            f"직접 변경 전 제출 금지: {old.name}"
+                        )
+                        continue
                     if new_path != old:
                         # 같은 파일을 가리키던 리포트 경로도 함께 갱신(댕글링 방지).
                         for key in ("submit_docx", "quality_docx"):
                             if report.get(key) == str(old):
                                 report[key] = str(new_path)
-                    final_docx = new_path
-                    if acc is not None:
-                        report["acceptance"]["draft_marked"] = True
+                    if old == final_old:
+                        final_docx = new_path
+                        if acc is not None:
+                            report["acceptance"]["draft_marked"] = True
 
         # 제출 정리 경로의 최종 명명(US-6) — 게이트 '통과'가 확인된 경우에만
         # 중립명(_정리본)을 '_제출용' 으로 올린다(게이트 결과의 상호배타 단일 결정).

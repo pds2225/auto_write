@@ -215,6 +215,11 @@ def _dedup_cells(doc: Document):
     return out
 
 
+# 제거기(image_apply.strip_notebooklm_blocks)가 검출과 같은 셀 순회(병합 중복
+# 제거 포함)를 쓰도록 공개한다 — 순회가 어긋나면 '지웠는데 검출됨'이 재발한다.
+dedup_cells = _dedup_cells
+
+
 def _iter_extra_paragraphs(doc: Document) -> Iterator[tuple[str, Paragraph]]:
     """머리글·바닥글 단락(표 셀 포함) — 본문 밖에 숨은 표시 텍스트(ACC-9).
 
