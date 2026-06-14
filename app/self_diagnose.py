@@ -14,7 +14,8 @@ cd D:\auto_write\app
 python self_diagnose.py "C:\경로\제출본.docx"
 python self_diagnose.py 제출본.docx --json 진단결과.json
 
-종료코드: 0 = 제출가능, 2 = 제출불가(DRAFT)
+종료코드 계약(ENC-2): 0 = 제출가능 / 1 = 입력 오류(파일 없음 등) /
+2 = 제출불가(DRAFT) / 3 = 검사 불능(검사기 예외 — 환경/의존성 문제, 판정 불가 = 제출 금지)
 읽기 전용 — 문서를 수정하지 않는다.
 """
 
@@ -56,6 +57,15 @@ def _requirement_status(req: dict, failed_ids: set[str], all_pass: bool) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # ENC-1: 기본 콘솔(cp949) 캡처 환경에서 em-dash(—) 등으로 UnicodeEncodeError
+    # 크래시가 나면 진단 결과·JSON 이 전부 유실된다 — 출력 인코딩을 utf-8 로 강제
+    # (이미 utf-8 이거나 reconfigure 미지원 환경이면 조용히 무시).
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
     ap = argparse.ArgumentParser(description="실사용 기준 자가진단 (읽기 전용)")
     ap.add_argument("docx", help="진단할 DOCX 경로")
     ap.add_argument("--json", dest="json_out", help="결과 JSON 저장 경로")
@@ -69,7 +79,13 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[오류] 파일 없음: {src}")
         return 1
 
-    report = run_acceptance(src, AcceptanceConfig(blind_review=args.blind_review))
+    try:
+        report = run_acceptance(src, AcceptanceConfig(blind_review=args.blind_review))
+    except Exception as exc:
+        # 검사기 자체가 죽으면 '판정 불가'다 — 문서 결함(2)과 구분되는 exit 3 으로
+        # 보고해 무인 체인이 '환경 문제(재시도)'와 '문서 문제(수정)'를 구분하게 한다.
+        print(f"[오류] 검사 불능({type(exc).__name__}: {exc}) — 판정 불가, 제출 금지")
+        return 3
     data = report.as_dict()
 
     print(f"\n=== 실사용 자가진단: {src.name} ===")

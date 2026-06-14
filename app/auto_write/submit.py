@@ -61,6 +61,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="공고 요구 산출 형식(예: hwp) — 다르면 제출명 차단(_DRAFT)+변환 안내")
     parser.add_argument("--strict", action="store_true",
                         help="종료코드 계약 활성: 0=제출가능/1=입력오류/2=제출불가/3=검사불능 (기본은 항상 0)")
+    parser.add_argument("--submit-clean", action="store_true",
+                        help="게이트 직전 NotebookLM 프롬프트를 md 로 보존 후 블록 제거 — 통과 시 _제출용 명명")
     args = parser.parse_args(argv)
 
     settings, storage, project_service, evaluation_service = _make()
@@ -86,6 +88,7 @@ def main(argv: list[str] | None = None) -> int:
         acceptance_gate=not args.no_acceptance,
         blind_review=args.blind_review,
         required_format=args.required_format,
+        submit_clean=args.submit_clean,
     )
     print(json.dumps(report, ensure_ascii=False, indent=2))
     print("\n최종 제출초안:", report.get("final_docx", ""))

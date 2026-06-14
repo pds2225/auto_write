@@ -26,6 +26,7 @@
 from __future__ import annotations
 
 import re
+import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -34,7 +35,9 @@ from docx import Document
 
 from ..config import ensure_directories, get_settings
 from .document_quality_orchestrator import DocumentQualityOrchestrator
-from .image_apply import ImageApplyReport, apply_images
+from .image_apply import (
+    ImageApplyReport, apply_images, extract_notebooklm_prompts, strip_notebooklm_blocks,
+)
 from .psst_fill import PSSTFillReport, apply_psst_scaffold
 from .usage_acceptance import (
     AcceptanceConfig, SEV_FAIL, backup_existing_output, force_draft_name, run_acceptance,
@@ -76,6 +79,8 @@ class AutopilotReport:
     draft_mark_error: str = ""
     format_mismatch: str = ""  # 산출 형식 게이트(ACC-5) — 요구 형식과 다르면 사유 기록
     overwrite_backup: str = ""  # 재실행 보호(PIPE-2) — 기존 산출물 백업 경로
+    prompt_md: str = ""        # 제출 정리(US-6) — 보존된 슬라이드 프롬프트 md 경로
+    strip_removed: int = 0     # 제출 정리(US-6) — 제거한 작업용 블록 단락 수
     # 5단계(잔존)
     residual_placeholders: list[str] = field(default_factory=list)
     manual_todo: list[str] = field(default_factory=list)
@@ -106,6 +111,8 @@ class AutopilotReport:
             "draft_mark_error": self.draft_mark_error,
             "format_mismatch": self.format_mismatch,
             "overwrite_backup": self.overwrite_backup,
+            "prompt_md": self.prompt_md,
+            "strip_removed": self.strip_removed,
             "residual_placeholders": self.residual_placeholders,
             "manual_todo": self.manual_todo,
         }
@@ -166,6 +173,7 @@ def run_autopilot(
     acceptance_gate: bool = True,
     blind_review: bool = False,
     required_format: Optional[str] = None,
+    submit_clean: bool = False,
     write_report: bool = True,
 ) -> AutopilotReport:
     """문서 품질 수정 전 단계를 무인 연속 실행한다.
@@ -184,6 +192,9 @@ def run_autopilot(
         required_format: 공고 요구 산출 형식(예: "hwp"). 최종 산출 확장자가 다르면
             제출명을 차단(_DRAFT)하고 변환 안내를 남긴다(ACC-5 — 판정은 이
             파이프라인 레벨에서만, run_acceptance 내부 아님). 기본 None=무검사.
+        submit_clean: True 면 게이트 직전에 NotebookLM 프롬프트를 md 로 보존한 뒤
+            작업용 블록을 제거한다(US-6) — '기본 산출이 항상 _DRAFT' 구조 해소.
+            기본 False = 기존 동작(블록 유지, 작업용 중간본).
         write_report: True 면 통합 리포트(md/json) 생성.
 
     Returns:
@@ -257,10 +268,24 @@ def run_autopilot(
         report.psst_scaffolded_areas = list(psst.scaffolded_areas)
     else:
         # PSST 보강 생략 시 2단계 결과를 최종으로 복사
-        import shutil
-
         final_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(str(stage_in), str(final_path))
+
+    # --- 3.5단계(옵션): 제출 정리(--submit-clean, US-6) ---
+    #     프롬프트를 md 로 보존(손실 0)한 뒤 작업용 블록을 제거하고 나서 게이트를
+    #     통과시킨다 — 블록 삽입 때문에 '기본 산출이 항상 _DRAFT' 가 되는 구조 해소.
+    if submit_clean:
+        prompts = extract_notebooklm_prompts(str(final_path))
+        if prompts:
+            md_path = results_root / f"{stem}_슬라이드프롬프트.md"
+            backup_existing_output(md_path)
+            md_path.write_text("\n\n---\n\n".join(prompts), encoding="utf-8")
+            report.prompt_md = str(md_path)
+        tmp_clean = results_root / f"{stem}_ap3_clean.docx"
+        strip_rep = strip_notebooklm_blocks(str(final_path), str(tmp_clean))
+        report.strip_removed = strip_rep.paragraphs_removed
+        # Path.replace 는 드라이브가 다르면 실패(WinError 17) — 복사로 대체
+        shutil.copyfile(str(tmp_clean), str(final_path))
 
     # --- 4단계: 실사용 수용검사 게이트(R8) — fail 결함이 있으면 DRAFT 마킹 ---
     #     게이트 자신이 죽어도 통과로 취급하지 않고(fail-closed: 판정 불가 = 제출 금지),

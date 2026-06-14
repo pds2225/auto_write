@@ -22,8 +22,13 @@ argument-hint: <입력DOCX경로> [--output 결과.docx] [--underline] [--keep-g
 - `--normalize-fonts` (선택): 글자크기 이상치 보정 활성.
 - `--placeholder-only` (선택): 차트 생성 없이 이미지 자리표시만 삽입(가장 안전).
 - `--no-psst` (선택): PSST 작성 보강 생략.
+- `--submit-clean` (선택): NotebookLM 프롬프트를 md 로 보존 후 작업용 블록 제거(제출 정리).
+- `--blind-review` (선택): 블라인드 공고 — ○○○ 마스킹 허용 + 실명 잔존 검출.
+- `--required-format hwp` (선택): HWP 필수 공고 — DOCX 산출이면 제출명 차단 + 변환 안내.
+- `--strict` (선택): 종료코드 0=제출가능/2=제출불가/3=검사불능(환경 문제 — 재시도).
 
 규칙: **원본 DOCX 는 절대 덮어쓰지 않는다.** 출력=입력이면 `ValueError`. 후처리 전 백업이 자동 생성된다.
+재실행 시 이전 산출물은 `_prev<타임스탬프>` 백업으로 보존된다.
 
 ## 실행 워크플로우(단계)
 1. 입력 확인: 입력 DOCX 존재 확인. 없으면 중단·보고. 작업 디렉토리를 `D:\auto_write\app` 으로 둔다.
@@ -33,7 +38,13 @@ argument-hint: <입력DOCX경로> [--output 결과.docx] [--underline] [--keep-g
 3. 결과 검수: `python _build_chochang.py inspect "<결과DOCX경로>"` 로 구조 확인.
 4. 잔존 placeholder/가이드 확인: 빈칸 표식(`___`, `(작성)`, `※ 작성`)·양식 안내문구 잔존 여부 보고.
 5. 점수/게이트 판정 확인: 리포트의 총점·게이트(우수90↑/통과85↑/보완70↑/실패70미만) 보고.
-6. submittable_filler 연계 안내: 잔존 빈칸이 있으면 plan 데이터로 채운 뒤 재실행하도록 안내.
+   **주의: 점수 게이트는 '서식 품질'만 본다 — 85점 이상이어도 제출가능이 아니다.**
+6. **수용검사(제출 가능성) 판정 확인**: 리포트의 수용검사 결과를 보고.
+   - `제출불가(DRAFT)` = 출력명에 `_DRAFT` 강제 — fail 결함(마커·블록·빈칸·미체크 등)
+     해결 전 제출 금지. NotebookLM 블록만 원인이면 `--submit-clean` 후 재검사.
+   - 최종 파일 경로는 항상 리포트의 `output_docx` 로 확인(DRAFT 개명 가능).
+   - 별도 재진단: `python self_diagnose.py "<결과DOCX>"` (exit 0=제출가능/2=제출불가/3=검사불능).
+7. submittable_filler 연계 안내: 잔존 빈칸이 있으면 plan 데이터로 채운 뒤 재실행하도록 안내.
 
 ## 호출 에이전트
 - `executor`: 단계별 PowerShell 명령 실행·결과 수집.
@@ -79,5 +90,7 @@ python document_quality_orchestrator.py --rollback "D:\auto_write\results\backup
 3. 통합 리포트 경로(md)
 4. 총점 및 게이트 결과(우수/통과/보완/실패)
 5. 이미지(차트/자리표시) 수 · PSST 보강 영역
-6. 잔존 placeholder/양식 안내문구 목록(없으면 "없음")
-7. 다음 조치(submittable_filler 로 빈칸 채움 후 재실행 / 제출 가능)
+6. **수용검사 판정(제출가능 / 제출불가(DRAFT) + fail 목록)** — 점수와 별개의 제출 게이트
+7. 잔존 placeholder/양식 안내문구 목록(없으면 "없음")
+8. 다음 조치(submittable_filler 로 빈칸 채움 / --submit-clean 으로 블록 정리 후 재검사 /
+   수용검사 '제출가능' + 점수 게이트 통과일 때만 "제출 가능")

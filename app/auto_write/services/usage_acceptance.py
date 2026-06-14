@@ -182,6 +182,19 @@ def _iter_cells(tables) -> Iterator:
                     yield from _iter_cells(cell.tables)
 
 
+def _iter_tables_recursive(tables) -> Iterator:
+    """표를 중첩(셀 안의 표) 포함해 전부 낸다 — 행 단위 검사들의 공용 순회.
+
+    (_iter_cells 는 lxml proxy 유지 주석이 걸린 민감 경로라 의도적으로 따로 둔다.)
+    """
+    for table in tables:
+        yield table
+        for row in table.rows:
+            for cell in row.cells:
+                if cell.tables:
+                    yield from _iter_tables_recursive(cell.tables)
+
+
 def _dedup_cells(doc: Document):
     """병합 중복을 제거한 셀 목록.
 
@@ -344,29 +357,22 @@ def check_unchecked_choices(doc: Document, config: AcceptanceConfig | None = Non
     defects = 0
     samples: list[str] = []
     seen_labels: set[str] = set()
-    def _walk(tables):
-        nonlocal defects
-        for table in tables:
-            for row in table.rows:
-                cells = _row_cells_dedup(row)
-                row_text = " ".join(cells)
-                if not _CHECKBOX_ROW_RE.search(row_text):
-                    continue
-                label = cells[0][:20] if cells else row_text[:20]
-                if label in seen_labels:
-                    continue
-                seen_labels.add(label)
-                checked = (any(m in row_text for m in _CHECKED_MARKS)
-                           or _STANDALONE_V_RE.search(row_text))  # 'V' 표기 체크 인정(오탐 방지)
-                if "□" in row_text and not checked:
-                    defects += 1
-                    if len(samples) < _MAX_SAMPLES:
-                        samples.append(f"[표] {row_text[:40]}")
-            for row in table.rows:
-                for cell in row.cells:
-                    if cell.tables:
-                        _walk(cell.tables)
-    _walk(doc.tables)
+    for table in _iter_tables_recursive(doc.tables):
+        for row in table.rows:
+            cells = _row_cells_dedup(row)
+            row_text = " ".join(cells)
+            if not _CHECKBOX_ROW_RE.search(row_text):
+                continue
+            label = cells[0][:20] if cells else row_text[:20]
+            if label in seen_labels:
+                continue
+            seen_labels.add(label)
+            checked = (any(m in row_text for m in _CHECKED_MARKS)
+                       or _STANDALONE_V_RE.search(row_text))  # 'V' 표기 체크 인정(오탐 방지)
+            if "□" in row_text and not checked:
+                defects += 1
+                if len(samples) < _MAX_SAMPLES:
+                    samples.append(f"[표] {row_text[:40]}")
     return CheckResult("unchecked_choices", "선택란(택1·해당여부) 미체크", SEV_FAIL, defects, samples,
                        f"체크 표시(■ 등) 없는 선택 행 {defects}개")
 
@@ -374,21 +380,14 @@ def check_unchecked_choices(doc: Document, config: AcceptanceConfig | None = Non
 def check_empty_label_fields(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
     defects = 0
     samples: list[str] = []
-    def _walk(tables):
-        nonlocal defects
-        for table in tables:
-            for row in table.rows:
-                cells = _row_cells_dedup(row)
-                for i, c in enumerate(cells[:-1]):
-                    if c in _LABEL_FIELDS and not cells[i + 1]:
-                        defects += 1
-                        if len(samples) < _MAX_SAMPLES:
-                            samples.append(f"[표] '{c}' 옆 칸 공란")
-            for row in table.rows:
-                for cell in row.cells:
-                    if cell.tables:
-                        _walk(cell.tables)
-    _walk(doc.tables)
+    for table in _iter_tables_recursive(doc.tables):
+        for row in table.rows:
+            cells = _row_cells_dedup(row)
+            for i, c in enumerate(cells[:-1]):
+                if c in _LABEL_FIELDS and not cells[i + 1]:
+                    defects += 1
+                    if len(samples) < _MAX_SAMPLES:
+                        samples.append(f"[표] '{c}' 옆 칸 공란")
     return CheckResult("empty_label_fields", "필수 라벨 옆 칸 공란", SEV_FAIL, defects, samples,
                        f"공란 필수칸 {defects}개")
 
@@ -468,23 +467,17 @@ def check_masking_violation(doc: Document, config: AcceptanceConfig | None = Non
             if _HANGUL_NAME_RE.fullmatch(v):
                 _flag(where, lbl, v)
 
-    def _walk(tables):
-        for table in tables:
-            for row in table.rows:
-                cells = _row_cells_dedup(row)
-                for i, c in enumerate(cells[:-1]):
-                    if re.sub(r"[\s:：]", "", c) not in _BLIND_LABEL_NORM:
-                        continue
-                    v = cells[i + 1].strip()
-                    if not v or _is_masked_value(v):
-                        continue
-                    if _HANGUL_NAME_RE.fullmatch(v):
-                        _flag("표", c, v)
-            for row in table.rows:
-                for cell in row.cells:
-                    if cell.tables:
-                        _walk(cell.tables)
-    _walk(doc.tables)
+    for table in _iter_tables_recursive(doc.tables):
+        for row in table.rows:
+            cells = _row_cells_dedup(row)
+            for i, c in enumerate(cells[:-1]):
+                if re.sub(r"[\s:：]", "", c) not in _BLIND_LABEL_NORM:
+                    continue
+                v = cells[i + 1].strip()
+                if not v or _is_masked_value(v):
+                    continue
+                if _HANGUL_NAME_RE.fullmatch(v):
+                    _flag("표", c, v)
     return CheckResult("masking_violation", label, SEV_FAIL, defects, samples,
                        f"마스킹 안 된 실명 의심 {defects}건 — 블라인드 공고 위반(탈락 사유)")
 
@@ -565,23 +558,15 @@ def check_paren_choices(doc: Document, config: AcceptanceConfig | None = None) -
     """
     defects = 0
     samples: list[str] = []
-
-    def _walk(tables):
-        nonlocal defects
-        for table in tables:
-            for row in table.rows:
-                row_text = " ".join(_row_cells_dedup(row))
-                if not _CHECKBOX_ROW_RE.search(row_text) or "□" in row_text:
-                    continue
-                if _EMPTY_PAREN_RE.search(row_text) and not _FILLED_PAREN_RE.search(row_text):
-                    defects += 1
-                    if len(samples) < _MAX_SAMPLES:
-                        samples.append(f"[표] {row_text[:40]}")
-            for row in table.rows:
-                for cell in row.cells:
-                    if cell.tables:
-                        _walk(cell.tables)
-    _walk(doc.tables)
+    for table in _iter_tables_recursive(doc.tables):
+        for row in table.rows:
+            row_text = " ".join(_row_cells_dedup(row))
+            if not _CHECKBOX_ROW_RE.search(row_text) or "□" in row_text:
+                continue
+            if _EMPTY_PAREN_RE.search(row_text) and not _FILLED_PAREN_RE.search(row_text):
+                defects += 1
+                if len(samples) < _MAX_SAMPLES:
+                    samples.append(f"[표] {row_text[:40]}")
     return CheckResult("paren_choices", "괄호형 선택란 미선택 의심", SEV_WARN, defects, samples,
                        f"빈 괄호 선택 행 {defects}개 — ( ) 안에 V/○ 표기 필요")
 
@@ -595,24 +580,16 @@ def check_empty_label_fields_ext(doc: Document, config: AcceptanceConfig | None 
     """
     defects = 0
     samples: list[str] = []
-
-    def _walk(tables):
-        nonlocal defects
-        for table in tables:
-            for row in table.rows:
-                cells = _row_cells_dedup(row)
-                for i, c in enumerate(cells[:-1]):
-                    if c in _LABEL_FIELDS:        # 기존 fail 검사 담당분 제외
-                        continue
-                    if _norm_label(c) in _LABEL_NORM_ALL and not cells[i + 1]:
-                        defects += 1
-                        if len(samples) < _MAX_SAMPLES:
-                            samples.append(f"[표] '{c}' 옆 칸 공란(확장 검사)")
-            for row in table.rows:
-                for cell in row.cells:
-                    if cell.tables:
-                        _walk(cell.tables)
-    _walk(doc.tables)
+    for table in _iter_tables_recursive(doc.tables):
+        for row in table.rows:
+            cells = _row_cells_dedup(row)
+            for i, c in enumerate(cells[:-1]):
+                if c in _LABEL_FIELDS:        # 기존 fail 검사 담당분 제외
+                    continue
+                if _norm_label(c) in _LABEL_NORM_ALL and not cells[i + 1]:
+                    defects += 1
+                    if len(samples) < _MAX_SAMPLES:
+                        samples.append(f"[표] '{c}' 옆 칸 공란(확장 검사)")
     return CheckResult("empty_label_fields_ext", "필수 라벨 옆 칸 공란(확장)", SEV_WARN, defects, samples,
                        f"공란 의심 {defects}개 — 라벨 변형·확장 목록 기준(warn 선도입)")
 
@@ -630,32 +607,25 @@ def check_empty_image_slots(doc: Document, config: AcceptanceConfig | None = Non
         tc = cell._tc
         return bool(tc.findall(".//" + qn("w:drawing")) or tc.findall(".//" + qn("w:pict")))
 
-    def _walk(tables):
-        nonlocal defects
-        for table in tables:
-            for row in table.rows:
-                # 병합 중복 제거하되 그림 검사를 위해 셀 객체가 필요하다
-                seen: list = []
-                cells = []
-                for cell in row.cells:
-                    if any(cell._tc is s for s in seen):
-                        continue
-                    seen.append(cell._tc)
-                    cells.append(cell)
-                for i, cell in enumerate(cells[:-1]):
-                    t = cell.text.strip()
-                    if not t or len(t) > 12 or not _IMAGE_LABEL_RE.search(t):
-                        continue
-                    nxt = cells[i + 1]
-                    if not nxt.text.strip() and not _cell_has_image(nxt):
-                        defects += 1
-                        if len(samples) < _MAX_SAMPLES:
-                            samples.append(f"[표] '{t}' 옆 칸에 텍스트·그림 없음")
-            for row in table.rows:
-                for cell in row.cells:
-                    if cell.tables:
-                        _walk(cell.tables)
-    _walk(doc.tables)
+    for table in _iter_tables_recursive(doc.tables):
+        for row in table.rows:
+            # 병합 중복 제거하되 그림 검사를 위해 셀 객체가 필요하다
+            seen: list = []
+            cells = []
+            for cell in row.cells:
+                if any(cell._tc is s for s in seen):
+                    continue
+                seen.append(cell._tc)
+                cells.append(cell)
+            for i, cell in enumerate(cells[:-1]):
+                t = cell.text.strip()
+                if not t or len(t) > 12 or not _IMAGE_LABEL_RE.search(t):
+                    continue
+                nxt = cells[i + 1]
+                if not nxt.text.strip() and not _cell_has_image(nxt):
+                    defects += 1
+                    if len(samples) < _MAX_SAMPLES:
+                        samples.append(f"[표] '{t}' 옆 칸에 텍스트·그림 없음")
     return CheckResult("empty_image_slots", "빈 그림/사진 칸 의심", SEV_WARN, defects, samples,
                        f"그림 미첨부 의심 칸 {defects}개")
 
