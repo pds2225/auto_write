@@ -18,6 +18,7 @@ from auto_write.services.usage_acceptance import (
     check_residual_colored_runs,
     check_paren_choices, check_empty_label_fields_ext,
     check_empty_image_slots, check_page_overflow,
+    check_font_size_spread,
 )
 
 
@@ -542,3 +543,24 @@ def test_run_all_normalizes_colors():
     rep = run_all(d)
     assert rep.colored_runs_normalized >= 1
     assert check_residual_colored_runs(d).defects == 0
+
+
+# --- R6: 글자크기 분산·이상치 검출(WARN) 회귀(원장 매핑 check 테스트 보강) ----------
+
+def test_font_size_spread_flags_outlier():
+    """R6: 8pt 미만/18pt 초과 이상치 글자크기를 WARN 으로 검출한다."""
+    from docx.shared import Pt
+    d = _doc()
+    d.add_paragraph().add_run("정상 본문").font.size = Pt(11)
+    d.add_paragraph().add_run("초소형 이상치").font.size = Pt(6)
+    r = check_font_size_spread(d)
+    assert r.severity == "warn"
+    assert r.defects >= 1
+
+
+def test_font_size_spread_clean_passes():
+    """단일 정상 크기만 있으면 결함 0(이상치·과다분산 없음)."""
+    from docx.shared import Pt
+    d = _doc()
+    d.add_paragraph().add_run("본문 한 종류 크기").font.size = Pt(11)
+    assert check_font_size_spread(d).defects == 0
