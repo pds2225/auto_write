@@ -157,6 +157,10 @@ class SubmissionPipelineTest(unittest.TestCase):
             self.assertTrue(Path(report["final_docx"]).exists())
             self.assertTrue((storage.project_dir("p1") / "output" / "output.docx").exists())
             self.assertGreaterEqual(report["images"]["inserted"], 1)
+            # 품질 단계가 수행되고 리포트가 채워져야 한다(구버전은 q_result.to_dict()
+            # AttributeError → except 로 quality 가 항상 빈 dict 였음 = HarnessResult.as_dict 회귀).
+            self.assertIn("quality", report["steps"])
+            self.assertTrue(report.get("quality"), "품질 리포트가 비어있음 — as_dict 회귀")
 
     def test_pipeline_images_error_does_not_kill_report(self):
         """PIPE-8: 이미지 단계 예외가 비싼 generate/eval 리포트를 날리지 않는다 —

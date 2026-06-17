@@ -110,8 +110,10 @@ class SubmissionPipeline:
             _protect_output(quality_out)
             q_result = quality.run(submit_path, quality_out, write_report=False)
             report["quality_docx"] = str(quality_out)
+            # HarnessResult 는 as_dict() 를 노출한다(to_dict 아님). 구버전은 to_dict() 를
+            # 호출해 AttributeError → except 로 quality 리포트가 항상 빈값이었음.
             try:
-                report["quality"] = q_result.to_dict()
+                report["quality"] = q_result.as_dict()
             except Exception:
                 report["quality"] = {}
             report["steps"].append("quality")

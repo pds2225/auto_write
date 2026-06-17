@@ -576,3 +576,26 @@ def test_strip_cli_gates_final_name(tmp_path: Path) -> None:
     assert rc2 == 0
     assert list(tmp_path.glob("good_nlm_제출용.docx"))
     assert list(tmp_path.glob("good_nlm_슬라이드프롬프트.md"))
+
+
+# --- R4: 앵커 정위치 삽입 — 정방향 우선(역포함 오매칭 차단) 회귀 -----------------
+
+def test_anchor_forward_match_wins_over_reverse_substring() -> None:
+    """앞쪽 본문에 앵커의 짧은 부분문자열이 있어도, 뒤쪽 표의 정방향 매칭
+    앵커가 선택되어야 한다(1차 정방향 패스 우선). 구버전은 역포함으로 앞 단락을 먼저
+    잡아 프롬프트 블록을 엉뚱한 위치에 삽입했다."""
+    from auto_write.services.image_apply import _find_anchor
+
+    doc = Document()
+    doc.add_paragraph("사업화")        # 3자 — 역포함 임계(>4) 미달
+    doc.add_paragraph("추진계획")      # 4자 — 구 코드(>=4)에서 오매칭, 신 코드(>4)에서 탈락
+    doc.add_paragraph("사업화추진")    # 5자 — 앵커의 부분문자열(구 코드 오매칭 위험)
+    table = doc.add_table(rows=1, cols=1)
+    table.rows[0].cells[0].text = "사업화추진계획 로드맵 단계별 마일스톤"
+    doc.add_paragraph("맺음말 단락.")
+
+    anchor = "사업화추진계획 로드맵 단계별 마일스톤"
+    para, table_found = _find_anchor(doc, anchor)
+    assert para is not None, "앵커를 찾지 못함 — 표 셀 정방향 매칭이 동작해야 함"
+    assert table_found is not None, "표 안 단락이 아님 — 뒤쪽 표 셀이 선택되어야 함"
+    assert anchor in para.text, "선택된 단락이 앵커 키를 포함해야 함(정방향)"
