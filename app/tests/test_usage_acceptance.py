@@ -480,3 +480,65 @@ def test_requirement_status_rules():
     assert sd._requirement_status(req, {"unresolved_markers"}, False) == "부분달성"
     assert sd._requirement_status(req, set(), True) == "달성"
     assert sd._requirement_status(req, {"unresolved_markers", "self_inserted_blocks"}, False) == "미달성"
+
+
+# --- R11: 유색 텍스트 검정 정규화(교정) — ACC-3 역연산 회귀 ----------------------
+
+def test_normalize_colored_text_flips_acc3():
+    """파란/회색 유색 본문을 검정으로 정규화하면 ACC-3 결함이 0이 되어야 한다."""
+    from docx.shared import RGBColor
+    from auto_write.services.doc_quality_ops import normalize_colored_text_to_black
+
+    d = _doc()
+    p = d.add_paragraph()
+    r = p.add_run("파란 안내문구")
+    r.font.color.rgb = RGBColor(0x00, 0x00, 0xFF)
+    g = d.add_paragraph()
+    gr = g.add_run("회색 가이드")
+    gr.font.color.rgb = RGBColor(0x80, 0x80, 0x80)
+    d.add_paragraph().add_run("검정 본문(상속)")  # 색 미지정 — 보존 대상
+
+    # before: ACC-3 가 2건 검출
+    assert check_residual_colored_runs(d).defects == 2
+
+    n = normalize_colored_text_to_black(d)
+    assert n == 2, "유색 런 2개를 검정으로 바꿔야 함"
+
+    # after: 0건 + 멱등(두 번째는 0)
+    assert check_residual_colored_runs(d).defects == 0
+    assert normalize_colored_text_to_black(d) == 0
+    # 텍스트 무손실
+    assert d.paragraphs[0].runs[0].text == "파란 안내문구"
+    assert d.paragraphs[2].runs[0].text == "검정 본문(상속)"
+
+
+def test_normalize_colored_text_preserves_white():
+    """보존색(흰색 계열)은 검정으로 바꾸지 않는다(표 머리글 흰 글씨 등)."""
+    from docx.shared import RGBColor
+    from auto_write.services.doc_quality_ops import normalize_colored_text_to_black
+
+    d = _doc()
+    w = d.add_paragraph()
+    wr = w.add_run("흰색 머리글")
+    wr.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+    assert normalize_colored_text_to_black(d) == 0  # 보존색은 건드리지 않음
+
+
+def test_color_preserve_set_in_sync_with_detection():
+    """교정(docx_ops._PRESERVE_COLORS)과 검출(usage_acceptance._COLOR_PRESERVE) 보존색 동기 가드."""
+    from auto_write.services.docx_ops import _PRESERVE_COLORS as REMEDIATE
+    from auto_write.services.usage_acceptance import _COLOR_PRESERVE as DETECT
+    assert REMEDIATE == DETECT, "보존색 집합이 검출/교정 간 어긋나면 안 됨"
+
+
+def test_run_all_normalizes_colors():
+    """run_all 이 유색 텍스트 정규화를 포함해 ACC-3 를 0으로 만든다(파이프라인 배선)."""
+    from docx.shared import RGBColor
+    from auto_write.services.doc_quality_ops import run_all
+
+    d = _doc()
+    pr = d.add_paragraph().add_run("파란 안내문구 본문입니다")
+    pr.font.color.rgb = RGBColor(0x00, 0x00, 0xFF)
+    rep = run_all(d)
+    assert rep.colored_runs_normalized >= 1
+    assert check_residual_colored_runs(d).defects == 0

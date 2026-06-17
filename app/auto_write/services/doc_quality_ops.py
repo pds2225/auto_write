@@ -23,7 +23,14 @@ from docx.oxml.ns import qn
 from docx.shared import Pt
 
 # 검증된 헬퍼 재사용 (docx_ops.py)
-from .docx_ops import _iter_body_paragraphs, _paragraph_text, GUIDE_MARKER_RE
+from .docx_ops import (
+    _iter_body_paragraphs,
+    _paragraph_text,
+    GUIDE_MARKER_RE,
+    _PRESERVE_COLORS,
+    _normalize_color_value,
+    _set_run_color_black_unless_preserved,
+)
 
 # ---------------------------------------------------------------------------
 # 상수 / 정규식
@@ -96,6 +103,7 @@ class QualityOpsReport:
     paragraphs_emphasized: int = 0
     font_sizes_normalized: int = 0
     paragraphs_unified: int = 0
+    colored_runs_normalized: int = 0
     notes: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict:
@@ -108,6 +116,7 @@ class QualityOpsReport:
             "paragraphs_emphasized": self.paragraphs_emphasized,
             "font_sizes_normalized": self.font_sizes_normalized,
             "paragraphs_unified": self.paragraphs_unified,
+            "colored_runs_normalized": self.colored_runs_normalized,
             "notes": list(self.notes),
         }
 
@@ -687,6 +696,60 @@ def remove_table_guide_rows(doc: Document, *, max_len: int = 500) -> int:
 # 통합 실행기
 # ---------------------------------------------------------------------------
 
+def _iter_all_paragraph_elements(doc: Document):
+    """본문 직계 + 모든 표 셀(중첩 표 포함) 단락(w:p lxml 요소)을 중복 없이 순회."""
+    for p in _iter_body_paragraphs(doc):
+        yield p
+    seen: set[int] = set()
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                cid = id(cell._tc)
+                if cid in seen:
+                    continue
+                seen.add(cid)
+                for p in cell._tc.iter(qn("w:p")):
+                    yield p
+
+
+def normalize_colored_text_to_black(doc: Document, *, enable: bool = True) -> int:
+    """검정 아닌 유색 본문 텍스트(파란 안내문구·회색 가이드 등)를 검정으로 정규화한다.
+
+    ``usage_acceptance.check_residual_colored_runs`` (ACC-3) 가 fail 로 잡는 결함의
+    역연산 — '명시적으로 검정(000000)·보존색(_PRESERVE_COLORS, 흰색 계열)이 아닌 색이
+    지정된 런'의 색만 검정으로 바꾼다.
+
+    안전 원칙(최소 변경):
+    - 색 미지정(테마 상속)·검정·보존색·테마색(w:val 없음) 런은 건드리지 않는다.
+    - 텍스트는 변경하지 않는다(날조 0). 굵게/밑줄 등 강조는 보존(색만 변경).
+    - 검증된 ``docx_ops._set_run_color_black_unless_preserved`` 를 재사용(단일 출처).
+
+    Returns:
+        색을 검정으로 바꾼 런 수(멱등 — 두 번째 실행은 0).
+    """
+    if not enable:
+        return 0
+    changed = 0
+    for para in _iter_all_paragraph_elements(doc):
+        for run in para.findall(qn("w:r")):
+            if not "".join(t.text or "" for t in run.findall(qn("w:t"))).strip():
+                continue  # 보이는 텍스트가 있는 런만
+            rpr = run.find(qn("w:rPr"))
+            if rpr is None:
+                continue
+            color = rpr.find(qn("w:color"))
+            if color is None:
+                continue  # 색 미지정(상속) — 검출도 통과시키므로 보존
+            hexv = _normalize_color_value(
+                color.get(qn("w:val")) or color.get("w:val") or color.get("val")
+            )
+            if not hexv or hexv == "000000" or hexv in _PRESERVE_COLORS:
+                continue  # 테마색(val 없음)·검정·보존색은 보존
+            _set_run_color_black_unless_preserved(run)
+            changed += 1
+    return changed
+
+
 def run_all(
     doc: Document,
     *,
@@ -695,10 +758,11 @@ def run_all(
     underline: bool = False,
     normalize_fonts: bool = False,
     unify_formatting: bool = True,
+    normalize_colors: bool = True,
 ) -> QualityOpsReport:
     """모든 결정론적 후처리를 안전한 순서로 1회 적용하고 집계 리포트를 반환한다.
 
-    순서: 안내삭제(body+표) → 글머리표공백 → 표공백 → 빈단락 → 서식통일 → 강조 → (옵션)폰트
+    순서: 안내삭제(body+표) → 글머리표공백 → 표공백 → 빈단락 → 서식통일 → 유색→검정 → 강조 → (옵션)폰트
 
     ``unify_formatting`` 은 기본 활성(live) — 단락별 크기/글꼴을 지배값으로 통일한다.
     강조(emphasize)보다 먼저 실행해 굵게 처리한 런의 서식이 덮이지 않게 한다.
@@ -714,6 +778,7 @@ def run_all(
     report.table_cells_cleaned = cleanup_table_whitespace(doc)
     report.empty_paragraphs_removed = remove_empty_paragraphs(doc)
     report.paragraphs_unified = unify_paragraph_formatting(doc, enable=unify_formatting)
+    report.colored_runs_normalized = normalize_colored_text_to_black(doc, enable=normalize_colors)
     if emphasize:
         report.paragraphs_emphasized = emphasize_key_sentences(doc, underline=underline)
     report.font_sizes_normalized = normalize_font_sizes(doc, enable=normalize_fonts)
