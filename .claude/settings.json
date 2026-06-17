@@ -43,6 +43,28 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "^(Workflow|Agent|Bash|PowerShell)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\session-resume-auto\\scripts\\resume_bg_log.py\""
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\session-resume-auto\\scripts\\resume_session_end.py\""
+          }
+        ]
+      }
     ]
   }
 }
