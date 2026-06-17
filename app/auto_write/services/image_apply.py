@@ -89,22 +89,13 @@ def _iter_table_contexts(table, top_table):
                 yield from _iter_table_contexts(nested, top_table)
 
 
-def _anchor_matches(anchor_text: str, para_text: str) -> bool:
-    a = (anchor_text or "").strip()
-    t = (para_text or "").strip()
-    if not a or not t:
-        return False
-    key = a[:40]
-    if key and key in t:
-        return True
-    # 표 헤더처럼 여러 셀을 합쳐 만든 앵커: 셀 텍스트가 앵커의 일부일 때도 매칭.
-    if len(t) >= 4 and t in a:
-        return True
-    return False
-
-
 def _find_anchor(doc: Document, anchor_text: str):
     """anchor_text 와 일치/부분일치하는 단락을 본문 + 표 셀에서 찾는다.
+
+    2-패스 전략:
+    - 1차 패스: 정방향 매칭(anchor_text[:40] in para_text)만 사용. 발견 시 즉시 반환.
+    - 2차 패스: 역포함(para_text in anchor_text) 허용하되 임계 강화(len >= 8).
+      표 헤더처럼 여러 셀을 합쳐 만든 앵커 대응 목적이므로 1차에서 못 찾았을 때만.
 
     Returns:
         (paragraph, top_table). 못 찾으면 (None, None).
@@ -112,9 +103,25 @@ def _find_anchor(doc: Document, anchor_text: str):
     """
     if not (anchor_text or "").strip():
         return None, None
+    a = anchor_text.strip()
+    key = a[:40]
+
+    # 1차 패스: 정방향 매칭만
+    if key:
+        for para, table in _iter_anchor_contexts(doc):
+            t = (para.text or "").strip()
+            if t and key in t:
+                return para, table
+
+    # 2차 패스: 역포함 허용(임계 강화: 앵커 길이의 25% 이상 & 절대 4자 초과).
+    # 표 헤더 합산 앵커(예: "추진 일정 마일스톤 담당")의 셀 텍스트("추진 일정", 6자)는
+    # 앵커 대비 비율이 높아 통과하고, 단순 부분 키워드("사업화", 3자)는 탈락한다.
+    min_ratio = 0.25
     for para, table in _iter_anchor_contexts(doc):
-        if _anchor_matches(anchor_text, para.text):
+        t = (para.text or "").strip()
+        if len(t) > 4 and t in a and len(t) >= len(a) * min_ratio:
             return para, table
+
     return None, None
 
 
