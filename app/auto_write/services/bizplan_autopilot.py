@@ -74,6 +74,8 @@ class BizplanReport:
     acceptance_fail_defects: int = 0
     acceptance_failed_checks: list[str] = field(default_factory=list)
     draft_marked: bool = False
+    acceptance_error: str = ""
+    draft_mark_error: str = ""
     score_history: list[LoopScore] = field(default_factory=list)
     needs_confirm: list[str] = field(default_factory=list)
     evidence_used: list[str] = field(default_factory=list)
@@ -98,6 +100,8 @@ class BizplanReport:
             "acceptance_fail_defects": self.acceptance_fail_defects,
             "acceptance_failed_checks": self.acceptance_failed_checks,
             "draft_marked": self.draft_marked,
+            "acceptance_error": self.acceptance_error,
+            "draft_mark_error": self.draft_mark_error,
             "score_history": [s.as_dict() for s in self.score_history],
             "needs_confirm": self.needs_confirm,
             "evidence_used": self.evidence_used,
@@ -244,6 +248,9 @@ def run_bizplan_autopilot(
         report.acceptance_verdict = ap.acceptance_verdict
         report.acceptance_fail_defects = ap.acceptance_fail_defects
         report.acceptance_failed_checks = list(ap.acceptance_failed_checks)
+        report.acceptance_error = ap.acceptance_error
+        report.draft_mark_error = ap.draft_mark_error
+        report.draft_marked = ap.draft_marked
         cur = ap.output_docx
 
         # 3) 공고 채점 + 목표 판정
@@ -261,8 +268,16 @@ def run_bizplan_autopilot(
 
     # 최종본 저장 — 수용검사 fail 이면 '제출' 이름으로 내보내지 않는다.
     # (중간본 _DRAFT 를 깨끗한 이름으로 복사하면 마킹이 소실되므로 최종 이름에도 강제)
-    if (report.acceptance_verdict and not report.acceptance_submittable
-            and not final_path.stem.endswith("_DRAFT")):
+    # fail-closed(R9): 정상 fail(verdict) 뿐 아니라 검사불능(acceptance_error)·내부 autopilot
+    # 의 _DRAFT 마킹(draft_marked, 위에서 ap 전파)·마킹실패(draft_mark_error)에도 _DRAFT 를
+    # 강제한다 — 예외 경로에서 verdict 가 빈 문자열이라 깨끗한 제출 이름으로 세탁되던 누수 차단.
+    needs_draft = (
+        report.draft_marked
+        or bool(report.acceptance_error)
+        or bool(report.draft_mark_error)
+        or (report.acceptance_verdict and not report.acceptance_submittable)
+    )
+    if needs_draft and not final_path.stem.endswith(("_DRAFT", "_DRAFT2")):
         final_path = final_path.with_name(f"{final_path.stem}_DRAFT{final_path.suffix}")
         report.draft_marked = True
     final_path.parent.mkdir(parents=True, exist_ok=True)
@@ -291,6 +306,14 @@ def _build_todo(report: BizplanReport) -> list[str]:
             f"결함 해결 전 제출 금지(출력명 _DRAFT)."
         )
         todo.extend(f"  · {c}" for c in report.acceptance_failed_checks)
+    if report.acceptance_error:
+        todo.append(
+            f"수용검사 실행 실패({report.acceptance_error}) — 판정 불가, 제출 금지(출력명 _DRAFT)."
+        )
+    if report.draft_mark_error:
+        todo.append(
+            f"_DRAFT 마킹 실패({report.draft_mark_error}) — 파일명 직접 변경 전 제출 금지."
+        )
     for nc in report.needs_confirm:
         todo.append(f"[확인필요] {nc}")
     if report.prompts_inserted:

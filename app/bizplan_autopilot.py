@@ -87,8 +87,13 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     def _strict_exit() -> int:
-        if (args.strict and report.acceptance_verdict
-                and not report.acceptance_submittable):
+        if not args.strict:
+            return 0
+        # 검사불능(예외)·_DRAFT 마킹 실패 = 판정 불가 → 3
+        # (auto_write_autopilot / submit / self_diagnose 의 종료코드 계약과 일치)
+        if report.acceptance_error or report.draft_mark_error:
+            return 3
+        if report.acceptance_verdict and not report.acceptance_submittable:
             return 2
         return 0
 

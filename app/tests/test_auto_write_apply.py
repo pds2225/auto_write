@@ -298,6 +298,29 @@ def test_bizplan_in_equals_out_blocked(tmp_path: Path) -> None:
         run_bizplan_autopilot(str(src), str(src), use_ai=False)
 
 
+def test_bizplan_fail_closed_on_acceptance_error(tmp_path: Path, monkeypatch) -> None:
+    """R9 fail-open 차단: 내부 autopilot 수용검사가 예외로 죽으면(검사불능, verdict='')
+    bizplan 최종본도 _DRAFT 로 강제되고 acceptance_error 가 전파돼야 한다.
+    (이전 누수: verdict 가 빈 문자열이라 DRAFT 가드를 건너뛰어 깨끗한 제출 이름으로 복사.)"""
+    from auto_write.services.bizplan_autopilot import run_bizplan_autopilot
+    import auto_write.services.autopilot_pipeline as ap_mod
+
+    def _boom(*a, **k):
+        raise RuntimeError("acceptance crashed")
+
+    monkeypatch.setattr(ap_mod, "run_acceptance", _boom)
+
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    _make_doc(src, with_table=True)
+    r = run_bizplan_autopilot(str(src), str(out), use_ai=False, write_report=False)
+    assert r.acceptance_error, "검사 예외가 acceptance_error 로 전파되어야 함"
+    assert r.draft_marked is True
+    assert r.output_docx.endswith("_DRAFT.docx")
+    assert not out.exists(), "검사불능인데 깨끗한 제출 이름으로 나가면 안 됨"
+    assert any(("판정 불가" in t) or ("실행 실패" in t) for t in r.manual_todo)
+
+
 # --- NotebookLM 블록 제거 (R5 오답노트: 제출본에 작업용 블록 잔존 재발 방지) ---
 
 def _check(path: Path, check_id: str):
