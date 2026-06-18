@@ -699,9 +699,19 @@ def check_font_size_spread(doc: Document, config: AcceptanceConfig | None = None
                        f"크기 {len(sizes)}종, 이상치(8pt 미만/18pt 초과) {outliers}개")
 
 
+def _iter_all_tables(tables):
+    """최상위 + 중첩 표(셀 안 표)를 모두 순회한다(빈 행 검사 등 표 전수 점검용)."""
+    for table in tables:
+        yield table
+        for row in table.rows:
+            for cell in row.cells:
+                if cell.tables:
+                    yield from _iter_all_tables(cell.tables)
+
+
 def check_empty_table_rows(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
     defects = 0
-    for table in doc.tables:
+    for table in _iter_all_tables(doc.tables):  # 중첩 표 포함(RAW doc.tables 만 보던 사각지대 보완)
         for row in table.rows:
             cells = _row_cells_dedup(row)
             if cells and all(not c for c in cells):

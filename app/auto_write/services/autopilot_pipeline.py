@@ -247,7 +247,7 @@ def run_autopilot(
     report.ops_summary = (
         f"안내문구-{o.guide_paragraphs_removed} 글머리표-{o.bullet_spacing_fixed} "
         f"표셀-{o.table_cells_cleaned} 빈단락-{o.empty_paragraphs_removed} "
-        f"강조-{o.paragraphs_emphasized}"
+        f"강조-{o.paragraphs_emphasized} 유색→검정-{o.colored_runs_normalized}"
     )
     stage_in = Path(qresult.output_docx)
 
