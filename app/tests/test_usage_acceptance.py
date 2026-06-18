@@ -470,6 +470,24 @@ def test_self_diagnose_exit3_on_checker_crash(tmp_path, monkeypatch):
     assert sd.main([str(src)]) == 3
 
 
+def test_self_diagnose_json_save_failure_keeps_exit_contract(tmp_path):
+    """R9: --json 저장 실패(없는 부모 폴더)가 진단 종료코드(0/2)를 오염시키지 않는다.
+    (구버전: write_text OSError 가 try 밖이라 미처리 예외→exit 1 로 계약 깨짐.)"""
+    import self_diagnose as sd
+
+    src = tmp_path / "ok.docx"
+    d = Document()
+    d.add_paragraph("본 사업은 휴머노이드 안전제어 칩을 개발한다.")
+    t = d.add_table(rows=1, cols=2)
+    t.cell(0, 0).text = "명 칭"
+    t.cell(0, 1).text = "테스트(주)"
+    d.save(str(src))
+    bad_json = tmp_path / "없는폴더" / "r.json"  # 부모 디렉터리 없음 → write_text OSError
+    rc = sd.main([str(src), "--json", str(bad_json)])
+    assert rc in (0, 2), f"JSON 저장 실패가 종료코드 계약을 오염시킴(크래시/1): {rc}"
+    assert not bad_json.exists()
+
+
 # --- US-7: 원장 판정 로직(LEDG-5/6) --------------------------------------------
 
 def test_requirement_status_rules():

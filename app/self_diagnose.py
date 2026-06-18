@@ -112,9 +112,15 @@ def main(argv: list[str] | None = None) -> int:
         data["ledger_gaps"] = gaps
 
     if args.json_out:
-        Path(args.json_out).write_text(
-            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-        print(f"\nJSON 저장: {args.json_out}")
+        # JSON 저장은 부수효과 — 실패해도 이미 산정·출력된 진단 종료코드(0/2)를
+        # 오염시키지 않는다(경고만). 나쁜 경로/권한으로 미처리 예외→exit 1 되던 것 차단.
+        try:
+            Path(args.json_out).write_text(
+                json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+            print(f"\nJSON 저장: {args.json_out}")
+        except OSError as exc:
+            print(f"\n[경고] JSON 저장 실패({type(exc).__name__}: {exc}) — "
+                  f"진단 결과는 위 출력을 참조", file=sys.stderr)
 
     return 0 if report.submittable else 2
 
