@@ -303,6 +303,8 @@ class DocumentQualityOrchestrator:
         lines.append(f"- 정리한 표 셀: {o.table_cells_cleaned}")
         lines.append(f"- 삭제한 빈 단락: {o.empty_paragraphs_removed}")
         lines.append(f"- 강조 처리 문장: {o.paragraphs_emphasized}")
+        lines.append(f"- 단락 서식 통일: {o.paragraphs_unified}")
+        lines.append(f"- 유색→검정 정규화 런: {o.colored_runs_normalized}")
         lines.append(f"- 글자크기 표준화: {o.font_sizes_normalized}")
         lines.append("")
         if r.psst is not None:
