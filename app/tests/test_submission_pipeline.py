@@ -461,6 +461,48 @@ class SubmissionPipelineTest(unittest.TestCase):
                     )
                     self.assertTrue(p.exists(), f"{key} 경로 없음: {p}")
 
+    def test_pipeline_submit_clean_fail_drafts_final(self):
+        """R7/R9: --submit-clean 경로에서 게이트 fail 시 최종본(_정리본)이 _DRAFT 로
+        마킹되어야 한다. clean_out 이 artifacts 에 미등재라 _DRAFT 누락→제출 이름으로
+        유출되던 결함의 회귀(구버전은 final 이 _정리본.docx 깨끗한 이름)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            settings = _settings(tmp_path)
+            storage = _FakeStorage(tmp_path)
+            oa = OpenAIService(settings)
+            prof = _profile(tmp_path)
+            ps = _FakeProjectService(storage, prof, oa)
+            pi = ProjectInput(
+                template_id="t1",
+                organization_profile={"기업명": "테스트(주)"},
+                project_meta={},
+            )
+            storage.save_project_input("p1", pi)
+            pipeline = SubmissionPipeline(ps, EvaluationService(oa), storage, settings)
+            fake = mock.Mock(submittable=False, fail_defects=1, results=[])
+            with mock.patch(
+                "auto_write.services.submission_orchestrator.run_acceptance",
+                return_value=fake,
+            ):
+                report = pipeline.run(
+                    "p1", announcement_text="",
+                    enable_images=False, enable_notebooklm=True, submit_clean=True,
+                )
+            self.assertIn("submit_clean", report["steps"])
+            self.assertFalse(report["acceptance"]["submittable"])
+            # 최종본이 _DRAFT 로 마킹되어 제출 이름(_정리본)으로 유출되지 않아야 한다
+            self.assertTrue(
+                report["final_docx"].endswith("_DRAFT.docx"),
+                f"최종본 미마킹(제출 이름 유출): {report['final_docx']}",
+            )
+            self.assertTrue(report["acceptance"]["draft_marked"])
+            # results 최상위에 '제출' 이름(비 DRAFT) 산출물 잔존 0
+            leftovers = [
+                p.name for p in Path(settings.results_root).glob("제출초안_*.docx")
+                if not p.stem.endswith(("_DRAFT", "_DRAFT2"))
+            ]
+            self.assertEqual(leftovers, [])
+
     def test_pipeline_notebooklm_partial_output_loses_submit_name(self):
         """R9 잔여 보강: apply_images 가 파일 생성 '후' 죽으면 부분 생성본이
         제출 이름의 고아로 남지 않는다(즉시 _DRAFT 박탈 + 게이트 artifacts 등재)."""

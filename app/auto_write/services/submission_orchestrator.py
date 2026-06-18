@@ -239,7 +239,13 @@ class SubmissionPipeline:
                 # 전파한다 — fail 실행의 중간본이 '제출' 이름으로 남으면 사용자가 그것을
                 # 집어 제출할 수 있다(R9 잔여 #9: 중간본 명명 정책).
                 final_old = Path(final_docx)
-                for old in artifacts:
+                # 최종본이 artifacts 에 없을 수 있다(예: --submit-clean 의 _정리본은
+                # artifacts 에 등록되지 않음) — 항상 포함시켜 fail 시 최종본이 _DRAFT
+                # 마킹에서 누락(제출 이름으로 유출)되지 않게 한다(R7/R9).
+                draft_targets = list(artifacts)
+                if final_old not in draft_targets:
+                    draft_targets.append(final_old)
+                for old in draft_targets:
                     if not old.exists():
                         continue
                     new_path, mark_error = force_draft_name(old)
