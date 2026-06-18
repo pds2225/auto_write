@@ -275,7 +275,12 @@ class SubmissionPipeline:
             fp_clean = Path(final_docx)
             acc_ok = (bool((report.get("acceptance") or {}).get("submittable"))
                       and not report.get("acceptance_error"))
-            if acc_ok and fp_clean.stem.endswith("_정리본"):
+            # 형식 일치까지 확인된 경우에만 _제출용 승격 — 불일치면 _정리본 을 유지해
+            # 직후 7.5 형식 게이트가 _정리본_DRAFT 로 강등하게 한다('_제출용_DRAFT' 모순명
+            # 방지, L188 정책: 통과 시에만 _제출용).
+            format_ok = (not required_format
+                         or fp_clean.suffix.lstrip(".").lower() == required_format.lstrip(".").lower())
+            if acc_ok and format_ok and fp_clean.stem.endswith("_정리본"):
                 submit_name = fp_clean.with_name(fp_clean.name.replace("_정리본", "_제출용"))
                 _protect_output(submit_name)
                 fp_clean.replace(submit_name)

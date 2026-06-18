@@ -503,6 +503,39 @@ class SubmissionPipelineTest(unittest.TestCase):
             ]
             self.assertEqual(leftovers, [])
 
+    def test_pipeline_submit_clean_format_mismatch_no_contradiction_name(self):
+        """R13: --submit-clean + required_format 불일치 시, 통과 문서라도 _제출용 으로
+        승격하지 않고 _정리본_DRAFT 로 강등한다('_제출용_DRAFT' 모순명 금지)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            settings = _settings(tmp_path)
+            storage = _FakeStorage(tmp_path)
+            oa = OpenAIService(settings)
+            prof = _profile(tmp_path)
+            ps = _FakeProjectService(storage, prof, oa)
+            pi = ProjectInput(
+                template_id="t1",
+                organization_profile={"기업명": "테스트(주)"},
+                project_meta={},
+            )
+            storage.save_project_input("p1", pi)
+            pipeline = SubmissionPipeline(ps, EvaluationService(oa), storage, settings)
+            fake = mock.Mock(submittable=True, fail_defects=0, results=[])
+            with mock.patch(
+                "auto_write.services.submission_orchestrator.run_acceptance",
+                return_value=fake,
+            ):
+                report = pipeline.run(
+                    "p1", announcement_text="",
+                    enable_images=False, enable_notebooklm=True,
+                    submit_clean=True, required_format="hwp",
+                )
+            final = report["final_docx"]
+            self.assertIn("format_mismatch", report)
+            self.assertTrue(final.endswith("_DRAFT.docx"), f"형식 불일치 미차단: {final}")
+            self.assertNotIn("_제출용", final, f"형식 불일치인데 _제출용 승격됨(모순명): {final}")
+            self.assertIn("_정리본", Path(final).stem)
+
     def test_pipeline_notebooklm_partial_output_loses_submit_name(self):
         """R9 잔여 보강: apply_images 가 파일 생성 '후' 죽으면 부분 생성본이
         제출 이름의 고아로 남지 않는다(즉시 _DRAFT 박탈 + 게이트 artifacts 등재)."""
