@@ -18,6 +18,9 @@
 - 실행: 시스템 Python(venv 없음) — **테스트·실행은 `py -3.11` 권장**(PATH 기본 3.14 는
   matplotlib 부재로 pytest 수집 에러). `app/` 이 import 기준. AI 키 없어도 동작.
 - 진단 CLI: `app/_build_chochang.py inspect|analyze|generate|finalize|struct|heads`.
+- **평생개발목표: DOCX↔HWP 양방향 변환 일치도 100%**(측정 하네스 conversion_fidelity 로
+  baseline%→개선 루프, 거짓완료 금지 — 항상 측정값으로 보고). 정부양식이 HWP 라 입출력단
+  변환은 `docx-hwp-conversion` 스킬이 담당한다.
 
 ---
 
@@ -64,7 +67,8 @@ py -3.11 -m pytest tests/ -q
 세부: docx-template-cleanup · bullet-spacing-normalization · paragraph-font-sizing ·
 table-whitespace-cleanup · content-emphasis · document-type-classification ·
 psst-structure-check · infographic-suggestion · document-quality-scoring ·
-backup-and-rollback · document-quality-inspection
+backup-and-rollback · document-quality-inspection ·
+**docx-hwp-conversion**(DOCX↔HWP/HWPX 양방향 변환, 입출력단)
 
 ### 커맨드 (`.claude/commands/`)
 
@@ -143,3 +147,4 @@ hwp_docx_convert(HWP↔DOCX 변환, COM 대화형 전용)
 | 2026-06-18 | selfdev 루프 #13: R12 분량 게이트(page_overflow) 실배선 — 죽은 코드 활성 | 수정 app/{self_diagnose,auto_write_autopilot}.py·app/auto_write/{submit.py,services/{autopilot_pipeline,submission_orchestrator}}.py / 테스트 app/tests/{test_usage_acceptance,test_auto_write_apply}.py(신규 2) / 원장 R12 근거 | 감사 #7: check_page_overflow 는 max_pages/ai_section_max 가 None 이면 비활성인데 실사용 진입점 3개(self_diagnose:83·autopilot_pipeline:296·submission_orchestrator:215)가 전부 AcceptanceConfig(blind_review=..)만 넘겨 분량 검사가 테스트 외 항상 죽은 코드 — 원장 R12'달성' 표기와 모순(사용자가 aijinjae 15p/2p 발동 수단 없음). 수정: 3개 CLI(self_diagnose/auto_write_autopilot/submit)에 --max-pages·--ai-section-max 추가 → run_autopilot·SubmissionPipeline.run·self_diagnose 시그니처 통해 AcceptanceConfig 로 전달. (page_overflow 는 SEV_WARN 이라 게이트 차단 아닌 경고 가시화.) 회귀 2(spy 로 CLI→config 전달 확인). 검증: 신규 2 통과 |
 | 2026-06-18 | auto-dev: 감사 잔여 큐 처리(Q1~Q4) | 수정 app/auto_write/services/{bizplan_autopilot,usage_acceptance,autopilot_pipeline}.py·app/bizplan_autopilot.py / 테스트 {test_auto_write_apply,test_submission_pipeline}.py(신규 2) / 원장 R13 | auto-dev 오케 목표지정 모드로 ultraqa 감사 잔여 처리: ①Q1(#3/#12) bizplan 에 --required-format/--submit-clean 배선(시그니처+CLI+내부 run_autopilot 전달) → bizplan 경로도 형식게이트·정리 활성 ②Q2(#21) submit/SubmissionPipeline 형식게이트(required_format 불일치→_DRAFT) 회귀 테스트 ③Q3(#20) check_empty_table_rows 가 중첩 표(셀 안 표) 빈 행 미검출하던 것 _iter_all_tables 재귀로 보완 ④Q4(#19) autopilot ops_summary 에 유색→검정 정규화 건수 표기 추가. Q5(마스킹 영문 성명, uncertain)는 오탐 위험으로 사람검증 영역 분리. py-3.11 회귀 0 |
 | 2026-06-19 | auto-dev: PR #30 병합 + 잔여 LOW(#18)·#24 수용 | 병합 PR #30(표셀 dedup·R12·bizplan·중첩표·R13테스트, master 7814b88) / 수정 app/auto_write/services/document_quality_orchestrator.py·원장 R11 | 검증된 열린 PR #30(228 passed) 병합으로 완료. #18: orchestrator report_md(사람용)에 단락서식통일·유색→검정 정규화 건수 표기 추가. #24(color 접근 except 침묵)는 FAIL 체크 오탐방지 방어동작이라 무변경 수용. Q5(마스킹 영문성명)·blind_review CLI 전파 회귀는 사람검증/코퍼스 영역 분리 |
+| 2026-06-19 | docx↔hwp 변환 스킬 신규+오케 등록 | .claude/skills/docx-hwp-conversion·document-quality-orchestrator·CLAUDE.md | HWP 제출물 변환을 하네스 정식 단계로(평생목표=DOCX↔HWP 100% 일치도 측정→개선 루프). 기존 hwp_docx.py/hwp_docx_convert.convert 자산을 pushy 트리거 스킬로 래핑(3단 폴백·DOCX→HWP 한글 COM 대화형 전용·원본 미수정). 오케 데이터흐름에 입력단(HWP→DOCX)·출력단(DOCX→HWP) + 단계표 행 추가(doc-architect 변환시점 결정·doc-safety-guard 원본보존). 신규 에이전트·커맨드 없음. 문서만 수정(코드 무변경) |
