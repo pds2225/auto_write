@@ -42,6 +42,7 @@ from typing import Any, Iterator
 from docx import Document
 from docx.oxml.ns import qn
 from docx.text.paragraph import Paragraph
+from docx.text.run import Run
 
 SEV_FAIL = "fail"
 SEV_WARN = "warn"
@@ -403,6 +404,7 @@ def check_residual_colored_runs(doc: Document, config: AcceptanceConfig | None =
     - 색 미지정(상속)·검정(000000)·흰색 계열(_COLOR_PRESERVE)은 통과.
     - 자기삽입 블록(_SELF_BLOCK_RE 단락)은 self_inserted_blocks 가 잡으므로 제외
       (이중 집계 방지). 단락 단위로 센다.
+    - 순회 범위: 본문·표 셀 + 머리글/바닥글 + 텍스트박스(ACC-9, 다른 fail 검사와 동일).
     """
     defects = 0
     samples: list[str] = []
@@ -412,7 +414,10 @@ def check_residual_colored_runs(doc: Document, config: AcceptanceConfig | None =
         text = (p.text or "").strip()
         if not text or _SELF_BLOCK_RE.search(text):
             return
-        for run in p.runs:
+        # 직계 run 뿐 아니라 하이퍼링크/필드(w:hyperlink>w:r 등) 안 run 까지 본다 —
+        # 파란 하이퍼링크형 안내문구가 R11 검출을 우회하던 갭 차단(교정도 동일 범위).
+        for _r_el in p._p.findall(".//" + qn("w:r")):
+            run = Run(_r_el, p)
             if not (run.text or "").strip():
                 continue
             try:
@@ -435,6 +440,11 @@ def check_residual_colored_runs(doc: Document, config: AcceptanceConfig | None =
     for cell in _dedup_cells(doc):
         for p in cell.paragraphs:
             _scan_para("표", p)
+    # 머리글·바닥글·텍스트박스의 유색 안내문구도 본다(다른 fail 검사와 동일 범위 — ACC-9).
+    for where, p in _iter_extra_paragraphs(doc):
+        _scan_para(where, p)
+    for p in _iter_textbox_paragraphs(doc):
+        _scan_para("텍스트박스", p)
     return CheckResult("residual_colored_runs", "검정 아닌 유색 텍스트 잔존", SEV_FAIL, defects, samples,
                        f"유색 텍스트 단락 {defects}개 — 안내문구 삭제·본문 검정 규칙 위반 의심")
 

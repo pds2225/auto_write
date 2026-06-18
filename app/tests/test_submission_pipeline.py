@@ -157,6 +157,10 @@ class SubmissionPipelineTest(unittest.TestCase):
             self.assertTrue(Path(report["final_docx"]).exists())
             self.assertTrue((storage.project_dir("p1") / "output" / "output.docx").exists())
             self.assertGreaterEqual(report["images"]["inserted"], 1)
+            # 품질 단계가 수행되고 리포트가 채워져야 한다(구버전은 q_result.to_dict()
+            # AttributeError → except 로 quality 가 항상 빈 dict 였음 = HarnessResult.as_dict 회귀).
+            self.assertIn("quality", report["steps"])
+            self.assertTrue(report.get("quality"), "품질 리포트가 비어있음 — as_dict 회귀")
 
     def test_pipeline_images_error_does_not_kill_report(self):
         """PIPE-8: 이미지 단계 예외가 비싼 generate/eval 리포트를 날리지 않는다 —
@@ -456,6 +460,81 @@ class SubmissionPipelineTest(unittest.TestCase):
                         p.stem.endswith(("_DRAFT", "_DRAFT2")), f"{key} 오마킹: {p.name}"
                     )
                     self.assertTrue(p.exists(), f"{key} 경로 없음: {p}")
+
+    def test_pipeline_submit_clean_fail_drafts_final(self):
+        """R7/R9: --submit-clean 경로에서 게이트 fail 시 최종본(_정리본)이 _DRAFT 로
+        마킹되어야 한다. clean_out 이 artifacts 에 미등재라 _DRAFT 누락→제출 이름으로
+        유출되던 결함의 회귀(구버전은 final 이 _정리본.docx 깨끗한 이름)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            settings = _settings(tmp_path)
+            storage = _FakeStorage(tmp_path)
+            oa = OpenAIService(settings)
+            prof = _profile(tmp_path)
+            ps = _FakeProjectService(storage, prof, oa)
+            pi = ProjectInput(
+                template_id="t1",
+                organization_profile={"기업명": "테스트(주)"},
+                project_meta={},
+            )
+            storage.save_project_input("p1", pi)
+            pipeline = SubmissionPipeline(ps, EvaluationService(oa), storage, settings)
+            fake = mock.Mock(submittable=False, fail_defects=1, results=[])
+            with mock.patch(
+                "auto_write.services.submission_orchestrator.run_acceptance",
+                return_value=fake,
+            ):
+                report = pipeline.run(
+                    "p1", announcement_text="",
+                    enable_images=False, enable_notebooklm=True, submit_clean=True,
+                )
+            self.assertIn("submit_clean", report["steps"])
+            self.assertFalse(report["acceptance"]["submittable"])
+            # 최종본이 _DRAFT 로 마킹되어 제출 이름(_정리본)으로 유출되지 않아야 한다
+            self.assertTrue(
+                report["final_docx"].endswith("_DRAFT.docx"),
+                f"최종본 미마킹(제출 이름 유출): {report['final_docx']}",
+            )
+            self.assertTrue(report["acceptance"]["draft_marked"])
+            # results 최상위에 '제출' 이름(비 DRAFT) 산출물 잔존 0
+            leftovers = [
+                p.name for p in Path(settings.results_root).glob("제출초안_*.docx")
+                if not p.stem.endswith(("_DRAFT", "_DRAFT2"))
+            ]
+            self.assertEqual(leftovers, [])
+
+    def test_pipeline_submit_clean_format_mismatch_no_contradiction_name(self):
+        """R13: --submit-clean + required_format 불일치 시, 통과 문서라도 _제출용 으로
+        승격하지 않고 _정리본_DRAFT 로 강등한다('_제출용_DRAFT' 모순명 금지)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            settings = _settings(tmp_path)
+            storage = _FakeStorage(tmp_path)
+            oa = OpenAIService(settings)
+            prof = _profile(tmp_path)
+            ps = _FakeProjectService(storage, prof, oa)
+            pi = ProjectInput(
+                template_id="t1",
+                organization_profile={"기업명": "테스트(주)"},
+                project_meta={},
+            )
+            storage.save_project_input("p1", pi)
+            pipeline = SubmissionPipeline(ps, EvaluationService(oa), storage, settings)
+            fake = mock.Mock(submittable=True, fail_defects=0, results=[])
+            with mock.patch(
+                "auto_write.services.submission_orchestrator.run_acceptance",
+                return_value=fake,
+            ):
+                report = pipeline.run(
+                    "p1", announcement_text="",
+                    enable_images=False, enable_notebooklm=True,
+                    submit_clean=True, required_format="hwp",
+                )
+            final = report["final_docx"]
+            self.assertIn("format_mismatch", report)
+            self.assertTrue(final.endswith("_DRAFT.docx"), f"형식 불일치 미차단: {final}")
+            self.assertNotIn("_제출용", final, f"형식 불일치인데 _제출용 승격됨(모순명): {final}")
+            self.assertIn("_정리본", Path(final).stem)
 
     def test_pipeline_notebooklm_partial_output_loses_submit_name(self):
         """R9 잔여 보강: apply_images 가 파일 생성 '후' 죽으면 부분 생성본이

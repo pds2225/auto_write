@@ -23,7 +23,14 @@ from docx.oxml.ns import qn
 from docx.shared import Pt
 
 # 검증된 헬퍼 재사용 (docx_ops.py)
-from .docx_ops import _iter_body_paragraphs, _paragraph_text, GUIDE_MARKER_RE
+from .docx_ops import (
+    _iter_body_paragraphs,
+    _paragraph_text,
+    GUIDE_MARKER_RE,
+    _PRESERVE_COLORS,
+    _normalize_color_value,
+    _set_run_color_black_unless_preserved,
+)
 
 # ---------------------------------------------------------------------------
 # 상수 / 정규식
@@ -96,6 +103,7 @@ class QualityOpsReport:
     paragraphs_emphasized: int = 0
     font_sizes_normalized: int = 0
     paragraphs_unified: int = 0
+    colored_runs_normalized: int = 0
     notes: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict:
@@ -108,6 +116,7 @@ class QualityOpsReport:
             "paragraphs_emphasized": self.paragraphs_emphasized,
             "font_sizes_normalized": self.font_sizes_normalized,
             "paragraphs_unified": self.paragraphs_unified,
+            "colored_runs_normalized": self.colored_runs_normalized,
             "notes": list(self.notes),
         }
 
@@ -687,6 +696,89 @@ def remove_table_guide_rows(doc: Document, *, max_len: int = 500) -> int:
 # 통합 실행기
 # ---------------------------------------------------------------------------
 
+def _iter_all_paragraph_elements(doc: Document):
+    """본문 직계 + 표 셀(중첩 포함) + 텍스트박스 + 머리글/바닥글 단락(w:p lxml 요소)을
+    중복 없이 순회한다.
+
+    유색 안내문구는 머리글·바닥글·텍스트박스에도 들어가므로(검출 ACC-3 와 동일 범위로
+    정렬), 본문/표만 보던 사각지대를 보완한다.
+    """
+    for p in _iter_body_paragraphs(doc):
+        yield p
+    seen: set[int] = set()
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                cid = id(cell._tc)
+                if cid in seen:
+                    continue
+                seen.add(cid)
+                for p in cell._tc.iter(qn("w:p")):
+                    yield p
+    # 텍스트박스(w:txbxContent) 안 단락
+    for txbx in doc.element.body.iter(qn("w:txbxContent")):
+        for p in txbx.iter(qn("w:p")):
+            yield p
+    # 머리글·바닥글(명시 정의가 있을 때만 — 빈 linked 머리글 접근 시 part 신규생성 부작용 회피)
+    for section in doc.sections:
+        for hf in (section.header, section.footer):
+            if hf is None or hf.is_linked_to_previous:
+                continue
+            for p in hf.paragraphs:
+                yield p._p
+            for tbl in hf.tables:
+                for row in tbl.rows:
+                    for cell in row.cells:
+                        for p in cell.paragraphs:
+                            yield p._p
+
+
+def normalize_colored_text_to_black(doc: Document, *, enable: bool = True) -> int:
+    """검정 아닌 유색 텍스트(파란 안내문구·회색 가이드 등)를 검정으로 정규화한다.
+
+    ``usage_acceptance.check_residual_colored_runs`` (ACC-3) 가 fail 로 잡는 결함을
+    교정한다 — '명시적으로 6자리 hex 색이 지정됐고 검정(000000)·보존색
+    (_PRESERVE_COLORS, 흰색 계열)이 아닌' 런의 색만 검정으로 바꾼다.
+
+    안전 원칙(최소 변경, 검출과 정합):
+    - 색 미지정(테마 상속)·검정·보존색·테마색(w:themeColor)·``w:val="auto"`` 등
+      **정규 6자리 hex 가 아닌 색은 건드리지 않는다**(검출도 비결함으로 보므로 — 역연산 정합).
+    - 텍스트는 변경하지 않는다(날조 0). 굵게/밑줄 등 강조는 보존(색만 변경).
+    - 검증된 ``docx_ops._set_run_color_black_unless_preserved`` 를 재사용(단일 출처).
+    - 순회 범위는 본문+표+텍스트박스+머리글/바닥글(검출과 동일). 다만 검출이 제외하는
+      자기삽입 블록(NotebookLM/스캐폴드) 런도 여기선 검정화될 수 있다 — 그 블록은
+      strip/submit-clean 으로 별도 제거되므로 무해(게이트는 self_inserted_blocks 로 DRAFT 유지).
+
+    Returns:
+        색을 검정으로 바꾼 런 수(멱등 — 두 번째 실행은 0).
+    """
+    if not enable:
+        return 0
+    changed = 0
+    for para in _iter_all_paragraph_elements(doc):
+        # 직계 + 하이퍼링크/필드 안 run(.//w:r)까지 — 파란 하이퍼링크형 안내문구도 교정
+        # (검출 check_residual_colored_runs 와 동일 범위로 정합).
+        for run in para.findall(".//" + qn("w:r")):
+            if not "".join(t.text or "" for t in run.findall(qn("w:t"))).strip():
+                continue  # 보이는 텍스트가 있는 런만
+            rpr = run.find(qn("w:rPr"))
+            if rpr is None:
+                continue
+            color = rpr.find(qn("w:color"))
+            if color is None:
+                continue  # 색 미지정(상속) — 검출도 통과시키므로 보존
+            hexv = _normalize_color_value(
+                color.get(qn("w:val")) or color.get("w:val") or color.get("val")
+            )
+            # 정규 6자리 hex 만 대상 — 'auto'·테마·단축형 등은 검출(color.rgb=None)이
+            # 비결함으로 보므로 교정도 보존한다(역연산 계약·멱등성 유지).
+            if not re.fullmatch(r"[0-9a-f]{6}", hexv) or hexv == "000000" or hexv in _PRESERVE_COLORS:
+                continue
+            _set_run_color_black_unless_preserved(run)
+            changed += 1
+    return changed
+
+
 def run_all(
     doc: Document,
     *,
@@ -695,10 +787,11 @@ def run_all(
     underline: bool = False,
     normalize_fonts: bool = False,
     unify_formatting: bool = True,
+    normalize_colors: bool = True,
 ) -> QualityOpsReport:
     """모든 결정론적 후처리를 안전한 순서로 1회 적용하고 집계 리포트를 반환한다.
 
-    순서: 안내삭제(body+표) → 글머리표공백 → 표공백 → 빈단락 → 서식통일 → 강조 → (옵션)폰트
+    순서: 안내삭제(body+표) → 글머리표공백 → 표공백 → 빈단락 → 서식통일 → 유색→검정 → 강조 → (옵션)폰트
 
     ``unify_formatting`` 은 기본 활성(live) — 단락별 크기/글꼴을 지배값으로 통일한다.
     강조(emphasize)보다 먼저 실행해 굵게 처리한 런의 서식이 덮이지 않게 한다.
@@ -714,6 +807,7 @@ def run_all(
     report.table_cells_cleaned = cleanup_table_whitespace(doc)
     report.empty_paragraphs_removed = remove_empty_paragraphs(doc)
     report.paragraphs_unified = unify_paragraph_formatting(doc, enable=unify_formatting)
+    report.colored_runs_normalized = normalize_colored_text_to_black(doc, enable=normalize_colors)
     if emphasize:
         report.paragraphs_emphasized = emphasize_key_sentences(doc, underline=underline)
     report.font_sizes_normalized = normalize_font_sizes(doc, enable=normalize_fonts)
