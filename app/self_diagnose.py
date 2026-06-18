@@ -72,6 +72,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--ledger", default=str(_LEDGER_DEFAULT), help="요구사항 원장 경로")
     ap.add_argument("--blind-review", action="store_true",
                     help="블라인드 공고 모드 — ○○○ 마스킹 허용 + 실명 잔존 검출(fail)")
+    ap.add_argument("--max-pages", type=int, default=None,
+                    help="본문 분량 제한(p) — 초과 시 warn(예: aijinjae 15). 미지정=검사 안 함")
+    ap.add_argument("--ai-section-max", type=int, default=None,
+                    help="AI활용계획 등 섹션 분량 제한(p, 예: 2). 미지정=검사 안 함")
     args = ap.parse_args(argv)
 
     src = Path(args.docx)
@@ -80,7 +84,11 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     try:
-        report = run_acceptance(src, AcceptanceConfig(blind_review=args.blind_review))
+        report = run_acceptance(src, AcceptanceConfig(
+            blind_review=args.blind_review,
+            max_pages=args.max_pages,
+            ai_section_max=args.ai_section_max,
+        ))
     except Exception as exc:
         # 검사기 자체가 죽으면 '판정 불가'다 — 문서 결함(2)과 구분되는 exit 3 으로
         # 보고해 무인 체인이 '환경 문제(재시도)'와 '문서 문제(수정)'를 구분하게 한다.

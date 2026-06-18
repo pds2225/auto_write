@@ -63,6 +63,10 @@ def main(argv: list[str] | None = None) -> int:
                         help="종료코드 계약 활성: 0=제출가능/1=입력오류/2=제출불가/3=검사불능 (기본은 항상 0)")
     parser.add_argument("--submit-clean", action="store_true",
                         help="게이트 직전 NotebookLM 프롬프트를 md 로 보존 후 블록 제거 — 통과 시 _제출용 명명")
+    parser.add_argument("--max-pages", type=int, default=None,
+                        help="본문 분량 제한(p) — 초과 시 수용검사 warn(예: 15). 미지정=검사 안 함")
+    parser.add_argument("--ai-section-max", type=int, default=None,
+                        help="AI활용계획 등 섹션 분량 제한(p, 예: 2). 미지정=검사 안 함")
     args = parser.parse_args(argv)
 
     settings, storage, project_service, evaluation_service = _make()
@@ -89,6 +93,8 @@ def main(argv: list[str] | None = None) -> int:
         blind_review=args.blind_review,
         required_format=args.required_format,
         submit_clean=args.submit_clean,
+        max_pages=args.max_pages,
+        ai_section_max=args.ai_section_max,
     )
     print(json.dumps(report, ensure_ascii=False, indent=2))
     print("\n최종 제출초안:", report.get("final_docx", ""))

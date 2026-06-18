@@ -174,6 +174,8 @@ def run_autopilot(
     blind_review: bool = False,
     required_format: Optional[str] = None,
     submit_clean: bool = False,
+    max_pages: Optional[int] = None,
+    ai_section_max: Optional[int] = None,
     write_report: bool = True,
 ) -> AutopilotReport:
     """문서 품질 수정 전 단계를 무인 연속 실행한다.
@@ -245,7 +247,7 @@ def run_autopilot(
     report.ops_summary = (
         f"안내문구-{o.guide_paragraphs_removed} 글머리표-{o.bullet_spacing_fixed} "
         f"표셀-{o.table_cells_cleaned} 빈단락-{o.empty_paragraphs_removed} "
-        f"강조-{o.paragraphs_emphasized}"
+        f"강조-{o.paragraphs_emphasized} 유색→검정-{o.colored_runs_normalized}"
     )
     stage_in = Path(qresult.output_docx)
 
@@ -293,7 +295,8 @@ def run_autopilot(
     if acceptance_gate:
         acc = None
         try:
-            acc = run_acceptance(str(final_path), AcceptanceConfig(blind_review=blind_review))
+            acc = run_acceptance(str(final_path), AcceptanceConfig(
+                blind_review=blind_review, max_pages=max_pages, ai_section_max=ai_section_max))
         except Exception as exc:
             report.acceptance_error = f"{type(exc).__name__}: {exc}"
         if acc is not None:

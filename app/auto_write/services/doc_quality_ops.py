@@ -706,14 +706,20 @@ def _iter_all_paragraph_elements(doc: Document):
     for p in _iter_body_paragraphs(doc):
         yield p
     seen: set[int] = set()
+    # lxml proxy 는 참조가 사라지면 id 가 재사용될 수 있어, id 만 저장하면 서로 다른 셀이
+    # '이미 본 것'으로 오판돼 과소집계(셀 누락)된다. refs 로 proxy 생존을 유지해 id 안정성을
+    # 보장한다(검출기 usage_acceptance._dedup_cells 와 동일 가드 — 검출↔교정 순회 정합).
+    refs: list = []  # proxy 생존 유지용 — 삭제 금지
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
-                cid = id(cell._tc)
+                tc = cell._tc
+                cid = id(tc)
                 if cid in seen:
                     continue
                 seen.add(cid)
-                for p in cell._tc.iter(qn("w:p")):
+                refs.append(tc)
+                for p in tc.iter(qn("w:p")):
                     yield p
     # 텍스트박스(w:txbxContent) 안 단락
     for txbx in doc.element.body.iter(qn("w:txbxContent")):
