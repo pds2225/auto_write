@@ -631,3 +631,27 @@ def test_header_colored_run_detected_and_normalized():
     assert check_residual_colored_runs(d).defects >= 1, "머리글 유색을 검출해야 함"
     assert normalize_colored_text_to_black(d) >= 1, "머리글 유색을 검정으로 교정해야 함"
     assert check_residual_colored_runs(d).defects == 0, "교정 후 0"
+
+
+# --- R11 보강: 하이퍼링크 내부 유색 run 검출·교정(.//w:r 범위) -------------------
+
+_HYPERLINK_BLUE_XML = (
+    '<w:hyperlink xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+    '<w:r><w:rPr><w:color w:val="0000FF"/></w:rPr><w:t>여기서 다운로드</w:t></w:r>'
+    '</w:hyperlink>'
+)
+
+
+def test_hyperlink_colored_run_detected_and_normalized():
+    """<w:hyperlink> 로 감싼 파란 안내 run 도 검출(ACC-3)·교정 범위에 포함돼야 한다.
+    (구버전: p.runs / findall(w:r) 가 직계만 봐서 하이퍼링크형 안내문구가 R11 통째로 우회.)"""
+    from docx.oxml import parse_xml
+    from auto_write.services.doc_quality_ops import normalize_colored_text_to_black
+
+    d = _doc()
+    p = d.add_paragraph("안내: ")
+    p._p.append(parse_xml(_HYPERLINK_BLUE_XML))
+
+    assert check_residual_colored_runs(d).defects >= 1, "하이퍼링크 내부 유색을 검출해야 함"
+    assert normalize_colored_text_to_black(d) >= 1, "하이퍼링크 내부 유색을 검정으로 교정해야 함"
+    assert check_residual_colored_runs(d).defects == 0, "교정 후 0"

@@ -756,7 +756,9 @@ def normalize_colored_text_to_black(doc: Document, *, enable: bool = True) -> in
         return 0
     changed = 0
     for para in _iter_all_paragraph_elements(doc):
-        for run in para.findall(qn("w:r")):
+        # 직계 + 하이퍼링크/필드 안 run(.//w:r)까지 — 파란 하이퍼링크형 안내문구도 교정
+        # (검출 check_residual_colored_runs 와 동일 범위로 정합).
+        for run in para.findall(".//" + qn("w:r")):
             if not "".join(t.text or "" for t in run.findall(qn("w:t"))).strip():
                 continue  # 보이는 텍스트가 있는 런만
             rpr = run.find(qn("w:rPr"))
