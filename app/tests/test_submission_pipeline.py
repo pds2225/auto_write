@@ -605,6 +605,66 @@ class SubmissionPipelineTest(unittest.TestCase):
             ]
             self.assertEqual(leftovers, [], "부분 생성본이 제출 이름으로 잔존")
 
+    def test_pipeline_forwards_blind_review_to_acceptance(self):
+        """G002: SubmissionPipeline.run(blind_review=..) 가 run_acceptance 의
+        AcceptanceConfig.blind_review 로 전달돼야 한다(엔진 동작은 test_usage_acceptance).
+        구버전 회귀: 전달 누락이면 submit 경로만 블라인드 마스킹 검사 사각지대가 된다."""
+        import auto_write.services.submission_orchestrator as so
+
+        for flag in (True, False):
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp_path = Path(tmp)
+                settings = _settings(tmp_path)
+                storage = _FakeStorage(tmp_path)
+                oa = OpenAIService(settings)
+                prof = _profile(tmp_path)
+                ps = _FakeProjectService(storage, prof, oa)
+                pi = ProjectInput(
+                    template_id="t1",
+                    organization_profile={"기업명": "테스트(주)"},
+                    project_meta={},
+                )
+                storage.save_project_input("p1", pi)
+                captured = {}
+                real = so.run_acceptance
+
+                def _spy(path, config=None, _c=captured, _r=real):
+                    _c["blind"] = getattr(config, "blind_review", "MISS")
+                    return _r(path, config)
+
+                pipeline = SubmissionPipeline(ps, EvaluationService(oa), storage, settings)
+                with mock.patch.object(so, "run_acceptance", _spy):
+                    pipeline.run(
+                        "p1", announcement_text="",
+                        enable_images=False, enable_notebooklm=False,
+                        blind_review=flag,
+                    )
+                self.assertEqual(captured["blind"], flag)
+
+    def test_submit_cli_forwards_blind_review(self):
+        """G002: submit CLI 의 --blind-review 가 SubmissionPipeline.run 으로 전달."""
+        from auto_write import submit
+
+        captured = {}
+
+        class _FakePipeline:
+            def __init__(self, *a, **k):
+                pass
+
+            def run(self, project_id, announcement_text="", **kw):
+                captured["blind"] = kw.get("blind_review", "MISS")
+                return {"final_docx": "x.docx", "steps": [], "needs_input": []}
+
+        with mock.patch.object(submit, "_make",
+                               return_value=(None, None, mock.Mock(), None)), \
+             mock.patch.object(submit, "SubmissionPipeline", _FakePipeline):
+            rc_on = submit.main(["--project", "p1", "--blind-review"])
+            self.assertEqual(captured["blind"], True)
+            rc_off = submit.main(["--project", "p1"])
+            self.assertEqual(captured["blind"], False)
+        self.assertEqual(rc_on, 0)
+        self.assertEqual(rc_off, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

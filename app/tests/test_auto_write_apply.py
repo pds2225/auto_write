@@ -663,3 +663,106 @@ def test_run_bizplan_passes_format_and_clean(tmp_path, monkeypatch) -> None:
                              required_format="hwp", submit_clean=True, write_report=False)
     assert captured["required_format"] == "hwp"
     assert captured["submit_clean"] is True
+
+
+# --- G002: blind_review(--blind-review) CLI→파이프라인 전파 무회귀 -----------------
+# 엔진(usage_acceptance)의 blind 동작 자체는 test_usage_acceptance 가 검증한다.
+# 여기서는 그 플래그가 CLI→파이프라인→run_acceptance 까지 '전달'되는지만 본다.
+# 구버전 회귀: 어느 한 단계라도 blind_review=blind_review 전달을 빠뜨리면, 블라인드
+# 공고에서 ○○○ 마스킹이 자리표시 fail 로 오탐되거나 실명 잔존(masking_violation)이
+# 미검출된다. (전달 누락이면 '기본값 False' 단언이 깨져 잡힌다.)
+
+def test_autopilot_forwards_blind_review_to_config(tmp_path, monkeypatch) -> None:
+    """run_autopilot(blind_review=..) 가 수용검사 AcceptanceConfig.blind_review 로 전달."""
+    import auto_write.services.autopilot_pipeline as ap
+    captured = {}
+    real = ap.run_acceptance
+
+    def _spy(path, config=None):
+        captured["blind"] = getattr(config, "blind_review", "MISS")
+        return real(path, config)
+
+    monkeypatch.setattr(ap, "run_acceptance", _spy)
+    src = tmp_path / "in.docx"
+    _make_doc(src, with_table=False)
+    ap.run_autopilot(str(src), str(tmp_path / "on.docx"),
+                     max_images=0, psst_scaffold=False, blind_review=True, write_report=False)
+    assert captured["blind"] is True
+    ap.run_autopilot(str(src), str(tmp_path / "off.docx"),
+                     max_images=0, psst_scaffold=False, write_report=False)
+    assert captured["blind"] is False          # 기본값 비블라인드(전달 누락 시 깨짐)
+
+
+def test_autopilot_cli_forwards_blind_review(tmp_path, monkeypatch) -> None:
+    """auto_write_autopilot CLI 의 --blind-review 가 run_autopilot 로 전달."""
+    import auto_write_autopilot as cli
+    from auto_write.services.autopilot_pipeline import AutopilotReport
+    captured = {}
+
+    def _spy(input_docx, output_docx=None, **kw):
+        captured["blind"] = kw.get("blind_review", "MISS")
+        return AutopilotReport(input_docx=str(input_docx), output_docx=str(output_docx or ""))
+
+    monkeypatch.setattr(cli, "run_autopilot", _spy)
+    base = [str(tmp_path / "x.docx"), "-o", str(tmp_path / "o.docx"),
+            "--no-psst", "--max-images", "0", "--no-report"]
+    assert cli.main(base + ["--blind-review"]) == 0
+    assert captured["blind"] is True
+    assert cli.main(base) == 0
+    assert captured["blind"] is False
+
+
+def test_bizplan_forwards_blind_review_to_autopilot(tmp_path, monkeypatch) -> None:
+    """run_bizplan_autopilot(blind_review=..) 가 내부 run_autopilot 로 전달(R13 동류)."""
+    import auto_write.services.bizplan_autopilot as bp
+    captured = {}
+    real = bp.run_autopilot
+
+    def _spy(*a, **k):
+        captured["blind"] = k.get("blind_review", "MISS")
+        return real(*a, **k)
+
+    monkeypatch.setattr(bp, "run_autopilot", _spy)
+    src = tmp_path / "in.docx"
+    _make_doc(src, with_table=True)
+    bp.run_bizplan_autopilot(str(src), str(tmp_path / "out.docx"), use_ai=False,
+                             blind_review=True, write_report=False)
+    assert captured["blind"] is True
+
+
+def test_bizplan_cli_forwards_blind_review(tmp_path, monkeypatch) -> None:
+    """bizplan_autopilot CLI 의 --blind-review 가 run_bizplan_autopilot 로 전달."""
+    import bizplan_autopilot as cli
+    from auto_write.services.bizplan_autopilot import BizplanReport
+    captured = {}
+
+    def _spy(input_docx, output_docx=None, **kw):
+        captured["blind"] = kw.get("blind_review", "MISS")
+        return BizplanReport(input_docx=str(input_docx), output_docx=str(output_docx or ""))
+
+    monkeypatch.setattr(cli, "run_bizplan_autopilot", _spy)
+    base = [str(tmp_path / "x.docx"), "-o", str(tmp_path / "o.docx"), "--no-ai", "--no-report"]
+    assert cli.main(base + ["--blind-review"]) == 0
+    assert captured["blind"] is True
+    assert cli.main(base) == 0
+    assert captured["blind"] is False
+
+
+def test_self_diagnose_cli_forwards_blind_review(tmp_path, monkeypatch) -> None:
+    """self_diagnose CLI 의 --blind-review 가 run_acceptance(AcceptanceConfig)로 전달."""
+    import self_diagnose as cli
+    captured = {}
+    real = cli.run_acceptance
+
+    def _spy(src, config=None):
+        captured["blind"] = getattr(config, "blind_review", "MISS")
+        return real(src, config)
+
+    monkeypatch.setattr(cli, "run_acceptance", _spy)
+    src = tmp_path / "d.docx"
+    _make_doc(src, with_table=False)
+    no_ledger = str(tmp_path / "no_ledger.json")   # 없는 원장 → 대조 스킵(_load_ledger=None)
+    cli.main([str(src), "--blind-review", "--ledger", no_ledger])
+    assert captured["blind"] is True
+    cli.main([str(src), "--ledger", no_ledger])
+    assert captured["blind"] is False
