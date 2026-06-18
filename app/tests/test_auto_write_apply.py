@@ -641,3 +641,25 @@ def test_run_autopilot_passes_page_limits_to_config(tmp_path, monkeypatch) -> No
     _make_doc(src, with_table=True)
     ap.run_autopilot(str(src), str(out), max_pages=15, ai_section_max=2, write_report=False)
     assert captured["mp"] == 15 and captured["ai"] == 2
+
+
+def test_run_bizplan_passes_format_and_clean(tmp_path, monkeypatch) -> None:
+    """R13/US-6: run_bizplan_autopilot 가 required_format/submit_clean 을 내부 run_autopilot
+    로 전달해야 한다(구버전: 두 인자 미전달 → bizplan 경로만 형식게이트·정리 사각지대)."""
+    import auto_write.services.bizplan_autopilot as bp
+    captured = {}
+    real = bp.run_autopilot
+
+    def _spy(*a, **k):
+        captured["required_format"] = k.get("required_format", "MISS")
+        captured["submit_clean"] = k.get("submit_clean", "MISS")
+        return real(*a, **k)
+
+    monkeypatch.setattr(bp, "run_autopilot", _spy)
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    _make_doc(src, with_table=True)
+    bp.run_bizplan_autopilot(str(src), str(out), use_ai=False,
+                             required_format="hwp", submit_clean=True, write_report=False)
+    assert captured["required_format"] == "hwp"
+    assert captured["submit_clean"] is True

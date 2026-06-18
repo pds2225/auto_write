@@ -63,6 +63,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--underline", action="store_true", help="강조 시 밑줄 추가")
     parser.add_argument("--blind-review", action="store_true",
                         help="블라인드 공고 모드 — ○○○ 마스킹 허용 + 실명 잔존 검출(fail)")
+    parser.add_argument("--required-format", default=None,
+                        help="공고 요구 산출 형식(예: hwp) — 다르면 제출명 차단(_DRAFT)+변환 안내")
+    parser.add_argument("--submit-clean", action="store_true",
+                        help="게이트 직전 NotebookLM 프롬프트를 md 로 보존 후 작업용 블록 제거(제출 정리)")
     parser.add_argument("--strict", action="store_true",
                         help="종료코드 계약 활성: 0=제출가능/2=제출불가 (기본은 항상 0)")
     parser.add_argument("--no-report", action="store_true", help="통합 리포트(md) 생략")
@@ -83,6 +87,8 @@ def main(argv: list[str] | None = None) -> int:
         placeholder_only=args.placeholder_only,
         underline=args.underline,
         blind_review=args.blind_review,
+        required_format=args.required_format,
+        submit_clean=args.submit_clean,
         write_report=not args.no_report,
     )
 
