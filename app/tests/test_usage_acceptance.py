@@ -575,3 +575,41 @@ def test_ai_writer_needs_confirm_note_is_detectable():
     d.add_paragraph("[확인필요] 매출 가정 / 목표시장 규모 근거")  # _add_note 가 쓰는 형식
     r = check_unresolved_markers(d)
     assert r.defects >= 1 and r.severity == "fail"
+
+
+# --- R11 보강: 비-RGB 색(auto/테마) 비교정 + 머리글/텍스트박스 범위 정합 회귀 --------
+
+def test_auto_color_run_not_detected_nor_mutated():
+    """w:val='auto'(Word 자동=검정) 런은 검출 0·교정 0 이어야 한다(역연산 정합).
+    구버전 교정은 _normalize_color_value('auto')='a' 를 유색으로 오인해 덮어썼다."""
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    from auto_write.services.doc_quality_ops import normalize_colored_text_to_black
+
+    d = _doc()
+    run = d.add_paragraph().add_run("자동색 본문")
+    rpr = run._r.get_or_add_rPr()
+    color = OxmlElement("w:color")
+    color.set(qn("w:val"), "auto")
+    rpr.append(color)
+
+    assert check_residual_colored_runs(d).defects == 0, "auto 색은 검출 비대상"
+    assert normalize_colored_text_to_black(d) == 0, "auto 색은 교정 비대상(덮어쓰기 금지)"
+    # 멱등·보존 확인: w:val 이 그대로 'auto'
+    assert color.get(qn("w:val")) == "auto"
+
+
+def test_header_colored_run_detected_and_normalized():
+    """머리글의 유색 안내문구도 검출(ACC-3)·교정 범위에 포함되어야 한다(ACC-9 정합)."""
+    from docx.shared import RGBColor
+    from auto_write.services.doc_quality_ops import normalize_colored_text_to_black
+
+    d = _doc()
+    hdr = d.sections[0].header
+    hdr.is_linked_to_previous = False
+    r = hdr.paragraphs[0].add_run("파란 머리글 안내문구")
+    r.font.color.rgb = RGBColor(0x00, 0x00, 0xFF)
+
+    assert check_residual_colored_runs(d).defects >= 1, "머리글 유색을 검출해야 함"
+    assert normalize_colored_text_to_black(d) >= 1, "머리글 유색을 검정으로 교정해야 함"
+    assert check_residual_colored_runs(d).defects == 0, "교정 후 0"
