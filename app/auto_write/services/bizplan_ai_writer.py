@@ -183,7 +183,9 @@ def ai_write_areas(
         nc = [str(x).strip() for x in result.get("needs_confirm", []) if str(x).strip()]
         ev = [str(x).strip() for x in result.get("evidence_used", []) if str(x).strip()]
         if nc:
-            _add_note(doc, "확인필요: " + " / ".join(nc))
+            # 대괄호 형식([확인필요])으로 통일 — usage_acceptance._MARKER_RE 가 검출해
+            # 미확인 항목이 수용검사 게이트를 우회하지 않도록 한다(R2 정합).
+            _add_note(doc, "[확인필요] " + " / ".join(nc))
             report.needs_confirm.extend(nc)
         report.evidence_used.extend(ev)
         report.areas_written += 1

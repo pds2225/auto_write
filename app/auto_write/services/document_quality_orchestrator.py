@@ -165,6 +165,8 @@ class DocumentQualityOrchestrator:
             ops_report.empty_paragraphs_removed += pass_ops.empty_paragraphs_removed
             ops_report.paragraphs_emphasized += pass_ops.paragraphs_emphasized
             ops_report.font_sizes_normalized += pass_ops.font_sizes_normalized
+            ops_report.paragraphs_unified += pass_ops.paragraphs_unified
+            ops_report.colored_runs_normalized += pass_ops.colored_runs_normalized
 
             # PSST (해당 유형만)
             if doc_type.type_code in _PSST_TYPES:

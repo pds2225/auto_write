@@ -564,3 +564,14 @@ def test_font_size_spread_clean_passes():
     d = _doc()
     d.add_paragraph().add_run("본문 한 종류 크기").font.size = Pt(11)
     assert check_font_size_spread(d).defects == 0
+
+
+# --- R2: AI 작성기 needs_confirm 주석이 게이트에 검출되는지(대괄호 통일) ----------
+
+def test_ai_writer_needs_confirm_note_is_detectable():
+    """bizplan_ai_writer 가 다는 needs_confirm 주석은 '[확인필요] …' 형식이라
+    check_unresolved_markers 가 fail 로 검출해야 한다(R2 — 미확인 항목 게이트 우회 금지)."""
+    d = _doc()
+    d.add_paragraph("[확인필요] 매출 가정 / 목표시장 규모 근거")  # _add_note 가 쓰는 형식
+    r = check_unresolved_markers(d)
+    assert r.defects >= 1 and r.severity == "fail"
