@@ -655,3 +655,25 @@ def test_hyperlink_colored_run_detected_and_normalized():
     assert check_residual_colored_runs(d).defects >= 1, "하이퍼링크 내부 유색을 검출해야 함"
     assert normalize_colored_text_to_black(d) >= 1, "하이퍼링크 내부 유색을 검정으로 교정해야 함"
     assert check_residual_colored_runs(d).defects == 0, "교정 후 0"
+
+
+# --- R11 보강: 표 셀(정부양식 핵심 위치) 유색 텍스트 검출·교정(#22) ---------------
+
+def test_table_cell_colored_run_detected_and_normalized():
+    """R11: 표 셀 안 유색 텍스트도 검출(ACC-3)·교정돼야 한다. 정규화기의 셀 순회가
+    refs-가드(id 재사용 방지)로 검출기와 정합 — 셀 누락 없이 검정 처리."""
+    from docx.shared import RGBColor
+    from auto_write.services.doc_quality_ops import normalize_colored_text_to_black
+
+    d = _doc()
+    t = d.add_table(rows=2, cols=2)
+    t.cell(0, 0).text = "사업 개요"
+    r = t.cell(0, 1).paragraphs[0].add_run("파란 안내문구 (표 셀 안)")
+    r.font.color.rgb = RGBColor(0x00, 0x00, 0xFF)
+    # 둘째 행에도 회색 유색 — 여러 셀에서 누락 없이 처리되는지
+    r2 = t.cell(1, 1).paragraphs[0].add_run("회색 가이드 (표 셀 안)")
+    r2.font.color.rgb = RGBColor(0x80, 0x80, 0x80)
+
+    assert check_residual_colored_runs(d).defects >= 2, "표 셀 유색 2개 검출"
+    assert normalize_colored_text_to_black(d) >= 2, "표 셀 유색 2개 교정"
+    assert check_residual_colored_runs(d).defects == 0, "교정 후 0"
