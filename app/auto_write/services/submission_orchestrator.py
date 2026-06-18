@@ -47,6 +47,8 @@ class SubmissionPipeline:
         blind_review: bool = False,
         required_format: str | None = None,
         submit_clean: bool = False,
+        max_pages: int | None = None,
+        ai_section_max: int | None = None,
     ) -> dict[str, Any]:
         report: dict[str, Any] = {"project_id": project_id, "steps": [], "needs_input": []}
         results_root = Path(self.settings.results_root)
@@ -212,7 +214,8 @@ class SubmissionPipeline:
         if acceptance_gate:
             acc = None
             try:
-                acc = run_acceptance(str(final_docx), AcceptanceConfig(blind_review=blind_review))
+                acc = run_acceptance(str(final_docx), AcceptanceConfig(
+                    blind_review=blind_review, max_pages=max_pages, ai_section_max=ai_section_max))
             except Exception as exc:
                 report["acceptance_error"] = f"{type(exc).__name__}: {exc}"
                 report["needs_input"].append(

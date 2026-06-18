@@ -677,3 +677,25 @@ def test_table_cell_colored_run_detected_and_normalized():
     assert check_residual_colored_runs(d).defects >= 2, "표 셀 유색 2개 검출"
     assert normalize_colored_text_to_black(d) >= 2, "표 셀 유색 2개 교정"
     assert check_residual_colored_runs(d).defects == 0, "교정 후 0"
+
+
+# --- R12 배선: 진입점이 분량 한도를 AcceptanceConfig 로 전달하는지(죽은 게이트 활성) ---
+
+def test_self_diagnose_passes_page_limits_to_config(tmp_path, monkeypatch):
+    """R12: self_diagnose --max-pages/--ai-section-max 가 AcceptanceConfig 로 전달돼야 한다
+    (구버전: 어느 실사용 진입점도 전달 안 해 page_overflow 가 항상 비활성=죽은 코드)."""
+    import self_diagnose as sd
+    captured = {}
+    real = sd.run_acceptance
+
+    def _spy(path, config=None):
+        captured["max_pages"] = getattr(config, "max_pages", "MISSING")
+        captured["ai_section_max"] = getattr(config, "ai_section_max", "MISSING")
+        return real(path, config)
+
+    monkeypatch.setattr(sd, "run_acceptance", _spy)
+    src = tmp_path / "x.docx"
+    Document().save(str(src))
+    sd.main([str(src), "--max-pages", "15", "--ai-section-max", "2"])
+    assert captured["max_pages"] == 15
+    assert captured["ai_section_max"] == 2
