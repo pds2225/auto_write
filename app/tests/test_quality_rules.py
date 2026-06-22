@@ -30,17 +30,17 @@ from auto_write.services.usage_acceptance import (
 
 # --- 프리셋 / resolve_ruleset ----------------------------------------------
 
-def test_presets_score_empty_required_only_bizplan():
-    # ⑤ 채점 연동(가중치 0→비0, '동작 변경')은 bizplan 프리셋만 켠다.
+def test_no_preset_enables_score_empty_required_by_default():
+    # ⑤ 채점 연동은 보수적으로 어떤 프리셋도 기본 on 하지 않는다(사용자 결정 2026-06-22).
     enabled = [n for n in PRESETS if PRESETS[n].score_empty_required]
-    assert enabled == ["bizplan"]
+    assert enabled == []
 
 
 def test_presets_flag_values():
     biz = PRESETS["bizplan"]
     assert biz.color_to_black is True
     assert biz.body_font_pt == 10.0            # ③ 본문 10pt
-    assert biz.score_empty_required is True
+    assert biz.score_empty_required is False   # ⑤ 보수적 off(사용자 결정)
 
     rep = PRESETS["report"]
     assert rep.body_font_pt is None
