@@ -511,6 +511,7 @@ def unify_paragraph_formatting(
     scope: str = "body+tables",
     preserve_emphasis: bool = True,
     enable: bool = True,
+    target_pt: float | None = None,
 ) -> int:
     """단락별로 텍스트 런의 글자 크기·글꼴(font family)을 '그 단락의 지배값'으로 통일.
 
@@ -526,12 +527,22 @@ def unify_paragraph_formatting(
     - ``enable=False`` 면 0(비활성). 단, run_all 기본은 활성(normalize_font_sizes 처럼
       죽은 코드가 되지 않도록 live 기본값).
 
-    scope 에 'tables' 가 포함되면 표 셀 단락까지 대상(병합셀 중복 제외).
+    ``target_pt`` (③ 본문 pt 통일) — ``is None``/``is not None`` 명시 분기:
+    - ``None``(기본): 위의 '지배값 통일' 동작 그대로(본문+표 셀 모두 지배 크기).
+    - ``not None``(예: 10.0): **본문 단락의 글자 크기를 target_pt 고정값으로** 맞춘다.
+      본문 크기에는 지배값을 적용하지 않는다(둘은 **상호배타** — 같은 본문 런에 동시
+      적용 금지). 본문은 명시 크기가 없어도(테마 상속) target_pt 를 **부여**한다
+      (지배값 모드의 'None→보존'과 의미가 다름). **표 셀 크기는 target·지배값 둘 다
+      적용하지 않는다**(양식 의도 크기 보존). 글꼴(font family) 통일은 두 모드 모두
+      동일하게 적용한다(target_pt 는 크기에만 관여). 멱등(2회차 0건).
+
+    scope 에 'tables' 가 포함되면 표 셀 단락까지 대상(병합셀 중복 제외, 중첩표 비재귀).
     """
     if not enable:
         return 0
 
-    paragraphs = list(doc.paragraphs)
+    # (단락, 표 셀 여부) — target_pt 모드는 본문/표 셀을 다르게 처리하므로 구분한다.
+    para_items: list[tuple] = [(p, False) for p in doc.paragraphs]
     if "tables" in scope:
         seen: set[int] = set()
         for table in doc.tables:
@@ -541,10 +552,13 @@ def unify_paragraph_formatting(
                     if cid in seen:
                         continue
                     seen.add(cid)
-                    paragraphs.extend(cell.paragraphs)
+                    para_items.extend((p, True) for p in cell.paragraphs)
+
+    # ③ target_pt → half-point 문자열(w:sz 단위). 예: 10.0 → "20".
+    target_half = str(int(round(target_pt * 2))) if target_pt is not None else None
 
     changed = 0
-    for para in paragraphs:
+    for para, is_table in para_items:
         if _element_has_drawing(para._p):
             continue
         style_name = _para_style_name(para)
@@ -575,8 +589,17 @@ def unify_paragraph_formatting(
         dom_sz = _dominant(sizes)
         dom_asc = _dominant(ascii_fonts)
         dom_ea = _dominant(ea_fonts)
-        if dom_sz is None and dom_asc is None and dom_ea is None:
-            continue  # 전부 테마 상속 → 보존(날조 금지)
+
+        # 적용할 크기 결정 — target_pt 모드와 지배값 모드는 상호배타(명시 분기).
+        if target_pt is not None:
+            # 본문은 고정 target, 표 셀은 크기 미적용(target·지배값 둘 다).
+            apply_size = target_half if not is_table else None
+        else:
+            apply_size = dom_sz  # 레거시: 본문+표 셀 모두 지배 크기
+
+        has_font_dom = dom_asc is not None or dom_ea is not None
+        if apply_size is None and not has_font_dom:
+            continue  # 적용할 크기도 글꼴 지배값도 없음 → 보존(날조 금지)
 
         para_changed = False
         for r in text_runs:
@@ -584,9 +607,9 @@ def unify_paragraph_formatting(
             if rpr is None:
                 rpr = r._element.makeelement(qn("w:rPr"), {})
                 r._element.insert(0, rpr)
-            if dom_sz is not None and _set_rpr_size(rpr, dom_sz):
+            if apply_size is not None and _set_rpr_size(rpr, apply_size):
                 para_changed = True
-            if (dom_asc is not None or dom_ea is not None) and _set_rpr_fonts(rpr, dom_asc, dom_ea):
+            if has_font_dom and _set_rpr_fonts(rpr, dom_asc, dom_ea):
                 para_changed = True
         if para_changed:
             changed += 1
