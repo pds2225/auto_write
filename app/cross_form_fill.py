@@ -8,7 +8,8 @@
     python cross_form_fill.py --source A.docx --target B.docx -o out.docx
     python cross_form_fill.py --source A.hwp  --target B.hwp  -o out.hwp
 
-결과는 AutofillReport(JSON)로 출력한다. 종료코드: 0=성공, 2=실패(ok=False).
+결과는 AutofillReport(JSON)로 출력한다. 종료코드: 0=성공, 2=실패(ok=False/예외).
+예외(없는 파일·원본덮어쓰기·손상 파일 등)도 raw traceback 대신 JSON 리포트+exit 2.
 """
 
 from __future__ import annotations
@@ -36,8 +37,22 @@ def main(argv: list[str] | None = None) -> int:
                         help="AI 사용(v1 미지원 슬롯 — 기본은 결정론 매칭)")
     args = parser.parse_args(argv)
 
-    report = autofill_from_source(
-        args.source, args.target, args.out, use_ai=args.use_ai)
+    # M5: 예외를 raw traceback/exit1 로 흘리지 않고 JSON 리포트+exit 2 로 통일.
+    try:
+        report = autofill_from_source(
+            args.source, args.target, args.out, use_ai=args.use_ai)
+    except (FileNotFoundError, ValueError) as exc:
+        err = {
+            "source": args.source,
+            "target": args.target,
+            "output": args.out,
+            "ok": False,
+            "error": str(exc),
+            "notes": [str(exc)],
+        }
+        print(json.dumps(err, ensure_ascii=False, indent=2))
+        return 2
+
     print(json.dumps(report.as_dict(), ensure_ascii=False, indent=2))
     return 0 if report.ok else 2
 
