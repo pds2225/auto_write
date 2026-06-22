@@ -2,6 +2,15 @@
   "hooks": {
     "SessionStart": [
       {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\session-guard\\scripts\\guard_session_start.py\""
+          }
+        ]
+      },
+      {
         "matcher": "startup|resume|compact|clear",
         "hooks": [
           {
@@ -15,7 +24,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\session-guard\\scripts\\guard_session_start.py\""
+            "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\omc-auto-router\\scripts\\omc_session_start.py\""
           }
         ]
       }
@@ -48,6 +57,15 @@
         "hooks": [
           {
             "type": "command",
+            "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\session-guard\\scripts\\guard_prompt.py\""
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
             "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\session-resume-auto\\scripts\\resume_prompt.py\""
           }
         ]
@@ -57,7 +75,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\session-guard\\scripts\\guard_prompt.py\""
+            "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\omc-auto-router\\scripts\\omc_prompt_router.py\""
           }
         ]
       }
@@ -79,7 +97,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\session-resume-auto\\scripts\\resume_session_end.py\""
+            "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\session-guard\\scripts\\guard_session_end.py\""
           }
         ]
       },
@@ -88,7 +106,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\session-guard\\scripts\\guard_session_end.py\""
+            "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\session-resume-auto\\scripts\\resume_session_end.py\""
           }
         ]
       }
@@ -109,6 +127,15 @@
           {
             "type": "command",
             "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\session-guard\\scripts\\guard_pregit.py\""
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\omc-auto-router\\scripts\\omc_pregit_gsync.py\""
           }
         ]
       }
