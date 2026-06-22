@@ -345,3 +345,174 @@ def test_extract_no_value_cell_pollution(tmp_path: Path) -> None:
     assert fields.get("항목") == "연락처"
     assert "연락처" not in fields  # 값 셀이 라벨로 오염 안 됨
     assert "010-1234-5678" not in fields
+
+
+# ============================================================================
+# 신규 회귀 테스트 (버그 헌트 C1/H1/H2/H3/H6/H7/M3/M5/M6 잠금)
+# TDD: 수정 전 RED → 그룹 A→B→C 수정 후 GREEN.
+# ============================================================================
+
+import subprocess  # noqa: E402
+
+CLI = Path(__file__).resolve().parents[1] / "cross_form_fill.py"
+APP_DIR = Path(__file__).resolve().parents[1]
+
+
+def _run_cli(source: str, target: str, out: str) -> "subprocess.CompletedProcess[str]":
+    """cross_form_fill.py 를 subprocess 로 실행(CLI 계약 검증용)."""
+    import os
+    env = dict(os.environ)
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONPATH"] = str(APP_DIR)
+    return subprocess.run(
+        ["py", "-3.11", str(CLI),
+         "--source", source, "--target", target, "-o", out],
+        capture_output=True, text=True, encoding="utf-8", cwd=str(APP_DIR), env=env,
+    )
+
+
+# --- 그룹 A: C1/H1/M3 — 라벨이 값으로 둔갑하지 않음 ---------------------------
+
+def test_column_major_budget_table_no_label_as_value(tmp_path: Path) -> None:
+    """컬럼-메이저/행렬 예산표: 헤더행(라벨들)+데이터행(숫자) 구조에서
+    extract 결과에 라벨이 '값'으로 들어가면 안 된다(C1/M3).
+
+    행0=[국고보조금, 자기부담금, 총사업비] (모두 라벨)
+    행1=[30,000,000, 10,000,000, 40,000,000] (모두 숫자값)
+    짝수=라벨 위치단정이면 행0에서 국고보조금→자기부담금(라벨→라벨)으로 페어링됨.
+    """
+    src = tmp_path / "a.docx"
+    doc = Document()
+    t = doc.add_table(rows=2, cols=3)
+    t.rows[0].cells[0].text = "국고보조금"
+    t.rows[0].cells[1].text = "자기부담금"
+    t.rows[0].cells[2].text = "총사업비"
+    t.rows[1].cells[0].text = "30,000,000"
+    t.rows[1].cells[1].text = "10,000,000"
+    t.rows[1].cells[2].text = "40,000,000"
+    doc.save(str(src))
+
+    fields = extract_source_fields(src)
+    # 라벨이 다른 라벨/숫자를 '값'으로 갖지 않아야 한다.
+    assert fields.get("국고보조금") != "자기부담금"
+    assert fields.get("총사업비") != "국고보조금"
+    # 라벨 텍스트가 어떤 키의 값으로도 새어들면 안 됨.
+    label_keys = {"국고보조금", "자기부담금", "총사업비"}
+    for v in fields.values():
+        assert v not in label_keys, f"라벨 '{v}' 이 값으로 추출됨"
+
+
+def test_seed_labels_not_high_transcribed(tmp_path: Path) -> None:
+    """실파일류 시드: 국고보조금/자기부담금/총사업비 칸에 라벨텍스트가
+    high(자동전사)로 들어가면 안 된다(C1).
+
+    소스 행렬 예산표 + 타깃에 동일 라벨 빈칸 → 라벨→값 전사가 일어나면 high 오전사.
+    """
+    src = tmp_path / "a.docx"
+    tgt = tmp_path / "b.docx"
+    out = tmp_path / "out.docx"
+    doc = Document()
+    t = doc.add_table(rows=2, cols=3)
+    t.rows[0].cells[0].text = "국고보조금"
+    t.rows[0].cells[1].text = "자기부담금"
+    t.rows[0].cells[2].text = "총사업비"
+    t.rows[1].cells[0].text = "30,000,000"
+    t.rows[1].cells[1].text = "10,000,000"
+    t.rows[1].cells[2].text = "40,000,000"
+    doc.save(str(src))
+
+    doc2 = Document()
+    t2 = doc2.add_table(rows=3, cols=2)
+    for i, lab in enumerate(["국고보조금", "자기부담금", "총사업비"]):
+        t2.rows[i].cells[0].text = lab
+        t2.rows[i].cells[1].text = ""
+    doc2.save(str(tgt))
+
+    report = autofill_from_source(src, tgt, out, use_ai=False)
+    # 라벨 텍스트가 high 로 전사되면 안 됨.
+    for lab in ("국고보조금", "자기부담금", "총사업비"):
+        v = _value_for(out, lab)
+        assert v not in ("국고보조금", "자기부담금", "총사업비", "인증평가", "현금"), \
+            f"'{lab}' 칸에 라벨텍스트 '{v}' 가 high 전사됨"
+
+
+# --- 그룹 B: H2 중복 타깃 라벨 / H3 괄호 토큰 충돌 ---------------------------
+
+def test_duplicate_target_label_only_one_high(tmp_path: Path) -> None:
+    """동일 라벨 빈칸 2개 타깃 → 한 칸만 자동전사, 나머지는 needs_confirm(H2)."""
+    src = tmp_path / "a.docx"
+    tgt = tmp_path / "b.docx"
+    out = tmp_path / "out.docx"
+    doc = Document()
+    t = doc.add_table(rows=1, cols=2)
+    t.rows[0].cells[0].text = "기업명"
+    t.rows[0].cells[1].text = "밸류업(주)"
+    doc.save(str(src))
+
+    doc2 = Document()
+    t2 = doc2.add_table(rows=2, cols=2)
+    t2.rows[0].cells[0].text = "기업명"
+    t2.rows[0].cells[1].text = ""
+    t2.rows[1].cells[0].text = "기업명"   # 동일 라벨 중복 빈칸
+    t2.rows[1].cells[1].text = ""
+    doc2.save(str(tgt))
+
+    report = autofill_from_source(src, tgt, out, use_ai=False)
+    # 동일값이 두 칸 모두에 복제되면 안 됨 → 정확히 1건만 전사.
+    assert report.transcribed == 1, f"중복 타깃에 {report.transcribed}건 전사(복제)"
+    # 두 번째 기업명은 needs_confirm 로 강등되어야 함.
+    assert any(n["normalized"] == "기업명" for n in report.needs_confirm)
+
+
+def test_bracket_token_mismatch_not_high(tmp_path: Path) -> None:
+    """금액(국고) 소스 + 금액(자부담) 타깃 → 괄호 토큰이 달라 high 전사 안 됨(H3)."""
+    src = tmp_path / "a.docx"
+    tgt = tmp_path / "b.docx"
+    out = tmp_path / "out.docx"
+    doc = Document()
+    t = doc.add_table(rows=1, cols=2)
+    t.rows[0].cells[0].text = "금액(국고)"
+    t.rows[0].cells[1].text = "60,000"
+    doc.save(str(src))
+
+    doc2 = Document()
+    t2 = doc2.add_table(rows=1, cols=2)
+    t2.rows[0].cells[0].text = "금액(자부담)"
+    t2.rows[0].cells[1].text = ""
+    doc2.save(str(tgt))
+
+    report = autofill_from_source(src, tgt, out, use_ai=False)
+    assert _value_for(out, "금액(자부담)") == "", "괄호 토큰 다른데 high 전사됨"
+    assert report.transcribed == 0
+
+
+# --- 그룹 C: H7 비지원 입력 / M6 미존재 출력 폴더 ---------------------------
+
+def test_cli_unsupported_input_exit2_json(tmp_path: Path) -> None:
+    """PDF/비지원 입력 → exit 2 + JSON 리포트(traceback/exit1 아님)(H7/M5)."""
+    src = tmp_path / "a.docx"
+    _make_source(src)
+    pdf = tmp_path / "bad.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n%fake pdf content\n")
+    out = tmp_path / "out.docx"
+
+    res = _run_cli(str(src), str(pdf), str(out))
+    assert res.returncode == 2, f"exit={res.returncode}, stderr={res.stderr[:400]}"
+    # stdout 은 JSON 리포트여야 한다(raw traceback 금지).
+    assert "Traceback" not in res.stdout
+    import json as _json
+    parsed = _json.loads(res.stdout)
+    assert parsed["ok"] is False
+
+
+def test_output_nested_dir_autocreated(tmp_path: Path) -> None:
+    """미존재 중첩 출력 폴더 → 자동 생성 후 정상 저장(M6)."""
+    src = tmp_path / "a.docx"
+    tgt = tmp_path / "b.docx"
+    out = tmp_path / "nope" / "deep" / "out.docx"
+    _make_source(src)
+    _make_target(tgt)
+
+    report = autofill_from_source(src, tgt, out, use_ai=False)
+    assert out.exists(), "중첩 출력 폴더가 자동 생성되지 않음"
+    assert report.ok
