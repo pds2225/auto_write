@@ -285,3 +285,26 @@ def test_target_pt_skips_headings_and_table_cells():
     assert _run_sz(h.runs[0]) == "30"                  # 제목 미변경(15pt)
     assert _run_sz(cell_run) == "18"                   # 표 셀 미변경(target·지배 둘 다 미적용)
     assert _run_sz(body.runs[0]) == "20"               # 본문만 target 10pt
+
+
+# --- 오케스트레이터 --ruleset 노출 (opt-in, 기본 None=현행) -------------------
+
+def test_orchestrator_ruleset_controls_color_normalization(tmp_path):
+    from auto_write.services.document_quality_orchestrator import DocumentQualityOrchestrator
+
+    def _blue_docx(name):
+        d = Document()
+        d.add_paragraph().add_run("본문 문장 텍스트").font.color.rgb = RGBColor(0x00, 0x00, 0xFF)
+        path = tmp_path / name
+        d.save(str(path))
+        return path
+
+    orch = DocumentQualityOrchestrator(tmp_path, openai_service=None)
+    # ruleset 미지정(현행) → 색→검정 on(하위호환)
+    res_default = orch.run(_blue_docx("in_default.docx"), tmp_path / "out_default.docx",
+                           ruleset=None, write_report=False)
+    assert res_default.ops.colored_runs_normalized >= 1
+    # off 프리셋 → 색→검정 끔(프리셋이 run_all 까지 제어)
+    res_off = orch.run(_blue_docx("in_off.docx"), tmp_path / "out_off.docx",
+                       ruleset="off", write_report=False)
+    assert res_off.ops.colored_runs_normalized == 0
