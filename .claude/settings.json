@@ -89,6 +89,15 @@
             "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\session-resume-auto\\scripts\\resume_bg_log.py\""
           }
         ]
+      },
+      {
+        "matcher": "Bash|Edit|Write|MultiEdit|NotebookEdit|Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\omc-auto-router\\scripts\\omc_post_tool_remind.py\""
+          }
+        ]
       }
     ],
     "SessionEnd": [
