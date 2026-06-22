@@ -31,6 +31,7 @@ from .document_type_classifier import _extract_text as _classify_extract
 from .psst_check import check_psst, PSSTReport
 from .infographic_suggest import suggest_images_ai, InfographicReport
 from .doc_quality_score import score_document, QualityScore
+from .quality_rules import resolve_ruleset
 
 # PSST 검사를 적용할 유형
 _PSST_TYPES = {"business_plan", "pitch_deck"}
@@ -117,6 +118,7 @@ class DocumentQualityOrchestrator:
         remove_guides: bool = True,
         normalize_fonts: bool = False,
         write_report: bool = True,
+        ruleset: str | None = None,
     ) -> HarnessResult:
         input_path = Path(input_docx).resolve()
         if not input_path.exists():
@@ -140,6 +142,15 @@ class DocumentQualityOrchestrator:
         text = _classify_extract(doc)
         doc_type = classify_text(text, filename=input_path.name)
 
+        # 사업계획서 규칙 프리셋(opt-in). None=현행(프리셋 미적용·하위호환),
+        # "auto"=문서유형 자동 매핑, 그 외 이름=해당 프리셋 강제.
+        if ruleset is None:
+            rules = None
+        elif ruleset == "auto":
+            rules = resolve_ruleset(doc_type.type_code)
+        else:
+            rules = resolve_ruleset(override=ruleset)
+
         # 3) 후처리 + 품질 루프
         psst_report: PSSTReport | None = None
         info_report: InfographicReport
@@ -152,6 +163,7 @@ class DocumentQualityOrchestrator:
             iterations += 1
             pass_ops = dq.run_all(
                 doc,
+                rules=rules,
                 remove_guides=remove_guides,
                 emphasize=emphasize,
                 underline=underline or (iterations >= 2),  # 미달 재시도 시 밑줄 강조 보강

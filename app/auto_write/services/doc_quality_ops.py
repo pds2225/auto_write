@@ -831,12 +831,22 @@ def run_all(
 
     ``unify_formatting`` 은 기본 활성(live) — 단락별 크기/글꼴을 지배값으로 통일한다.
     강조(emphasize)보다 먼저 실행해 굵게 처리한 런의 서식이 덮이지 않게 한다.
+
+    ``rules`` (BizplanRulesConfig) 가 주어지면 ② 색→검정(color_to_black)·③ 본문 pt
+    (body_font_pt→target_pt)를 프리셋이 제어한다(rules 우선). None 이면 위의 bool
+    인자대로 동작한다(하위호환 — 현행과 동일).
     """
-    # 사업계획서 규칙 프리셋(rules) 배선 자리 — Phase 1(저위험): rules 는 받기만
-    # 하고 동작을 바꾸지 않는다. rules=None 과 완전히 동일한 레거시 경로다. ② 색검정·
-    # ③ target_pt 등 고위험 fixer 의 실제 배선은 Phase 2 에서 이 지점에 추가한다.
-    # 하위호환 불변식: rules 유무와 무관하게 현행 count 가 변하지 않아야 한다
-    # (tests/test_quality_rules.py 의 run_all(rules=None)==레거시 단언으로 고정).
+    # 사업계획서 규칙 프리셋(rules) 배선 — rules 가 주어지면 프리셋 플래그가 해당 동작
+    # 인자를 덮어쓴다(옵트인, rules 우선). rules=None 이면 기존 bool 인자 그대로(하위호환).
+    #   ② color_to_black → normalize_colors (minimal/off 는 색→검정을 끌 수 있음)
+    #   ③ body_font_pt   → target_pt (None 이면 지배값 통일 모드)
+    # 그 외 프리셋 플래그(suggest_notebooklm·blank_undecided·flag_unverified_claims·
+    # score_empty_required 등)는 run_all 이 아닌 다른 레이어(인포그래픽·채움·수용검사·
+    # 채점)의 관심사라 여기서 적용하지 않는다.
+    target_pt: float | None = None
+    if rules is not None:
+        normalize_colors = rules.color_to_black
+        target_pt = rules.body_font_pt
     report = QualityOpsReport()
     if remove_guides:
         report.guide_paragraphs_removed = remove_guide_paragraphs(doc)
@@ -847,7 +857,8 @@ def run_all(
     report.bullet_spacing_fixed = normalize_bullet_spacing(doc)
     report.table_cells_cleaned = cleanup_table_whitespace(doc)
     report.empty_paragraphs_removed = remove_empty_paragraphs(doc)
-    report.paragraphs_unified = unify_paragraph_formatting(doc, enable=unify_formatting)
+    report.paragraphs_unified = unify_paragraph_formatting(
+        doc, enable=unify_formatting, target_pt=target_pt)
     report.colored_runs_normalized = normalize_colored_text_to_black(doc, enable=normalize_colors)
     if emphasize:
         report.paragraphs_emphasized = emphasize_key_sentences(doc, underline=underline)

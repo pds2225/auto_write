@@ -53,6 +53,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--underline", action="store_true", help="강조 시 밑줄도 추가")
     parser.add_argument("--keep-guides", action="store_true", help="양식 안내문구 삭제 비활성")
     parser.add_argument("--normalize-fonts", action="store_true", help="글자크기 이상치 보정 활성")
+    parser.add_argument("--ruleset", choices=["auto", "bizplan", "report", "minimal", "off"],
+                        default=None,
+                        help="사업계획서 규칙 프리셋 적용(opt-in). auto=문서유형 자동 매핑, 미지정=현행")
     parser.add_argument("--no-report", action="store_true", help="리포트(md/json) 생성 생략")
     parser.add_argument("--json", action="store_true", help="결과를 JSON 으로 출력")
     parser.add_argument("--rollback", nargs=2, metavar=("BACKUP_DIR", "TARGET"),
@@ -77,6 +80,7 @@ def main(argv: list[str] | None = None) -> int:
         remove_guides=not args.keep_guides,
         normalize_fonts=args.normalize_fonts,
         write_report=not args.no_report,
+        ruleset=args.ruleset,
     )
 
     if args.json:

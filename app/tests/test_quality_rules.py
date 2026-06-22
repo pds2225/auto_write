@@ -102,15 +102,44 @@ def test_run_all_rules_none_equals_legacy():
     assert legacy.as_dict() == rules_none.as_dict()
 
 
-def test_run_all_rules_preset_is_phase1_noop():
-    """Phase 1 에서 rules 는 받기만 하고 동작을 바꾸지 않는다(레거시 동등).
+def test_run_all_bizplan_applies_color_and_target_pt():
+    # bizplan: color_to_black=True(색→검정 on) + body_font_pt=10(본문 10pt 통일).
+    doc = Document()
+    p = doc.add_paragraph()
+    run = p.add_run("본문 문장 텍스트")
+    run.font.size = Pt(9)
+    run.font.color.rgb = RGBColor(0x00, 0x00, 0xFF)
+    rep = run_all(doc, rules=PRESETS["bizplan"])
+    assert rep.colored_runs_normalized >= 1            # ② 색→검정 적용
+    assert _run_sz(p.runs[0]) == "20"                  # ③ 본문 10pt(half-point 20)
 
-    Phase 2 에서 ②③⑤ 가 배선되면 이 단언은 의도적으로 갱신될 예정이다.
-    """
-    legacy = run_all(_build_doc())
-    with_biz = run_all(_build_doc(), rules=PRESETS["bizplan"])
-    with_off = run_all(_build_doc(), rules=PRESETS["off"])
-    assert legacy.as_dict() == with_biz.as_dict() == with_off.as_dict()
+
+def test_run_all_off_preset_disables_color_normalization():
+    # off: color_to_black=False → 색→검정을 끈다(사용자 결정 — 프리셋이 제어).
+    doc = Document()
+    p = doc.add_paragraph()
+    p.add_run("본문 문장 텍스트").font.color.rgb = RGBColor(0x00, 0x00, 0xFF)
+    rep = run_all(doc, rules=PRESETS["off"])
+    assert rep.colored_runs_normalized == 0            # 색 변환 안 함
+    color = p.runs[0]._element.find(qn("w:rPr")).find(qn("w:color"))
+    assert color.get(qn("w:val")).lower() == "0000ff"  # 파랑 보존
+
+
+def test_run_all_minimal_preset_disables_color_normalization():
+    doc = Document()
+    p = doc.add_paragraph()
+    p.add_run("본문 문장 텍스트").font.color.rgb = RGBColor(0x00, 0x00, 0xFF)
+    rep = run_all(doc, rules=PRESETS["minimal"])
+    assert rep.colored_runs_normalized == 0            # minimal 도 색 변환 끔
+
+
+def test_run_all_rules_none_keeps_default_color_normalization():
+    # 대조군: rules 미지정(현행)은 기본대로 색→검정 on(하위호환 — 항상 켜짐).
+    doc = Document()
+    p = doc.add_paragraph()
+    p.add_run("본문 문장 텍스트").font.color.rgb = RGBColor(0x00, 0x00, 0xFF)
+    rep = run_all(doc, rules=None)
+    assert rep.colored_runs_normalized >= 1
 
 
 def test_run_all_actually_does_work():
@@ -256,3 +285,26 @@ def test_target_pt_skips_headings_and_table_cells():
     assert _run_sz(h.runs[0]) == "30"                  # 제목 미변경(15pt)
     assert _run_sz(cell_run) == "18"                   # 표 셀 미변경(target·지배 둘 다 미적용)
     assert _run_sz(body.runs[0]) == "20"               # 본문만 target 10pt
+
+
+# --- 오케스트레이터 --ruleset 노출 (opt-in, 기본 None=현행) -------------------
+
+def test_orchestrator_ruleset_controls_color_normalization(tmp_path):
+    from auto_write.services.document_quality_orchestrator import DocumentQualityOrchestrator
+
+    def _blue_docx(name):
+        d = Document()
+        d.add_paragraph().add_run("본문 문장 텍스트").font.color.rgb = RGBColor(0x00, 0x00, 0xFF)
+        path = tmp_path / name
+        d.save(str(path))
+        return path
+
+    orch = DocumentQualityOrchestrator(tmp_path, openai_service=None)
+    # ruleset 미지정(현행) → 색→검정 on(하위호환)
+    res_default = orch.run(_blue_docx("in_default.docx"), tmp_path / "out_default.docx",
+                           ruleset=None, write_report=False)
+    assert res_default.ops.colored_runs_normalized >= 1
+    # off 프리셋 → 색→검정 끔(프리셋이 run_all 까지 제어)
+    res_off = orch.run(_blue_docx("in_off.docx"), tmp_path / "out_off.docx",
+                       ruleset="off", write_report=False)
+    assert res_off.ops.colored_runs_normalized == 0
