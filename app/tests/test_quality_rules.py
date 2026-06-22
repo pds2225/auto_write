@@ -12,12 +12,17 @@ from __future__ import annotations
 
 import pytest
 from docx import Document
-from docx.shared import RGBColor
+from docx.shared import RGBColor, Pt
+from docx.enum.text import WD_COLOR_INDEX
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 
 from auto_write.services.quality_rules import (
     BizplanRulesConfig, PRESETS, resolve_ruleset,
 )
-from auto_write.services.doc_quality_ops import run_all
+from auto_write.services.doc_quality_ops import (
+    run_all, normalize_colored_text_to_black, unify_paragraph_formatting,
+)
 from auto_write.services.usage_acceptance import (
     AcceptanceConfig, SEV_WARN, run_acceptance, check_unverified_claims,
 )
@@ -163,3 +168,91 @@ def test_unverified_claims_warn_does_not_change_gate(tmp_path):
     assert rep_off.submittable == rep_on.submittable   # 게이트(submittable) 불변
     assert rep_on.warn_defects >= 1                     # 경고는 잡힌다
     assert "unverified_claims" in {r.check_id for r in rep_on.results}  # 검사 등록 확인
+
+
+# --- ② 색→검정 정규화는 형광펜·음영(highlight/shd)을 보존해야 함 (강조 증발 방지) ----
+
+def _doc_with_colored_highlighted_run():
+    doc = Document()
+    p = doc.add_paragraph("핵심 ")
+    run = p.add_run("성과 강조 문장")
+    run.font.color.rgb = RGBColor(0x00, 0x00, 0xFF)     # 파란 글자색
+    run.font.highlight_color = WD_COLOR_INDEX.YELLOW    # 노란 형광펜(w:highlight)
+    rpr = run._element.get_or_add_rPr()
+    shd = OxmlElement("w:shd")
+    shd.set(qn("w:val"), "clear")
+    shd.set(qn("w:fill"), "FFFF00")
+    rpr.append(shd)                                     # 음영(w:shd)
+    return doc, run
+
+
+def test_color_normalize_preserves_highlight_and_shd():
+    """색 정규화는 글자색만 검정화하고 형광펜·음영은 보존해야 한다.
+
+    검출기 check_residual_colored_runs 는 색만 보고 highlight 는 안 보므로, 색변환이
+    highlight/shd 까지 지우면 게이트가 못 잡는 '강조 증발' 회귀가 된다(계획 §2-D-②).
+    """
+    doc, run = _doc_with_colored_highlighted_run()
+    n = normalize_colored_text_to_black(doc)
+    assert n >= 1                                       # 파란 글자색 → 검정
+    rpr = run._element.find(qn("w:rPr"))
+    color = rpr.find(qn("w:color"))
+    assert color is not None and color.get(qn("w:val")) == "000000"
+    assert rpr.find(qn("w:highlight")) is not None, "형광펜(highlight)이 보존돼야 함"
+    assert rpr.find(qn("w:shd")) is not None, "음영(shd)이 보존돼야 함"
+    assert normalize_colored_text_to_black(doc) == 0    # 멱등 — 2회차 0건
+
+
+# --- ③ unify_paragraph_formatting target_pt 본문 통일 (지배값과 상호배타·명시 분기) ----
+
+def _run_sz(run):
+    rpr = run._element.find(qn("w:rPr"))
+    if rpr is None:
+        return None
+    sz = rpr.find(qn("w:sz"))
+    return sz.get(qn("w:val")) if sz is not None else None
+
+
+def test_target_pt_sets_body_size_overriding_dominant():
+    # 본문: 9pt·9pt·12pt → 지배값 9pt(half 18)이지만 target_pt=10 이면 모두 20.
+    doc = Document()
+    p = doc.add_paragraph()
+    for pt in (9, 9, 12):
+        p.add_run("문장 ").font.size = Pt(pt)
+    n = unify_paragraph_formatting(doc, target_pt=10.0)
+    assert n == 1
+    assert {_run_sz(r) for r in p.runs} == {"20"}      # target 10pt=half 20, 지배값 18 미적용
+    assert unify_paragraph_formatting(doc, target_pt=10.0) == 0   # 멱등
+
+
+def test_target_pt_imposes_size_on_theme_inherited_body():
+    # 명시 크기 없는 본문(테마 상속)에도 target_pt 모드는 크기를 '부여'한다.
+    doc = Document()
+    p = doc.add_paragraph("크기 미지정 본문")
+    assert _run_sz(p.runs[0]) is None
+    n = unify_paragraph_formatting(doc, target_pt=10.0)
+    assert n == 1
+    assert _run_sz(p.runs[0]) == "20"
+
+
+def test_dominant_mode_preserves_theme_inherited_body():
+    # 대조군: target_pt=None(지배값 모드)은 명시 크기 없는 본문을 보존(부여 안 함).
+    doc = Document()
+    p = doc.add_paragraph("크기 미지정 본문")
+    assert unify_paragraph_formatting(doc, target_pt=None) == 0
+    assert _run_sz(p.runs[0]) is None                  # 날조 금지 — 크기 미부여
+
+
+def test_target_pt_skips_headings_and_table_cells():
+    doc = Document()
+    h = doc.add_heading("제목", level=1)
+    h.runs[0].font.size = Pt(15)                       # 제목 크기 명시
+    t = doc.add_table(rows=1, cols=1)
+    cell_run = t.cell(0, 0).paragraphs[0].add_run("셀 내용")
+    cell_run.font.size = Pt(9)
+    body = doc.add_paragraph()
+    body.add_run("본문").font.size = Pt(9)
+    unify_paragraph_formatting(doc, target_pt=10.0)
+    assert _run_sz(h.runs[0]) == "30"                  # 제목 미변경(15pt)
+    assert _run_sz(cell_run) == "18"                   # 표 셀 미변경(target·지배 둘 다 미적용)
+    assert _run_sz(body.runs[0]) == "20"               # 본문만 target 10pt
