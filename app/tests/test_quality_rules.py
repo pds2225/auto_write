@@ -13,11 +13,14 @@ from __future__ import annotations
 import pytest
 from docx import Document
 from docx.shared import RGBColor
+from docx.enum.text import WD_COLOR_INDEX
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 
 from auto_write.services.quality_rules import (
     BizplanRulesConfig, PRESETS, resolve_ruleset,
 )
-from auto_write.services.doc_quality_ops import run_all
+from auto_write.services.doc_quality_ops import run_all, normalize_colored_text_to_black
 from auto_write.services.usage_acceptance import (
     AcceptanceConfig, SEV_WARN, run_acceptance, check_unverified_claims,
 )
@@ -163,3 +166,36 @@ def test_unverified_claims_warn_does_not_change_gate(tmp_path):
     assert rep_off.submittable == rep_on.submittable   # 게이트(submittable) 불변
     assert rep_on.warn_defects >= 1                     # 경고는 잡힌다
     assert "unverified_claims" in {r.check_id for r in rep_on.results}  # 검사 등록 확인
+
+
+# --- ② 색→검정 정규화는 형광펜·음영(highlight/shd)을 보존해야 함 (강조 증발 방지) ----
+
+def _doc_with_colored_highlighted_run():
+    doc = Document()
+    p = doc.add_paragraph("핵심 ")
+    run = p.add_run("성과 강조 문장")
+    run.font.color.rgb = RGBColor(0x00, 0x00, 0xFF)     # 파란 글자색
+    run.font.highlight_color = WD_COLOR_INDEX.YELLOW    # 노란 형광펜(w:highlight)
+    rpr = run._element.get_or_add_rPr()
+    shd = OxmlElement("w:shd")
+    shd.set(qn("w:val"), "clear")
+    shd.set(qn("w:fill"), "FFFF00")
+    rpr.append(shd)                                     # 음영(w:shd)
+    return doc, run
+
+
+def test_color_normalize_preserves_highlight_and_shd():
+    """색 정규화는 글자색만 검정화하고 형광펜·음영은 보존해야 한다.
+
+    검출기 check_residual_colored_runs 는 색만 보고 highlight 는 안 보므로, 색변환이
+    highlight/shd 까지 지우면 게이트가 못 잡는 '강조 증발' 회귀가 된다(계획 §2-D-②).
+    """
+    doc, run = _doc_with_colored_highlighted_run()
+    n = normalize_colored_text_to_black(doc)
+    assert n >= 1                                       # 파란 글자색 → 검정
+    rpr = run._element.find(qn("w:rPr"))
+    color = rpr.find(qn("w:color"))
+    assert color is not None and color.get(qn("w:val")) == "000000"
+    assert rpr.find(qn("w:highlight")) is not None, "형광펜(highlight)이 보존돼야 함"
+    assert rpr.find(qn("w:shd")) is not None, "음영(shd)이 보존돼야 함"
+    assert normalize_colored_text_to_black(doc) == 0    # 멱등 — 2회차 0건

@@ -30,7 +30,7 @@ from .docx_ops import (
     GUIDE_MARKER_RE,
     _PRESERVE_COLORS,
     _normalize_color_value,
-    _set_run_color_black_unless_preserved,
+    _set_run_color_black_only,
 )
 
 if TYPE_CHECKING:  # 런타임 결합 없음 — 타입힌트 전용(프리셋 모듈 단방향 의존)
@@ -753,8 +753,10 @@ def normalize_colored_text_to_black(doc: Document, *, enable: bool = True) -> in
     안전 원칙(최소 변경, 검출과 정합):
     - 색 미지정(테마 상속)·검정·보존색·테마색(w:themeColor)·``w:val="auto"`` 등
       **정규 6자리 hex 가 아닌 색은 건드리지 않는다**(검출도 비결함으로 보므로 — 역연산 정합).
-    - 텍스트는 변경하지 않는다(날조 0). 굵게/밑줄 등 강조는 보존(색만 변경).
-    - 검증된 ``docx_ops._set_run_color_black_unless_preserved`` 를 재사용(단일 출처).
+    - 텍스트는 변경하지 않는다(날조 0). 굵게/밑줄/형광펜/음영 등 강조는 보존(색만 변경).
+    - ``docx_ops._set_run_color_black_only`` 를 사용 — 색만 검정화하고 highlight/shd 는
+      보존한다(강조 증발 방지). 채움 경로의 ``_set_run_color_black_unless_preserved`` 는
+      highlight/shd 를 지우므로 후처리 색 정규화에는 쓰지 않는다.
     - 순회 범위는 본문+표+텍스트박스+머리글/바닥글(검출과 동일). 다만 검출이 제외하는
       자기삽입 블록(NotebookLM/스캐폴드) 런도 여기선 검정화될 수 있다 — 그 블록은
       strip/submit-clean 으로 별도 제거되므로 무해(게이트는 self_inserted_blocks 로 DRAFT 유지).
@@ -784,7 +786,7 @@ def normalize_colored_text_to_black(doc: Document, *, enable: bool = True) -> in
             # 비결함으로 보므로 교정도 보존한다(역연산 계약·멱등성 유지).
             if not re.fullmatch(r"[0-9a-f]{6}", hexv) or hexv == "000000" or hexv in _PRESERVE_COLORS:
                 continue
-            _set_run_color_black_unless_preserved(run)
+            _set_run_color_black_only(run)
             changed += 1
     return changed
 
