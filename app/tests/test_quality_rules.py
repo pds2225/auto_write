@@ -102,15 +102,44 @@ def test_run_all_rules_none_equals_legacy():
     assert legacy.as_dict() == rules_none.as_dict()
 
 
-def test_run_all_rules_preset_is_phase1_noop():
-    """Phase 1 에서 rules 는 받기만 하고 동작을 바꾸지 않는다(레거시 동등).
+def test_run_all_bizplan_applies_color_and_target_pt():
+    # bizplan: color_to_black=True(색→검정 on) + body_font_pt=10(본문 10pt 통일).
+    doc = Document()
+    p = doc.add_paragraph()
+    run = p.add_run("본문 문장 텍스트")
+    run.font.size = Pt(9)
+    run.font.color.rgb = RGBColor(0x00, 0x00, 0xFF)
+    rep = run_all(doc, rules=PRESETS["bizplan"])
+    assert rep.colored_runs_normalized >= 1            # ② 색→검정 적용
+    assert _run_sz(p.runs[0]) == "20"                  # ③ 본문 10pt(half-point 20)
 
-    Phase 2 에서 ②③⑤ 가 배선되면 이 단언은 의도적으로 갱신될 예정이다.
-    """
-    legacy = run_all(_build_doc())
-    with_biz = run_all(_build_doc(), rules=PRESETS["bizplan"])
-    with_off = run_all(_build_doc(), rules=PRESETS["off"])
-    assert legacy.as_dict() == with_biz.as_dict() == with_off.as_dict()
+
+def test_run_all_off_preset_disables_color_normalization():
+    # off: color_to_black=False → 색→검정을 끈다(사용자 결정 — 프리셋이 제어).
+    doc = Document()
+    p = doc.add_paragraph()
+    p.add_run("본문 문장 텍스트").font.color.rgb = RGBColor(0x00, 0x00, 0xFF)
+    rep = run_all(doc, rules=PRESETS["off"])
+    assert rep.colored_runs_normalized == 0            # 색 변환 안 함
+    color = p.runs[0]._element.find(qn("w:rPr")).find(qn("w:color"))
+    assert color.get(qn("w:val")).lower() == "0000ff"  # 파랑 보존
+
+
+def test_run_all_minimal_preset_disables_color_normalization():
+    doc = Document()
+    p = doc.add_paragraph()
+    p.add_run("본문 문장 텍스트").font.color.rgb = RGBColor(0x00, 0x00, 0xFF)
+    rep = run_all(doc, rules=PRESETS["minimal"])
+    assert rep.colored_runs_normalized == 0            # minimal 도 색 변환 끔
+
+
+def test_run_all_rules_none_keeps_default_color_normalization():
+    # 대조군: rules 미지정(현행)은 기본대로 색→검정 on(하위호환 — 항상 켜짐).
+    doc = Document()
+    p = doc.add_paragraph()
+    p.add_run("본문 문장 텍스트").font.color.rgb = RGBColor(0x00, 0x00, 0xFF)
+    rep = run_all(doc, rules=None)
+    assert rep.colored_runs_normalized >= 1
 
 
 def test_run_all_actually_does_work():
