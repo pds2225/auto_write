@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from docx import Document
 from docx.oxml.ns import qn
@@ -31,6 +32,9 @@ from .docx_ops import (
     _normalize_color_value,
     _set_run_color_black_unless_preserved,
 )
+
+if TYPE_CHECKING:  # 런타임 결합 없음 — 타입힌트 전용(프리셋 모듈 단방향 의존)
+    from .quality_rules import BizplanRulesConfig
 
 # ---------------------------------------------------------------------------
 # 상수 / 정규식
@@ -788,6 +792,7 @@ def normalize_colored_text_to_black(doc: Document, *, enable: bool = True) -> in
 def run_all(
     doc: Document,
     *,
+    rules: "BizplanRulesConfig | None" = None,
     remove_guides: bool = True,
     emphasize: bool = True,
     underline: bool = False,
@@ -802,6 +807,11 @@ def run_all(
     ``unify_formatting`` 은 기본 활성(live) — 단락별 크기/글꼴을 지배값으로 통일한다.
     강조(emphasize)보다 먼저 실행해 굵게 처리한 런의 서식이 덮이지 않게 한다.
     """
+    # 사업계획서 규칙 프리셋(rules) 배선 자리 — Phase 1(저위험): rules 는 받기만
+    # 하고 동작을 바꾸지 않는다. rules=None 과 완전히 동일한 레거시 경로다. ② 색검정·
+    # ③ target_pt 등 고위험 fixer 의 실제 배선은 Phase 2 에서 이 지점에 추가한다.
+    # 하위호환 불변식: rules 유무와 무관하게 현행 count 가 변하지 않아야 한다
+    # (tests/test_quality_rules.py 의 run_all(rules=None)==레거시 단언으로 고정).
     report = QualityOpsReport()
     if remove_guides:
         report.guide_paragraphs_removed = remove_guide_paragraphs(doc)
