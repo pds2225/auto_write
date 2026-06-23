@@ -486,6 +486,74 @@ def test_bracket_token_mismatch_not_high(tmp_path: Path) -> None:
     assert report.transcribed == 0
 
 
+# --- 이름(성명)류 필드 값-타입 가드 (실측 회귀: 역할서술 오전사) ----------------
+
+def _name_target(norm: str = "대표자명") -> list[dict]:
+    return [{
+        "orig_label": norm, "normalized": norm, "kind": "table",
+        "table_index": 0, "row": 0, "value_cell": 1, "para_index": -1,
+    }]
+
+
+def test_name_field_rejects_role_description_value() -> None:
+    """이름(성명)류 타깃에 역할서술 값(콤마·'및'·'총괄')이 오면 high 금지·needs_confirm."""
+    source = {"대표자": "기술개발, 특허전략 및 사업화 총괄"}  # 역할서술(이름 아님)
+    m = match_fields(source, _name_target("대표자명"))[0]
+    assert m.confidence != "high"           # 자동전사 금지(오매칭<빈칸)
+    assert m.source_label == "" and m.value == ""
+    assert "대표자" in m.candidates         # needs_confirm 후보로 노출(투명)
+
+
+def test_name_field_accepts_real_name_value() -> None:
+    """이름 모양 값(홍길동)은 정상 high 전사 — 회귀 보호."""
+    m = match_fields({"대표자": "홍길동"}, _name_target("대표자명"))[0]
+    assert m.confidence == "high" and m.value == "홍길동"
+
+
+def test_name_field_accepts_masked_name_value() -> None:
+    """마스킹된 이름(○○○)도 이름 모양으로 보고 전사 허용(보존)."""
+    m = match_fields({"대표자": "○○○"}, _name_target("성명"))[0]
+    assert m.confidence == "high" and m.value == "○○○"
+
+
+def test_name_field_rejects_misc_separator_role_value() -> None:
+    """ㆍ·세미콜론 등 드문 구분자로 나열된 역할서술도 이름칸 high 금지(G1)."""
+    m = match_fields({"대표자": "전략기획ㆍ사업운영"}, _name_target("성명"))[0]
+    assert m.confidence != "high"
+
+
+def test_non_name_field_value_shape_unaffected() -> None:
+    """비이름 필드(연락처)는 값에 콤마가 있어도 가드 영향 없음 — 기존 동작 보존."""
+    source = {"연락처": "02-1234-5678, 내선 7"}
+    targets = [{
+        "orig_label": "연락처", "normalized": "연락처", "kind": "table",
+        "table_index": 0, "row": 0, "value_cell": 1, "para_index": -1,
+    }]
+    m = match_fields(source, targets)[0]
+    assert m.confidence == "high" and m.value.startswith("02-1234")
+
+
+def test_role_description_paragraph_not_autofilled_to_name(tmp_path: Path) -> None:
+    """실측 회귀(미래큐러스 A): 본문 '대표자 : <역할서술>' 이 타깃 '대표자명'에 자동전사 안 됨."""
+    src = tmp_path / "a.docx"
+    tgt = tmp_path / "b.docx"
+    out = tmp_path / "out.docx"
+    da = Document()
+    da.add_paragraph("⑤ 사업 수행 체계")
+    da.add_paragraph("대표자 : 기술개발, 특허전략 및 사업화 총괄")
+    da.save(str(src))
+    db = Document()
+    t = db.add_table(rows=1, cols=2)
+    t.rows[0].cells[0].text = "대표자명"
+    t.rows[0].cells[1].text = ""
+    db.save(str(tgt))
+
+    report = autofill_from_source(src, tgt, out, use_ai=False)
+    assert _value_for(out, "대표자명") == "", "역할서술이 이름칸에 자동전사됨"
+    assert report.transcribed == 0
+    assert any(nc["normalized"] == "대표자명" for nc in report.needs_confirm)
+
+
 # --- 그룹 C: H7 비지원 입력 / M6 미존재 출력 폴더 ---------------------------
 
 def test_cli_unsupported_input_exit2_json(tmp_path: Path) -> None:

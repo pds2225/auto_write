@@ -146,6 +146,33 @@ def _cluster_rep(norm_label: str) -> Optional[str]:
     return _CLUSTER_OF.get(norm_label)
 
 
+# 이름(성명)류 동의어 클러스터 대표키 — 이 클러스터 타깃엔 '이름 모양' 값만 high 전사.
+_NAME_FIELD_REP: Optional[str] = _CLUSTER_OF.get(_key("대표자"))
+
+# 이름이 아님을 드러내는 표지: 나열 구분자(콤마·가운뎃점·세미콜론·파이프 등) / 역할·책임 서술어.
+_NON_NAME_RE = re.compile(r"[,，;/·•∙ㆍ、|&]|및|총괄|담당|수행|자문")
+
+
+def _is_name_field(norm_label: str) -> bool:
+    """정규화 라벨이 이름(성명)류 동의어 클러스터에 속하면 True."""
+    return _NAME_FIELD_REP is not None and _cluster_rep(norm_label) == _NAME_FIELD_REP
+
+
+def _looks_like_name(value: str) -> bool:
+    """값이 사람 이름(또는 마스킹 ○○○)으로 그럴듯하면 True.
+
+    이름은 짧고 나열·역할서술이 없다. 역할분담 서술("대표자 : 기술개발, 특허전략 및
+    사업화 총괄")이 이름칸에 high 전사되는 실측 오류를 차단한다(오매칭<빈칸). 가드는
+    이름필드에만 적용하므로 비이름 필드(연락처 등)의 콤마 값은 영향받지 않는다.
+    """
+    v = (value or "").strip()
+    if not v:
+        return False
+    if len(v) > 20:               # 외국식 이름을 포함해도 이름은 길지 않다
+        return False
+    return not _NON_NAME_RE.search(v)
+
+
 _BRACKET_RE = re.compile(r"[\(（]([^\)）]*)[\)）]")
 
 
@@ -623,6 +650,10 @@ def match_fields(
             # H2: 동일 정규화 타깃이 이미 high 전사됐으면 둘째부터 강등
             elif norm in high_seen:
                 demote_to = "duplicate"
+            # 값-타입: 이름(성명)류 타깃에 이름 모양 아닌 값(역할서술 등)이면 high 금지
+            #          → needs_confirm 으로 노출(역할분담 서술 오전사 차단, 오매칭<빈칸)
+            elif _is_name_field(norm) and not _looks_like_name(source[src_label]):
+                demote_to = "value_type"
 
         if conf == "high" and src_label is not None and demote_to is None:
             high_seen.add(norm)
