@@ -568,6 +568,7 @@ def test_is_obvious_placeholder_vectors() -> None:
     # 월·일 둘 다 0 일 때만 더미날짜 — 한쪽만 0/버전문자열은 보존(적대리뷰 #2)
     preserve = ["", "경기도 성남시", "서울시 강남구", "2025.03.17", "2025년 03월17일",
                 "2020.10.05", "327-29-01754", "5억원", "100억원", "2,000명",
+                "100.00원", "1,000.00원", "0.00%",
                 "정규직 1명", "GOOGLE", "BOOK", "SOHO 창업", "O2O 플랫폼",
                 "㈜OOO컴퍼니", "홍길동",
                 "2000.01.00", "2000.00.15", "2020.0.5", "펌웨어 1234.0.1"]
@@ -599,6 +600,27 @@ def test_find_target_preserves_real_value_cell(tmp_path: Path) -> None:
     doc.save(str(tgt))
     targets = find_target_fields(tgt)
     assert not any(t["normalized"] == "사업장소재지" for t in targets), "실값 칸이 타깃됨"
+
+
+def test_decimal_amounts_are_not_placeholder_targets(tmp_path: Path) -> None:
+    """소수점 0을 포함한 금액·비율 실값은 플레이스홀더로 승격하지 않는다."""
+    tgt = tmp_path / "b.docx"
+    doc = Document()
+    t = doc.add_table(rows=3, cols=2)
+    for i, (label, value) in enumerate([
+        ("매출액", "100.00원"),
+        ("총사업비", "1,000.00원"),
+        ("지분율", "0.00%"),
+    ]):
+        t.cell(i, 0).text = label
+        t.cell(i, 1).text = value
+    doc.save(str(tgt))
+
+    targets = find_target_fields(tgt)
+    norms = {t["normalized"] for t in targets}
+    assert "매출액" not in norms
+    assert "총사업비" not in norms
+    assert "지분율" not in norms
 
 
 def test_noise_label_filtered_but_real_label_kept() -> None:
