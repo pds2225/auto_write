@@ -121,6 +121,9 @@ class AcceptanceConfig:
     max_pages: int | None = None        # 본문 분량 제한 — None 이면 검사 안 함
     ai_section_max: int | None = None   # AI활용계획 등 섹션 분량 제한
     allowed_fonts: int = _ALLOWED_FONT_KINDS
+    strict_acceptance: bool = False     # True: US-3c 선도입 warn 3종을 fail 로 승격
+    #   (괄호선택란·라벨변형·빈그림칸). 공고가 해당 항목을 필수로 요구할 때 opt-in.
+    #   기본 False = 현행(warn, 오탐 0). 기본값 fail 승격은 음성 코퍼스 검증 후 차기 과제.
     flag_unverified_claims: bool = False   # ⑦ 협업사·실적 사실기반 — warn·기본 off(오탐 위험 큼)
 
 
@@ -800,11 +803,18 @@ _ALL_CHECKS = (
     check_unverified_claims,
 )
 
+# US-3c 선도입 warn 검사 중 strict_acceptance 로 fail 승격되는 대상(R14).
+# 음성 코퍼스 검증 전까지 기본은 warn(오탐 0). 공고가 해당 항목을 필수로
+# 요구할 때만 config.strict_acceptance=True 로 fail 게이트에 편입한다.
+_PROMOTABLE_WARN_IDS = ("paren_choices", "empty_label_fields_ext", "empty_image_slots")
+
 
 def run_acceptance(path: str | Path, config: AcceptanceConfig | None = None) -> AcceptanceReport:
     """DOCX 1개에 대해 전체 수용 검사를 실행한다 (읽기 전용).
 
     config 미지정(None)이면 AcceptanceConfig 기본값으로 동작한다 — 현행과 동일.
+    config.strict_acceptance=True 면 US-3c 선도입 warn 3종을 fail 로 승격한다
+    (opt-in; 기본 False 면 현행 그대로 — 오탐 0 불변).
     """
     cfg = config if config is not None else AcceptanceConfig()
     path = Path(path)
@@ -812,6 +822,10 @@ def run_acceptance(path: str | Path, config: AcceptanceConfig | None = None) -> 
     report = AcceptanceReport(source=str(path))
     for check in _ALL_CHECKS:
         report.results.append(check(doc, cfg))
+    if cfg.strict_acceptance:
+        for r in report.results:
+            if r.check_id in _PROMOTABLE_WARN_IDS:
+                r.severity = SEV_FAIL
     return report
 
 

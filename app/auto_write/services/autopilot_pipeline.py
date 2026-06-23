@@ -176,6 +176,7 @@ def run_autopilot(
     submit_clean: bool = False,
     max_pages: Optional[int] = None,
     ai_section_max: Optional[int] = None,
+    strict_acceptance: bool = False,
     write_report: bool = True,
 ) -> AutopilotReport:
     """문서 품질 수정 전 단계를 무인 연속 실행한다.
@@ -197,6 +198,9 @@ def run_autopilot(
         submit_clean: True 면 게이트 직전에 NotebookLM 프롬프트를 md 로 보존한 뒤
             작업용 블록을 제거한다(US-6) — '기본 산출이 항상 _DRAFT' 구조 해소.
             기본 False = 기존 동작(블록 유지, 작업용 중간본).
+        strict_acceptance: True 면 US-3c 선도입 warn 3종(괄호선택란·라벨변형·빈그림칸)을
+            fail 로 승격해 게이트(_DRAFT)에 편입한다(R14, opt-in). 공고가 해당 항목을
+            필수로 요구할 때만 켠다. 기본 False = 현행(warn, 오탐 0).
         write_report: True 면 통합 리포트(md/json) 생성.
 
     Returns:
@@ -296,7 +300,8 @@ def run_autopilot(
         acc = None
         try:
             acc = run_acceptance(str(final_path), AcceptanceConfig(
-                blind_review=blind_review, max_pages=max_pages, ai_section_max=ai_section_max))
+                blind_review=blind_review, max_pages=max_pages, ai_section_max=ai_section_max,
+                strict_acceptance=strict_acceptance))
         except Exception as exc:
             report.acceptance_error = f"{type(exc).__name__}: {exc}"
         if acc is not None:

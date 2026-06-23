@@ -76,6 +76,8 @@ def main(argv: list[str] | None = None) -> int:
                     help="본문 분량 제한(p) — 초과 시 warn(예: aijinjae 15). 미지정=검사 안 함")
     ap.add_argument("--ai-section-max", type=int, default=None,
                     help="AI활용계획 등 섹션 분량 제한(p, 예: 2). 미지정=검사 안 함")
+    ap.add_argument("--strict-acceptance", action="store_true",
+                    help="US-3c 선도입 warn 3종(괄호선택란·라벨변형·빈그림칸)을 fail 로 승격(공고 필수 항목용 opt-in)")
     args = ap.parse_args(argv)
 
     src = Path(args.docx)
@@ -88,6 +90,7 @@ def main(argv: list[str] | None = None) -> int:
             blind_review=args.blind_review,
             max_pages=args.max_pages,
             ai_section_max=args.ai_section_max,
+            strict_acceptance=args.strict_acceptance,
         ))
     except Exception as exc:
         # 검사기 자체가 죽으면 '판정 불가'다 — 문서 결함(2)과 구분되는 exit 3 으로

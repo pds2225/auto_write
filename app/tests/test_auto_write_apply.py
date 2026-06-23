@@ -194,6 +194,34 @@ def test_autopilot_acceptance_gate_passes_clean_doc(tmp_path: Path) -> None:
     assert report.output_docx == str(out) and out.exists()
 
 
+def test_autopilot_strict_acceptance_promotes_paren_warn_to_draft(tmp_path: Path) -> None:
+    """R14: strict_acceptance=True 면 괄호 선택란 warn 만 있는 문서도 _DRAFT 로 막는다.
+
+    기본(strict 미지정)에서는 warn 이라 제출 가능 이름을 유지해야 한다(회귀 없음).
+    """
+    from auto_write.services.autopilot_pipeline import run_autopilot
+
+    src = tmp_path / "paren.docx"
+    doc = Document()
+    doc.add_paragraph("개요: 게이트 검증용 문서.")
+    t = doc.add_table(rows=1, cols=2)
+    t.cell(0, 0).text = "지원 분야(택 1)"
+    t.cell(0, 1).text = "( ) 제조  ( ) 지식서비스"   # 미선택 → paren_choices warn
+    doc.save(str(src))
+
+    base = run_autopilot(str(src), str(tmp_path / "base_out.docx"),
+                         max_images=0, psst_scaffold=False, write_report=False)
+    assert base.acceptance_submittable is True       # 기본: warn → 제출 가능
+    assert base.draft_marked is False
+
+    strict = run_autopilot(str(src), str(tmp_path / "strict_out.docx"),
+                           max_images=0, psst_scaffold=False, write_report=False,
+                           strict_acceptance=True)
+    assert strict.acceptance_submittable is False     # opt-in: fail 승격 → 제출불가
+    assert strict.draft_marked is True
+    assert strict.output_docx.endswith("_DRAFT.docx")
+
+
 def test_autopilot_acceptance_gate_can_be_disabled(tmp_path: Path) -> None:
     """acceptance_gate=False 면 기존 동작 그대로(이름 유지, 판정 없음)."""
     from auto_write.services.autopilot_pipeline import run_autopilot
