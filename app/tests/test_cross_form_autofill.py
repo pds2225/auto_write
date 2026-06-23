@@ -554,6 +554,119 @@ def test_role_description_paragraph_not_autofilled_to_name(tmp_path: Path) -> No
     assert any(nc["normalized"] == "대표자명" for nc in report.needs_confirm)
 
 
+# --- 예시 플레이스홀더 빈칸승격 + 가짜타깃 필터 (recall, 실측) -------------------
+
+from auto_write.services.cross_form_autofill import (  # noqa: E402
+    _is_obvious_placeholder, _is_noise_label,
+)
+
+
+def test_is_obvious_placeholder_vectors() -> None:
+    """적대검증 지정 벡터: 명백한 예시만 True, 그럴듯한 실값·영문 O단어는 False."""
+    promote = ["2000.00.00.", "2000. 00. 00.", "0000.00.00", "2000년 00월00일",
+               "000억원", "000명", "00건", "000-00-00000"]
+    # 월·일 둘 다 0 일 때만 더미날짜 — 한쪽만 0/버전문자열은 보존(적대리뷰 #2)
+    preserve = ["", "경기도 성남시", "서울시 강남구", "2025.03.17", "2025년 03월17일",
+                "2020.10.05", "327-29-01754", "5억원", "100억원", "2,000명",
+                "정규직 1명", "GOOGLE", "BOOK", "SOHO 창업", "O2O 플랫폼",
+                "㈜OOO컴퍼니", "홍길동",
+                "2000.01.00", "2000.00.15", "2020.0.5", "펌웨어 1234.0.1"]
+    for v in promote:
+        assert _is_obvious_placeholder(v) is True, f"승격 실패: {v!r}"
+    for v in preserve:
+        assert _is_obvious_placeholder(v) is False, f"실값 오판(덮어쓰기 위험): {v!r}"
+
+
+def test_find_target_promotes_placeholder_cell(tmp_path: Path) -> None:
+    """예시 플레이스홀더('2000.00.00.')가 든 칸도 채울 타깃으로 승격된다."""
+    tgt = tmp_path / "b.docx"
+    doc = Document()
+    t = doc.add_table(rows=1, cols=2)
+    t.cell(0, 0).text = "창업일"
+    t.cell(0, 1).text = "2000.00.00."   # 예시 플레이스홀더
+    doc.save(str(tgt))
+    targets = find_target_fields(tgt)
+    assert any(t["normalized"] == "창업일" for t in targets), "PH 칸이 타깃 승격 안 됨"
+
+
+def test_find_target_preserves_real_value_cell(tmp_path: Path) -> None:
+    """0 없는 그럴듯한 실값('경기도 성남시')은 타깃 아님(덮어쓰기 금지)."""
+    tgt = tmp_path / "b.docx"
+    doc = Document()
+    t = doc.add_table(rows=1, cols=2)
+    t.cell(0, 0).text = "사업장 소재지"
+    t.cell(0, 1).text = "경기도 성남시"   # 그럴듯한 실값
+    doc.save(str(tgt))
+    targets = find_target_fields(tgt)
+    assert not any(t["normalized"] == "사업장소재지" for t in targets), "실값 칸이 타깃됨"
+
+
+def test_noise_label_filtered_but_real_label_kept() -> None:
+    """표 번호·예시토큰은 가짜 라벨로 드롭, 동의어 클러스터 라벨은 보호(R7)."""
+    assert _is_noise_label("2", "2") is True            # 표 번호
+    assert _is_noise_label("3", "3") is True
+    assert _is_noise_label("...", "") is True           # 생략기호
+    assert _is_noise_label("000 대표", "000대표") is True  # 예시 인명/직책
+    assert _is_noise_label("OOO", "ooo") is True
+    # 진짜 라벨은 절대 드롭 안 함
+    assert _is_noise_label("기업명", "기업명") is False
+    assert _is_noise_label("대표자명", "대표자명") is False
+    assert _is_noise_label("창업일", "창업일") is False
+    assert _is_noise_label("협업희망 수요기업명", "협업희망수요기업명") is False
+
+
+def test_noise_label_keeps_quantity_hint_labels() -> None:
+    """예시힌트(00명·000억원)가 붙은 진짜 수량필드 라벨은 드롭하지 않는다(적대리뷰 #1, recall 보호)."""
+    from auto_write.services.cross_form_autofill import _key
+    for lab in ["고용 계획(00명)", "매출 목표(000억원)", "참여연구원 00명", "보유 특허 00건"]:
+        assert _is_noise_label(lab, _key(lab)) is False, f"수량 라벨 오드롭: {lab!r}"
+
+
+def test_placeholder_promotion_fills_from_source_e2e(tmp_path: Path) -> None:
+    """실측 회귀: 소스 개업연월일 → 타깃 '창업일' PH칸 자동채움(동의어). 실값칸은 보존."""
+    src = tmp_path / "a.docx"
+    tgt = tmp_path / "b.docx"
+    out = tmp_path / "out.docx"
+    da = Document()
+    ta = da.add_table(rows=1, cols=2)
+    ta.cell(0, 0).text = "개업연월일"
+    ta.cell(0, 1).text = "2025.03.17"
+    da.save(str(src))
+    db = Document()
+    tb = db.add_table(rows=2, cols=2)
+    tb.cell(0, 0).text = "창업일"
+    tb.cell(0, 1).text = "2000.00.00."        # PH → 채워져야 함
+    tb.cell(1, 0).text = "사업장 소재지"
+    tb.cell(1, 1).text = "경기도 성남시"        # 실값 → 보존
+    db.save(str(tgt))
+
+    report = autofill_from_source(src, tgt, out, use_ai=False)
+    assert _value_for(out, "창업일") == "2025.03.17", "PH 칸이 소스값으로 안 채워짐"
+    assert _value_for(out, "사업장 소재지") == "경기도 성남시", "실값이 덮어써짐!"
+    assert report.transcribed == 1
+
+
+def test_fill_double_gate_never_overwrites_real_value(tmp_path: Path) -> None:
+    """2중 게이트: 어떤 경로로든 이미 실값이 든 칸은 set_cell_text 로 덮어쓰지 않는다."""
+    src = tmp_path / "a.docx"
+    tgt = tmp_path / "b.docx"
+    out = tmp_path / "out.docx"
+    da = Document()
+    ta = da.add_table(rows=1, cols=2)
+    ta.cell(0, 0).text = "기업명"
+    ta.cell(0, 1).text = "미래큐러스"
+    da.save(str(src))
+    db = Document()
+    tb = db.add_table(rows=1, cols=2)
+    tb.cell(0, 0).text = "기업명"
+    tb.cell(0, 1).text = "㈜오토라이트"   # 이미 실값 있음 → 절대 덮어쓰기 금지
+    db.save(str(tgt))
+
+    report = autofill_from_source(src, tgt, out, use_ai=False)
+    assert _value_for(out, "기업명") == "㈜오토라이트", "실값이 덮어써짐(불변원칙 위반)"
+    assert report.transcribed == 0
+
+
 # --- 그룹 C: H7 비지원 입력 / M6 미존재 출력 폴더 ---------------------------
 
 def test_cli_unsupported_input_exit2_json(tmp_path: Path) -> None:

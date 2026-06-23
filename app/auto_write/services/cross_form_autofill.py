@@ -494,6 +494,71 @@ def _is_fill_blank(rest: str) -> bool:
     return bool(_FILL_BLANK_RE.match(rest or ""))
 
 
+# 예시 플레이스홀더(=실제로는 채울 빈칸) 판별 — 적대검증 확정 보수판(O마스크 제외).
+_PH_DATE_RE = re.compile(r"(?<!\d)\d{4}\s*[.\-/]\s*(\d{1,2})\s*[.\-/]\s*(\d{1,2})\s*\.?(?!\d)")
+_PH_DATE_KR_RE = re.compile(r"(?<!\d)\d{4}\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일?")
+_PH_ZERO_QTY_RE = re.compile(
+    r"(?<![0-9,])0{2,}\s*(?:억원|천만원|백만원|만원|원|명|건|개|회|년|개월|%|퍼센트)(?![0-9])")
+_PH_DUMMY_REG_RE = re.compile(r"(?<!\d)0{2,3}\s*-\s*0{2}\s*-\s*0{4,5}(?!\d)")
+
+
+def _is_obvious_placeholder(value: str) -> bool:
+    """값이 '명백한 예시 플레이스홀더'(=실제로는 채울 빈칸)면 True (보수적).
+
+    3종만 인정: ①불가능 날짜(월 또는 일이 00 — 2025.03.17 같은 정상 날짜 보존)
+    ②전부-0 수량(000억원/00건 — '100억원'·'2,000명'은 부정후방탐색으로 배제)
+    ③더미 등록번호(000-00-00000 — 실번호 327-29-01754 보존).
+    **O마스크(OOO/○○)는 의도적으로 제외** — 영문 실단어(GOOGLE/SOHO/O2O)를 오판해
+    실값을 덮어쓰는 경로를 원천 차단(적대검증 치명결함 반영). 0 없는 그럴듯한 실값
+    (경기도 성남시 등)은 False → 보존(덮어쓰기 금지).
+    """
+    v = (value or "").strip()
+    if not v:
+        return False
+    for rx in (_PH_DATE_RE, _PH_DATE_KR_RE):
+        m = rx.search(v)
+        # 월·일이 '둘 다' 0 인 더미 날짜만(2000.00.00.) — 한쪽만 0(2020.0.5 버전문자열)은 보존
+        if m and int(m.group(1)) == 0 and int(m.group(2)) == 0:
+            return True
+    if _PH_ZERO_QTY_RE.search(v):
+        return True
+    if _PH_DUMMY_REG_RE.search(v):
+        return True
+    return False
+
+
+# 가짜 타깃(채울 라벨로 부적합한 잡음) 판별 — R7 안전핀(클러스터 라벨 절대 보호).
+_PURE_INDEX_RE = re.compile(r"^\s*(?:\d{1,3}|[①-⑳]|[Ⅰ-Ⅻ]|\d{1,3}\s*[.)])\s*$")
+_ELLIPSIS_ONLY_RE = re.compile(r"^[.．…‥⋯\s]+$")
+_EXAMPLE_OZERO_RE = re.compile(
+    r"^[Oo0○Ｏ]{3,}(?:\s*(?:대표|과장|부장|차장|대리|사원|팀장|이사|주임))?$")
+_NOTICE_PREFIX = ("※", "☞", "주)")
+
+
+def _is_noise_label(label_text: str, norm: str) -> bool:
+    """채울 타깃의 '라벨'로 부적합한 잡음이면 True(표 번호·예시토큰·생략기호·안내문).
+
+    **R7 안전핀**: 동의어 클러스터(_CLUSTER_OF) 등록 라벨은 절대 잡지 않는다
+    (진짜 필드 라벨 오탈락 0). 클러스터 미등록 라벨에만 잡음 패턴을 적용한다.
+    """
+    t = (label_text or "").strip()
+    if not t:
+        return True
+    if _cluster_rep(norm) is not None:        # R7: 진짜 라벨 보호
+        return False
+    if _PURE_INDEX_RE.match(t):               # 표 번호 '2'/'3'/'①'
+        return True
+    if _ELLIPSIS_ONLY_RE.match(t):            # '...' 단독
+        return True
+    if _EXAMPLE_OZERO_RE.match(re.sub(r"\s+", "", t)):   # 'OOO'/'000 대표' 예시
+        return True
+    if t.startswith(_NOTICE_PREFIX):          # 안내문(※/☞/주))
+        return True
+    # 주의: '고용 계획(00명)'·'매출 목표(000억원)' 같은 진짜 수량필드 라벨을 드롭하지
+    # 않도록, 라벨 텍스트에 _is_obvious_placeholder 를 적용하지 않는다(recall 보호).
+    return False
+
+
 def find_target_fields(docx_path: str | Path) -> list[dict[str, Any]]:
     """타깃 DOCX 에서 채울 빈칸을 식별한다(표 칸 + 본문 단락형 빈칸).
 
@@ -517,9 +582,12 @@ def find_target_fields(docx_path: str | Path) -> list[dict[str, Any]]:
                 label = _key(label_text)
                 if not label:
                     continue
+                if _is_noise_label(label_text, label):
+                    continue  # 표 번호·예시토큰·안내문 = 가짜 타깃(R7 클러스터 라벨은 보호)
                 value_text = (logical[i + 1].text or "").strip()
-                if value_text:
-                    continue  # 이미 채워짐 → 후보 아님
+                if value_text and not _is_obvious_placeholder(value_text):
+                    continue  # 실제 값이 있음 → 후보 아님(덮어쓰기 금지)
+                # 빈칸 또는 명백한 예시 플레이스홀더(2000.00.00.·000억원) → 채울 후보 승격
                 targets.append({
                     "orig_label": SubmittableFiller._norm(label_text),
                     "normalized": label,
@@ -957,6 +1025,12 @@ def autofill_from_source(
             if m.value_cell >= len(logical):
                 report.notes.append(
                     f"전사 셀 범위초과 ti={m.table_index} ri={m.row} ci={m.value_cell}")
+                continue
+            cur = (logical[m.value_cell].text or "").strip()
+            if cur and not _is_obvious_placeholder(cur):
+                # 2중 게이트: 빈칸도 예시 플레이스홀더도 아닌 실값이면 덮어쓰기 금지(불변원칙)
+                report.notes.append(
+                    f"전사 보류(실값 보존) ti={m.table_index} ri={m.row} ci={m.value_cell}")
                 continue
             set_cell_text(logical[m.value_cell], str(m.value))
             transcribed += 1
