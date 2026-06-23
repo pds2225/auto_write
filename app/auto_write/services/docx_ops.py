@@ -83,6 +83,33 @@ def _set_run_color_black_unless_preserved(run: etree._Element) -> None:
     color.set(qn("w:val"), "000000")
 
 
+def _set_run_color_black_only(run: etree._Element) -> None:
+    """run 의 글자색만 검정(000000)으로 바꾼다 — highlight/shd 는 보존한다.
+
+    후처리 색 정규화(doc_quality_ops.normalize_colored_text_to_black)용. 채움 경로의
+    ``_set_run_color_black_unless_preserved`` 와 달리 형광펜(w:highlight)·음영(w:shd)을
+    건드리지 않는다 — 색만 보고 판정하는 검출기(check_residual_colored_runs) 범위와
+    정합하며, 정당한 강조가 색 교정에 휩쓸려 사라지는 '강조 증발'을 막는다. 보존색
+    (_PRESERVE_COLORS)·검정은 호출 측에서 이미 걸러지지만 방어적으로 여기서도
+    보존색이면 건드리지 않는다.
+    """
+    rpr = run.find(qn("w:rPr"))
+    if rpr is None:
+        rpr = OxmlElement("w:rPr")
+        run.insert(0, rpr)
+    color = rpr.find(qn("w:color"))
+    if color is not None:
+        current = _normalize_color_value(
+            color.get(qn("w:val")) or color.get("w:val") or color.get("val")
+        )
+        if current in _PRESERVE_COLORS:
+            return
+    else:
+        color = OxmlElement("w:color")
+        rpr.append(color)
+    color.set(qn("w:val"), "000000")
+
+
 def _write_para(para, text: str) -> None:
     runs = para.findall(qn("w:r"))
     if runs:

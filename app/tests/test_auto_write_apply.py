@@ -194,6 +194,34 @@ def test_autopilot_acceptance_gate_passes_clean_doc(tmp_path: Path) -> None:
     assert report.output_docx == str(out) and out.exists()
 
 
+def test_autopilot_strict_acceptance_promotes_paren_warn_to_draft(tmp_path: Path) -> None:
+    """R14: strict_acceptance=True 면 괄호 선택란 warn 만 있는 문서도 _DRAFT 로 막는다.
+
+    기본(strict 미지정)에서는 warn 이라 제출 가능 이름을 유지해야 한다(회귀 없음).
+    """
+    from auto_write.services.autopilot_pipeline import run_autopilot
+
+    src = tmp_path / "paren.docx"
+    doc = Document()
+    doc.add_paragraph("개요: 게이트 검증용 문서.")
+    t = doc.add_table(rows=1, cols=2)
+    t.cell(0, 0).text = "지원 분야(택 1)"
+    t.cell(0, 1).text = "( ) 제조  ( ) 지식서비스"   # 미선택 → paren_choices warn
+    doc.save(str(src))
+
+    base = run_autopilot(str(src), str(tmp_path / "base_out.docx"),
+                         max_images=0, psst_scaffold=False, write_report=False)
+    assert base.acceptance_submittable is True       # 기본: warn → 제출 가능
+    assert base.draft_marked is False
+
+    strict = run_autopilot(str(src), str(tmp_path / "strict_out.docx"),
+                           max_images=0, psst_scaffold=False, write_report=False,
+                           strict_acceptance=True)
+    assert strict.acceptance_submittable is False     # opt-in: fail 승격 → 제출불가
+    assert strict.draft_marked is True
+    assert strict.output_docx.endswith("_DRAFT.docx")
+
+
 def test_autopilot_acceptance_gate_can_be_disabled(tmp_path: Path) -> None:
     """acceptance_gate=False 면 기존 동작 그대로(이름 유지, 판정 없음)."""
     from auto_write.services.autopilot_pipeline import run_autopilot
@@ -296,6 +324,29 @@ def test_bizplan_in_equals_out_blocked(tmp_path: Path) -> None:
     _make_doc(src)
     with pytest.raises(ValueError):
         run_bizplan_autopilot(str(src), str(src), use_ai=False)
+
+
+def test_bizplan_fail_closed_on_acceptance_error(tmp_path: Path, monkeypatch) -> None:
+    """R9 fail-open 차단: 내부 autopilot 수용검사가 예외로 죽으면(검사불능, verdict='')
+    bizplan 최종본도 _DRAFT 로 강제되고 acceptance_error 가 전파돼야 한다.
+    (이전 누수: verdict 가 빈 문자열이라 DRAFT 가드를 건너뛰어 깨끗한 제출 이름으로 복사.)"""
+    from auto_write.services.bizplan_autopilot import run_bizplan_autopilot
+    import auto_write.services.autopilot_pipeline as ap_mod
+
+    def _boom(*a, **k):
+        raise RuntimeError("acceptance crashed")
+
+    monkeypatch.setattr(ap_mod, "run_acceptance", _boom)
+
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    _make_doc(src, with_table=True)
+    r = run_bizplan_autopilot(str(src), str(out), use_ai=False, write_report=False)
+    assert r.acceptance_error, "검사 예외가 acceptance_error 로 전파되어야 함"
+    assert r.draft_marked is True
+    assert r.output_docx.endswith("_DRAFT.docx")
+    assert not out.exists(), "검사불능인데 깨끗한 제출 이름으로 나가면 안 됨"
+    assert any(("판정 불가" in t) or ("실행 실패" in t) for t in r.manual_todo)
 
 
 # --- NotebookLM 블록 제거 (R5 오답노트: 제출본에 작업용 블록 잔존 재발 방지) ---
@@ -576,3 +627,170 @@ def test_strip_cli_gates_final_name(tmp_path: Path) -> None:
     assert rc2 == 0
     assert list(tmp_path.glob("good_nlm_제출용.docx"))
     assert list(tmp_path.glob("good_nlm_슬라이드프롬프트.md"))
+
+
+# --- R4: 앵커 정위치 삽입 — 정방향 우선(역포함 오매칭 차단) 회귀 -----------------
+
+def test_anchor_forward_match_wins_over_reverse_substring() -> None:
+    """앞쪽 본문에 앵커의 짧은 부분문자열이 있어도, 뒤쪽 표의 정방향 매칭
+    앵커가 선택되어야 한다(1차 정방향 패스 우선). 구버전은 역포함으로 앞 단락을 먼저
+    잡아 프롬프트 블록을 엉뚱한 위치에 삽입했다."""
+    from auto_write.services.image_apply import _find_anchor
+
+    doc = Document()
+    doc.add_paragraph("사업화")        # 3자 — 역포함 임계(>4) 미달
+    doc.add_paragraph("추진계획")      # 4자 — 구 코드(>=4)에서 오매칭, 신 코드(>4)에서 탈락
+    doc.add_paragraph("사업화추진")    # 5자 — 앵커의 부분문자열(구 코드 오매칭 위험)
+    table = doc.add_table(rows=1, cols=1)
+    table.rows[0].cells[0].text = "사업화추진계획 로드맵 단계별 마일스톤"
+    doc.add_paragraph("맺음말 단락.")
+
+    anchor = "사업화추진계획 로드맵 단계별 마일스톤"
+    para, table_found = _find_anchor(doc, anchor)
+    assert para is not None, "앵커를 찾지 못함 — 표 셀 정방향 매칭이 동작해야 함"
+    assert table_found is not None, "표 안 단락이 아님 — 뒤쪽 표 셀이 선택되어야 함"
+    assert anchor in para.text, "선택된 단락이 앵커 키를 포함해야 함(정방향)"
+
+
+def test_run_autopilot_passes_page_limits_to_config(tmp_path, monkeypatch) -> None:
+    """R12: run_autopilot(max_pages=..) 가 수용검사 AcceptanceConfig 로 전달돼야 한다."""
+    import auto_write.services.autopilot_pipeline as ap
+    captured = {}
+    real = ap.run_acceptance
+
+    def _spy(path, config=None):
+        captured["mp"] = getattr(config, "max_pages", "MISS")
+        captured["ai"] = getattr(config, "ai_section_max", "MISS")
+        return real(path, config)
+
+    monkeypatch.setattr(ap, "run_acceptance", _spy)
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    _make_doc(src, with_table=True)
+    ap.run_autopilot(str(src), str(out), max_pages=15, ai_section_max=2, write_report=False)
+    assert captured["mp"] == 15 and captured["ai"] == 2
+
+
+def test_run_bizplan_passes_format_and_clean(tmp_path, monkeypatch) -> None:
+    """R13/US-6: run_bizplan_autopilot 가 required_format/submit_clean 을 내부 run_autopilot
+    로 전달해야 한다(구버전: 두 인자 미전달 → bizplan 경로만 형식게이트·정리 사각지대)."""
+    import auto_write.services.bizplan_autopilot as bp
+    captured = {}
+    real = bp.run_autopilot
+
+    def _spy(*a, **k):
+        captured["required_format"] = k.get("required_format", "MISS")
+        captured["submit_clean"] = k.get("submit_clean", "MISS")
+        return real(*a, **k)
+
+    monkeypatch.setattr(bp, "run_autopilot", _spy)
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    _make_doc(src, with_table=True)
+    bp.run_bizplan_autopilot(str(src), str(out), use_ai=False,
+                             required_format="hwp", submit_clean=True, write_report=False)
+    assert captured["required_format"] == "hwp"
+    assert captured["submit_clean"] is True
+
+
+# --- G002: blind_review(--blind-review) CLI→파이프라인 전파 무회귀 -----------------
+# 엔진(usage_acceptance)의 blind 동작 자체는 test_usage_acceptance 가 검증한다.
+# 여기서는 그 플래그가 CLI→파이프라인→run_acceptance 까지 '전달'되는지만 본다.
+# 구버전 회귀: 어느 한 단계라도 blind_review=blind_review 전달을 빠뜨리면, 블라인드
+# 공고에서 ○○○ 마스킹이 자리표시 fail 로 오탐되거나 실명 잔존(masking_violation)이
+# 미검출된다. (전달 누락이면 '기본값 False' 단언이 깨져 잡힌다.)
+
+def test_autopilot_forwards_blind_review_to_config(tmp_path, monkeypatch) -> None:
+    """run_autopilot(blind_review=..) 가 수용검사 AcceptanceConfig.blind_review 로 전달."""
+    import auto_write.services.autopilot_pipeline as ap
+    captured = {}
+    real = ap.run_acceptance
+
+    def _spy(path, config=None):
+        captured["blind"] = getattr(config, "blind_review", "MISS")
+        return real(path, config)
+
+    monkeypatch.setattr(ap, "run_acceptance", _spy)
+    src = tmp_path / "in.docx"
+    _make_doc(src, with_table=False)
+    ap.run_autopilot(str(src), str(tmp_path / "on.docx"),
+                     max_images=0, psst_scaffold=False, blind_review=True, write_report=False)
+    assert captured["blind"] is True
+    ap.run_autopilot(str(src), str(tmp_path / "off.docx"),
+                     max_images=0, psst_scaffold=False, write_report=False)
+    assert captured["blind"] is False          # 기본값 비블라인드(전달 누락 시 깨짐)
+
+
+def test_autopilot_cli_forwards_blind_review(tmp_path, monkeypatch) -> None:
+    """auto_write_autopilot CLI 의 --blind-review 가 run_autopilot 로 전달."""
+    import auto_write_autopilot as cli
+    from auto_write.services.autopilot_pipeline import AutopilotReport
+    captured = {}
+
+    def _spy(input_docx, output_docx=None, **kw):
+        captured["blind"] = kw.get("blind_review", "MISS")
+        return AutopilotReport(input_docx=str(input_docx), output_docx=str(output_docx or ""))
+
+    monkeypatch.setattr(cli, "run_autopilot", _spy)
+    base = [str(tmp_path / "x.docx"), "-o", str(tmp_path / "o.docx"),
+            "--no-psst", "--max-images", "0", "--no-report"]
+    assert cli.main(base + ["--blind-review"]) == 0
+    assert captured["blind"] is True
+    assert cli.main(base) == 0
+    assert captured["blind"] is False
+
+
+def test_bizplan_forwards_blind_review_to_autopilot(tmp_path, monkeypatch) -> None:
+    """run_bizplan_autopilot(blind_review=..) 가 내부 run_autopilot 로 전달(R13 동류)."""
+    import auto_write.services.bizplan_autopilot as bp
+    captured = {}
+    real = bp.run_autopilot
+
+    def _spy(*a, **k):
+        captured["blind"] = k.get("blind_review", "MISS")
+        return real(*a, **k)
+
+    monkeypatch.setattr(bp, "run_autopilot", _spy)
+    src = tmp_path / "in.docx"
+    _make_doc(src, with_table=True)
+    bp.run_bizplan_autopilot(str(src), str(tmp_path / "out.docx"), use_ai=False,
+                             blind_review=True, write_report=False)
+    assert captured["blind"] is True
+
+
+def test_bizplan_cli_forwards_blind_review(tmp_path, monkeypatch) -> None:
+    """bizplan_autopilot CLI 의 --blind-review 가 run_bizplan_autopilot 로 전달."""
+    import bizplan_autopilot as cli
+    from auto_write.services.bizplan_autopilot import BizplanReport
+    captured = {}
+
+    def _spy(input_docx, output_docx=None, **kw):
+        captured["blind"] = kw.get("blind_review", "MISS")
+        return BizplanReport(input_docx=str(input_docx), output_docx=str(output_docx or ""))
+
+    monkeypatch.setattr(cli, "run_bizplan_autopilot", _spy)
+    base = [str(tmp_path / "x.docx"), "-o", str(tmp_path / "o.docx"), "--no-ai", "--no-report"]
+    assert cli.main(base + ["--blind-review"]) == 0
+    assert captured["blind"] is True
+    assert cli.main(base) == 0
+    assert captured["blind"] is False
+
+
+def test_self_diagnose_cli_forwards_blind_review(tmp_path, monkeypatch) -> None:
+    """self_diagnose CLI 의 --blind-review 가 run_acceptance(AcceptanceConfig)로 전달."""
+    import self_diagnose as cli
+    captured = {}
+    real = cli.run_acceptance
+
+    def _spy(src, config=None):
+        captured["blind"] = getattr(config, "blind_review", "MISS")
+        return real(src, config)
+
+    monkeypatch.setattr(cli, "run_acceptance", _spy)
+    src = tmp_path / "d.docx"
+    _make_doc(src, with_table=False)
+    no_ledger = str(tmp_path / "no_ledger.json")   # 없는 원장 → 대조 스킵(_load_ledger=None)
+    cli.main([str(src), "--blind-review", "--ledger", no_ledger])
+    assert captured["blind"] is True
+    cli.main([str(src), "--ledger", no_ledger])
+    assert captured["blind"] is False

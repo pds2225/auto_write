@@ -47,6 +47,9 @@ class SubmissionPipeline:
         blind_review: bool = False,
         required_format: str | None = None,
         submit_clean: bool = False,
+        max_pages: int | None = None,
+        ai_section_max: int | None = None,
+        strict_acceptance: bool = False,
     ) -> dict[str, Any]:
         report: dict[str, Any] = {"project_id": project_id, "steps": [], "needs_input": []}
         results_root = Path(self.settings.results_root)
@@ -110,8 +113,10 @@ class SubmissionPipeline:
             _protect_output(quality_out)
             q_result = quality.run(submit_path, quality_out, write_report=False)
             report["quality_docx"] = str(quality_out)
+            # HarnessResult 는 as_dict() 를 노출한다(to_dict 아님). 구버전은 to_dict() 를
+            # 호출해 AttributeError → except 로 quality 리포트가 항상 빈값이었음.
             try:
-                report["quality"] = q_result.to_dict()
+                report["quality"] = q_result.as_dict()
             except Exception:
                 report["quality"] = {}
             report["steps"].append("quality")
@@ -210,7 +215,9 @@ class SubmissionPipeline:
         if acceptance_gate:
             acc = None
             try:
-                acc = run_acceptance(str(final_docx), AcceptanceConfig(blind_review=blind_review))
+                acc = run_acceptance(str(final_docx), AcceptanceConfig(
+                    blind_review=blind_review, max_pages=max_pages, ai_section_max=ai_section_max,
+                    strict_acceptance=strict_acceptance))
             except Exception as exc:
                 report["acceptance_error"] = f"{type(exc).__name__}: {exc}"
                 report["needs_input"].append(
@@ -237,7 +244,13 @@ class SubmissionPipeline:
                 # 전파한다 — fail 실행의 중간본이 '제출' 이름으로 남으면 사용자가 그것을
                 # 집어 제출할 수 있다(R9 잔여 #9: 중간본 명명 정책).
                 final_old = Path(final_docx)
-                for old in artifacts:
+                # 최종본이 artifacts 에 없을 수 있다(예: --submit-clean 의 _정리본은
+                # artifacts 에 등록되지 않음) — 항상 포함시켜 fail 시 최종본이 _DRAFT
+                # 마킹에서 누락(제출 이름으로 유출)되지 않게 한다(R7/R9).
+                draft_targets = list(artifacts)
+                if final_old not in draft_targets:
+                    draft_targets.append(final_old)
+                for old in draft_targets:
                     if not old.exists():
                         continue
                     new_path, mark_error = force_draft_name(old)
@@ -267,7 +280,12 @@ class SubmissionPipeline:
             fp_clean = Path(final_docx)
             acc_ok = (bool((report.get("acceptance") or {}).get("submittable"))
                       and not report.get("acceptance_error"))
-            if acc_ok and fp_clean.stem.endswith("_정리본"):
+            # 형식 일치까지 확인된 경우에만 _제출용 승격 — 불일치면 _정리본 을 유지해
+            # 직후 7.5 형식 게이트가 _정리본_DRAFT 로 강등하게 한다('_제출용_DRAFT' 모순명
+            # 방지, L188 정책: 통과 시에만 _제출용).
+            format_ok = (not required_format
+                         or fp_clean.suffix.lstrip(".").lower() == required_format.lstrip(".").lower())
+            if acc_ok and format_ok and fp_clean.stem.endswith("_정리본"):
                 submit_name = fp_clean.with_name(fp_clean.name.replace("_정리본", "_제출용"))
                 _protect_output(submit_name)
                 fp_clean.replace(submit_name)

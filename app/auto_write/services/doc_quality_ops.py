@@ -17,13 +17,24 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from docx import Document
 from docx.oxml.ns import qn
 from docx.shared import Pt
 
 # 검증된 헬퍼 재사용 (docx_ops.py)
-from .docx_ops import _iter_body_paragraphs, _paragraph_text, GUIDE_MARKER_RE
+from .docx_ops import (
+    _iter_body_paragraphs,
+    _paragraph_text,
+    GUIDE_MARKER_RE,
+    _PRESERVE_COLORS,
+    _normalize_color_value,
+    _set_run_color_black_only,
+)
+
+if TYPE_CHECKING:  # 런타임 결합 없음 — 타입힌트 전용(프리셋 모듈 단방향 의존)
+    from .quality_rules import BizplanRulesConfig
 
 # ---------------------------------------------------------------------------
 # 상수 / 정규식
@@ -96,6 +107,7 @@ class QualityOpsReport:
     paragraphs_emphasized: int = 0
     font_sizes_normalized: int = 0
     paragraphs_unified: int = 0
+    colored_runs_normalized: int = 0
     notes: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict:
@@ -108,6 +120,7 @@ class QualityOpsReport:
             "paragraphs_emphasized": self.paragraphs_emphasized,
             "font_sizes_normalized": self.font_sizes_normalized,
             "paragraphs_unified": self.paragraphs_unified,
+            "colored_runs_normalized": self.colored_runs_normalized,
             "notes": list(self.notes),
         }
 
@@ -498,6 +511,7 @@ def unify_paragraph_formatting(
     scope: str = "body+tables",
     preserve_emphasis: bool = True,
     enable: bool = True,
+    target_pt: float | None = None,
 ) -> int:
     """단락별로 텍스트 런의 글자 크기·글꼴(font family)을 '그 단락의 지배값'으로 통일.
 
@@ -513,12 +527,22 @@ def unify_paragraph_formatting(
     - ``enable=False`` 면 0(비활성). 단, run_all 기본은 활성(normalize_font_sizes 처럼
       죽은 코드가 되지 않도록 live 기본값).
 
-    scope 에 'tables' 가 포함되면 표 셀 단락까지 대상(병합셀 중복 제외).
+    ``target_pt`` (③ 본문 pt 통일) — ``is None``/``is not None`` 명시 분기:
+    - ``None``(기본): 위의 '지배값 통일' 동작 그대로(본문+표 셀 모두 지배 크기).
+    - ``not None``(예: 10.0): **본문 단락의 글자 크기를 target_pt 고정값으로** 맞춘다.
+      본문 크기에는 지배값을 적용하지 않는다(둘은 **상호배타** — 같은 본문 런에 동시
+      적용 금지). 본문은 명시 크기가 없어도(테마 상속) target_pt 를 **부여**한다
+      (지배값 모드의 'None→보존'과 의미가 다름). **표 셀 크기는 target·지배값 둘 다
+      적용하지 않는다**(양식 의도 크기 보존). 글꼴(font family) 통일은 두 모드 모두
+      동일하게 적용한다(target_pt 는 크기에만 관여). 멱등(2회차 0건).
+
+    scope 에 'tables' 가 포함되면 표 셀 단락까지 대상(병합셀 중복 제외, 중첩표 비재귀).
     """
     if not enable:
         return 0
 
-    paragraphs = list(doc.paragraphs)
+    # (단락, 표 셀 여부) — target_pt 모드는 본문/표 셀을 다르게 처리하므로 구분한다.
+    para_items: list[tuple] = [(p, False) for p in doc.paragraphs]
     if "tables" in scope:
         seen: set[int] = set()
         for table in doc.tables:
@@ -528,10 +552,13 @@ def unify_paragraph_formatting(
                     if cid in seen:
                         continue
                     seen.add(cid)
-                    paragraphs.extend(cell.paragraphs)
+                    para_items.extend((p, True) for p in cell.paragraphs)
+
+    # ③ target_pt → half-point 문자열(w:sz 단위). 예: 10.0 → "20".
+    target_half = str(int(round(target_pt * 2))) if target_pt is not None else None
 
     changed = 0
-    for para in paragraphs:
+    for para, is_table in para_items:
         if _element_has_drawing(para._p):
             continue
         style_name = _para_style_name(para)
@@ -562,8 +589,17 @@ def unify_paragraph_formatting(
         dom_sz = _dominant(sizes)
         dom_asc = _dominant(ascii_fonts)
         dom_ea = _dominant(ea_fonts)
-        if dom_sz is None and dom_asc is None and dom_ea is None:
-            continue  # 전부 테마 상속 → 보존(날조 금지)
+
+        # 적용할 크기 결정 — target_pt 모드와 지배값 모드는 상호배타(명시 분기).
+        if target_pt is not None:
+            # 본문은 고정 target, 표 셀은 크기 미적용(target·지배값 둘 다).
+            apply_size = target_half if not is_table else None
+        else:
+            apply_size = dom_sz  # 레거시: 본문+표 셀 모두 지배 크기
+
+        has_font_dom = dom_asc is not None or dom_ea is not None
+        if apply_size is None and not has_font_dom:
+            continue  # 적용할 크기도 글꼴 지배값도 없음 → 보존(날조 금지)
 
         para_changed = False
         for r in text_runs:
@@ -571,9 +607,9 @@ def unify_paragraph_formatting(
             if rpr is None:
                 rpr = r._element.makeelement(qn("w:rPr"), {})
                 r._element.insert(0, rpr)
-            if dom_sz is not None and _set_rpr_size(rpr, dom_sz):
+            if apply_size is not None and _set_rpr_size(rpr, apply_size):
                 para_changed = True
-            if (dom_asc is not None or dom_ea is not None) and _set_rpr_fonts(rpr, dom_asc, dom_ea):
+            if has_font_dom and _set_rpr_fonts(rpr, dom_asc, dom_ea):
                 para_changed = True
         if para_changed:
             changed += 1
@@ -687,22 +723,130 @@ def remove_table_guide_rows(doc: Document, *, max_len: int = 500) -> int:
 # 통합 실행기
 # ---------------------------------------------------------------------------
 
+def _iter_all_paragraph_elements(doc: Document):
+    """본문 직계 + 표 셀(중첩 포함) + 텍스트박스 + 머리글/바닥글 단락(w:p lxml 요소)을
+    중복 없이 순회한다.
+
+    유색 안내문구는 머리글·바닥글·텍스트박스에도 들어가므로(검출 ACC-3 와 동일 범위로
+    정렬), 본문/표만 보던 사각지대를 보완한다.
+    """
+    for p in _iter_body_paragraphs(doc):
+        yield p
+    seen: set[int] = set()
+    # lxml proxy 는 참조가 사라지면 id 가 재사용될 수 있어, id 만 저장하면 서로 다른 셀이
+    # '이미 본 것'으로 오판돼 과소집계(셀 누락)된다. refs 로 proxy 생존을 유지해 id 안정성을
+    # 보장한다(검출기 usage_acceptance._dedup_cells 와 동일 가드 — 검출↔교정 순회 정합).
+    refs: list = []  # proxy 생존 유지용 — 삭제 금지
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                tc = cell._tc
+                cid = id(tc)
+                if cid in seen:
+                    continue
+                seen.add(cid)
+                refs.append(tc)
+                for p in tc.iter(qn("w:p")):
+                    yield p
+    # 텍스트박스(w:txbxContent) 안 단락
+    for txbx in doc.element.body.iter(qn("w:txbxContent")):
+        for p in txbx.iter(qn("w:p")):
+            yield p
+    # 머리글·바닥글(명시 정의가 있을 때만 — 빈 linked 머리글 접근 시 part 신규생성 부작용 회피)
+    for section in doc.sections:
+        for hf in (section.header, section.footer):
+            if hf is None or hf.is_linked_to_previous:
+                continue
+            for p in hf.paragraphs:
+                yield p._p
+            for tbl in hf.tables:
+                for row in tbl.rows:
+                    for cell in row.cells:
+                        for p in cell.paragraphs:
+                            yield p._p
+
+
+def normalize_colored_text_to_black(doc: Document, *, enable: bool = True) -> int:
+    """검정 아닌 유색 텍스트(파란 안내문구·회색 가이드 등)를 검정으로 정규화한다.
+
+    ``usage_acceptance.check_residual_colored_runs`` (ACC-3) 가 fail 로 잡는 결함을
+    교정한다 — '명시적으로 6자리 hex 색이 지정됐고 검정(000000)·보존색
+    (_PRESERVE_COLORS, 흰색 계열)이 아닌' 런의 색만 검정으로 바꾼다.
+
+    안전 원칙(최소 변경, 검출과 정합):
+    - 색 미지정(테마 상속)·검정·보존색·테마색(w:themeColor)·``w:val="auto"`` 등
+      **정규 6자리 hex 가 아닌 색은 건드리지 않는다**(검출도 비결함으로 보므로 — 역연산 정합).
+    - 텍스트는 변경하지 않는다(날조 0). 굵게/밑줄/형광펜/음영 등 강조는 보존(색만 변경).
+    - ``docx_ops._set_run_color_black_only`` 를 사용 — 색만 검정화하고 highlight/shd 는
+      보존한다(강조 증발 방지). 채움 경로의 ``_set_run_color_black_unless_preserved`` 는
+      highlight/shd 를 지우므로 후처리 색 정규화에는 쓰지 않는다.
+    - 순회 범위는 본문+표+텍스트박스+머리글/바닥글(검출과 동일). 다만 검출이 제외하는
+      자기삽입 블록(NotebookLM/스캐폴드) 런도 여기선 검정화될 수 있다 — 그 블록은
+      strip/submit-clean 으로 별도 제거되므로 무해(게이트는 self_inserted_blocks 로 DRAFT 유지).
+
+    Returns:
+        색을 검정으로 바꾼 런 수(멱등 — 두 번째 실행은 0).
+    """
+    if not enable:
+        return 0
+    changed = 0
+    for para in _iter_all_paragraph_elements(doc):
+        # 직계 + 하이퍼링크/필드 안 run(.//w:r)까지 — 파란 하이퍼링크형 안내문구도 교정
+        # (검출 check_residual_colored_runs 와 동일 범위로 정합).
+        for run in para.findall(".//" + qn("w:r")):
+            if not "".join(t.text or "" for t in run.findall(qn("w:t"))).strip():
+                continue  # 보이는 텍스트가 있는 런만
+            rpr = run.find(qn("w:rPr"))
+            if rpr is None:
+                continue
+            color = rpr.find(qn("w:color"))
+            if color is None:
+                continue  # 색 미지정(상속) — 검출도 통과시키므로 보존
+            hexv = _normalize_color_value(
+                color.get(qn("w:val")) or color.get("w:val") or color.get("val")
+            )
+            # 정규 6자리 hex 만 대상 — 'auto'·테마·단축형 등은 검출(color.rgb=None)이
+            # 비결함으로 보므로 교정도 보존한다(역연산 계약·멱등성 유지).
+            if not re.fullmatch(r"[0-9a-f]{6}", hexv) or hexv == "000000" or hexv in _PRESERVE_COLORS:
+                continue
+            _set_run_color_black_only(run)
+            changed += 1
+    return changed
+
+
 def run_all(
     doc: Document,
     *,
+    rules: "BizplanRulesConfig | None" = None,
     remove_guides: bool = True,
     emphasize: bool = True,
     underline: bool = False,
     normalize_fonts: bool = False,
     unify_formatting: bool = True,
+    normalize_colors: bool = True,
 ) -> QualityOpsReport:
     """모든 결정론적 후처리를 안전한 순서로 1회 적용하고 집계 리포트를 반환한다.
 
-    순서: 안내삭제(body+표) → 글머리표공백 → 표공백 → 빈단락 → 서식통일 → 강조 → (옵션)폰트
+    순서: 안내삭제(body+표) → 글머리표공백 → 표공백 → 빈단락 → 서식통일 → 유색→검정 → 강조 → (옵션)폰트
 
     ``unify_formatting`` 은 기본 활성(live) — 단락별 크기/글꼴을 지배값으로 통일한다.
     강조(emphasize)보다 먼저 실행해 굵게 처리한 런의 서식이 덮이지 않게 한다.
+
+    ``rules`` (BizplanRulesConfig) 가 주어지면 ② 색→검정(color_to_black)·③ 본문 pt
+    (body_font_pt→target_pt)를 프리셋이 제어한다(rules 우선). None 이면 위의 bool
+    인자대로 동작한다(하위호환 — 현행과 동일).
     """
+    # 사업계획서 규칙 프리셋(rules) 배선 — rules 가 주어지면 프리셋 플래그가 해당 동작
+    # 인자를 덮어쓴다(옵트인, rules 우선). rules=None 이면 기존 bool 인자 그대로(하위호환).
+    #   ② color_to_black → normalize_colors (minimal/off 는 색→검정을 끌 수 있음)
+    #   ③ body_font_pt   → target_pt (None 이면 지배값 통일 모드)
+    # 그 외 프리셋 플래그(suggest_notebooklm·blank_undecided·flag_unverified_claims·
+    # score_empty_required 등)는 run_all 이 아닌 다른 레이어(인포그래픽·채움·수용검사·
+    # 채점)의 관심사라 여기서 적용하지 않는다.
+    target_pt: float | None = None
+    if rules is not None:
+        normalize_colors = rules.color_to_black
+        target_pt = rules.body_font_pt
     report = QualityOpsReport()
     if remove_guides:
         report.guide_paragraphs_removed = remove_guide_paragraphs(doc)
@@ -713,7 +857,9 @@ def run_all(
     report.bullet_spacing_fixed = normalize_bullet_spacing(doc)
     report.table_cells_cleaned = cleanup_table_whitespace(doc)
     report.empty_paragraphs_removed = remove_empty_paragraphs(doc)
-    report.paragraphs_unified = unify_paragraph_formatting(doc, enable=unify_formatting)
+    report.paragraphs_unified = unify_paragraph_formatting(
+        doc, enable=unify_formatting, target_pt=target_pt)
+    report.colored_runs_normalized = normalize_colored_text_to_black(doc, enable=normalize_colors)
     if emphasize:
         report.paragraphs_emphasized = emphasize_key_sentences(doc, underline=underline)
     report.font_sizes_normalized = normalize_font_sizes(doc, enable=normalize_fonts)

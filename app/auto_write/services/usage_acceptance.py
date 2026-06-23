@@ -42,6 +42,7 @@ from typing import Any, Iterator
 from docx import Document
 from docx.oxml.ns import qn
 from docx.text.paragraph import Paragraph
+from docx.text.run import Run
 
 SEV_FAIL = "fail"
 SEV_WARN = "warn"
@@ -120,6 +121,10 @@ class AcceptanceConfig:
     max_pages: int | None = None        # 본문 분량 제한 — None 이면 검사 안 함
     ai_section_max: int | None = None   # AI활용계획 등 섹션 분량 제한
     allowed_fonts: int = _ALLOWED_FONT_KINDS
+    strict_acceptance: bool = False     # True: US-3c 선도입 warn 3종을 fail 로 승격
+    #   (괄호선택란·라벨변형·빈그림칸). 공고가 해당 항목을 필수로 요구할 때 opt-in.
+    #   기본 False = 현행(warn, 오탐 0). 기본값 fail 승격은 음성 코퍼스 검증 후 차기 과제.
+    flag_unverified_claims: bool = False   # ⑦ 협업사·실적 사실기반 — warn·기본 off(오탐 위험 큼)
 
 
 @dataclass
@@ -403,6 +408,7 @@ def check_residual_colored_runs(doc: Document, config: AcceptanceConfig | None =
     - 색 미지정(상속)·검정(000000)·흰색 계열(_COLOR_PRESERVE)은 통과.
     - 자기삽입 블록(_SELF_BLOCK_RE 단락)은 self_inserted_blocks 가 잡으므로 제외
       (이중 집계 방지). 단락 단위로 센다.
+    - 순회 범위: 본문·표 셀 + 머리글/바닥글 + 텍스트박스(ACC-9, 다른 fail 검사와 동일).
     """
     defects = 0
     samples: list[str] = []
@@ -412,7 +418,10 @@ def check_residual_colored_runs(doc: Document, config: AcceptanceConfig | None =
         text = (p.text or "").strip()
         if not text or _SELF_BLOCK_RE.search(text):
             return
-        for run in p.runs:
+        # 직계 run 뿐 아니라 하이퍼링크/필드(w:hyperlink>w:r 등) 안 run 까지 본다 —
+        # 파란 하이퍼링크형 안내문구가 R11 검출을 우회하던 갭 차단(교정도 동일 범위).
+        for _r_el in p._p.findall(".//" + qn("w:r")):
+            run = Run(_r_el, p)
             if not (run.text or "").strip():
                 continue
             try:
@@ -435,6 +444,11 @@ def check_residual_colored_runs(doc: Document, config: AcceptanceConfig | None =
     for cell in _dedup_cells(doc):
         for p in cell.paragraphs:
             _scan_para("표", p)
+    # 머리글·바닥글·텍스트박스의 유색 안내문구도 본다(다른 fail 검사와 동일 범위 — ACC-9).
+    for where, p in _iter_extra_paragraphs(doc):
+        _scan_para(where, p)
+    for p in _iter_textbox_paragraphs(doc):
+        _scan_para("텍스트박스", p)
     return CheckResult("residual_colored_runs", "검정 아닌 유색 텍스트 잔존", SEV_FAIL, defects, samples,
                        f"유색 텍스트 단락 {defects}개 — 안내문구 삭제·본문 검정 규칙 위반 의심")
 
@@ -689,9 +703,19 @@ def check_font_size_spread(doc: Document, config: AcceptanceConfig | None = None
                        f"크기 {len(sizes)}종, 이상치(8pt 미만/18pt 초과) {outliers}개")
 
 
+def _iter_all_tables(tables):
+    """최상위 + 중첩 표(셀 안 표)를 모두 순회한다(빈 행 검사 등 표 전수 점검용)."""
+    for table in tables:
+        yield table
+        for row in table.rows:
+            for cell in row.cells:
+                if cell.tables:
+                    yield from _iter_all_tables(cell.tables)
+
+
 def check_empty_table_rows(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
     defects = 0
-    for table in doc.tables:
+    for table in _iter_all_tables(doc.tables):  # 중첩 표 포함(RAW doc.tables 만 보던 사각지대 보완)
         for row in table.rows:
             cells = _row_cells_dedup(row)
             if cells and all(not c for c in cells):
@@ -718,6 +742,48 @@ def check_recruit_date_conflict(doc: Document, config: AcceptanceConfig | None =
                        f"서로 다른 채용시기 표기 {len(tokens)}종: {sorted(tokens)}")
 
 
+# ⑦ 협업사·실적 '사실 기반' 보수 검사용 패턴 (warn 선도입 — 오탐 표면 큼).
+#   '확정·체결·완료'로 단정한 협업/실적 주장을 잡되, 근거 표기·헷지 표현은 제외한다.
+#   화이트리스트는 음성 코퍼스 검증 후 차기 확장(현재는 보수적 최소 집합).
+_UNVERIFIED_CLAIM_RE = re.compile(
+    r"(협업|제휴|협약|MOU|업무\s*협약|독점\s*(?:계약|공급|판매)|납품|공급\s*계약|기술\s*이전)"
+    r"\s*[\(（]?\s*(?:확정|체결|완료|성사)"
+)
+_CLAIM_HEDGE_RE = re.compile(
+    r"검토\s*중|협의\s*중|논의\s*중|추진\s*중|계획\s*중|예정|예상|기대|목표|가능성|희망"
+)
+_CLAIM_EVIDENCE_RE = re.compile(
+    r"\[산출근거|\[출처|출처\s*[:：]|근거\s*[:：]|계약\s*번호|등록\s*번호|특허\s*제?\s*\d"
+)
+
+
+def check_unverified_claims(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
+    """협업사·실적을 근거 없이 '확정'으로 단정한 표현 — warn (기본 off, ⑦).
+
+    사업계획서 작성 규칙: 협업/실적은 사실 기반으로만 적되, 확정되지 않은
+    제휴·실적을 단정하면 심사 신뢰도를 떨어뜨린다. 오탐 표면이 커서 기본 off
+    (config.flag_unverified_claims=True 일 때만 활성)이고, 게이트(submittable)에
+    영향 없는 warn 으로만 신호한다. 근거 표기([산출근거]·출처·계약번호 등)나
+    헷지 표현(검토 중·예정·협의 중 등)이 함께 있으면 잡지 않는다(보수적).
+    """
+    label = "근거 없는 협업·실적 단정(사실기반 위반 의심)"
+    if config is None or not config.flag_unverified_claims:
+        return CheckResult("unverified_claims", label, SEV_WARN, 0, [],
+                           "검사 비활성(flag_unverified_claims=True 시 활성)")
+    defects = 0
+    samples: list[str] = []
+    for where, text in _iter_all_texts(doc):
+        if not _UNVERIFIED_CLAIM_RE.search(text):
+            continue
+        if _CLAIM_HEDGE_RE.search(text) or _CLAIM_EVIDENCE_RE.search(text):
+            continue
+        defects += 1
+        if len(samples) < _MAX_SAMPLES:
+            samples.append(f"[{where}] '{text[:30]}'")
+    return CheckResult("unverified_claims", label, SEV_WARN, defects, samples,
+                       f"근거 없이 확정 단정한 협업·실적 의심 {defects}건 — 사실 기반 표기 권고")
+
+
 _ALL_CHECKS = (
     check_unresolved_markers,
     check_self_inserted_blocks,
@@ -734,13 +800,21 @@ _ALL_CHECKS = (
     check_empty_label_fields_ext,
     check_empty_image_slots,
     check_page_overflow,
+    check_unverified_claims,
 )
+
+# US-3c 선도입 warn 검사 중 strict_acceptance 로 fail 승격되는 대상(R14).
+# 음성 코퍼스 검증 전까지 기본은 warn(오탐 0). 공고가 해당 항목을 필수로
+# 요구할 때만 config.strict_acceptance=True 로 fail 게이트에 편입한다.
+_PROMOTABLE_WARN_IDS = ("paren_choices", "empty_label_fields_ext", "empty_image_slots")
 
 
 def run_acceptance(path: str | Path, config: AcceptanceConfig | None = None) -> AcceptanceReport:
     """DOCX 1개에 대해 전체 수용 검사를 실행한다 (읽기 전용).
 
     config 미지정(None)이면 AcceptanceConfig 기본값으로 동작한다 — 현행과 동일.
+    config.strict_acceptance=True 면 US-3c 선도입 warn 3종을 fail 로 승격한다
+    (opt-in; 기본 False 면 현행 그대로 — 오탐 0 불변).
     """
     cfg = config if config is not None else AcceptanceConfig()
     path = Path(path)
@@ -748,6 +822,10 @@ def run_acceptance(path: str | Path, config: AcceptanceConfig | None = None) -> 
     report = AcceptanceReport(source=str(path))
     for check in _ALL_CHECKS:
         report.results.append(check(doc, cfg))
+    if cfg.strict_acceptance:
+        for r in report.results:
+            if r.check_id in _PROMOTABLE_WARN_IDS:
+                r.severity = SEV_FAIL
     return report
 
 

@@ -1,0 +1,113 @@
+{
+  "source": "/mnt/d/auto_write/app/미래큐러스_제출본_autopilot_FIXED_20260610.docx",
+  "target": "/mnt/d/auto_write/[별첨 1] 초격차 스타트업 프로젝트 링크업 4대 도메인 AX 프로그램 협업과제 수행계획서_오토라이트.docx",
+  "output": "/mnt/d/auto_write/WORKS/cross_form_outputs/cross_form_20260623_105746.docx",
+  "transcribed": 3,
+  "confirmed": 0,
+  "src_fields": 65,
+  "tgt_fields": 15,
+  "matches": [
+    {
+      "target_label": "기업명",
+      "normalized": "기업명",
+      "source_label": "기업명",
+      "value": "미래큐러스",
+      "confidence": "high",
+      "table_index": 4,
+      "row": 1,
+      "value_cell": 1,
+      "kind": "table",
+      "para_index": -1
+    },
+    {
+      "target_label": "대표자명",
+      "normalized": "대표자명",
+      "source_label": "대표자",
+      "value": "기술개발, 특허전략 및 사업화 총괄",
+      "confidence": "high",
+      "table_index": 4,
+      "row": 2,
+      "value_cell": 1,
+      "kind": "table",
+      "para_index": -1
+    },
+    {
+      "target_label": "사업자등록번호",
+      "normalized": "사업자등록번호",
+      "source_label": "사업자등록번호",
+      "value": "327-29-01754",
+      "confidence": "high",
+      "table_index": 4,
+      "row": 4,
+      "value_cell": 4,
+      "kind": "table",
+      "para_index": -1
+    }
+  ],
+  "needs_confirm": [
+    {
+      "target_label": "2",
+      "normalized": "2",
+      "candidates": [
+        "2단계"
+      ],
+      "confidence": "fuzzy"
+    },
+    {
+      "target_label": "3",
+      "normalized": "3",
+      "candidates": [
+        "3단계"
+      ],
+      "confidence": "fuzzy"
+    },
+    {
+      "target_label": "4",
+      "normalized": "4",
+      "candidates": [
+        "4단계"
+      ],
+      "confidence": "fuzzy"
+    }
+  ],
+  "unmatched_targets": [
+    {
+      "target_label": "협업희망 수요기업명",
+      "normalized": "협업희망수요기업명"
+    },
+    {
+      "target_label": "법인등록번호",
+      "normalized": "법인등록번호"
+    },
+    {
+      "target_label": "국내·외 인증",
+      "normalized": "국내·외인증"
+    },
+    {
+      "target_label": "국내·외 인증",
+      "normalized": "국내·외인증"
+    },
+    {
+      "target_label": "000 대표",
+      "normalized": "000대표"
+    },
+    {
+      "target_label": "000 과장",
+      "normalized": "000과장"
+    },
+    {
+      "target_label": "컴퓨터공학과 교수 재직(00년)",
+      "normalized": "컴퓨터공학과교수재직"
+    },
+    {
+      "target_label": "OO학 전공, 관련 경력(00년 이상)",
+      "normalized": "OO학전공,관련경력"
+    },
+    {
+      "target_label": "...",
+      "normalized": "..."
+    }
+  ],
+  "ok": true,
+  "notes": []
+}

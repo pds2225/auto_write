@@ -18,6 +18,7 @@ from auto_write.services.usage_acceptance import (
     check_residual_colored_runs,
     check_paren_choices, check_empty_label_fields_ext,
     check_empty_image_slots, check_page_overflow,
+    check_font_size_spread,
 )
 
 
@@ -212,6 +213,94 @@ def test_page_overflow_config_gated():
     r = check_page_overflow(d, AcceptanceConfig(max_pages=1))
     assert r.severity == "warn" and r.defects == 1
     assert check_page_overflow(d, AcceptanceConfig(max_pages=10)).defects == 0
+
+
+# --- R14: US-3c warn 3종 opt-in fail 승격 (strict_acceptance) -----------------
+
+def _save_doc(d: Document, tmp_path, name: str = "r14.docx"):
+    p = tmp_path / name
+    d.save(str(p))
+    return p
+
+
+def test_strict_acceptance_promotes_paren_choices_to_fail(tmp_path):
+    """strict_acceptance=True 면 괄호형 선택란 미선택 warn 이 fail 로 승격→제출불가."""
+    d = _doc()
+    t = d.add_table(rows=1, cols=2)
+    t.cell(0, 0).text = "지원 분야(택 1)"
+    t.cell(0, 1).text = "( ) 제조  ( ) 지식서비스"
+    p = _save_doc(d, tmp_path)
+    # 기본(현행): warn — 제출 가능
+    base = run_acceptance(p)
+    pc = next(r for r in base.results if r.check_id == "paren_choices")
+    assert pc.severity == "warn" and pc.defects == 1
+    assert base.submittable is True
+    # opt-in: 같은 결함이 fail 로 승격 → 제출불가
+    strict = run_acceptance(p, AcceptanceConfig(strict_acceptance=True))
+    pc2 = next(r for r in strict.results if r.check_id == "paren_choices")
+    assert pc2.severity == "fail" and pc2.defects == 1
+    assert strict.submittable is False
+    assert strict.fail_defects >= 1
+
+
+def test_strict_acceptance_promotes_exactly_three_named_checks(tmp_path):
+    """승격 대상은 정확히 paren_choices·empty_label_fields_ext·empty_image_slots 3종."""
+    d = _doc()
+    t1 = d.add_table(rows=1, cols=2)            # paren_choices
+    t1.cell(0, 0).text = "유형(택 1)"
+    t1.cell(0, 1).text = "( ) A  ( ) B"
+    t2 = d.add_table(rows=1, cols=2)            # empty_label_fields_ext
+    t2.cell(0, 0).text = "사업자등록번호"
+    t2.cell(0, 1).text = ""
+    t3 = d.add_table(rows=1, cols=2)            # empty_image_slots
+    t3.cell(0, 0).text = "대표 사진"
+    t3.cell(0, 1).text = ""
+    p = _save_doc(d, tmp_path)
+    strict = run_acceptance(p, AcceptanceConfig(strict_acceptance=True))
+    promoted = {r.check_id for r in strict.results
+                if r.severity == "fail" and r.defects > 0
+                and r.check_id in ("paren_choices", "empty_label_fields_ext",
+                                   "empty_image_slots")}
+    assert promoted == {"paren_choices", "empty_label_fields_ext", "empty_image_slots"}
+    assert strict.submittable is False
+
+
+def test_strict_acceptance_does_not_touch_other_warns(tmp_path):
+    """다른 warn(빈 표 행 등)은 strict_acceptance 여도 warn 유지 — 승격 범위 한정."""
+    d = _doc()
+    d.add_table(rows=1, cols=2)  # 완전히 빈 행 → empty_table_rows warn
+    p = _save_doc(d, tmp_path)
+    strict = run_acceptance(p, AcceptanceConfig(strict_acceptance=True))
+    etr = next(r for r in strict.results if r.check_id == "empty_table_rows")
+    assert etr.severity == "warn" and etr.defects == 1   # 승격 대상 아님
+    assert strict.submittable is True                    # fail 없음 → 제출 가능
+
+
+def test_strict_acceptance_default_off_no_regression(tmp_path):
+    """기본(None·AcceptanceConfig()) 은 현행 그대로 — 세 검사 warn 유지(오탐 0 불변)."""
+    d = _doc()
+    t = d.add_table(rows=1, cols=2)
+    t.cell(0, 0).text = "유형(택 1)"
+    t.cell(0, 1).text = "( ) A  ( ) B"
+    p = _save_doc(d, tmp_path)
+    for cfg in (None, AcceptanceConfig()):
+        rep = run_acceptance(p, cfg)
+        pc = next(r for r in rep.results if r.check_id == "paren_choices")
+        assert pc.severity == "warn"
+        assert rep.submittable is True
+
+
+def test_strict_acceptance_clean_doc_still_submittable(tmp_path):
+    """승격해도 결함이 없으면 제출 가능 — 승격은 '결함이 있을 때만' 막는다."""
+    d = _doc()
+    t = d.add_table(rows=1, cols=2)
+    t.cell(0, 0).text = "지원 분야(택 1)"
+    t.cell(0, 1).text = "(V) 제조  ( ) 지식서비스"   # 채움 → 결함 아님
+    p = _save_doc(d, tmp_path)
+    strict = run_acceptance(p, AcceptanceConfig(strict_acceptance=True))
+    pc = next(r for r in strict.results if r.check_id == "paren_choices")
+    assert pc.severity == "fail" and pc.defects == 0     # 승격됐지만 결함 0
+    assert strict.submittable is True
 
 
 # --- US-3a: 색상·스캐폴드·날짜·스타일폰트 + R8 재정의 --------------------------
@@ -469,6 +558,24 @@ def test_self_diagnose_exit3_on_checker_crash(tmp_path, monkeypatch):
     assert sd.main([str(src)]) == 3
 
 
+def test_self_diagnose_json_save_failure_keeps_exit_contract(tmp_path):
+    """R9: --json 저장 실패(없는 부모 폴더)가 진단 종료코드(0/2)를 오염시키지 않는다.
+    (구버전: write_text OSError 가 try 밖이라 미처리 예외→exit 1 로 계약 깨짐.)"""
+    import self_diagnose as sd
+
+    src = tmp_path / "ok.docx"
+    d = Document()
+    d.add_paragraph("본 사업은 휴머노이드 안전제어 칩을 개발한다.")
+    t = d.add_table(rows=1, cols=2)
+    t.cell(0, 0).text = "명 칭"
+    t.cell(0, 1).text = "테스트(주)"
+    d.save(str(src))
+    bad_json = tmp_path / "없는폴더" / "r.json"  # 부모 디렉터리 없음 → write_text OSError
+    rc = sd.main([str(src), "--json", str(bad_json)])
+    assert rc in (0, 2), f"JSON 저장 실패가 종료코드 계약을 오염시킴(크래시/1): {rc}"
+    assert not bad_json.exists()
+
+
 # --- US-7: 원장 판정 로직(LEDG-5/6) --------------------------------------------
 
 def test_requirement_status_rules():
@@ -480,3 +587,203 @@ def test_requirement_status_rules():
     assert sd._requirement_status(req, {"unresolved_markers"}, False) == "부분달성"
     assert sd._requirement_status(req, set(), True) == "달성"
     assert sd._requirement_status(req, {"unresolved_markers", "self_inserted_blocks"}, False) == "미달성"
+
+
+# --- R11: 유색 텍스트 검정 정규화(교정) — ACC-3 역연산 회귀 ----------------------
+
+def test_normalize_colored_text_flips_acc3():
+    """파란/회색 유색 본문을 검정으로 정규화하면 ACC-3 결함이 0이 되어야 한다."""
+    from docx.shared import RGBColor
+    from auto_write.services.doc_quality_ops import normalize_colored_text_to_black
+
+    d = _doc()
+    p = d.add_paragraph()
+    r = p.add_run("파란 안내문구")
+    r.font.color.rgb = RGBColor(0x00, 0x00, 0xFF)
+    g = d.add_paragraph()
+    gr = g.add_run("회색 가이드")
+    gr.font.color.rgb = RGBColor(0x80, 0x80, 0x80)
+    d.add_paragraph().add_run("검정 본문(상속)")  # 색 미지정 — 보존 대상
+
+    # before: ACC-3 가 2건 검출
+    assert check_residual_colored_runs(d).defects == 2
+
+    n = normalize_colored_text_to_black(d)
+    assert n == 2, "유색 런 2개를 검정으로 바꿔야 함"
+
+    # after: 0건 + 멱등(두 번째는 0)
+    assert check_residual_colored_runs(d).defects == 0
+    assert normalize_colored_text_to_black(d) == 0
+    # 텍스트 무손실
+    assert d.paragraphs[0].runs[0].text == "파란 안내문구"
+    assert d.paragraphs[2].runs[0].text == "검정 본문(상속)"
+
+
+def test_normalize_colored_text_preserves_white():
+    """보존색(흰색 계열)은 검정으로 바꾸지 않는다(표 머리글 흰 글씨 등)."""
+    from docx.shared import RGBColor
+    from auto_write.services.doc_quality_ops import normalize_colored_text_to_black
+
+    d = _doc()
+    w = d.add_paragraph()
+    wr = w.add_run("흰색 머리글")
+    wr.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+    assert normalize_colored_text_to_black(d) == 0  # 보존색은 건드리지 않음
+
+
+def test_color_preserve_set_in_sync_with_detection():
+    """교정(docx_ops._PRESERVE_COLORS)과 검출(usage_acceptance._COLOR_PRESERVE) 보존색 동기 가드."""
+    from auto_write.services.docx_ops import _PRESERVE_COLORS as REMEDIATE
+    from auto_write.services.usage_acceptance import _COLOR_PRESERVE as DETECT
+    assert REMEDIATE == DETECT, "보존색 집합이 검출/교정 간 어긋나면 안 됨"
+
+
+def test_run_all_normalizes_colors():
+    """run_all 이 유색 텍스트 정규화를 포함해 ACC-3 를 0으로 만든다(파이프라인 배선)."""
+    from docx.shared import RGBColor
+    from auto_write.services.doc_quality_ops import run_all
+
+    d = _doc()
+    pr = d.add_paragraph().add_run("파란 안내문구 본문입니다")
+    pr.font.color.rgb = RGBColor(0x00, 0x00, 0xFF)
+    rep = run_all(d)
+    assert rep.colored_runs_normalized >= 1
+    assert check_residual_colored_runs(d).defects == 0
+
+
+# --- R6: 글자크기 분산·이상치 검출(WARN) 회귀(원장 매핑 check 테스트 보강) ----------
+
+def test_font_size_spread_flags_outlier():
+    """R6: 8pt 미만/18pt 초과 이상치 글자크기를 WARN 으로 검출한다."""
+    from docx.shared import Pt
+    d = _doc()
+    d.add_paragraph().add_run("정상 본문").font.size = Pt(11)
+    d.add_paragraph().add_run("초소형 이상치").font.size = Pt(6)
+    r = check_font_size_spread(d)
+    assert r.severity == "warn"
+    assert r.defects >= 1
+
+
+def test_font_size_spread_clean_passes():
+    """단일 정상 크기만 있으면 결함 0(이상치·과다분산 없음)."""
+    from docx.shared import Pt
+    d = _doc()
+    d.add_paragraph().add_run("본문 한 종류 크기").font.size = Pt(11)
+    assert check_font_size_spread(d).defects == 0
+
+
+# --- R2: AI 작성기 needs_confirm 주석이 게이트에 검출되는지(대괄호 통일) ----------
+
+def test_ai_writer_needs_confirm_note_is_detectable():
+    """bizplan_ai_writer 가 다는 needs_confirm 주석은 '[확인필요] …' 형식이라
+    check_unresolved_markers 가 fail 로 검출해야 한다(R2 — 미확인 항목 게이트 우회 금지)."""
+    d = _doc()
+    d.add_paragraph("[확인필요] 매출 가정 / 목표시장 규모 근거")  # _add_note 가 쓰는 형식
+    r = check_unresolved_markers(d)
+    assert r.defects >= 1 and r.severity == "fail"
+
+
+# --- R11 보강: 비-RGB 색(auto/테마) 비교정 + 머리글/텍스트박스 범위 정합 회귀 --------
+
+def test_auto_color_run_not_detected_nor_mutated():
+    """w:val='auto'(Word 자동=검정) 런은 검출 0·교정 0 이어야 한다(역연산 정합).
+    구버전 교정은 _normalize_color_value('auto')='a' 를 유색으로 오인해 덮어썼다."""
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    from auto_write.services.doc_quality_ops import normalize_colored_text_to_black
+
+    d = _doc()
+    run = d.add_paragraph().add_run("자동색 본문")
+    rpr = run._r.get_or_add_rPr()
+    color = OxmlElement("w:color")
+    color.set(qn("w:val"), "auto")
+    rpr.append(color)
+
+    assert check_residual_colored_runs(d).defects == 0, "auto 색은 검출 비대상"
+    assert normalize_colored_text_to_black(d) == 0, "auto 색은 교정 비대상(덮어쓰기 금지)"
+    # 멱등·보존 확인: w:val 이 그대로 'auto'
+    assert color.get(qn("w:val")) == "auto"
+
+
+def test_header_colored_run_detected_and_normalized():
+    """머리글의 유색 안내문구도 검출(ACC-3)·교정 범위에 포함되어야 한다(ACC-9 정합)."""
+    from docx.shared import RGBColor
+    from auto_write.services.doc_quality_ops import normalize_colored_text_to_black
+
+    d = _doc()
+    hdr = d.sections[0].header
+    hdr.is_linked_to_previous = False
+    r = hdr.paragraphs[0].add_run("파란 머리글 안내문구")
+    r.font.color.rgb = RGBColor(0x00, 0x00, 0xFF)
+
+    assert check_residual_colored_runs(d).defects >= 1, "머리글 유색을 검출해야 함"
+    assert normalize_colored_text_to_black(d) >= 1, "머리글 유색을 검정으로 교정해야 함"
+    assert check_residual_colored_runs(d).defects == 0, "교정 후 0"
+
+
+# --- R11 보강: 하이퍼링크 내부 유색 run 검출·교정(.//w:r 범위) -------------------
+
+_HYPERLINK_BLUE_XML = (
+    '<w:hyperlink xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+    '<w:r><w:rPr><w:color w:val="0000FF"/></w:rPr><w:t>여기서 다운로드</w:t></w:r>'
+    '</w:hyperlink>'
+)
+
+
+def test_hyperlink_colored_run_detected_and_normalized():
+    """<w:hyperlink> 로 감싼 파란 안내 run 도 검출(ACC-3)·교정 범위에 포함돼야 한다.
+    (구버전: p.runs / findall(w:r) 가 직계만 봐서 하이퍼링크형 안내문구가 R11 통째로 우회.)"""
+    from docx.oxml import parse_xml
+    from auto_write.services.doc_quality_ops import normalize_colored_text_to_black
+
+    d = _doc()
+    p = d.add_paragraph("안내: ")
+    p._p.append(parse_xml(_HYPERLINK_BLUE_XML))
+
+    assert check_residual_colored_runs(d).defects >= 1, "하이퍼링크 내부 유색을 검출해야 함"
+    assert normalize_colored_text_to_black(d) >= 1, "하이퍼링크 내부 유색을 검정으로 교정해야 함"
+    assert check_residual_colored_runs(d).defects == 0, "교정 후 0"
+
+
+# --- R11 보강: 표 셀(정부양식 핵심 위치) 유색 텍스트 검출·교정(#22) ---------------
+
+def test_table_cell_colored_run_detected_and_normalized():
+    """R11: 표 셀 안 유색 텍스트도 검출(ACC-3)·교정돼야 한다. 정규화기의 셀 순회가
+    refs-가드(id 재사용 방지)로 검출기와 정합 — 셀 누락 없이 검정 처리."""
+    from docx.shared import RGBColor
+    from auto_write.services.doc_quality_ops import normalize_colored_text_to_black
+
+    d = _doc()
+    t = d.add_table(rows=2, cols=2)
+    t.cell(0, 0).text = "사업 개요"
+    r = t.cell(0, 1).paragraphs[0].add_run("파란 안내문구 (표 셀 안)")
+    r.font.color.rgb = RGBColor(0x00, 0x00, 0xFF)
+    # 둘째 행에도 회색 유색 — 여러 셀에서 누락 없이 처리되는지
+    r2 = t.cell(1, 1).paragraphs[0].add_run("회색 가이드 (표 셀 안)")
+    r2.font.color.rgb = RGBColor(0x80, 0x80, 0x80)
+
+    assert check_residual_colored_runs(d).defects >= 2, "표 셀 유색 2개 검출"
+    assert normalize_colored_text_to_black(d) >= 2, "표 셀 유색 2개 교정"
+    assert check_residual_colored_runs(d).defects == 0, "교정 후 0"
+
+
+# --- R12 배선: 진입점이 분량 한도를 AcceptanceConfig 로 전달하는지(죽은 게이트 활성) ---
+
+def test_self_diagnose_passes_page_limits_to_config(tmp_path, monkeypatch):
+    """R12: self_diagnose --max-pages/--ai-section-max 가 AcceptanceConfig 로 전달돼야 한다
+    (구버전: 어느 실사용 진입점도 전달 안 해 page_overflow 가 항상 비활성=죽은 코드)."""
+    import self_diagnose as sd
+    captured = {}
+    real = sd.run_acceptance
+
+    def _spy(path, config=None):
+        captured["max_pages"] = getattr(config, "max_pages", "MISSING")
+        captured["ai_section_max"] = getattr(config, "ai_section_max", "MISSING")
+        return real(path, config)
+
+    monkeypatch.setattr(sd, "run_acceptance", _spy)
+    src = tmp_path / "x.docx"
+    Document().save(str(src))
+    sd.main([str(src), "--max-pages", "15", "--ai-section-max", "2"])
+    assert captured["max_pages"] == 15
+    assert captured["ai_section_max"] == 2
