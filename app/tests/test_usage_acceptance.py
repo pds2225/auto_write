@@ -215,6 +215,94 @@ def test_page_overflow_config_gated():
     assert check_page_overflow(d, AcceptanceConfig(max_pages=10)).defects == 0
 
 
+# --- R14: US-3c warn 3종 opt-in fail 승격 (strict_acceptance) -----------------
+
+def _save_doc(d: Document, tmp_path, name: str = "r14.docx"):
+    p = tmp_path / name
+    d.save(str(p))
+    return p
+
+
+def test_strict_acceptance_promotes_paren_choices_to_fail(tmp_path):
+    """strict_acceptance=True 면 괄호형 선택란 미선택 warn 이 fail 로 승격→제출불가."""
+    d = _doc()
+    t = d.add_table(rows=1, cols=2)
+    t.cell(0, 0).text = "지원 분야(택 1)"
+    t.cell(0, 1).text = "( ) 제조  ( ) 지식서비스"
+    p = _save_doc(d, tmp_path)
+    # 기본(현행): warn — 제출 가능
+    base = run_acceptance(p)
+    pc = next(r for r in base.results if r.check_id == "paren_choices")
+    assert pc.severity == "warn" and pc.defects == 1
+    assert base.submittable is True
+    # opt-in: 같은 결함이 fail 로 승격 → 제출불가
+    strict = run_acceptance(p, AcceptanceConfig(strict_acceptance=True))
+    pc2 = next(r for r in strict.results if r.check_id == "paren_choices")
+    assert pc2.severity == "fail" and pc2.defects == 1
+    assert strict.submittable is False
+    assert strict.fail_defects >= 1
+
+
+def test_strict_acceptance_promotes_exactly_three_named_checks(tmp_path):
+    """승격 대상은 정확히 paren_choices·empty_label_fields_ext·empty_image_slots 3종."""
+    d = _doc()
+    t1 = d.add_table(rows=1, cols=2)            # paren_choices
+    t1.cell(0, 0).text = "유형(택 1)"
+    t1.cell(0, 1).text = "( ) A  ( ) B"
+    t2 = d.add_table(rows=1, cols=2)            # empty_label_fields_ext
+    t2.cell(0, 0).text = "사업자등록번호"
+    t2.cell(0, 1).text = ""
+    t3 = d.add_table(rows=1, cols=2)            # empty_image_slots
+    t3.cell(0, 0).text = "대표 사진"
+    t3.cell(0, 1).text = ""
+    p = _save_doc(d, tmp_path)
+    strict = run_acceptance(p, AcceptanceConfig(strict_acceptance=True))
+    promoted = {r.check_id for r in strict.results
+                if r.severity == "fail" and r.defects > 0
+                and r.check_id in ("paren_choices", "empty_label_fields_ext",
+                                   "empty_image_slots")}
+    assert promoted == {"paren_choices", "empty_label_fields_ext", "empty_image_slots"}
+    assert strict.submittable is False
+
+
+def test_strict_acceptance_does_not_touch_other_warns(tmp_path):
+    """다른 warn(빈 표 행 등)은 strict_acceptance 여도 warn 유지 — 승격 범위 한정."""
+    d = _doc()
+    d.add_table(rows=1, cols=2)  # 완전히 빈 행 → empty_table_rows warn
+    p = _save_doc(d, tmp_path)
+    strict = run_acceptance(p, AcceptanceConfig(strict_acceptance=True))
+    etr = next(r for r in strict.results if r.check_id == "empty_table_rows")
+    assert etr.severity == "warn" and etr.defects == 1   # 승격 대상 아님
+    assert strict.submittable is True                    # fail 없음 → 제출 가능
+
+
+def test_strict_acceptance_default_off_no_regression(tmp_path):
+    """기본(None·AcceptanceConfig()) 은 현행 그대로 — 세 검사 warn 유지(오탐 0 불변)."""
+    d = _doc()
+    t = d.add_table(rows=1, cols=2)
+    t.cell(0, 0).text = "유형(택 1)"
+    t.cell(0, 1).text = "( ) A  ( ) B"
+    p = _save_doc(d, tmp_path)
+    for cfg in (None, AcceptanceConfig()):
+        rep = run_acceptance(p, cfg)
+        pc = next(r for r in rep.results if r.check_id == "paren_choices")
+        assert pc.severity == "warn"
+        assert rep.submittable is True
+
+
+def test_strict_acceptance_clean_doc_still_submittable(tmp_path):
+    """승격해도 결함이 없으면 제출 가능 — 승격은 '결함이 있을 때만' 막는다."""
+    d = _doc()
+    t = d.add_table(rows=1, cols=2)
+    t.cell(0, 0).text = "지원 분야(택 1)"
+    t.cell(0, 1).text = "(V) 제조  ( ) 지식서비스"   # 채움 → 결함 아님
+    p = _save_doc(d, tmp_path)
+    strict = run_acceptance(p, AcceptanceConfig(strict_acceptance=True))
+    pc = next(r for r in strict.results if r.check_id == "paren_choices")
+    assert pc.severity == "fail" and pc.defects == 0     # 승격됐지만 결함 0
+    assert strict.submittable is True
+
+
 # --- US-3a: 색상·스캐폴드·날짜·스타일폰트 + R8 재정의 --------------------------
 
 def test_residual_colored_runs_detected():

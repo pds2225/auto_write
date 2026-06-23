@@ -54,6 +54,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="본문 분량 제한(p) — 초과 시 수용검사 warn(예: aijinjae 15). 미지정=검사 안 함")
     parser.add_argument("--ai-section-max", type=int, default=None,
                         help="AI활용계획 등 섹션 분량 제한(p, 예: 2). 미지정=검사 안 함")
+    parser.add_argument("--strict-acceptance", action="store_true",
+                        help="US-3c 선도입 warn 3종(괄호선택란·라벨변형·빈그림칸)을 fail 로 승격(공고 필수 항목용 opt-in)")
     parser.add_argument("--no-acceptance", action="store_true",
                         help="실사용 수용검사 게이트(DRAFT 마킹) 생략")
     parser.add_argument("--no-report", action="store_true", help="통합 리포트(md) 생성 생략")
@@ -76,6 +78,7 @@ def main(argv: list[str] | None = None) -> int:
         submit_clean=args.submit_clean,
         max_pages=args.max_pages,
         ai_section_max=args.ai_section_max,
+        strict_acceptance=args.strict_acceptance,
         write_report=not args.no_report,
     )
 
