@@ -131,6 +131,9 @@ SYNONYMS: list[list[str]] = [
     ["부서", "소속", "소속부서", "부서명", "담당부서"],
     ["생년월일", "출생년월일", "출생연월일", "생일"],
     ["법인등록번호", "법인등기번호", "법인번호"],
+    # 사업자 형태(선택칸) — 체크박스 그룹 라벨 ↔ 소스 값('개인사업자'/'법인') 매칭용.
+    ["사업자형태", "사업자구분", "기업형태", "사업자유형", "기업구분",
+     "법인형태", "창업기업형태", "사업형태"],
 ]
 
 # 정규화 라벨 → 대표키(클러스터의 첫 원소). 같은 대표키면 동의어로 본다.
@@ -238,11 +241,13 @@ class AutofillReport:
     output: str
     transcribed: int = 0
     confirmed: int = 0         # 그중 사용자 확정(confirmations)으로 채운 칸 수
+    checkbox_checked: int = 0  # 자동 체크한 선택칸 수(□→■)
     src_fields: int = 0        # 소스에서 추출한 라벨-값 수(진단용, H6)
     tgt_fields: int = 0        # 타깃에서 찾은 빈칸 수(진단용, H6)
     matches: list[Match] = field(default_factory=list)        # 실제 전사한 매칭
     needs_confirm: list[dict[str, Any]] = field(default_factory=list)  # 애매/충돌(보류)
     unmatched_targets: list[dict[str, Any]] = field(default_factory=list)
+    checkbox_groups: list[dict[str, Any]] = field(default_factory=list)  # 선택칸 판정 결과
     ok: bool = False
     notes: list[str] = field(default_factory=list)
 
@@ -253,11 +258,13 @@ class AutofillReport:
             "output": self.output,
             "transcribed": self.transcribed,
             "confirmed": self.confirmed,
+            "checkbox_checked": self.checkbox_checked,
             "src_fields": self.src_fields,
             "tgt_fields": self.tgt_fields,
             "matches": [m.as_dict() for m in self.matches],
             "needs_confirm": self.needs_confirm,
             "unmatched_targets": self.unmatched_targets,
+            "checkbox_groups": self.checkbox_groups,
             "ok": self.ok,
             "notes": self.notes,
         }
@@ -764,6 +771,173 @@ def match_fields(
     return matches
 
 
+# --- 체크박스(선택칸) 자동 체크 -----------------------------------------------
+# 정부양식의 "사업자 형태 | □ 개인 | □ 법인" 같은 선택칸을 소스 값으로 채운다.
+# 안전 원칙(텍스트 전사와 동일): 오매칭은 빈칸보다 나쁘다 → **정확히 한 옵션에만
+# 매칭될 때만** 체크. 모호(0개·2개+)·소스 무값이면 보류(자동 체크 금지, 날조 0).
+
+# 빈(미선택) 체크박스 / 이미 체크된 박스 기호 집합. 사용자 선택: □ → ■.
+_EMPTY_BOX_CHARS = "□☐▢◻◽⬚〼"
+_CHECKED_BOX_CHARS = "■☑☒✓✔◼◾🗹"
+_EMPTY_BOX_RE = re.compile("[" + _EMPTY_BOX_CHARS + "]")
+_ANY_BOX_RE = re.compile("[" + _EMPTY_BOX_CHARS + _CHECKED_BOX_CHARS + "]")
+_CHECK_MARK = "■"  # □ 를 이 기호로 치환(사용자 확정)
+
+# 선택칸 값↔옵션 정규화 사전(알려진 동의어만 표준형으로 환원; 모르면 그대로 둔다).
+# **부분문자열 매칭을 쓰지 않는 이유**: '개인'(옵션) in '개인정보보호'(값) / '법인' in
+# '법인영업…' 처럼 옵션명이 무관한 값의 일부면 오체크된다(적대검증 HIGH 3건). 그래서
+# 값·옵션을 이 사전으로 환원한 뒤 **정확일치만** 인정한다 — 서술형·짧은 절단값·예시값은
+# 사전에 없어 자동으로 보류된다(오매칭 < 빈칸·날조 0 불변).
+_CHOICE_VALUE_MAP: dict[str, str] = {
+    "개인": "개인", "개인사업자": "개인", "개인기업": "개인",
+    "법인": "법인", "법인사업자": "법인", "법인기업": "법인",
+    "주식회사": "법인", "㈜": "법인", "유한회사": "법인",
+    "유한책임회사": "법인", "합자회사": "법인", "합명회사": "법인",
+}
+
+
+def _normalize_choice(norm_key: str) -> str:
+    """선택칸 값/옵션 정규화 키를 비교용 표준형으로 환원(알려진 동의어만)."""
+    return _CHOICE_VALUE_MAP.get(norm_key, norm_key)
+
+
+def _option_text(cell_text: str) -> str:
+    """체크박스 기호를 제거한 옵션 라벨 텍스트('□ 개인' → '개인')."""
+    return _ANY_BOX_RE.sub("", (cell_text or "").strip()).strip()
+
+
+def _is_option_cell(cell_text: str) -> bool:
+    """셀이 '체크박스 1개 + 옵션명' 형태면 True.
+
+    - 박스가 **정확히 1개**여야 한다(0개=일반 라벨/값, 2개+=한 셀 복수박스는
+      위치 모호로 보류·미지원). 박스 외에 실제 글자(옵션명)가 있어야 한다
+      ('□' 단독 = 매트릭스 체크칸은 옵션 아님).
+    """
+    s = (cell_text or "").strip()
+    if len(_ANY_BOX_RE.findall(s)) != 1:
+        return False
+    return bool(_HAS_WORD_RE.search(_ANY_BOX_RE.sub("", s)))
+
+
+def find_checkbox_targets(docx_path: str | Path) -> list[dict[str, Any]]:
+    """타깃 DOCX 표에서 '라벨 + 연속 □옵션' 선택칸 그룹을 탐지한다.
+
+    반환 각 항목: {label, normalized, table_index, row, options:[{cell_index,
+    text, normalized}]}. 라벨은 옵션 그룹 바로 앞의 비-옵션 논리셀이다. 옵션이
+    행 맨 앞이라 라벨이 없거나 옵션이 2개 미만이면 그룹으로 보지 않는다(보수적).
+    """
+    doc = Document(str(docx_path))
+    groups: list[dict[str, Any]] = []
+    for ti, table in enumerate(doc.tables):
+        for ri, row in enumerate(table.rows):
+            logical = _logical_cells(row)
+            n = len(logical)
+            i = 0
+            while i < n:
+                if not _is_option_cell(logical[i].text):
+                    i += 1
+                    continue
+                # 옵션 그룹 시작 — 직전 비옵션 셀이 라벨.
+                label_text = logical[i - 1].text if i - 1 >= 0 else ""
+                options: list[dict[str, Any]] = []
+                j = i
+                while j < n and _is_option_cell(logical[j].text):
+                    opt = _option_text(logical[j].text)
+                    options.append({
+                        "cell_index": j,
+                        "text": opt,
+                        "normalized": _key(opt),
+                    })
+                    j += 1
+                label_norm = _key(label_text)
+                if label_norm and len(options) >= 2:
+                    groups.append({
+                        "label": SubmittableFiller._norm(label_text),
+                        "normalized": label_norm,
+                        "table_index": ti,
+                        "row": ri,
+                        "options": options,
+                    })
+                i = j
+    return groups
+
+
+def match_checkbox_groups(
+    source: dict[str, str],
+    groups: list[dict[str, Any]],
+    source_originals: Optional[dict[str, str]] = None,
+) -> list[dict[str, Any]]:
+    """각 선택칸 그룹에 대해 체크할 옵션을 보수적으로 결정한다.
+
+    - 그룹 라벨을 ``_best_source_for_target`` 로 소스 매칭(**high 단일후보만** 값 사용).
+    - 값·옵션을 ``_normalize_choice`` 로 환원한 뒤 **정확일치**가 정확히 하나면 체크
+      (checked_option_index). 부분문자열 매칭은 쓰지 않는다 — '개인'이 '개인정보보호'의
+      일부거나 짧은 절단값('소')이 '중소기업'의 일부면 오체크되기 때문(오매칭 < 빈칸).
+    - 소스 값이 예시 플레이스홀더(``_is_obvious_placeholder``)면 체크 금지(날조 0).
+    - 0개/2개+/무값/플레이스홀더면 -1(보류).
+    반환 각 항목: 그룹 정보 + {source_label, source_value, checked_option_index,
+    confidence("high"|"ambiguous"|"no_match"|"no_source"|"placeholder")}.
+    """
+    results: list[dict[str, Any]] = []
+    for g in groups:
+        label_norm = g["normalized"]
+        src_label, conf, _cands = _best_source_for_target(label_norm, source)
+        value = source.get(src_label, "") if (conf == "high" and src_label) else ""
+
+        checked_idx = -1
+        if value and _is_obvious_placeholder(value):
+            decision = "placeholder"         # 예시값(00법인 등) → 체크 금지(날조 0)
+        elif value:
+            vnorm = _normalize_choice(_key(value))
+            hits: list[int] = []
+            for oi, opt in enumerate(g["options"]):
+                okey = opt["normalized"]
+                if okey and _normalize_choice(okey) == vnorm:  # 정확일치만(환원 후)
+                    hits.append(oi)
+            if len(hits) == 1:
+                checked_idx = hits[0]
+                decision = "high"
+            elif hits:
+                decision = "ambiguous"       # 2개+ 매칭 → 보류
+            else:
+                decision = "no_match"        # 소스 값이 어느 옵션과도 정확일치 안 함
+        else:
+            decision = "no_source"           # 소스에 그 라벨 값이 없음(날조 0)
+
+        results.append({
+            "label": g["label"],
+            "normalized": label_norm,
+            "table_index": g["table_index"],
+            "row": g["row"],
+            "options": g["options"],
+            "source_label": src_label if value else "",
+            "source_value": value,
+            "checked_option_index": checked_idx,
+            "confidence": "high" if checked_idx >= 0 else decision,
+        })
+    return results
+
+
+def _check_option_cell(cell) -> bool:
+    """셀의 빈 체크박스(첫 1개)를 ■ 로 치환한다. 옵션 글자·서식은 보존.
+
+    이미 체크된 박스(■/☑ 등)거나 빈 박스가 없으면 무변경(멱등). 반환=변경 여부.
+    run 단위로 치환해 옵션 텍스트("개인")와 다른 run 서식을 건드리지 않는다.
+    ``para.runs`` 가 아니라 ``.//w:r`` 전체를 도므로 <w:hyperlink>/필드로 감싸인
+    run 안의 □ 도 잡는다(R11 선례 — 검출 cell.text 와 기입 범위 일치, 조용한 no-op 방지).
+    """
+    from docx.oxml.ns import qn
+    from docx.text.run import Run
+
+    for para in cell.paragraphs:
+        for r_el in para._p.findall(".//" + qn("w:r")):
+            run = Run(r_el, para)
+            if _EMPTY_BOX_RE.search(run.text):
+                run.text = _EMPTY_BOX_RE.sub(_CHECK_MARK, run.text, count=1)
+                return True
+    return False
+
+
 # --- 사용자 확정(needs_confirm 적용) -----------------------------------------
 
 def _normalize_confirmations(
@@ -893,6 +1067,7 @@ def autofill_from_source(
     *,
     use_ai: bool = False,
     confirmations: Optional[dict[str, str]] = None,
+    enable_checkbox: bool = True,
 ) -> AutofillReport:
     """소스 A 의 값을 타깃 B 의 빈 칸에 전사해 out 으로 저장한다(원본 미수정).
 
@@ -1046,15 +1221,53 @@ def autofill_from_source(
                 transcribed += 1
                 if m.confidence == "confirmed":
                     confirmed_written += 1
+
+        # 체크박스(선택칸) 자동 체크: 사업자형태 등 '□옵션' → ■ (보수적, high 단일매칭만).
+        # 좌표(table_index/row/cell_index)는 tgt_docx 와 doc 가 같은 파일이라 일치한다.
+        # 체크박스 처리 실패가 텍스트 전사 결과를 무효화하지 않도록 예외를 가둔다.
+        checkbox_checked = 0
+        if enable_checkbox:
+            try:
+                groups = find_checkbox_targets(tgt_docx)
+                decided = match_checkbox_groups(groups and src_fields or {},
+                                                groups, src_originals)
+                report.checkbox_groups = [
+                    {k: d[k] for k in ("label", "normalized", "source_value",
+                                       "checked_option_index", "confidence")}
+                    for d in decided
+                ]
+                for d in decided:
+                    ci = d["checked_option_index"]
+                    if ci < 0:
+                        continue
+                    if d["table_index"] >= len(doc.tables):
+                        continue
+                    rows = doc.tables[d["table_index"]].rows
+                    if d["row"] >= len(rows):
+                        continue
+                    logical = _logical_cells(rows[d["row"]])
+                    cell_idx = d["options"][ci]["cell_index"]
+                    if cell_idx >= len(logical):
+                        continue
+                    if _check_option_cell(logical[cell_idx]):
+                        checkbox_checked += 1
+            except Exception as exc:  # noqa: BLE001 — 전사 결과 보호
+                report.notes.append(f"체크박스 처리 건너뜀: {exc}")
+
         doc.save(str(docx_out))
 
         report.matches = to_write
         report.transcribed = transcribed
         report.confirmed = confirmed_written
+        report.checkbox_checked = checkbox_checked
 
         # H6: 전사 0건/타깃 빈칸 0건은 "성공"으로 오인하지 않도록 보수적 처리.
         #     파일 저장은 됐어도 전사 성과가 없으므로 ok=False + 진단 경고.
-        nothing_done = (transcribed == 0) or (report.tgt_fields == 0)
+        #     단 체크박스 자동 체크가 있었으면 성과로 인정한다(checkbox_checked>0).
+        nothing_done = (
+            (transcribed == 0 and checkbox_checked == 0)
+            or (report.tgt_fields == 0 and checkbox_checked == 0)
+        )
         if nothing_done:
             if report.tgt_fields == 0:
                 report.notes.append(
