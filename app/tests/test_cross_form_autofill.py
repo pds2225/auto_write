@@ -28,7 +28,9 @@ from docx import Document
 from auto_write.services.cross_form_autofill import (
     autofill_from_source,
     extract_source_fields,
+    find_checkbox_targets,
     find_target_fields,
+    match_checkbox_groups,
     match_fields,
 )
 
@@ -697,3 +699,249 @@ def test_output_nested_dir_autocreated(tmp_path: Path) -> None:
     report = autofill_from_source(src, tgt, out, use_ai=False)
     assert out.exists(), "중첩 출력 폴더가 자동 생성되지 않음"
     assert report.ok
+
+
+# === 체크박스(선택칸) 자동 체크 — 사업자형태 □개인/□법인 ====================
+# 실측(미래큐러스 A → 오토라이트 B): B 사업자형태 행 = [사업자 형태 | □ 개인 | □ 법인],
+# A 사업자구분 = "개인사업자" → □ 개인을 ■ 개인으로 체크해야 함(현재 미구현).
+
+def _make_checkbox_target(
+    path: Path,
+    label: str = "사업자 형태",
+    options: tuple[str, ...] = ("□ 개인", "□ 법인"),
+    trailing: tuple[str, str] | None = ("사업장 소재지", "경기도 성남시"),
+) -> None:
+    """타깃: [라벨 | □옵션1 | □옵션2 | (다른라벨 | 값)] 한 행 표."""
+    doc = Document()
+    ncols = 1 + len(options) + (2 if trailing else 0)
+    t = doc.add_table(rows=1, cols=ncols)
+    cells = t.rows[0].cells
+    cells[0].text = label
+    for i, opt in enumerate(options):
+        cells[1 + i].text = opt
+    if trailing:
+        cells[1 + len(options)].text = trailing[0]
+        cells[1 + len(options) + 1].text = trailing[1]
+    doc.save(str(path))
+
+
+def _make_bizform_source(path: Path, value: str = "개인사업자") -> None:
+    """소스: 사업자 구분 = <value> (사업자형태 동의어)."""
+    doc = Document()
+    t = doc.add_table(rows=1, cols=2)
+    t.rows[0].cells[0].text = "사업자 구분"
+    t.rows[0].cells[1].text = value
+    doc.save(str(path))
+
+
+def _cell_text(docx_path: Path, ti: int, ri: int, ci: int) -> str:
+    doc = Document(str(docx_path))
+    return (doc.tables[ti].rows[ri].cells[ci].text or "").strip()
+
+
+# --- 단위: 탐지 --------------------------------------------------------------
+
+def test_find_checkbox_targets_detects_group(tmp_path: Path) -> None:
+    """라벨 다음 연속 '□옵션' 셀들을 한 그룹으로 탐지(라벨·옵션 정규화)."""
+    tgt = tmp_path / "b.docx"
+    _make_checkbox_target(tgt)
+    groups = find_checkbox_targets(tgt)
+    assert len(groups) == 1
+    g = groups[0]
+    assert g["normalized"] == "사업자형태"
+    opt_norms = [o["normalized"] for o in g["options"]]
+    assert opt_norms == ["개인", "법인"]
+    # 다음 라벨('사업장 소재지')은 옵션에 포함되지 않는다(그룹 경계).
+    assert all("소재지" not in o["normalized"] for o in g["options"])
+
+
+def test_find_checkbox_ignores_lone_box(tmp_path: Path) -> None:
+    """옵션 텍스트 없는 단독 '□' 셀(매트릭스 체크칸)은 옵션으로 보지 않는다."""
+    tgt = tmp_path / "b.docx"
+    # [구분 | □ | □ | □] — 옵션명 없는 순수 박스 → 그룹 없음
+    _make_checkbox_target(
+        tgt, label="구분", options=("□", "□", "□"), trailing=None)
+    groups = find_checkbox_targets(tgt)
+    assert groups == []
+
+
+def test_find_checkbox_no_box_no_group(tmp_path: Path) -> None:
+    """체크박스 기호가 전혀 없으면 그룹 0(일반 라벨-값 표는 무관)."""
+    tgt = tmp_path / "b.docx"
+    _make_target(tgt)  # 일반 라벨|빈칸 표
+    assert find_checkbox_targets(tgt) == []
+
+
+# --- 단위: 매칭 --------------------------------------------------------------
+
+def test_checkbox_match_개인사업자_checks_개인(tmp_path: Path) -> None:
+    """소스 '개인사업자' → 옵션 '개인'만 매칭(법인 아님)."""
+    src = tmp_path / "a.docx"
+    tgt = tmp_path / "b.docx"
+    _make_bizform_source(src, "개인사업자")
+    _make_checkbox_target(tgt)
+    fields = extract_source_fields(src)
+    groups = find_checkbox_targets(tgt)
+    decided = match_checkbox_groups(fields, groups)
+    assert len(decided) == 1
+    d = decided[0]
+    assert d["confidence"] == "high"
+    assert d["checked_option_index"] == 0          # □ 개인
+    assert d["source_value"] == "개인사업자"
+
+
+def test_checkbox_match_법인사업자_checks_법인(tmp_path: Path) -> None:
+    """역방향 안전: 소스 '법인사업자' → 옵션 '법인'만 매칭."""
+    src = tmp_path / "a.docx"
+    tgt = tmp_path / "b.docx"
+    _make_bizform_source(src, "법인사업자")
+    _make_checkbox_target(tgt)
+    decided = match_checkbox_groups(
+        extract_source_fields(src), find_checkbox_targets(tgt))
+    assert decided[0]["checked_option_index"] == 1  # □ 법인
+
+
+def test_checkbox_no_source_no_check(tmp_path: Path) -> None:
+    """소스에 사업자형태 정보가 없으면 어떤 옵션도 체크하지 않는다(날조 0)."""
+    src = tmp_path / "a.docx"
+    tgt = tmp_path / "b.docx"
+    _make_source(src)            # 기업명/대표자/사업자등록번호만(사업자형태 없음)
+    _make_checkbox_target(tgt)
+    decided = match_checkbox_groups(
+        extract_source_fields(src), find_checkbox_targets(tgt))
+    # 매칭 보류: checked_option_index 는 -1 (자동 체크 금지)
+    assert decided[0]["checked_option_index"] == -1
+    assert decided[0]["confidence"] != "high"
+
+
+def test_checkbox_ambiguous_no_check(tmp_path: Path) -> None:
+    """소스 값이 두 옵션 모두 포함하면(개인 및 법인) 보류(오매칭<빈칸)."""
+    src = tmp_path / "a.docx"
+    tgt = tmp_path / "b.docx"
+    _make_bizform_source(src, "개인 및 법인")
+    _make_checkbox_target(tgt)
+    decided = match_checkbox_groups(
+        extract_source_fields(src), find_checkbox_targets(tgt))
+    assert decided[0]["checked_option_index"] == -1
+
+
+# --- E2E: autofill 기입 ------------------------------------------------------
+
+def test_autofill_checkbox_e2e_marks_box(tmp_path: Path) -> None:
+    """E2E: □ 개인 → ■ 개인, □ 법인 보존, 옵션 글자 보존, transcribed 카운트."""
+    src = tmp_path / "a.docx"
+    tgt = tmp_path / "b.docx"
+    out = tmp_path / "out.docx"
+    _make_bizform_source(src, "개인사업자")
+    _make_checkbox_target(tgt)
+    report = autofill_from_source(src, tgt, out)
+    assert _cell_text(out, 0, 0, 1) == "■ 개인"      # 체크됨
+    assert _cell_text(out, 0, 0, 2) == "□ 법인"      # 비매칭 옵션 보존
+    assert report.checkbox_checked == 1
+
+
+def test_autofill_checkbox_idempotent(tmp_path: Path) -> None:
+    """이미 ■ 개인이면 그대로(멱등), 중복 체크·훼손 없음."""
+    src = tmp_path / "a.docx"
+    tgt = tmp_path / "b.docx"
+    out = tmp_path / "out.docx"
+    _make_bizform_source(src, "개인사업자")
+    _make_checkbox_target(tgt, options=("■ 개인", "□ 법인"))
+    report = autofill_from_source(src, tgt, out)
+    assert _cell_text(out, 0, 0, 1) == "■ 개인"
+    assert _cell_text(out, 0, 0, 2) == "□ 법인"
+    assert report.checkbox_checked == 0              # 이미 체크 → 새 변경 0
+
+
+def test_autofill_checkbox_disabled_flag(tmp_path: Path) -> None:
+    """enable_checkbox=False 면 체크박스를 건드리지 않는다."""
+    src = tmp_path / "a.docx"
+    tgt = tmp_path / "b.docx"
+    out = tmp_path / "out.docx"
+    _make_bizform_source(src, "개인사업자")
+    _make_checkbox_target(tgt)
+    report = autofill_from_source(src, tgt, out, enable_checkbox=False)
+    assert _cell_text(out, 0, 0, 1) == "□ 개인"      # 무변경
+    assert report.checkbox_checked == 0
+
+
+def test_autofill_checkbox_preserves_originals(tmp_path: Path) -> None:
+    """원본 source·target 미수정(체크박스 경로도 불변)."""
+    src = tmp_path / "a.docx"
+    tgt = tmp_path / "b.docx"
+    out = tmp_path / "out.docx"
+    _make_bizform_source(src, "개인사업자")
+    _make_checkbox_target(tgt)
+    autofill_from_source(src, tgt, out)
+    assert _cell_text(tgt, 0, 0, 1) == "□ 개인"      # 타깃 원본 보존
+    assert _cell_text(src, 0, 0, 1) == "개인사업자"  # 소스 원본 보존
+
+
+# --- 적대검증 FIX_FIRST 회귀: 부분문자열 오체크 차단 -------------------------
+
+def test_checkbox_substring_no_false_check(tmp_path: Path) -> None:
+    """옵션명이 무관한 값의 부분문자열이어도 오체크 금지(적대검증 HIGH #1).
+
+    '개인정보보호'·'법인영업 중심'은 옵션 '개인'/'법인'의 상위문자열이지만
+    의미가 다르다 → 정확일치(환원 후) 아니므로 보류(-1)여야 한다.
+    """
+    tgt = tmp_path / "b.docx"
+    _make_checkbox_target(tgt)
+    groups = find_checkbox_targets(tgt)
+    for bad in ("개인정보보호", "법인영업 중심의 사업 운영"):
+        decided = match_checkbox_groups({"사업자형태": bad}, groups)
+        assert decided[0]["checked_option_index"] == -1, f"{bad!r} 오체크"
+        assert decided[0]["confidence"] != "high"
+
+
+def test_checkbox_short_value_no_false_check(tmp_path: Path) -> None:
+    """짧은 소스 값이 긴 옵션의 부분문자열이어도 오체크 금지(적대검증 HIGH #2).
+
+    '소'(값)는 '중소기업'의 일부지만 사업자 구분이 아니다 → 보류(-1).
+    """
+    tgt = tmp_path / "b.docx"
+    _make_checkbox_target(tgt, label="기업 구분",
+                          options=("□ 중소기업", "□ 대기업"), trailing=None)
+    groups = find_checkbox_targets(tgt)
+    decided = match_checkbox_groups({"기업구분": "소"}, groups)
+    assert decided[0]["checked_option_index"] == -1
+
+
+def test_checkbox_placeholder_value_no_check(tmp_path: Path) -> None:
+    """예시 플레이스홀더 값('00법인'/'000개인')은 체크 금지(적대검증 HIGH #3·날조 0)."""
+    tgt = tmp_path / "b.docx"
+    _make_checkbox_target(tgt)
+    groups = find_checkbox_targets(tgt)
+    for ph in ("00법인", "000개인", "○○○"):
+        decided = match_checkbox_groups({"사업자형태": ph}, groups)
+        assert decided[0]["checked_option_index"] == -1, f"{ph!r} 오체크"
+
+
+def test_checkbox_real_value_still_checks(tmp_path: Path) -> None:
+    """보수화 후에도 정상 값('개인사업자'/'법인')은 그대로 체크(양성 보존)."""
+    tgt = tmp_path / "b.docx"
+    _make_checkbox_target(tgt)
+    groups = find_checkbox_targets(tgt)
+    assert match_checkbox_groups({"사업자형태": "개인사업자"}, groups)[0]["checked_option_index"] == 0
+    assert match_checkbox_groups({"사업자형태": "주식회사"}, groups)[0]["checked_option_index"] == 1
+    assert match_checkbox_groups({"사업자형태": "법인"}, groups)[0]["checked_option_index"] == 1
+
+
+def test_check_option_cell_hyperlink_wrapped_box(tmp_path: Path) -> None:
+    """<w:hyperlink>로 감싸인 run 안의 □ 도 체크된다(적대검증 LOW #4·조용한 no-op 방지)."""
+    from docx.oxml import OxmlElement
+    from auto_write.services.cross_form_autofill import _check_option_cell
+    doc = Document()
+    t = doc.add_table(rows=1, cols=2)
+    t.rows[0].cells[0].text = "사업자 형태"
+    cell = t.rows[0].cells[1]
+    para = cell.paragraphs[0]
+    hl = OxmlElement("w:hyperlink")
+    run = OxmlElement("w:r")
+    wt = OxmlElement("w:t")
+    wt.text = "□ 개인"
+    run.append(wt)
+    hl.append(run)
+    para._p.append(hl)
+    assert _check_option_cell(cell) is True
+    assert "■ 개인" in cell.text
