@@ -11,20 +11,20 @@
         ]
       },
       {
-        "matcher": "startup|resume|compact|clear",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\session-resume-auto\\scripts\\resume_restore.py\""
-          }
-        ]
-      },
-      {
         "matcher": "startup|resume|clear|compact",
         "hooks": [
           {
             "type": "command",
             "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\omc-auto-router\\scripts\\omc_session_start.py\""
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|compact|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\session-resume-auto\\scripts\\resume_restore.py\""
           }
         ]
       }
@@ -66,7 +66,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\session-resume-auto\\scripts\\resume_prompt.py\""
+            "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\omc-auto-router\\scripts\\omc_prompt_router.py\""
           }
         ]
       },
@@ -75,27 +75,27 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\omc-auto-router\\scripts\\omc_prompt_router.py\""
+            "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\session-resume-auto\\scripts\\resume_prompt.py\""
           }
         ]
       }
     ],
     "PostToolUse": [
       {
-        "matcher": "^(Workflow|Agent|Bash|PowerShell)$",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\session-resume-auto\\scripts\\resume_bg_log.py\""
-          }
-        ]
-      },
-      {
         "matcher": "Bash|Edit|Write|MultiEdit|NotebookEdit|Agent|Task",
         "hooks": [
           {
             "type": "command",
             "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\omc-auto-router\\scripts\\omc_post_tool_remind.py\""
+          }
+        ]
+      },
+      {
+        "matcher": "^(Workflow|Agent|Bash|PowerShell)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\session-resume-auto\\scripts\\resume_bg_log.py\""
           }
         ]
       }
