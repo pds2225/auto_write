@@ -1,0 +1,2 @@
+﻿공고페이지_K-Startup: https://www.k-startup.go.kr/web/contents/bizpbanc-ongoing.do?page=1&pbancEndYn=N&pbancSn=178103&schM=view&schStr=regist
+보조페이지_GIST: https://www.gist.ac.kr/kr/html/sub06/060101.html?GotoPage=1&mode=V&no=221851
