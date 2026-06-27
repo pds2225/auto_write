@@ -21,6 +21,25 @@
 - 원본 레포: `pds2225/autowrite` (BizPlan Injector, 2026-03 시작)
 - 이전 시점의 원본 사용법은 해당 레포 `README.md` 참조.
 
-## 주의
-이전 직후 상태로, `auto_write` 본체 패키지(`app/auto_write/`)와의 import 경로 정합은
-아직 맞추지 않았다. 독립 CLI로 동작하던 자산이므로 통합 사용 시 경로 조정이 필요할 수 있다.
+## 실행
+
+독립 CLI/앱으로 동작한다. `tools/injector/` 의존성은 `requirements.txt` 참조.
+
+```bash
+pip install -r tools/injector/requirements.txt
+python tools/injector/inject.py --analyze tools/injector/templates/<양식>.docx
+```
+
+## import 경로 정합 (점검 완료)
+
+이전 후 점검 결과 **경로 조정 불필요**하다. 인젝터는 자기 위치를 스스로 부트스트랩한다:
+
+- `inject.py` → `sys.path.insert(0, os.path.dirname(__file__))`
+- `core/ai_writer.py` → `sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))`
+
+덕분에 CWD와 무관하게 `from core import ...` / `from prompts import ...` 가 새 위치
+(`tools/injector/`)에서 그대로 해소된다(스모크 테스트로 확인 — `prompts` import OK,
+`core` 는 경로 해소 통과 후 `lxml`(python-docx 의존성) 설치 여부에만 좌우).
+
+`auto_write` 본체 패키지(`app/auto_write/`)와는 결합하지 않은 **독립 도구**다. 두 코드베이스를
+한 모듈에서 함께 쓰려는 경우에만 추가 경로 작업이 필요하다(현재 그런 사용처 없음).
