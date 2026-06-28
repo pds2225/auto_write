@@ -8,12 +8,18 @@ PutFieldText 호출·날조0·잔여 정직보고·COM 미가용 시 정직 degr
 from __future__ import annotations
 
 import os
+import shutil
+import zipfile
 from pathlib import Path
 
 import pytest
 
 from auto_write.services import hwp_com_fill
-from auto_write.services.hwp_com_fill import _parse_field_list, fill_hwp_com
+from auto_write.services.hwp_com_fill import (
+    _parse_field_list,
+    fill_hwp_com,
+    fill_hwp_via_hwpx,
+)
 
 
 class _MockHwp:
@@ -188,3 +194,129 @@ def test_hardlink_out_equals_in_raises(monkeypatch, src_hwp, tmp_path):
         pytest.skip("이 파일시스템은 하드링크 미지원")
     with pytest.raises(ValueError):
         fill_hwp_com(src_hwp, link, identity={"기업명": "x"})
+
+
+# --- 표 양식 자동 파이프라인(.hwp→hwpx→채움→.hwp) 검증 (mock COM 변환=무손실 복사) -- #
+
+_HP = "http://www.hancom.co.kr/hwpml/2011/paragraph"
+_HS = "http://www.hancom.co.kr/hwpml/2011/section"
+
+
+def _table_hwpx_bytes() -> bytes:
+    def cell(col, text):
+        return (
+            f'<hp:tc><hp:cellAddr colAddr="{col}" rowAddr="0"/>'
+            f'<hp:cellSpan colSpan="1" rowSpan="1"/>'
+            f'<hp:subList><hp:p><hp:run charPrIDRef="0"><hp:t>{text}</hp:t>'
+            f"</hp:run></hp:p></hp:subList></hp:tc>"
+        )
+
+    rows = (
+        f'<hp:tr>{cell(0, "기업명")}{cell(1, "")}</hp:tr>'
+        f'<hp:tr>{cell(0, "대표자")}{cell(1, "")}</hp:tr>'
+    )
+    section = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f'<hs:sec xmlns:hp="{_HP}" xmlns:hs="{_HS}">'
+        f'<hp:p><hp:run charPrIDRef="0"><hp:tbl rowCnt="2" colCnt="2">{rows}</hp:tbl>'
+        "</hp:run></hp:p></hs:sec>"
+    ).encode("utf-8")
+    return section
+
+
+def _write_table_hwpx(path: Path) -> None:
+    with zipfile.ZipFile(path, "w") as z:
+        zi = zipfile.ZipInfo("mimetype")
+        zi.compress_type = zipfile.ZIP_STORED
+        z.writestr(zi, b"application/hwp+zip")
+        z.writestr("Contents/header.xml", b"<head>STYLES</head>")
+        z.writestr("Contents/section0.xml", _table_hwpx_bytes())
+
+
+def _install_lossless_com(monkeypatch):
+    """한글 COM 변환을 '무손실 복사'로 모킹(.hwp↔.hwpx 를 바이트 복사로 흉내)."""
+    monkeypatch.setattr(hwp_com_fill, "hancom_com_available", lambda: True)
+    monkeypatch.setattr(
+        hwp_com_fill, "_convert_via_com",
+        lambda src, dst, fmts: shutil.copyfile(str(src), str(dst)),
+    )
+
+
+def _read_cell_value(hwp_or_hwpx: Path, label: str) -> str:
+    from lxml import etree
+
+    with zipfile.ZipFile(hwp_or_hwpx) as z:
+        root = etree.fromstring(z.read("Contents/section0.xml"))
+    q = lambda t: f"{{{_HP}}}{t}"  # noqa: E731
+    for tr in root.iter(q("tr")):
+        cells = [c for c in tr if c.tag == q("tc")]
+        if len(cells) < 2:
+            continue
+        ltxt = "".join(t.text or "" for t in cells[0].iter(q("t"))).strip()
+        if ltxt == label:
+            return "".join(t.text or "" for t in cells[1].iter(q("t"))).strip()
+    return "<not found>"
+
+
+@pytest.fixture()
+def src_hwp_table(tmp_path: Path) -> Path:
+    """표 양식 .hwp(내용은 HWPX 바이트 — mock 변환이 복사하므로 유효)."""
+    p = tmp_path / "table_form.hwp"
+    _write_table_hwpx(p)
+    return p
+
+
+def test_pipeline_fills_table_form_hwp(monkeypatch, src_hwp_table, tmp_path):
+    """표 양식 .hwp 를 자동 파이프라인으로 채우고 .hwp 로 되돌린다(구조 보존)."""
+    _install_lossless_com(monkeypatch)
+    out = tmp_path / "out.hwp"
+    rep = fill_hwp_via_hwpx(
+        src_hwp_table, out, identity={"기업명": "도보네비게이션(주)", "대표자": "홍길동"},
+    )
+    assert rep.ok and rep.method == "hwp_via_hwpx"
+    assert rep.filled_count == 2
+    assert _read_cell_value(out, "기업명") == "도보네비게이션(주)"
+    assert _read_cell_value(out, "대표자") == "홍길동"
+    assert rep.structure_preserved is True
+    assert rep.counts["before"]["cells"] == rep.counts["after"]["cells"]
+
+
+def test_pipeline_original_untouched(monkeypatch, src_hwp_table, tmp_path):
+    import hashlib
+
+    _install_lossless_com(monkeypatch)
+    before = hashlib.sha256(src_hwp_table.read_bytes()).hexdigest()
+    fill_hwp_via_hwpx(src_hwp_table, tmp_path / "out.hwp", identity={"기업명": "x(주)"})
+    assert hashlib.sha256(src_hwp_table.read_bytes()).hexdigest() == before
+
+
+def test_pipeline_com_unavailable_honest(monkeypatch, src_hwp_table, tmp_path):
+    monkeypatch.setattr(hwp_com_fill, "hancom_com_available", lambda: False)
+    out = tmp_path / "out.hwp"
+    rep = fill_hwp_via_hwpx(src_hwp_table, out, identity={"기업명": "x(주)"})
+    assert rep.ok is False
+    assert not out.exists()
+    assert any("COM" in n for n in rep.notes)
+
+
+def test_pipeline_hwpx_to_hwpx_needs_no_com(monkeypatch, tmp_path):
+    """입력·출력 모두 .hwpx 면 한글 없이도 동작(need_com=False)."""
+    monkeypatch.setattr(hwp_com_fill, "hancom_com_available", lambda: False)
+    src = tmp_path / "f.hwpx"
+    _write_table_hwpx(src)
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwp_via_hwpx(src, out, identity={"기업명": "노콤(주)"})
+    assert rep.ok is True
+    assert _read_cell_value(out, "기업명") == "노콤(주)"
+
+
+def test_pipeline_out_equals_in_raises(src_hwp_table):
+    with pytest.raises(ValueError):
+        fill_hwp_via_hwpx(src_hwp_table, src_hwp_table, identity={"기업명": "x"})
+
+
+def test_pipeline_no_tmp_leftover(monkeypatch, src_hwp_table, tmp_path):
+    _install_lossless_com(monkeypatch)
+    out = tmp_path / "out.hwp"
+    fill_hwp_via_hwpx(src_hwp_table, out, identity={"기업명": "x(주)"})
+    assert not list(tmp_path.glob("*.tmp*"))

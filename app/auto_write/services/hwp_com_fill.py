@@ -27,15 +27,28 @@ COM 객체 생성은 ``hwp_docx_convert._dispatch_hwp`` 를 재사용(테스트 
 
 from __future__ import annotations
 
+import os
+import re
+import shutil
+import tempfile
+import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
+from lxml import etree
+
 from .cross_form_autofill import _cluster_rep, _key
-from .hwp_docx_convert import _dispatch_hwp, hancom_com_available
-from .hwpx_fill import _same_file
+from .hwp_docx_convert import (
+    _SAVE_FORMATS,
+    _convert_via_com,
+    _dispatch_hwp,
+    hancom_com_available,
+)
+from .hwpx_fill import _cell_text, _direct, _q, _same_file, fill_hwpx
 
 _HWP_EXTS = {".hwp", ".hwpx"}
+_SECTION_RE = re.compile(r"Contents/section\d+\.xml$", re.IGNORECASE)
 
 
 @dataclass
@@ -221,4 +234,168 @@ def fill_hwp_com(
 
     # 잔여: 실제로 기입되지 않은 라벨(정직 보고) — 같은 클러스터 중복 라벨도 누락 노출.
     report.residual = [lbl for wk, lbl, _v in wants if wk not in used_want_keys]
+    return report
+
+
+# --- 표 양식 자동 파이프라인 (.hwp → hwpx 채움 → .hwp, 한글 COM 변환) ----------
+
+@dataclass
+class HwpPipelineReport:
+    input: str
+    output: str = ""
+    ok: bool = False
+    method: str = ""                                  # "hwp_via_hwpx" | ""
+    filled: dict[str, str] = field(default_factory=dict)
+    filled_count: int = 0
+    replaced: int = 0
+    residual: list[str] = field(default_factory=list)
+    structure_preserved: Optional[bool] = None        # 표/셀 구조 보존 여부
+    counts: dict[str, Any] = field(default_factory=dict)  # 채움 전/후 구조 측정치
+    notes: list[str] = field(default_factory=list)
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "input": self.input,
+            "output": self.output,
+            "ok": self.ok,
+            "method": self.method,
+            "filled": dict(self.filled),
+            "filled_count": self.filled_count,
+            "replaced": self.replaced,
+            "residual": list(self.residual),
+            "structure_preserved": self.structure_preserved,
+            "counts": dict(self.counts),
+            "notes": list(self.notes),
+        }
+
+
+def _hwpx_structural_counts(path: Path) -> dict[str, int]:
+    """HWPX 의 표/행/셀/비어있지않은셀 수 — 채움 전후 구조 동일성 측정용."""
+    tables = rows = cells = nonempty = 0
+    with zipfile.ZipFile(path) as z:
+        for name in z.namelist():
+            if not _SECTION_RE.search(name):
+                continue
+            root = etree.fromstring(z.read(name))
+            for tbl in root.iter(_q("tbl")):
+                tables += 1
+                for tr in _direct(tbl, "tr"):
+                    rows += 1
+                    for tc in _direct(tr, "tc"):
+                        cells += 1
+                        if _cell_text(tc):
+                            nonempty += 1
+    return {"tables": tables, "rows": rows, "cells": cells, "nonempty_cells": nonempty}
+
+
+def fill_hwp_via_hwpx(
+    in_hwp: str | Path,
+    out_hwp: str | Path,
+    *,
+    identity: Optional[dict[str, str]] = None,
+    replacements: Optional[dict[str, str]] = None,
+    use_com: bool = True,
+) -> HwpPipelineReport:
+    """표 양식 .hwp 를 한 번에 채운다: .hwp →(한글 COM) .hwpx → 표 칸 채움 →(COM) .hwp.
+
+    누름틀이 없는 '표 양식' .hwp(정부양식 다수)를 위한 경로. 변환은 한글이 자기
+    네이티브 형식(HWPX)으로 저장/되돌리는 것이라 사실상 무손실이며, 값 채움은
+    hwpx_fill 이 표 칸의 텍스트만 바꿔 양식을 보존한다.
+
+    Args:
+        in_hwp: 입력 .hwp/.hwpx(원본, 미수정).
+        out_hwp: 출력 .hwp/.hwpx. out==in 이면 ValueError.
+        identity: 라벨→값(동의어·장식 라벨 자동 매칭).
+        replacements: 직접 치환 {예시토큰: 실제값}(선택).
+        use_com: False 면 COM 시도 없이 안내만(드라이런).
+
+    Returns:
+        HwpPipelineReport — 채운 항목·잔여·구조 보존 여부·안내.
+    """
+    src = Path(in_hwp)
+    dst = Path(out_hwp)
+    report = HwpPipelineReport(input=str(src), output=str(dst))
+    identity = dict(identity or {})
+    replacements = dict(replacements or {})
+
+    # 1) 안전장치
+    if not src.exists():
+        raise FileNotFoundError(f"입력 파일이 없습니다: {src}")
+    if _same_file(src, dst):
+        raise ValueError("출력이 입력과 같습니다. 원본 덮어쓰기는 금지입니다.")
+    if src.suffix.lower() not in _HWP_EXTS:
+        raise ValueError(f"HWP/HWPX 입력만 지원합니다: {src.name}")
+    if dst.suffix.lower() not in _HWP_EXTS:
+        raise ValueError(f"출력은 .hwp/.hwpx 만 지원합니다: {dst.name}")
+
+    need_com = src.suffix.lower() == ".hwp" or dst.suffix.lower() == ".hwp"
+    if need_com and (not use_com or not hancom_com_available()):
+        report.notes.append(
+            "한글(Hancom Office) COM 을 사용할 수 없습니다 — .hwp↔.hwpx 변환은 한글 COM "
+            "으로만 됩니다. 대안: 입력·출력을 모두 .hwpx 로 하면 한글 없이 채울 수 있습니다.")
+        return report
+
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="hwp_pipe_") as td:
+        work = Path(td)
+        mid = work / "mid.hwpx"
+
+        # 2) .hwp → .hwpx (한글 네이티브 저장, 무손실). 이미 .hwpx 면 그대로 사용.
+        try:
+            if src.suffix.lower() == ".hwpx":
+                shutil.copyfile(src, mid)
+            else:
+                _convert_via_com(src, mid, _SAVE_FORMATS[".hwpx"])
+        except Exception as exc:
+            report.notes.append(
+                f"HWP→HWPX 변환 실패({type(exc).__name__}: {exc}) — 대화형에서 한글 "
+                "'보안 승인'을 허용하거나, 한글에서 직접 HWPX 로 저장 후 재시도하세요.")
+            return report
+
+        # 3) HWPX 표 칸 채움(양식 보존 검증된 경로)
+        filled = work / "filled.hwpx"
+        fr = fill_hwpx(mid, filled, identity=identity, replacements=replacements)
+        report.filled = dict(fr.filled)
+        report.filled_count = fr.filled_count
+        report.replaced = fr.replaced
+        report.residual = list(fr.residual)
+        report.notes.extend(fr.notes)
+
+        # 4) 구조 보존 측정(채움 전/후 표·셀 수 동일해야 함)
+        try:
+            c_in = _hwpx_structural_counts(mid)
+            c_out = _hwpx_structural_counts(filled)
+            report.counts = {"before": c_in, "after": c_out}
+            report.structure_preserved = (
+                c_in["tables"] == c_out["tables"]
+                and c_in["rows"] == c_out["rows"]
+                and c_in["cells"] == c_out["cells"]
+            )
+        except Exception as exc:
+            report.notes.append(f"구조 측정 생략: {type(exc).__name__}")
+
+        # 5) filled.hwpx → 출력(.hwp 면 한글 COM 으로 되돌림). 원자적 교체.
+        tmp_out = dst.with_name(f"{dst.stem}.{os.getpid()}.tmp{dst.suffix.lower()}")
+        try:
+            if dst.suffix.lower() == ".hwpx":
+                shutil.copyfile(filled, tmp_out)
+            else:
+                _convert_via_com(filled, tmp_out, _SAVE_FORMATS[".hwp"])
+            if not (tmp_out.exists() and tmp_out.stat().st_size > 0):
+                report.notes.append("출력 파일 생성 실패(빈 결과).")
+                return report
+            os.replace(tmp_out, dst)
+        except Exception as exc:
+            try:
+                if tmp_out.exists():
+                    tmp_out.unlink()
+            except OSError:
+                pass
+            report.notes.append(
+                f"HWPX→{dst.suffix} 변환 실패({type(exc).__name__}: {exc}) — 채워진 "
+                "HWPX 는 만들어졌으니 한글에서 직접 해당 형식으로 저장할 수 있습니다.")
+            return report
+
+    report.ok = True
+    report.method = "hwp_via_hwpx"
     return report
