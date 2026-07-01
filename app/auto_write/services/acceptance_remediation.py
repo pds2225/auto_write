@@ -33,6 +33,10 @@ _KIND_LABEL = {
 _KIND_ICON = {KIND_AUTO: "[자동]", KIND_HUMAN: "[입력]", KIND_MANUAL: "[수동]"}
 _KIND_ORDER = (KIND_AUTO, KIND_HUMAN, KIND_MANUAL)
 
+# 콘솔 '제출까지 남은 일' 블록에 결함당 몇 개의 구체 항목을 보일지(파일 체크리스트는
+# 전부 보인다). 화면이 길어지지 않게 요약 표시용으로만 제한한다.
+_MAX_ITEMS_IN_TEXT = 3
+
 # 명령 템플릿의 문서 경로 자리표시 — build 시 실제 경로로 치환한다.
 DOC_TOKEN = "{doc}"
 
@@ -144,6 +148,9 @@ def build_remediation(results, doc_name: str) -> list[dict]:
     - 통과(passed)한 검사는 제외 — 남은 일만 보여준다.
     - fail 먼저, 그 다음 warn (같은 심각도 안에서는 원래 검사 순서 유지 — stable sort).
     - KIND_AUTO 의 command 는 {doc} 를 doc_name 으로 치환해 바로 실행 가능하게 한다.
+    - ``items`` 에 그 문서의 실제 결함 위치(검사가 캡처한 samples)를 담는다 — 안내가
+      '명칭·기업명 등' 일반 예시가 아니라 "이 문서의 '대표자명' 옆 칸이 비었다" 처럼
+      구체적이 되게 한다. 사람도 기계(autopilot·에이전트)도 바로 소비할 수 있다.
     """
     items: list[dict] = []
     for r in results:
@@ -159,9 +166,43 @@ def build_remediation(results, doc_name: str) -> list[dict]:
             "kind": rem.kind,
             "action": rem.action,
             "command": command,
+            "items": list(getattr(r, "samples", []) or []),
         })
     items.sort(key=lambda d: 0 if d["severity"] == SEV_FAIL else 1)
     return items
+
+
+def remediation_summary(items: list[dict]) -> dict:
+    """남은 일을 종류별로 집계한다 — "제출까지 얼마나 남았나"를 한눈에.
+
+    - auto_commands : 실행해야 할 서로 다른 자동 명령 수(복붙 실행 횟수).
+    - human_fields  : 사람이 직접 채워야 할 칸/항목 수(값 날조 금지 대상).
+    - manual_items  : 한글/워드에서 판단해 손봐야 할 항목 수.
+    - blocking_defects : 제출을 막는 fail 결함 총수(warn 제외).
+    - remaining_checks : 통과하지 못한 검사 수.
+    """
+    return {
+        "auto_commands": len(unique_commands(items)),
+        "human_fields": sum(it["defects"] for it in items if it["kind"] == KIND_HUMAN),
+        "manual_items": sum(it["defects"] for it in items if it["kind"] == KIND_MANUAL),
+        "blocking_defects": sum(it["defects"] for it in items if it["severity"] == SEV_FAIL),
+        "remaining_checks": len(items),
+    }
+
+
+def summary_line(summary: dict) -> str:
+    """remediation_summary 를 사람이 읽는 한 줄 진행도로 만든다."""
+    if not summary.get("remaining_checks"):
+        return "제출까지 남은 일 요약: 없음 — 바로 제출 가능"
+    parts: list[str] = []
+    if summary.get("auto_commands"):
+        parts.append(f"자동 명령 {summary['auto_commands']}개 실행")
+    if summary.get("human_fields"):
+        parts.append(f"사람이 채울 칸 {summary['human_fields']}개")
+    if summary.get("manual_items"):
+        parts.append(f"한글/워드 수동 확인 {summary['manual_items']}건")
+    body = " · ".join(parts) if parts else f"확인할 항목 {summary['remaining_checks']}건"
+    return "제출까지 남은 일 요약: " + body
 
 
 def unique_commands(items: list[dict]) -> list[str]:
@@ -181,7 +222,7 @@ def format_remediation_text(items: list[dict]) -> list[str]:
     if not items:
         return ["제출까지 남은 일: 없음 — 바로 제출 가능"]
 
-    lines = ["--- 제출까지 남은 일 (결함별 다음 행동) ---"]
+    lines = ["--- 제출까지 남은 일 (결함별 다음 행동) ---", summary_line(remediation_summary(items))]
     for kind in _KIND_ORDER:
         group = [it for it in items if it["kind"] == kind]
         if not group:
@@ -190,6 +231,12 @@ def format_remediation_text(items: list[dict]) -> list[str]:
         for it in group:
             sev = "" if it["severity"] == SEV_FAIL else " (경고)"
             lines.append(f"  · {it['label']}({it['defects']}){sev}: {it['action']}")
+            # 이 문서의 실제 결함 위치를 몇 개 보여준다(전체는 --checklist 파일에).
+            concrete = it.get("items") or []
+            for s in concrete[:_MAX_ITEMS_IN_TEXT]:
+                lines.append(f"      - {s}")
+            if len(concrete) > _MAX_ITEMS_IN_TEXT:
+                lines.append(f"      - … 외 {len(concrete) - _MAX_ITEMS_IN_TEXT}개 (전체는 --checklist 참조)")
 
     cmds = unique_commands(items)
     if cmds:
@@ -197,3 +244,55 @@ def format_remediation_text(items: list[dict]) -> list[str]:
         for c in cmds:
             lines.append(f"  $ {c}")
     return lines
+
+
+def build_checklist_markdown(items: list[dict], doc_name: str, submittable: bool) -> str:
+    """제출 준비 punch-list 를 마크다운 체크박스 문서로 만든다.
+
+    사용자가 파일로 열어 하나씩 지워가며(- [ ] → - [x]) 제출 준비를 완성하도록.
+    콘솔 요약과 달리 결함의 구체 항목(어느 칸이 비었는지)을 전부 나열한다.
+    진단은 읽기 전용이므로 이 파일은 원본과 무관한 새 산출물이다(원본 미수정).
+    """
+    lines = [f"# 제출 준비 체크리스트 — {doc_name}", ""]
+    lines.append("> 자가진단(self_diagnose) 결과입니다. 아래 항목을 하나씩 처리하며 제출 준비를 완성하세요.")
+    lines.append("> 이 진단은 **읽기 전용**이라 원본 문서를 수정하지 않았습니다. "
+                 "**없는 값을 지어내지 마세요** — 값이 없으면 빈칸으로 둡니다(날조 0).")
+    lines.append("")
+
+    if not items:
+        lines.append("## ✅ 제출 준비 완료 — 채워야 할 것이 없습니다. 바로 제출하세요.")
+        lines.append("")
+        return "\n".join(lines)
+
+    summary = remediation_summary(items)
+    lines.append(f"**현재 판정: {'제출 가능' if submittable else '제출불가(DRAFT)'}**")
+    lines.append("")
+    lines.append(summary_line(summary))
+    lines.append("")
+
+    for kind in _KIND_ORDER:
+        group = [it for it in items if it["kind"] == kind]
+        if not group:
+            continue
+        lines.append(f"## {_KIND_ICON[kind]} {_KIND_LABEL[kind]}")
+        lines.append("")
+        for it in group:
+            sev = "" if it["severity"] == SEV_FAIL else " (경고)"
+            lines.append(f"- [ ] **{it['label']}**({it['defects']}){sev} — {it['action']}")
+            for s in (it.get("items") or []):
+                lines.append(f"  - {s}")
+            if it.get("command"):
+                lines.append(f"  - 실행: `{it['command']}`")
+        lines.append("")
+
+    cmds = unique_commands(items)
+    if cmds:
+        lines.append("---")
+        lines.append("")
+        lines.append("### 지금 실행하면 자동 해결되는 명령 (복사해서 실행)")
+        lines.append("")
+        lines.append("```powershell")
+        lines.extend(cmds)
+        lines.append("```")
+        lines.append("")
+    return "\n".join(lines)
