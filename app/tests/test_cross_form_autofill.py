@@ -952,9 +952,11 @@ def test_check_option_cell_hyperlink_wrapped_box(tmp_path: Path) -> None:
 # ============================================================================
 
 from auto_write.services.cross_form_autofill import (  # noqa: E402
+    BatchAutofillItem,
     BatchAutofillReport,
     batch_autofill_from_pool,
     discover_form_targets,
+    format_batch_detail_korean,
     format_batch_summary_korean,
     is_skipped_non_form,
     pick_source_from_pool,
@@ -1083,6 +1085,193 @@ def test_format_batch_summary_korean() -> None:
     assert "양식 1개 채움" in text
     assert "2칸 확인필요" in text
     assert "HWP 1개 생성" in text
+
+
+# --- 배치 양식별 상세(확인 필요 확정명령 + 빈칸) — 다음 후보 #2 ------------------
+# 배치 요약은 '확인필요 N칸' 집계만 줘서 어느 칸이 애매하고 무슨 --confirm 명령을
+# 붙일지 알 수 없었다(각 양식을 단일 모드로 다시 돌려야 함). 이제 양식별 상세를
+# 보존·출력해 배치에서도 사람 확인 루프를 닫는다.
+
+def test_format_batch_detail_shows_confirm_command_and_blanks() -> None:
+    report = BatchAutofillReport(
+        notice_folder="/n", source_pool="/p", output_dir="/n/filled",
+        items=[
+            BatchAutofillItem(
+                target="신청서.docx", source="완성.docx",
+                output="/n/filled/신청서_filled.docx", ok=True, transcribed=3,
+                needs_confirm_count=1,
+                needs_confirm=[{
+                    "target_label": "제품명칭", "normalized": "제품명칭",
+                    "candidates": ["제품명", "서비스명"], "confidence": "fuzzy",
+                }],
+                unmatched_targets=[{
+                    "target_label": "사업자등록번호", "normalized": "사업자등록번호",
+                }],
+            ),
+        ],
+    )
+    text = format_batch_detail_korean(report)
+    # 양식 이름 헤더 + 채움/확인필요/빈칸 집계
+    assert "신청서.docx" in text
+    # 확인 필요 후보 + 복붙 가능한 확정 명령(단일 모드와 동일 계약)
+    assert "제품명칭" in text and "제품명" in text
+    assert '--confirm "제품명칭=제품명"' in text
+    # 빈칸(완성본에 값 없음 — 직접 채울 칸)
+    assert "사업자등록번호" in text
+    assert "빈칸" in text
+
+
+def test_format_batch_detail_empty_when_nothing_actionable() -> None:
+    """확인 필요·빈칸이 없으면 빈 문자열(호출부에서 출력 생략) — 노이즈 0."""
+    report = BatchAutofillReport(
+        notice_folder="/n", source_pool="/p", output_dir="/n/filled",
+        items=[
+            BatchAutofillItem(
+                target="a.docx", source="s.docx", output="/n/filled/a_filled.docx",
+                ok=True, transcribed=5,
+            ),
+        ],
+    )
+    assert format_batch_detail_korean(report) == ""
+
+
+def test_format_batch_detail_skips_failed_forms() -> None:
+    """채우지 못한(ok=False) 양식은 상세에 넣지 않는다(요약 실패줄이 담당)."""
+    report = BatchAutofillReport(
+        notice_folder="/n", source_pool="/p", output_dir="/n/filled",
+        items=[
+            BatchAutofillItem(
+                target="망한양식.docx", source="", output="", ok=False,
+                unmatched_targets=[{"target_label": "성명", "normalized": "성명"}],
+                notes=["완성본 폴더에 소스 파일이 없습니다"],
+            ),
+        ],
+    )
+    assert format_batch_detail_korean(report) == ""
+
+
+def test_format_batch_detail_bounds_per_form() -> None:
+    """한 양식에 확인 필요 칸이 많으면 상단 일부 + '…외 N칸' 으로 접는다."""
+    many = [
+        {"target_label": f"라벨{i}", "normalized": f"라벨{i}", "candidates": [f"후보{i}"]}
+        for i in range(9)
+    ]
+    report = BatchAutofillReport(
+        notice_folder="/n", source_pool="/p", output_dir="/n/filled",
+        items=[
+            BatchAutofillItem(
+                target="양식.docx", source="s.docx",
+                output="/n/filled/양식_filled.docx", ok=True, transcribed=1,
+                needs_confirm_count=9, needs_confirm=many,
+            ),
+        ],
+    )
+    text = format_batch_detail_korean(report, per_form_limit=6)
+    assert "…외 3칸" in text  # 9 - 6
+
+
+def test_format_batch_detail_cp949_safe() -> None:
+    """윈도우 한글 콘솔(cp949)에서도 안 깨지는 문자만 쓴다(■·→·… 포함)."""
+    report = BatchAutofillReport(
+        notice_folder="/n", source_pool="/p", output_dir="/n/filled",
+        items=[
+            BatchAutofillItem(
+                target="신청서.docx", source="완성.docx",
+                output="/n/filled/신청서_filled.docx", ok=True, transcribed=2,
+                needs_confirm=[{
+                    "target_label": "제품명칭", "candidates": ["제품명"],
+                }],
+                unmatched_targets=[{"target_label": "매출액"}],
+            ),
+        ],
+    )
+    text = format_batch_detail_korean(report)
+    text.encode("cp949")  # 예외 없이 인코딩되면 통과
+    # 인코딩만 통과하고 내용이 사라지면(빈 상세) 헛통과이므로, 실제 렌더 존재도 단언
+    assert "--confirm" in text
+    assert "■" in text
+
+
+def test_format_batch_detail_confirm_escapes_special_label() -> None:
+    """타깃 라벨에 = 나 \" 가 있으면 깨지는 인라인 --confirm 대신 --confirm-file 안내.
+
+    (인라인 명령은 파서가 첫 = 에서 분리·셸 따옴표가 붕괴해 엉뚱한 칸을 채운다 —
+    적대적 코드리뷰 MEDIUM#1. 단일·배치 공용 _confirm_hint 가 방어.)
+    """
+    report = BatchAutofillReport(
+        notice_folder="/n", source_pool="/p", output_dir="/n/filled",
+        items=[
+            BatchAutofillItem(
+                target="양식.docx", source="s.docx",
+                output="/n/filled/양식_filled.docx", ok=True, transcribed=0,
+                needs_confirm=[{
+                    "target_label": "매출(전년=100)", "candidates": ["매출액"],
+                }],
+            ),
+        ],
+    )
+    text = format_batch_detail_korean(report)
+    # 깨지는 인라인 명령을 그대로 방출하지 않는다
+    assert '--confirm "매출(전년=100)=매출액"' not in text
+    # 대신 값 손상 없는 --confirm-file(JSON) 로 안내
+    assert "--confirm-file" in text
+    assert '"매출(전년=100)"' in text  # JSON 은 특수문자를 안전하게 담는다
+
+
+def test_batch_autofill_stores_per_form_detail(tmp_path: Path) -> None:
+    """batch_autofill_from_pool 이 양식별 needs_confirm/unmatched 를 실제로 보존한다.
+
+    (전에는 집계 개수만 남기고 상세를 버려서 배치에서 확정 명령을 안내할 수 없었다.)
+    """
+    pool = tmp_path / "pool"
+    notice = tmp_path / "notice"
+    pool.mkdir()
+    notice.mkdir()
+    _make_source(pool / "완성_사업계획서.docx")
+    _make_target(notice / "신청서.docx")
+
+    report = batch_autofill_from_pool(notice, pool, "filled", convert_hwp=False)
+    item = report.items[0]
+    assert item.ok
+    # _make_target 의 '사업명' 은 소스에 값이 없어 빈칸으로 남는다(날조 0).
+    blank_labels = {u.get("target_label") for u in item.unmatched_targets}
+    assert "사업명" in blank_labels
+    assert isinstance(item.needs_confirm, list)
+
+
+def test_batch_cli_shows_per_form_detail(tmp_path: Path) -> None:
+    """배치 CLI 가 요약 뒤에 양식별 '빈칸' 상세(그 문서의 실제 칸)를 보여준다."""
+    pool = tmp_path / "pool"
+    notice = tmp_path / "notice"
+    pool.mkdir()
+    notice.mkdir()
+    _make_source(pool / "완성.docx")
+    _make_target(notice / "양식.docx")
+
+    res = _run_batch_cli(str(notice), str(pool), extra=["--no-hwp"])
+    assert res.returncode == 0
+    assert "[양식별 확인 필요·빈칸]" in res.stdout
+    # 그 문서의 실제 빈칸 이름이 콕 집혀 나온다(일반 예시 아님)
+    assert "사업명" in res.stdout
+
+
+def test_batch_cli_json_includes_per_form_detail(tmp_path: Path) -> None:
+    """--json 에도 양식별 needs_confirm/unmatched_targets 가 담겨 자동화가 이어받는다."""
+    import json as _json
+    pool = tmp_path / "pool"
+    notice = tmp_path / "notice"
+    pool.mkdir()
+    notice.mkdir()
+    _make_source(pool / "완성.docx")
+    _make_target(notice / "양식.docx")
+
+    res = _run_batch_cli(str(notice), str(pool), extra=["--no-hwp", "--json"])
+    assert res.returncode == 0
+    brace = res.stdout.index("{")
+    data = _json.loads(res.stdout[brace:])
+    item = data["items"][0]
+    assert "unmatched_targets" in item and "needs_confirm" in item
+    assert any(u.get("target_label") == "사업명" for u in item["unmatched_targets"])
 
 
 def test_try_convert_hwp_skip_when_com_fails(tmp_path: Path, monkeypatch) -> None:

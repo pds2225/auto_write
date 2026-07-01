@@ -32,6 +32,7 @@ from pathlib import Path
 from auto_write.services.cross_form_autofill import (
     autofill_from_source,
     batch_autofill_from_pool,
+    format_batch_detail_korean,
     format_batch_summary_korean,
     format_single_summary_korean,
 )
@@ -152,6 +153,14 @@ def _run_batch(args: argparse.Namespace) -> int:
 
     summary = format_batch_summary_korean(report)
     print(summary)
+
+    # 양식별 상세(확인 필요 칸의 --confirm 명령 + 빈칸 목록). 집계만으론 "어느 칸?
+    # 무슨 명령?"을 알 수 없던 갭을 메운다. 확인 필요·빈칸이 없으면 빈 문자열이라 생략.
+    detail = format_batch_detail_korean(report)
+    if detail:
+        print()
+        print(detail)
+
     if args.json:
         print(json.dumps({
             "notice_folder": report.notice_folder,
@@ -168,6 +177,8 @@ def _run_batch(args: argparse.Namespace) -> int:
                     "ok": i.ok,
                     "transcribed": i.transcribed,
                     "needs_confirm_count": i.needs_confirm_count,
+                    "needs_confirm": i.needs_confirm,
+                    "unmatched_targets": i.unmatched_targets,
                     "hwp_ok": i.hwp_ok,
                     "notes": i.notes,
                 }

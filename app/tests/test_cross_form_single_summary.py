@@ -203,6 +203,21 @@ def test_summary_is_cp949_safe() -> None:
     text.encode("cp949")   # 예외가 나면 실패
 
 
+def test_summary_confirm_escapes_special_label() -> None:
+    """타깃 라벨에 = 나 " 가 있으면 깨지는 인라인 --confirm 대신 --confirm-file 안내.
+
+    인라인 ``--confirm "타깃=소스"`` 는 파서가 첫 = 에서 분리·셸 따옴표가 붕괴해
+    엉뚱한 칸을 채운다(적대적 코드리뷰 MEDIUM#1). 단일·배치 공용 _confirm_hint 방어.
+    """
+    rep = AutofillReport(source="a", target="b", output="o", ok=True)
+    rep.needs_confirm = [{"target_label": "매출(전년=100)", "normalized": "매출",
+                          "candidates": ["매출액"], "confidence": "fuzzy"}]
+    text = format_single_summary_korean(rep)
+    assert '--confirm "매출(전년=100)=매출액"' not in text  # 깨지는 명령 미방출
+    assert "--confirm-file" in text                          # 값 손상 없는 대안 안내
+    text.encode("cp949")   # 대안 안내도 cp949 안전
+
+
 # --- round-trip: 제안한 --confirm 이 실제로 그 칸을 채운다(핵심 증명) --------
 
 def test_summary_confirm_command_actually_fills(tmp_path: Path) -> None:
