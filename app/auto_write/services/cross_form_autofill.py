@@ -667,12 +667,27 @@ def _is_noise_label(label_text: str, norm: str) -> bool:
     return False
 
 
+def _cell_blank(cell) -> bool:
+    """논리 셀이 '빈칸'(빈 문자열 또는 명백한 예시 플레이스홀더)이면 True(덮어쓰기 대상)."""
+    t = (cell.text or "").strip()
+    return (not t) or _is_obvious_placeholder(t)
+
+
+def _row_all_blank(logical) -> bool:
+    """행의 모든 논리 셀이 빈칸이면 True('값 대기' 행). 빈 행은 False(보수)."""
+    return bool(logical) and all(_cell_blank(c) for c in logical)
+
+
 def find_target_fields(docx_path: str | Path) -> list[dict[str, Any]]:
     """타깃 DOCX 에서 채울 빈칸을 식별한다(표 칸 + 본문 단락형 빈칸).
 
     반환 각 항목: {orig_label, normalized, kind, table_index, row, value_cell, para_index}
     - **표 칸**(kind="table"): 라벨 셀 바로 다음 논리 셀이 비어 있으면 후보.
       value_cell 은 라벨 셀 다음 논리 셀 인덱스. para_index 는 -1.
+    - **세로형 표 칸**(kind="table"): 헤더 행에 인식 라벨(동의어 클러스터)이 있고
+      바로 아래 행이 전부 빈칸이면 아래 칸을 값칸으로 본다(표지형 정보 카드). 이때
+      row 는 '아래' 행(ri+1), value_cell 은 열 인덱스 → 표 기입 로직 그대로 재사용.
+      로스터(다중 레코드)·병합 어긋남은 제외(보수).
     - **본문 단락형 빈칸**(kind="paragraph"): ``라벨 : ____`` 처럼 콜론 뒤가 빈칸인
       단락. para_index 는 ``doc.paragraphs`` 기준 인덱스, 표 좌표(table_index/row/
       value_cell)는 -1. 콜론 뒤에 실제 값/마스킹(○○○)/문장이 있으면 후보 제외
@@ -731,6 +746,47 @@ def find_target_fields(docx_path: str | Path) -> list[dict[str, Any]]:
                             "fill_start": fstart,
                             "fill_end": fend,
                         })
+
+        # 세로형(라벨 위 / 값 아래) 정보 카드: 헤더 행에 인식 라벨이 있고 바로 아래
+        # 행이 '전부 빈칸'이면, 각 열의 아래 칸을 그 라벨의 값칸으로 본다. 가로 스캔
+        # (라벨|값)이 못 잡는 표지형 카드(성명·생년월일·연락처를 위에 나열하고 그 아래
+        # 줄에 값을 적는 구조)를 채운다. value_cell 은 '아래' 행(row=ri+1)의 열 인덱스라
+        # 기존 표 기입 로직이 그대로 재사용된다(kind="table").
+        # 안전 가드(오매칭<빈칸): ①동의어 클러스터에 등록된 인식 라벨만 ②아래 행이
+        # 전부 빈칸일 때만(값이 하나라도 있으면 로스터/데이터 행) ③아래에 빈 행이 또
+        # 이어지면 다중 레코드 로스터로 보고 제외(성명 헤더로 여러 명 명부에 일괄기입 방지)
+        # ④병합으로 위·아래 논리셀 수가 어긋나면 세로 정렬을 보장할 수 없어 제외.
+        # 가로 타깃 뒤에 추가 → 같은 라벨은 H2 dedup 에서 가로가 우선(더 신뢰도 높음).
+        rows = table.rows
+        for ri in range(len(rows) - 1):
+            header = _logical_cells(rows[ri])
+            below = _logical_cells(rows[ri + 1])
+            if not header or len(header) != len(below):
+                continue
+            recognized = [
+                ci for ci in range(len(header))
+                if (header[ci].text or "").strip()
+                and _cluster_rep(_key(header[ci].text)) is not None
+            ]
+            if not recognized:
+                continue
+            if not _row_all_blank(below):
+                continue  # 아래 행에 값 존재 → 세로 카드 아님(로스터/데이터 행 보호)
+            if ri + 2 < len(rows) and _row_all_blank(_logical_cells(rows[ri + 2])):
+                continue  # 아래 빈 행이 연속 → 다중 레코드 로스터 → 세로 채움 금지
+            for ci in recognized:
+                if not _cell_blank(below[ci]):
+                    continue
+                label_text = header[ci].text or ""
+                targets.append({
+                    "orig_label": SubmittableFiller._norm(label_text),
+                    "normalized": _key(label_text),
+                    "kind": "table",
+                    "table_index": ti,
+                    "row": ri + 1,       # 값칸은 헤더 '아래' 행
+                    "value_cell": ci,
+                    "para_index": -1,
+                })
 
     # 본문 단락형 빈칸: 한 줄의 각 "라벨 : <빈칸>" 칸(멀티필드 대응).
     # 표 칸 다음에 추가 → H2 dedup 에서 표 우선. 같은 줄 여러 칸은 각각 타깃이 된다.
