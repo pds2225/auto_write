@@ -26,6 +26,10 @@ import json
 import sys
 from pathlib import Path
 
+from auto_write.services.acceptance_remediation import (
+    build_remediation,
+    format_remediation_text,
+)
 from auto_write.services.usage_acceptance import AcceptanceConfig, run_acceptance
 
 _LEDGER_DEFAULT = Path(__file__).resolve().parent.parent / "workspace" / "requirements_ledger.json"
@@ -106,6 +110,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[{mark}] {c.label:<22} {c.detail}")
         for s in c.samples[:3]:
             print(f"       · {s}")
+
+    # 결함별 '다음 행동' 안내 — 개수만 보여주던 것을 "무엇을 어떻게 고치면 제출
+    # 가능한지"(자동 명령 / 사람 값입력 / 한글 수동)로 번역한다. 명령의 {doc} 는
+    # 사용자가 넘긴 경로 그대로 치환해 같은 폴더에서 바로 복붙 실행되게 한다.
+    rem_items = build_remediation(report.results, args.docx)
+    print()
+    for line in format_remediation_text(rem_items):
+        print(line)
+    data["remediation"] = rem_items
 
     failed_ids = {c.check_id for c in report.results if not c.passed and c.severity == "fail"}
     ledger = _load_ledger(Path(args.ledger))
