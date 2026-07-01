@@ -11,6 +11,7 @@
   python analyze_docs.py announcement "C:\\공고\\모집공고.hwp"
   python analyze_docs.py announcement 공고.txt --text-of "직접 붙여넣은 공고 본문..."
   python analyze_docs.py form "C:\\양식\\사업계획서_양식.hwp"
+  python analyze_docs.py folder "C:\\공고\\01_STAR-Exploration"
 """
 
 from __future__ import annotations
@@ -98,6 +99,13 @@ def main(argv: list[str] | None = None) -> int:
     frm.add_argument("input", help="양식 파일(DOCX/HWP/PDF) 경로")
     frm.add_argument("--json", action="store_true", help="JSON 출력")
 
+    fld = sub.add_parser("folder", help="공고 폴더 통째 분석(공고+양식 목록, 한국어 요약)")
+    fld.add_argument("input", help="공고 첨부 폴더 경로")
+    fld.add_argument("--no-ai", action="store_true", help="AI 비활성(휴리스틱만)")
+    fld.add_argument("--no-save-json", action="store_true",
+                     help=".analysis/ JSON 저장 안 함")
+    fld.add_argument("--json", action="store_true", help="한국어 요약 뒤 JSON 도 출력")
+
     args = parser.parse_args(argv)
 
     if args.cmd == "announcement":
@@ -124,6 +132,25 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(r.as_dict(), ensure_ascii=False, indent=2))
         else:
             _print_form(r)
+        return 0
+
+    if args.cmd == "folder":
+        from auto_write.services.folder_analyzer import (
+            analyze_folder,
+            format_folder_summary_korean,
+        )
+
+        openai_service = None
+        if args.no_ai:
+            openai_service = _DummyNoAI()
+        r = analyze_folder(
+            args.input,
+            openai_service=openai_service,
+            save_json=not args.no_save_json,
+        )
+        print(format_folder_summary_korean(r))
+        if args.json:
+            print(json.dumps(r.as_dict(), ensure_ascii=False, indent=2))
         return 0
 
     parser.error("알 수 없는 명령")
