@@ -114,6 +114,26 @@ hwp_docx_convert(HWP↔DOCX 변환, COM 대화형 전용)
 
 ---
 
+## 하네스: 빈 양식 자동완성·제출완성 (cross-form-submission)
+
+**목표:** 빈 새 양식 B + 완성된 기존 사업계획서 A → A 의 **사실 항목을 B 의 유사 칸에 전사**
+(표칸·본문빈칸·선택칸 □→■)하고 검수해서 **즉시 제출 가능한 B** 로 완성한다. 이미지는 직접
+생성하지 않고 **NotebookLM 프롬프트로 대체**. A 에 없는 칸은 `[확인필요]`(사실)/`[작성 필요]`
+(서술)로 정직하게 남긴다. **글을 새로 쓰지 않는 "사실 재배열 전사" 전용**(서술 문장 작성은
+다음 단계 하네스).
+
+**트리거:** 다음 요청 시 `cross-form-submission` 스킬을 사용하라. 단순 질문은 직접 응답 가능.
+- "빈 양식 채워줘", "이 양식에 옮겨줘", "기존 사업계획서로 새 양식 작성", "양식 자동완성",
+  "새 양식 제출본 만들어줘", "A 내용으로 B 채워 제출가능하게", "cross-form", "전사해서 제출본 완성"
+- 재실행·수정·보완·부분 재실행(전사만/검수만)·needs_confirm 확정·다른 양식 재전사도 동일 스킬.
+
+**경계:** '완성 DOCX 다듬기'=document-quality-orchestrator / '처음부터 작성'=bizplan-orchestrator
+/ '공고·양식 분석'=announcement-form-analysis. 이 스킬은 **입력 2개(완성본 A + 빈 양식 B)** 로
+"전사 후 제출완성"만 한다. 엔진은 모두 기존 코드 재사용(cross_form_autofill·usage_acceptance·
+submission_orchestrator·image_apply). 신규 에이전트는 `cross-form-filler` 1개, 나머지 6개 재사용.
+
+---
+
 **변경 이력**
 
 | 날짜 | 변경 내용 | 대상 | 사유 |
@@ -151,3 +171,7 @@ hwp_docx_convert(HWP↔DOCX 변환, COM 대화형 전용)
 | 2026-06-23 | selfdev 루프 #14(R14): US-3c 선도입 warn 3종 opt-in fail 승격 | 수정 app/auto_write/services/{usage_acceptance,autopilot_pipeline,submission_orchestrator}.py·app/{self_diagnose,auto_write_autopilot}.py·app/auto_write/submit.py / 테스트 app/tests/{test_usage_acceptance(신규 5),test_auto_write_apply(신규 1)}.py / 원장 R14 | 원장 R14: 괄호선택란(paren_choices)·라벨변형(empty_label_fields_ext)·빈그림칸(empty_image_slots) warn 3종 fail 승격. 단 '오탐 표면적 큼 — 음성 코퍼스 검증 후' 설계 주석대로 무조건 승격은 멀쩡한 문서를 거짓 제출불가로 만들 위험 → **AcceptanceConfig.strict_acceptance**(기본 False, 오탐 0 불변) + CLI **--strict-acceptance** opt-in 으로 구현(공고가 해당 항목 필수일 때만 하드 게이트). run_acceptance 사후 severity 승격(_PROMOTABLE_WARN_IDS 한정·property 동적 반영), self_diagnose/autopilot/submit 3 게이트 배선. 적대적 코드리뷰 SHIP(무회귀·범위한정·변이안전·스레딩 5축 PASS). py-3.11 **332 passed**(신규 6, 회귀 0). E2E: paren 결함 문서 기본 exit 0(제출가능)·--strict-acceptance exit 2(제출불가). 기본값 fail 승격은 음성 코퍼스 확보 후 차기 |
 | 2026-06-23 | cross-form 자동채움: 이름(성명)류 필드 값-타입 가드 (실측 회귀) | 수정 app/auto_write/services/cross_form_autofill.py / 테스트 app/tests/test_cross_form_autofill.py(신규 6) | 실측(미래큐러스 A→오토라이트 B) 버그: 타깃 '대표자명'에 사람 이름이 아니라 역할서술 "기술개발, 특허전략 및 사업화 총괄"이 high 자동전사. 근본원인=소스 A 본문 "⑤ 사업 수행 체계"의 역할분담 서술 "대표자 : 기술개발…"을 `_extract_source` 본문 단락 보조추출이 `대표자=<역할>`로 추출→동의어 클러스터(대표자↔대표자명) high 매칭. 수정: match_fields high 경로에 이름 동의어 클러스터(rep=대표자) 타깃에 한해 값이 이름 모양 아니면(`_looks_like_name`: 20자 초과/콤마·및·가운뎃점·세미콜론·총괄·담당·수행·자문) `value_type` 강등→needs_confirm 노출(오매칭<빈칸). 비이름 필드(연락처 등)·실명·마스킹 ○○○는 무영향. 적대적 코드리뷰 SHIP(스코프·false-reject·데이터흐름·가시성 6축 PASS). py-3.11 337 passed(신규 6, 회귀 0). 실측 재검증: transcribed 3→2, 대표자명→needs_confirm(후보 대표자) |
 | 2026-06-24 | cross-form 자동채움: 예시 플레이스홀더 빈칸승격 + 가짜타깃 필터 (recall, 멀티에이전트 설계·적대검증) | 수정 app/auto_write/services/cross_form_autofill.py / 테스트 app/tests/test_cross_form_autofill.py(신규 7) | 실측 진단(빈양식 B 27표 대조): B 신청기업표가 칸에 예시 플레이스홀더(`창업일=2000.00.00.`·`매출=000억원`·`출원=00건`)를 담고 있는데 find_target_fields 가 '칸이 완전히 비어야만' 타깃으로 봐(`if value_text: continue`) 예시문구 든 칸을 '이미 채워짐'으로 오인→영구 미충족(창업일↔A 개업연월일 등 채울 수 있는데 놓침). 또 표번호 '2/3/4'·예시라벨 '000 대표' 등 가짜타깃 잡음. 멀티에이전트 Workflow(4에이전트)가 플레이스홀더 판별규칙 설계·적대검증 — 치명결함(O마스크 OOO를 placeholder로 보면 GOOGLE/SOHO/O2O 영문 실단어 오판→실값 덮어쓰기) 발견·O마스크 제외 확정. 구현: `_is_obvious_placeholder`(3종만 — 불가능날짜 월·일둘다0/전부-0수량 `(?<![0-9,])`로 100억원·2,000명 배제/더미등록번호, **O마스크 제외**)로 PH칸 빈칸승격 + `_is_noise_label`(표번호·OOO·생략기호·안내문 드롭, R7 클러스터 라벨 절대보호) + 채움 직전 2중게이트(실값 절대 덮어쓰기 금지). 적대 코드리뷰 FIX_FIRST(수량라벨 오드롭·버전문자열 오판)→수정→재검증. py-3.11 345 passed(신규 7, 회귀 0). 실측 재검증: transcribed 2→3(창업일=2025년 03월17일 추가)·실값 덮어쓰기 0·잡음(2/3/4·000대표) 제거·미충족칸 정직표시(생년월일·매출 등 A에 값없어 빈칸=날조0). 날조0·오매칭<빈칸<덮어쓰기 불변 |
+| 2026-06-24 | cross-form 자동채움: 선택칸(체크박스 □→■) 자동 체크 + 적대검증 보수화 (PR #44) | 수정 app/auto_write/services/cross_form_autofill.py·app/cross_form_fill.py / 테스트 app/tests/test_cross_form_autofill.py(신규 16) | 실측(미래큐러스 A→오토라이트 B): B '사업자 형태 □개인/□법인' 선택칸을 A 사업자구분='개인사업자'로 ■개인 자동 체크(기존엔 체크박스를 빈칸으로도 안 보고 무시). find_checkbox_targets(라벨+연속 □옵션 그룹 탐지)·match_checkbox_groups(보수 매칭)·_check_option_cell(□→■ run단위·멱등)·SYNONYMS 사업자형태 클러스터·CLI --no-checkbox·AutofillReport checkbox_checked/groups. 멀티에이전트 적대 코드리뷰(5차원→검증→종합) FIX_FIRST: 실제 결함 4건(부분문자열 매칭이 '개인정보보호'→개인·'법인영업'→법인·짧은값 '소'·예시값 '00법인' 오체크 / 하이퍼링크 □ 조용한 no-op) → 부분문자열 폐기·정규화 사전 환원 후 정확일치만·_is_obvious_placeholder 가드·.//w:r 순회로 수정. py-3.11 361 passed(신규 16, 회귀 0). 실측 ■개인 체크·□법인 보존·원본 미수정·transcribed 3 유지. 체크 기호 ■(사용자 선택) |
+| 2026-06-24 | 하네스 신규: 빈 양식 자동완성·제출완성 (cross-form-submission) | .claude/agents/cross-form-filler.md(신규)·.claude/skills/cross-form-submission/SKILL.md(신규)·CLAUDE.md | 사용자 `/harness` 요청: 빈 new양식 + 완성본 A → 사실 항목 전사·검수해 즉시 제출 가능 완성(이미지=NotebookLM 프롬프트). Phase 0 감사로 기존 코드(cross_form_autofill·usage_acceptance·submission_orchestrator·image_apply·form_analyzer) 전부 재사용 확정 → 얇은 하네스 레이어만 신규. 신규 에이전트 cross-form-filler 1개(전사 전담) + 기존 6개 재사용(analyzer/quality-gate/postprocessor/safety-guard/architect/writer). 오케스트레이터 스킬 cross-form-submission(하이브리드: 결정론 CLI + 에이전트 판단, 5단계 분석→전사→보강→검수→완성·리포트). 사용자 설계 결정: '사실 재배열 전사' 먼저(날조0·즉시제출 직결), 서술 문장작성은 다음 단계 하네스([작성 필요] 칸이 그 작업큐). 요구사항 wiki .omc/wiki/cross-form.md 영구 저장 |
+| 2026-06-28 | HWP/HWPX 원본 양식 '변환 왕복 없는' 직접 채우기 (PR #48 병합) | 신규 app/auto_write/services/{hwpx_fill,hwp_com_fill}.py·app/hwp_fill_direct.py·app/tests/{test_hwpx_fill,test_hwp_com_fill}.py | 사용자 요구 '원본 양식 훼손 없이 값만 입력'. HWPX(=ZIP/OWPML)의 section*.xml 값 칸 hp:t 텍스트만 수정하고 header.xml(서식)·BinData(이미지)·mimetype 바이트 보존→**양식 100% 유지**(한글 불필요·샌드박스 검증). 바이너리 .hwp 는 한글 COM 누름틀 PutFieldText(정직 degradation). 매칭은 cross_form_autofill 재사용(동의어·플레이스홀더·라벨가드)·날조0·실값/라벨 덮어쓰기금지·원본미수정(하드링크 samefile 차단)·원자적 쓰기. 적대검증 5렌즈→실결함 9건 수정(하드링크 out==in critical·cellAddr/colSpan 병합셀 값칸선택 high·replacements 보호·lxml proxy id 회피). py-3.11 395 passed(신규 34, 회귀 0) |
+| 2026-06-28 | 표 양식 .hwp 원-커맨드 자동 파이프라인 (.hwp→hwpx→채움→.hwp) | 수정 app/auto_write/services/hwp_com_fill.py(fill_hwp_via_hwpx)·app/hwp_fill_direct.py(.hwp 기본 자동·--field 옵션)·app/tests/test_hwp_com_fill.py(신규 6) | selfdev: 실측—STAR·도보네비게이션 양식이 누름틀 0개 '표 양식'이라 .hwp 직접 필드채움은 0칸. 한글 COM 이 자기 네이티브 HWPX 로 저장/되돌리는 **무손실 변환**을 이용해 .hwp 하나만 넣으면 자동 변환→표칸 채움(hwpx_fill)→.hwp 복원. 원본미수정·원자적쓰기·구조보존 측정(표/행/셀 동일 확인). 실제 STAR.hwp E2E: 4칸 채움·표16/행40/칸121 동일·비어있지않은칸 67→71(정확히 +4)·출력 .hwp 에 값 4개 전부 보존·원본 미수정. py-3.11 신규 6(회귀 0) |
