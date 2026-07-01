@@ -1383,3 +1383,312 @@ def autofill_from_source(
             report.ok = not nothing_done
 
     return report
+
+
+# --- 배치: 공고 폴더 양식 일괄 채우기 + HWP 변환 --------------------------------
+
+_FORM_GLOB_PATTERNS = ("*.docx", "*.hwp", "*.hwpx")
+
+_DEFAULT_SOURCE_KEYWORDS: tuple[str, ...] = (
+    "사업계획서", "사업계획", "신청서", "완성", "k-global", "kglobal", "star",
+    "제출", "작성",
+)
+
+_NON_FORM_NAME_KEYWORDS: tuple[str, ...] = (
+    "공고", "공고문", "모집", "안내", "포스터", "poster", "붙임", "첨부",
+    "download", "manifest",
+)
+
+_BATCH_OUTPUT_SKIP_DIRS = frozenset({"filled", "filled_out", "__pycache__"})
+
+
+@dataclass
+class BatchAutofillItem:
+    target: str
+    source: str
+    output: str
+    hwp_output: str = ""
+    ok: bool = False
+    transcribed: int = 0
+    needs_confirm_count: int = 0
+    hwp_ok: bool = False
+    notes: list[str] = field(default_factory=list)
+
+
+@dataclass
+class BatchAutofillReport:
+    notice_folder: str
+    source_pool: str
+    output_dir: str
+    items: list[BatchAutofillItem] = field(default_factory=list)
+    skipped_targets: list[str] = field(default_factory=list)
+
+    @property
+    def ok_count(self) -> int:
+        return sum(1 for i in self.items if i.ok)
+
+    @property
+    def hwp_count(self) -> int:
+        return sum(1 for i in self.items if i.hwp_ok)
+
+
+def _name_has_any_keyword(name: str, keywords: tuple[str, ...]) -> bool:
+    lowered = name.lower()
+    return any(kw.lower() in lowered for kw in keywords)
+
+
+def is_skipped_non_form(path: Path) -> bool:
+    """공고문·안내·포스터 등 양식이 아닌 첨부는 배치 타깃에서 제외한다."""
+    return _name_has_any_keyword(path.stem, _NON_FORM_NAME_KEYWORDS)
+
+
+def discover_form_targets(notice_folder: str | Path) -> list[Path]:
+    """공고 폴더 최상위에서 양식 후보(.docx/.hwp/.hwpx)를 찾는다."""
+    folder = Path(notice_folder)
+    if not folder.is_dir():
+        raise FileNotFoundError(f"공고 폴더가 없습니다: {folder}")
+
+    found: list[Path] = []
+    seen: set[str] = set()
+    for pattern in _FORM_GLOB_PATTERNS:
+        for path in sorted(folder.glob(pattern)):
+            key = str(path.resolve())
+            if key in seen:
+                continue
+            seen.add(key)
+            if is_skipped_non_form(path):
+                continue
+            if path.suffix.lower() not in _SUPPORTED_EXTS:
+                continue
+            found.append(path)
+    return found
+
+
+def list_source_pool(pool_dir: str | Path) -> list[Path]:
+    """완성본 A 후보 폴더에서 지원 확장자 파일을 나열한다(최상위만)."""
+    folder = Path(pool_dir)
+    if not folder.is_dir():
+        raise FileNotFoundError(f"소스 풀 폴더가 없습니다: {folder}")
+
+    files: list[Path] = []
+    seen: set[str] = set()
+    for pattern in _FORM_GLOB_PATTERNS:
+        for path in sorted(folder.glob(pattern)):
+            if path.suffix.lower() not in _SUPPORTED_EXTS:
+                continue
+            key = str(path.resolve())
+            if key in seen:
+                continue
+            seen.add(key)
+            files.append(path)
+    return files
+
+
+def _score_source_candidate(path: Path, keywords: tuple[str, ...]) -> tuple[int, float]:
+    """파일명 키워드 적중 수(우선) + 최신 수정시각(동점)으로 소스 A 후보를 점수화한다."""
+    hits = sum(1 for kw in keywords if kw.lower() in path.stem.lower())
+    return hits, path.stat().st_mtime
+
+
+def pick_source_from_pool(
+    pool_dir: str | Path,
+    target: Path,
+    keywords: tuple[str, ...] | None = None,
+    *,
+    use_dry_run: bool = True,
+) -> Path | None:
+    """타깃마다 소스 A 1개를 고른다(dry-run 매칭 점수 → 키워드 → 최신 mtime)."""
+    keywords = keywords or _DEFAULT_SOURCE_KEYWORDS
+    candidates = list_source_pool(pool_dir)
+    if not candidates:
+        return None
+    if len(candidates) == 1:
+        return candidates[0]
+
+    if use_dry_run:
+        scored: list[tuple[Path, int, int, float]] = []
+        for cand in candidates:
+            dr = dry_run_transcribe_score(cand, target)
+            kw_hits, mtime = _score_source_candidate(cand, keywords)
+            scored.append((cand, dr, kw_hits, mtime))
+        scored.sort(key=lambda item: (item[1], item[2], item[3]), reverse=True)
+        if scored[0][1] > 0:
+            return scored[0][0]
+        # dry-run 전부 0이면 파일명 키워드 경로로 폴백
+
+    scored_kw = [(c, _score_source_candidate(c, keywords)) for c in candidates]
+    scored_kw.sort(key=lambda item: item[1], reverse=True)
+    best_hits = scored_kw[0][1][0]
+    if best_hits > 0:
+        top = [c for c, (hits, _) in scored_kw if hits == best_hits]
+        return max(top, key=lambda p: p.stat().st_mtime)
+    return max(candidates, key=lambda p: p.stat().st_mtime)
+
+
+def dry_run_transcribe_score(source: Path, target: Path) -> int:
+    """소스-타깃 쌍의 예상 high 자동전사 건수(출력 파일 없음, 가벼운 매칭)."""
+    source = Path(source)
+    target = Path(target)
+    if source.suffix.lower() not in _SUPPORTED_EXTS:
+        return 0
+    if target.suffix.lower() not in _SUPPORTED_EXTS:
+        return 0
+
+    with tempfile.TemporaryDirectory(prefix="xform_dry_") as td:
+        tmpdir = Path(td)
+        probe = AutofillReport(source=str(source), target=str(target), output="")
+        src_docx = _to_docx_if_needed(source, tmpdir, probe)
+        tgt_docx = _to_docx_if_needed(target, tmpdir, probe)
+        if src_docx is None or tgt_docx is None:
+            return 0
+        try:
+            src_fields, src_originals = _extract_source(src_docx)
+            tgt_fields = find_target_fields(tgt_docx)
+        except PackageNotFoundError:
+            return 0
+        if not src_fields or not tgt_fields:
+            return 0
+        matches = match_fields(src_fields, tgt_fields, src_originals)
+        return sum(
+            1 for m in matches
+            if m.confidence == "high" and m.source_label and m.value
+        )
+
+
+def try_convert_filled_docx_to_hwp(docx_path: Path) -> tuple[Optional[Path], list[str]]:
+    """채운 DOCX 를 같은 폴더에 .hwp 로 변환 시도한다(COM 불가 시 예외 없이 실패 보고)."""
+    from .hwp_docx_convert import docx_to_hwp
+
+    docx_path = Path(docx_path)
+    if docx_path.suffix.lower() != ".docx" or not docx_path.exists():
+        return None, ["DOCX 출력이 없어 HWP 변환을 건너뜁니다"]
+    hwp_path = docx_path.with_suffix(".hwp")
+    if hwp_path.resolve() == docx_path.resolve():
+        return None, ["HWP 출력 경로가 DOCX 와 같습니다"]
+    conv = docx_to_hwp(docx_path, hwp_path)
+    if conv.ok:
+        return hwp_path, []
+    return None, list(conv.notes)
+
+
+def format_batch_summary_korean(report: BatchAutofillReport) -> str:
+    """사용자용 한국어 요약(채팅·팝업에 붙여넣기 좋은 문장)."""
+    lines: list[str] = []
+    n_ok = report.ok_count
+    n_total = len(report.items)
+    n_confirm = sum(i.needs_confirm_count for i in report.items)
+    n_hwp = report.hwp_count
+    n_fail = n_total - n_ok
+
+    if n_ok:
+        lines.append(f"양식 {n_ok}개 채움")
+    if n_confirm:
+        lines.append(f"{n_confirm}칸 확인필요")
+    if n_hwp:
+        lines.append(f"HWP {n_hwp}개 생성")
+    elif n_ok:
+        lines.append("HWP 변환 실패 — DOCX만 저장됨(한글 프로그램에서 열어 주세요)")
+    if n_fail:
+        lines.append(f"실패 {n_fail}건(세부는 아래 참고)")
+    if report.skipped_targets:
+        lines.append(f"공고문 등 제외 {len(report.skipped_targets)}개")
+    if report.output_dir:
+        lines.append(f"저장: {report.output_dir}")
+
+    for item in report.items:
+        if not item.ok:
+            name = Path(item.target).name
+            reason = item.notes[0] if item.notes else "채움 실패"
+            lines.append(f"  · {name}: {reason}")
+        elif item.needs_confirm_count and not n_confirm:
+            pass
+        elif item.needs_confirm_count:
+            name = Path(item.target).name
+            lines.append(f"  · {name}: 확인필요 {item.needs_confirm_count}칸")
+        elif item.ok and not item.hwp_ok and item.output.endswith(".docx"):
+            name = Path(item.target).name
+            if any("HWP" in n or "한글" in n for n in item.notes):
+                lines.append(f"  · {name}: DOCX만 저장(HWP 변환 실패)")
+
+    if not lines:
+        return "채울 양식을 찾지 못했습니다. 폴더에 신청서·참가서류 파일이 있는지 확인해 주세요."
+    return "\n".join(lines)
+
+
+def batch_autofill_from_pool(
+    notice_folder: str | Path,
+    source_pool: str | Path,
+    output_subdir: str = "filled",
+    *,
+    source_keywords: tuple[str, ...] | None = None,
+    use_ai: bool = False,
+    confirmations: Optional[dict[str, str]] = None,
+    enable_checkbox: bool = True,
+    convert_hwp: bool = True,
+) -> BatchAutofillReport:
+    """공고 폴더의 양식들을 소스 풀에서 고른 A 로 일괄 채운다."""
+    notice = Path(notice_folder)
+    pool = Path(source_pool)
+    out_dir = notice / output_subdir
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    batch = BatchAutofillReport(
+        notice_folder=str(notice),
+        source_pool=str(pool),
+        output_dir=str(out_dir),
+    )
+
+    # 스킵된 공고문 파일명 기록(진단용)
+    for pattern in _FORM_GLOB_PATTERNS:
+        for path in notice.glob(pattern):
+            if is_skipped_non_form(path):
+                batch.skipped_targets.append(str(path))
+
+    targets = discover_form_targets(notice)
+    if not targets:
+        return batch
+
+    for target in targets:
+        item = BatchAutofillItem(target=str(target), source="", output="")
+        source = pick_source_from_pool(pool, target, source_keywords)
+        if source is None:
+            item.notes.append("완성본 폴더에 소스 파일이 없습니다")
+            batch.items.append(item)
+            continue
+
+        item.source = str(source)
+        out_path = out_dir / f"{target.stem}_filled.docx"
+        item.output = str(out_path)
+
+        try:
+            rep = autofill_from_source(
+                source, target, out_path,
+                use_ai=use_ai,
+                confirmations=confirmations,
+                enable_checkbox=enable_checkbox,
+            )
+        except (FileNotFoundError, ValueError, OSError) as exc:
+            item.notes.append(str(exc))
+            batch.items.append(item)
+            continue
+
+        item.transcribed = rep.transcribed
+        item.needs_confirm_count = len(rep.needs_confirm)
+        item.ok = rep.ok
+        item.notes.extend(rep.notes[:3])
+        item.output = rep.output
+
+        out_file = Path(rep.output)
+        if convert_hwp and item.ok and out_file.suffix.lower() == ".docx" and out_file.exists():
+            hwp_path, hwp_notes = try_convert_filled_docx_to_hwp(out_file)
+            if hwp_path:
+                item.hwp_output = str(hwp_path)
+                item.hwp_ok = True
+            else:
+                item.notes.append(
+                    "HWP 변환 실패 — DOCX만 저장됨"
+                    + (f" ({hwp_notes[0]})" if hwp_notes else ""))
+
+        batch.items.append(item)
+
+    return batch

@@ -945,3 +945,198 @@ def test_check_option_cell_hyperlink_wrapped_box(tmp_path: Path) -> None:
     para._p.append(hl)
     assert _check_option_cell(cell) is True
     assert "■ 개인" in cell.text
+
+
+# ============================================================================
+# 배치 모드: 공고 폴더 일괄 채우기 + HWP (F = #1 + #3)
+# ============================================================================
+
+from auto_write.services.cross_form_autofill import (  # noqa: E402
+    BatchAutofillReport,
+    batch_autofill_from_pool,
+    discover_form_targets,
+    format_batch_summary_korean,
+    is_skipped_non_form,
+    pick_source_from_pool,
+    try_convert_filled_docx_to_hwp,
+)
+
+BATCH_CLI = Path(__file__).resolve().parents[1] / "cross_form_fill.py"
+
+
+def _run_batch_cli(
+    notice: str, pool: str, out_subdir: str = "filled", extra: list[str] | None = None,
+) -> "subprocess.CompletedProcess[str]":
+    import os
+    env = dict(os.environ)
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONPATH"] = str(APP_DIR)
+    cmd = [
+        "py", "-3.11", str(BATCH_CLI), "batch",
+        "--notice-folder", notice,
+        "--source-pool", pool,
+        "-o", out_subdir,
+    ]
+    if extra:
+        cmd.extend(extra)
+    return subprocess.run(
+        cmd, capture_output=True, text=True, encoding="utf-8",
+        cwd=str(APP_DIR), env=env,
+    )
+
+
+def test_is_skipped_non_form_announcement() -> None:
+    assert is_skipped_non_form(Path("2026_모집공고.hwp")) is True
+    assert is_skipped_non_form(Path("신청서.hwp")) is False
+
+
+def test_discover_form_targets_skips_announcement(tmp_path: Path) -> None:
+    (tmp_path / "공고문.docx").write_bytes(b"x")
+    tgt = tmp_path / "참가신청서.docx"
+    _make_target(tgt)
+    found = discover_form_targets(tmp_path)
+    assert len(found) == 1
+    assert found[0].name == "참가신청서.docx"
+
+
+def test_pick_source_from_pool_keyword_and_mtime(tmp_path: Path) -> None:
+    pool = tmp_path / "pool"
+    pool.mkdir()
+    old = pool / "old_메모.docx"
+    new = pool / "new_메모.docx"
+    best = pool / "STAR_사업계획서.docx"
+    for p in (old, new, best):
+        _make_source(p)
+    # mtime: best oldest but keyword + dry-run wins
+    import os
+    import time
+    os.utime(old, (time.time() - 100, time.time() - 100))
+    os.utime(new, (time.time(), time.time()))
+    picked = pick_source_from_pool(pool, Path("b.docx"))
+    assert picked is not None
+    assert picked.name == "STAR_사업계획서.docx"
+
+
+def test_pick_source_dry_run_per_target(tmp_path: Path) -> None:
+    """dry-run: 필드가 맞는 소스를 타깃마다 고른다(최신 mtime·파일명만으로는 오선택 방지)."""
+    from auto_write.services.cross_form_autofill import dry_run_transcribe_score
+
+    pool = tmp_path / "pool"
+    pool.mkdir()
+    good = pool / "z_last_완성.docx"
+    bad = pool / "a_first_신청서.docx"
+    _make_source(good)
+    # bad: 기업명만 있는 빈약 소스
+    doc = Document()
+    t = doc.add_table(rows=1, cols=2)
+    t.rows[0].cells[0].text = "비고"
+    t.rows[0].cells[1].text = "메모"
+    doc.save(str(bad))
+
+    tgt = tmp_path / "b.docx"
+    _make_target(tgt)
+
+    import os
+    import time
+    os.utime(bad, (time.time(), time.time()))
+    os.utime(good, (time.time() - 3600, time.time() - 3600))
+
+    assert dry_run_transcribe_score(good, tgt) >= 3
+    assert dry_run_transcribe_score(bad, tgt) == 0
+    picked = pick_source_from_pool(pool, tgt)
+    assert picked is not None
+    assert picked.name == "z_last_완성.docx"
+
+
+def test_batch_autofill_fills_multiple_targets(tmp_path: Path) -> None:
+    pool = tmp_path / "pool"
+    notice = tmp_path / "notice"
+    pool.mkdir()
+    notice.mkdir()
+    _make_source(pool / "완성_사업계획서.docx")
+
+    t1 = notice / "신청서1.docx"
+    t2 = notice / "신청서2.docx"
+    _make_target(t1)
+    _make_target(t2)
+
+    report = batch_autofill_from_pool(notice, pool, "filled", convert_hwp=False)
+    assert report.ok_count == 2
+    out_dir = notice / "filled"
+    assert (out_dir / "신청서1_filled.docx").exists()
+    assert (out_dir / "신청서2_filled.docx").exists()
+    assert report.items[0].transcribed >= 1
+
+
+def test_format_batch_summary_korean() -> None:
+    from auto_write.services.cross_form_autofill import BatchAutofillItem
+    report = BatchAutofillReport(
+        notice_folder="/n", source_pool="/p", output_dir="/n/filled",
+        items=[
+            BatchAutofillItem(
+                target="a.docx", source="s.docx", output="/n/filled/a_filled.docx",
+                ok=True, transcribed=3, needs_confirm_count=2, hwp_ok=True,
+            ),
+        ],
+    )
+    text = format_batch_summary_korean(report)
+    assert "양식 1개 채움" in text
+    assert "2칸 확인필요" in text
+    assert "HWP 1개 생성" in text
+
+
+def test_try_convert_hwp_skip_when_com_fails(tmp_path: Path, monkeypatch) -> None:
+    docx = tmp_path / "out.docx"
+    _make_source(docx)
+
+    from auto_write.services.hwp_docx_convert import ConvertReport
+    import auto_write.services.hwp_docx_convert as hdc
+
+    def _fail(*_a, **_k):
+        return ConvertReport(direction="docx->hwp", ok=False, notes=["COM 없음"])
+
+    monkeypatch.setattr(hdc, "docx_to_hwp", _fail)
+
+    hwp, notes = try_convert_filled_docx_to_hwp(docx)
+    assert hwp is None
+    assert notes
+
+
+def test_batch_cli_korean_stdout_not_json_only(tmp_path: Path) -> None:
+    pool = tmp_path / "pool"
+    notice = tmp_path / "notice"
+    pool.mkdir()
+    notice.mkdir()
+    _make_source(pool / "완성.docx")
+    tgt = notice / "양식.docx"
+    _make_target(tgt)
+
+    res = _run_batch_cli(str(notice), str(pool), extra=["--no-hwp"])
+    assert res.returncode == 0
+    assert "양식" in res.stdout
+    assert "채움" in res.stdout
+    # 기본은 JSON only 아님
+    assert not res.stdout.strip().startswith("{")
+
+
+def test_batch_cli_hwp_skip_message(tmp_path: Path, monkeypatch) -> None:
+    pool = tmp_path / "pool"
+    notice = tmp_path / "notice"
+    pool.mkdir()
+    notice.mkdir()
+    _make_source(pool / "완성.docx")
+    tgt = notice / "양식.docx"
+    _make_target(tgt)
+
+    import auto_write.services.hwp_docx_convert as hdc
+    from auto_write.services.hwp_docx_convert import ConvertReport
+
+    def _fail(*_a, **_k):
+        return ConvertReport(direction="docx->hwp", ok=False, notes=["COM 없음"])
+
+    monkeypatch.setattr(hdc, "docx_to_hwp", _fail)
+
+    res = _run_batch_cli(str(notice), str(pool))
+    assert res.returncode == 0
+    assert "DOCX" in res.stdout or "HWP" in res.stdout
+    assert (notice / "filled" / "양식_filled.docx").exists()
