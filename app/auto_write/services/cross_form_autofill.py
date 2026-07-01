@@ -464,6 +464,98 @@ def _is_bad_value(value: str, label_keys: set[str]) -> bool:
     return False
 
 
+def _vertical_header_cols(header: list) -> list[int]:
+    """헤더 행이 '세로형 카드 헤더'면 인식 라벨 열 인덱스 목록, 아니면 [].
+
+    세로형 정보 카드(표지·개요 박스)는 라벨을 한 줄에 나열하고(성명·생년월일·연락처)
+    **아래 줄**에 값을 적는다. 소스 추출을 위해 이런 헤더 행을 판별한다.
+
+    판별 규칙(가로 라벨|값 행과의 확실한 구분 = 오추출<빈칸):
+      - 비어있지 않은 논리셀이 **2개 이상**이고 **전부 동의어 클러스터 라벨**일 때만.
+        한 칸이라도 라벨 아닌 값(예: '밸류업(주)')이 섞이면 가로 라벨|값 행이므로
+        세로 헤더로 보지 않는다(그 행은 짝수-인덱스 가로 추출이 처리).
+      - 예산 행렬 헤더([국고보조금, 자기부담금, 총사업비])는 앞 두 라벨이 클러스터
+        미등록이라 '전부 라벨' 조건에서 탈락 → 세로 값 추출 대상이 아니다.
+      - **동의어 중복 배제**: 같은 동의어 클러스터 라벨이 두 칸 이상이면(예 부서·소속)
+        정상 정보 카드가 아니다. 진짜 카드는 서로 다른 필드를 나열한다. 이 중복은
+        가로 라벨|값 더블페어 행([직위|대표|부서|소속], 대표·소속이 값이지만 라벨
+        어휘)을 세로로 오인한 신호 → 폐기(오추출<빈칸, 리뷰 MEDIUM 잔여 차단).
+    반환된 열 인덱스만 아래 행에서 값을 읽는다.
+    """
+    non_empty = [i for i, c in enumerate(header) if (c.text or "").strip()]
+    if len(non_empty) < 2:
+        return []
+    reps: list[str] = []
+    for i in non_empty:
+        rep = _cluster_rep(_key(header[i].text))
+        if rep is None:
+            return []  # 라벨 아닌 셀 존재 → 세로 헤더 아님
+        reps.append(rep)
+    if len(set(reps)) != len(reps):
+        return []  # 같은 클러스터 라벨 중복 → 정상 카드 아님(가로 더블페어 오인 차단)
+    return non_empty
+
+
+def _extract_vertical_cards(doc, put) -> None:
+    """세로형(라벨 위 / 값 아래) 정보 카드에서 (라벨,값)을 추출해 put 한다.
+
+    가로 짝수-인덱스 추출이 못 읽는 구조(헤더=라벨 나열, 아래=값)를 보강한다.
+    보수 가드(오추출<빈칸):
+      - 헤더 행이 ``_vertical_header_cols`` 로 '전부 인식 라벨(≥2)'일 때만.
+      - ``len(header)==len(below)`` (병합 정렬 보장).
+      - **아래 행 라벨 가드(가로 오인 차단)**: 아래 행의 인식 열 셀 중 하나라도 그
+        자체가 필드 라벨(``_cluster_rep`` 존재)이면, 이 행은 세로 헤더가 아니라
+        '가로 라벨|값 행'을 오인한 것으로 보고 **카드 전체를 폐기**한다. 예:
+        ``[직위|대표] / [성명|홍길동]`` — 아래 [성명,홍길동]의 '성명'이 라벨이라
+        세로로 읽으면 ``대표→홍길동`` 오추출이 되지만, 가로 추출이 ``성명→홍길동``
+        정답을 낸다. (값 셀 단어가 라벨 어휘와 겹치는 정상 가로 표 보호.)
+      - **로스터 가드**: 아래-아래 행(ri+2)의 인식 열에 값(라벨 아님)이 **하나라도**
+        있으면 다중 레코드 명부로 보고 카드 전체를 건너뛴다(첫 레코드를 대표값으로
+        오인 기입 방지). 2번째 레코드의 일부 칸이 비어 있어도 로스터로 판정한다.
+    값이 없는 칸은 건너뛴다(날조 0). ``put`` 은 ``_extract_source`` 의 ``_put``
+    (이미 있으면 유지). 세로가 **가로보다 먼저** 실행되므로(순수 세로 카드의 헤더 행이
+    가로에 라벨→라벨로 오염되는 것을 막기 위해), 위 '아래 행 라벨 가드'가 진짜 가로
+    행을 세로가 잘못 선점하는 유일한 경로를 차단한다.
+    """
+    for table in doc.tables:
+        rows = table.rows
+        for ri in range(len(rows) - 1):
+            header = _logical_cells(rows[ri])
+            below = _logical_cells(rows[ri + 1])
+            if not header or len(header) != len(below):
+                continue
+            cols = _vertical_header_cols(header)
+            if not cols:
+                continue
+            # 아래 행 라벨 가드: 아래 인식 열 셀 중 하나라도 필드 라벨이면 세로 헤더가
+            # 아니라 가로 라벨|값 행 오인 → 카드 전체 폐기(가로 추출이 정답을 낸다).
+            if any(
+                (below[ci].text or "").strip()
+                and _cluster_rep(_key(below[ci].text)) is not None
+                for ci in cols
+            ):
+                continue
+            # 로스터(다중 레코드) 가드: 아래-아래 행의 인식 열에 값(라벨 아님)이 하나라도
+            # 있으면 명부 → 카드 전체 건너뜀. 2번째 레코드가 일부 비어도 로스터로 본다.
+            if ri + 2 < len(rows):
+                below2 = _logical_cells(rows[ri + 2])
+                if len(below2) == len(header) and any(
+                    (below2[ci].text or "").strip()
+                    and _cluster_rep(_key(below2[ci].text)) is None
+                    for ci in cols
+                ):
+                    continue
+            for ci in cols:
+                value = (below[ci].text or "").strip()
+                if not value:
+                    continue                          # 값 없음 → 건너뜀(날조 0)
+                label_text = header[ci].text
+                label = _key(label_text)
+                if not label:
+                    continue
+                put(label, label_text, value)
+
+
 def extract_source_fields(docx_path: str | Path) -> dict[str, str]:
     """소스 DOCX 의 표에서 (라벨,값) 쌍을 추출한다.
 
@@ -476,6 +568,9 @@ def extract_source_fields(docx_path: str | Path) -> dict[str, str]:
       것을 차단한다(오매칭은 빈칸보다 나쁘다).
     - 정규화 라벨(_key)을 키로, 라벨·값 둘 다 비어있지 않을 때만 담는다(날조 0의 출발점).
     - 같은 정규화 라벨이 여러 번 나오면 처음 채워진 값을 유지한다.
+    - **세로형 카드**(헤더 행=라벨 나열 / 아래 행=값)도 추출한다: 헤더가 전부 인식
+      라벨(≥2)일 때만 아래 행 값을 읽는다(_extract_vertical_cards). 표지·개요 박스의
+      세로형 정보 카드가 통째로 유실되던 갭을 메운다(가로 짝수-인덱스가 못 읽는 구조).
     - 보조: 본문 단락의 "라벨: 값" 패턴도 추출(표에 없을 때만 보강).
     """
     fields, _ = _extract_source(docx_path)
@@ -496,6 +591,14 @@ def _extract_source(docx_path: str | Path) -> tuple[dict[str, str], dict[str, st
         if label not in fields:
             fields[label] = value
             originals[label] = SubmittableFiller._norm(label_text)
+
+    # 세로형(라벨 위 / 값 아래) 정보 카드에서 값 추출 — 가로 짝수-인덱스 추출이 못
+    # 읽는 표지형 카드(성명·생년월일·연락처를 위에 나열, 아래 행에 값). **가로보다
+    # 먼저** 실행한다: 순수 세로 카드의 헤더 행(라벨만 나열)은 가로 짝수-인덱스가
+    # 라벨→라벨(기업명→대표자)로 오염시켜 _put 이 그 오염값을 먼저 고정하기 때문.
+    # 둘은 상호배타(진짜 가로 라벨|값 행은 col1 이 값이라 세로 헤더 조건 미충족)이므로
+    # 세로-우선은 올바른 가로 추출을 절대 덮지 않는다(오추출<빈칸).
+    _extract_vertical_cards(doc, _put)
 
     for table in doc.tables:
         rows = table.rows
