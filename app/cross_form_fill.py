@@ -6,6 +6,8 @@
 빈칸일 때만 — 이미 채워짐·마스킹 ○○○·문장은 보존).
 **한 줄에 여러 칸이 나란히 있어도**(예: "기업명 : ____    대표자 : ____") 각 칸을
 개별 인식해 채운다(빈칸만, 이미 채워진/마스킹 칸과 칸 사이 간격은 그대로 보존).
+**선택칸**(예: "사업자 형태 | □ 개인 | □ 법인")도 소스 값('개인사업자')과 정확히
+한 옵션에만 매칭될 때만 ■ 로 체크한다(모호하면 보류 — 끄려면 --no-checkbox).
 
 사용법 (PowerShell):
     cd D:\auto_write\app
@@ -87,6 +89,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="needs_confirm 후보 확정 적용(반복 가능). 예: --confirm \"제품명칭=제품명\"")
     parser.add_argument("--confirm-file", metavar="PATH",
                         help="확정 맵 JSON 파일({타깃:소스} 또는 [{target,source}])")
+    parser.add_argument("--no-checkbox", action="store_true",
+                        help="선택칸(□개인/□법인) 자동 체크 끄기(기본은 켜짐·보수적 매칭)")
     args = parser.parse_args(argv)
 
     # M5: 예외를 raw traceback/exit1 로 흘리지 않고 JSON 리포트+exit 2 로 통일.
@@ -94,7 +98,8 @@ def main(argv: list[str] | None = None) -> int:
         confirmations = _parse_confirmations(args.confirm, args.confirm_file)
         report = autofill_from_source(
             args.source, args.target, args.out, use_ai=args.use_ai,
-            confirmations=confirmations or None)
+            confirmations=confirmations or None,
+            enable_checkbox=not args.no_checkbox)
     except (FileNotFoundError, ValueError, OSError, json.JSONDecodeError) as exc:
         err = {
             "source": args.source,
