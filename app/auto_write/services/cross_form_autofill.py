@@ -1845,6 +1845,126 @@ def format_batch_summary_korean(report: BatchAutofillReport) -> str:
     return "\n".join(lines)
 
 
+# --- 단일 전사 결과 사람용 요약 -----------------------------------------------
+
+def _summary_shorten(text: str, limit: int = 40) -> str:
+    """요약 한 줄에 넣기 좋게 공백 정리 + 과길이 말줄임(값을 바꾸지 않고 표시만)."""
+    t = " ".join(str(text or "").split())
+    if len(t) <= limit:
+        return t
+    return t[: max(1, limit - 1)] + "…"
+
+
+def format_single_summary_korean(report: AutofillReport) -> str:
+    """단일 A→B 전사 결과를 비개발자용 한국어 요약으로 만든다.
+
+    원본 JSON 덤프 대신 **무엇이 채워졌고 / 무엇을 확인해야 하고 / 무엇을 직접
+    채워야 하는지**를 한눈에 보여준다. 확인 필요(needs_confirm) 칸은 그대로 붙여
+    다시 실행할 수 있는 ``--confirm "타깃=소스"`` 명령을 함께 제시해, 비개발자가
+    raw JSON 을 뜯어보지 않고도 사람 확인 루프를 닫을 수 있게 한다.
+
+    읽기 전용 — ``report`` 만 읽고 값을 지어내지 않는다(전사 개수는 실제 저장 기준
+    ``transcribed``, 확인·빈칸 목록은 report 의 실제 항목).
+    """
+    lines: list[str] = ["완성본 → 빈 양식 전사 결과"]
+    if report.source:
+        lines.append(f"  소스: {Path(report.source).name}")
+    if report.target:
+        lines.append(f"  양식: {Path(report.target).name}")
+    if report.output:
+        lines.append(f"  결과: {Path(report.output).name}")
+
+    if not report.ok:
+        reason = report.notes[0] if report.notes else "전사할 항목을 찾지 못했습니다."
+        lines.append("")
+        lines.append(f"[아직 제출본 아님] {_summary_shorten(reason, 80)}")
+
+    # [채운 칸] 자동으로 채운 칸 (실제 저장 기준 transcribed, 목록은 매칭)
+    matches = list(report.matches)
+    if report.transcribed or matches:
+        lines.append("")
+        lines.append(f"[자동으로 채운 칸] {report.transcribed}개")
+        for m in matches:
+            tgt = _summary_shorten(m.target_label or m.normalized)
+            val = _summary_shorten(m.value, 50)
+            tag = " (사용자 확정)" if m.confidence == "confirmed" else ""
+            src = m.source_label
+            if src and _key(src) != m.normalized:
+                lines.append(f"  · {tgt} ← {val}  (소스 라벨: {_summary_shorten(src)}){tag}")
+            else:
+                lines.append(f"  · {tgt} ← {val}{tag}")
+        # 미기입 사유는 여러 가지(표 셀에 이미 실값·단락 필드 위치 미확정·빈값)라
+        # 원인을 단정하지 않는다(비개발자 오해 방지 — 코드리뷰 MEDIUM#1).
+        skipped = len(matches) - report.transcribed
+        if skipped > 0:
+            lines.append(
+                f"  ※ 위 {skipped}칸은 채우지 않았습니다"
+                "(양식에 이미 값이 있거나 채울 위치를 확정하지 못함).")
+
+    # [선택칸] 자동 체크한 선택칸(box -> checked)
+    checked_groups = [
+        g for g in report.checkbox_groups
+        if isinstance(g.get("checked_option_index"), int)
+        and g["checked_option_index"] >= 0
+    ]
+    if report.checkbox_checked or checked_groups:
+        lines.append("")
+        lines.append(f"[자동 체크한 선택칸] {report.checkbox_checked}개")
+        for g in checked_groups:
+            label = _summary_shorten(g.get("label") or g.get("normalized") or "")
+            sv = _summary_shorten(g.get("source_value") or "", 30)
+            lines.append(f"  · {label}: '{sv}' 로 체크" if sv else f"  · {label}: 체크")
+
+    # [확인 필요] 비슷하지만 애매 — 후보 + 복붙 가능한 확정 명령
+    if report.needs_confirm:
+        lines.append("")
+        lines.append(
+            f"[확인 필요] 비슷하지만 확실치 않아 비워둠 {len(report.needs_confirm)}개")
+        for nc in report.needs_confirm[:12]:
+            tgt = nc.get("target_label") or nc.get("normalized") or ""
+            cands = [c for c in (nc.get("candidates") or []) if c]
+            if cands:
+                cand_str = ", ".join(_summary_shorten(c, 24) for c in cands[:4])
+                lines.append(f"  · {_summary_shorten(tgt)} → 후보: {cand_str}")
+                lines.append(f"      확정하려면: --confirm \"{tgt}={cands[0]}\"")
+            else:
+                lines.append(
+                    f"  · {_summary_shorten(tgt)} → 알맞은 후보 없음(직접 채워 주세요)")
+        extra = len(report.needs_confirm) - 12
+        if extra > 0:
+            lines.append(f"  …외 {extra}개")
+
+    # [빈칸] 완성본에 값이 없어 비워둔 칸(날조 0 — 직접 채움)
+    if report.unmatched_targets:
+        lines.append("")
+        lines.append(
+            f"[빈칸] 완성본에 값이 없어 비워둔 칸 {len(report.unmatched_targets)}개 (직접 채워 주세요)")
+        for um in report.unmatched_targets[:12]:
+            tgt = um.get("target_label") or um.get("normalized") or ""
+            lines.append(f"  · {_summary_shorten(tgt)}")
+        extra = len(report.unmatched_targets) - 12
+        if extra > 0:
+            lines.append(f"  …외 {extra}개")
+
+    body = (report.transcribed or matches or checked_groups or report.checkbox_checked
+            or report.needs_confirm or report.unmatched_targets)
+    if report.ok and not body:
+        lines.append("")
+        lines.append("  (채울 빈칸이 없거나 이미 모두 채워져 있습니다.)")
+
+    tail: list[str] = []
+    if report.needs_confirm:
+        tail.append("확인 필요 칸은 위 --confirm 명령을 붙여 다시 실행하면 채워집니다.")
+    if report.unmatched_targets:
+        tail.append("빈칸은 완성본에 값이 없어 비운 것이라 직접 입력하세요"
+                    "(없는 값은 지어내지 않습니다).")
+    if tail:
+        lines.append("")
+        lines.append("다음: " + " ".join(tail))
+
+    return "\n".join(lines)
+
+
 def batch_autofill_from_pool(
     notice_folder: str | Path,
     source_pool: str | Path,
