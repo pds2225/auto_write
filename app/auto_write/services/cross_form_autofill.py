@@ -294,9 +294,10 @@ class Match:
     table_index: int           # 타깃 표 인덱스("paragraph" 칸이면 -1)
     row: int                   # 타깃 행("paragraph" 칸이면 -1)
     value_cell: int            # 타깃 값 셀(논리 셀) 인덱스("paragraph" 칸이면 -1)
-    kind: str = "table"        # 채울 칸 종류: "table" | "paragraph"
+    kind: str = "table"        # 채울 칸 종류: "table" | "paragraph" | "cell_paragraph"
     para_index: int = -1       # 본문 단락 인덱스(kind=="paragraph" 일 때만 유효)
-    fill_start: int = -1       # 단락 기입 구간 시작(kind=="paragraph" 일 때만, 멀티필드)
+    cell_para_index: int = -1  # 셀 내부 단락 인덱스(kind=="cell_paragraph" 일 때만; value_cell=논리셀)
+    fill_start: int = -1       # 단락 기입 구간 시작(kind=="paragraph"/"cell_paragraph", 멀티필드)
     fill_end: int = -1         # 단락 기입 구간 끝(이 구간을 ' '+값 으로 교체)
     candidates: list[str] = field(default_factory=list)  # 보고용 후보(자동전사 아님)
 
@@ -582,6 +583,18 @@ def _is_fill_blank(rest: str) -> bool:
     return bool(_FILL_BLANK_RE.match(rest or ""))
 
 
+def _is_visible_blank(rest: str) -> bool:
+    """콜론 뒤 값이 '보이는 빈칸'(밑줄·점·대시 등 실제 채움선이 있음)이면 True.
+
+    **표 셀 인라인 필드 전용** 판정. ``_is_fill_blank`` 는 콜론 뒤가 완전히 비어도
+    (공백/빈문자) 빈칸으로 보지만, 표 셀에서 '라벨:'(콜론 뒤 공백)은 **옆 값칸**을
+    가리키는 경우와 구별이 안 되므로 인라인으로 오기입하면 안 된다. 그래서 셀 인라인은
+    스트립 후에도 비어있지 않은(밑줄 ______ 같은 가시적 채움선) 경우만 인정한다.
+    본문 단락 경로(_is_fill_blank)는 '옆 칸' 개념이 없어 기존대로 둔다.
+    """
+    return bool((rest or "").strip()) and _is_fill_blank(rest)
+
+
 # 예시 플레이스홀더(=실제로는 채울 빈칸) 판별 — 적대검증 확정 보수판(O마스크 제외).
 _PH_DATE_RE = re.compile(r"(?<!\d)\d{4}\s*[.\-/]\s*(\d{1,2})\s*[.\-/]\s*(\d{1,2})\s*\.?(?!\d)")
 _PH_DATE_KR_RE = re.compile(r"(?<!\d)\d{4}\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일?")
@@ -692,6 +705,32 @@ def find_target_fields(docx_path: str | Path) -> list[dict[str, Any]]:
                     "value_cell": i + 1,
                     "para_index": -1,
                 })
+
+            # 표 셀 '안'의 인라인 "라벨 : ______" 빈칸(개요/표지 박스에 흔함).
+            # doc.paragraphs 는 셀 단락을 포함하지 않아 아래 본문 스캔이 못 잡는다 →
+            # 각 논리 셀의 단락을 직접 훑어 '보이는 빈칸' 인라인 필드만 채운다(멀티필드).
+            for ci, cell in enumerate(logical):
+                for cpi, cpara in enumerate(cell.paragraphs):
+                    for label_raw, value_raw, fstart, fend in _iter_line_fields(cpara.text or ""):
+                        label = _key(label_raw)
+                        if not label:
+                            continue
+                        # 셀 인라인은 '보이는 빈칸'(밑줄/점/대시)만 — 콜론 뒤 공백/빈값은
+                        # 옆 값칸 패턴과 모호하므로 제외(오기입 방지).
+                        if not _is_visible_blank(value_raw):
+                            continue
+                        targets.append({
+                            "orig_label": SubmittableFiller._norm(label_raw),
+                            "normalized": label,
+                            "kind": "cell_paragraph",
+                            "table_index": ti,
+                            "row": ri,
+                            "value_cell": ci,
+                            "para_index": -1,
+                            "cell_para_index": cpi,
+                            "fill_start": fstart,
+                            "fill_end": fend,
+                        })
 
     # 본문 단락형 빈칸: 한 줄의 각 "라벨 : <빈칸>" 칸(멀티필드 대응).
     # 표 칸 다음에 추가 → H2 dedup 에서 표 우선. 같은 줄 여러 칸은 각각 타깃이 된다.
@@ -831,6 +870,7 @@ def match_fields(
                 value_cell=tgt["value_cell"],
                 kind=tgt.get("kind", "table"),
                 para_index=tgt.get("para_index", -1),
+                cell_para_index=tgt.get("cell_para_index", -1),
                 fill_start=tgt.get("fill_start", -1),
                 fill_end=tgt.get("fill_end", -1),
             ))
@@ -852,6 +892,7 @@ def match_fields(
                 value_cell=tgt["value_cell"],
                 kind=tgt.get("kind", "table"),
                 para_index=tgt.get("para_index", -1),
+                cell_para_index=tgt.get("cell_para_index", -1),
                 fill_start=tgt.get("fill_start", -1),
                 fill_end=tgt.get("fill_end", -1),
                 candidates=cand,
@@ -1272,10 +1313,17 @@ def autofill_from_source(
         transcribed = 0
         confirmed_written = 0
         para_groups: dict[int, list[Match]] = {}
+        # 표 셀 '안' 인라인 빈칸: (표, 행, 논리셀, 셀단락) 별로 모아 한 번에 기입.
+        cell_para_groups: dict[tuple[int, int, int, int], list[Match]] = {}
         for m in to_write:
             # 본문 단락형 빈칸: 같은 단락의 여러 칸을 모아 한 번에 기입(인덱스 밀림 방지)
             if m.kind == "paragraph":
                 para_groups.setdefault(m.para_index, []).append(m)
+                continue
+            if m.kind == "cell_paragraph":
+                cell_para_groups.setdefault(
+                    (m.table_index, m.row, m.value_cell, m.cell_para_index), []
+                ).append(m)
                 continue
             if m.table_index >= len(doc.tables):
                 report.notes.append(f"전사 표 범위초과 ti={m.table_index}")
@@ -1306,6 +1354,29 @@ def autofill_from_source(
                 report.notes.append(f"전사 단락 범위초과 pi={pi}")
                 continue
             for m in _fill_paragraph_fields(doc.paragraphs[pi], group):
+                transcribed += 1
+                if m.confidence == "confirmed":
+                    confirmed_written += 1
+
+        # 표 셀 '안' 인라인 빈칸: 셀 단락을 찾아 본문 단락과 동일하게 한 번에 기입.
+        # (표-라벨 경로는 '빈/예시' 값셀만 덮으므로, 글자가 든 인라인 셀과 겹치지 않는다.)
+        for (ti, ri, ci, cpi), group in cell_para_groups.items():
+            if ti < 0 or ti >= len(doc.tables):
+                report.notes.append(f"전사 셀단락 표범위초과 ti={ti}")
+                continue
+            rows = doc.tables[ti].rows
+            if ri < 0 or ri >= len(rows):
+                report.notes.append(f"전사 셀단락 행범위초과 ti={ti} ri={ri}")
+                continue
+            logical = _logical_cells(rows[ri])
+            if ci < 0 or ci >= len(logical):
+                report.notes.append(f"전사 셀단락 셀범위초과 ti={ti} ri={ri} ci={ci}")
+                continue
+            cell_paras = logical[ci].paragraphs
+            if cpi < 0 or cpi >= len(cell_paras):
+                report.notes.append(f"전사 셀단락 단락범위초과 ti={ti} ri={ri} ci={ci} cpi={cpi}")
+                continue
+            for m in _fill_paragraph_fields(cell_paras[cpi], group):
                 transcribed += 1
                 if m.confidence == "confirmed":
                     confirmed_written += 1
