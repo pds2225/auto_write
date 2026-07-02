@@ -787,3 +787,67 @@ def test_self_diagnose_passes_page_limits_to_config(tmp_path, monkeypatch):
     sd.main([str(src), "--max-pages", "15", "--ai-section-max", "2"])
     assert captured["max_pages"] == 15
     assert captured["ai_section_max"] == 2
+
+
+# --- R6: HWP→DOCX 변환본 사각지대 — docDefaults·테마 폰트 해석 ------------------
+
+def test_theme_font_helpers_read_default_template():
+    """기본 python-docx 템플릿의 테마·docDefaults 를 헬퍼가 해석한다."""
+    from auto_write.services.usage_acceptance import (
+        _load_theme_fonts, _resolve_theme_token,
+        _doc_default_fonts, _doc_default_size_pt,
+    )
+    d = _doc()
+    theme = _load_theme_fonts(d)
+    assert theme.get("minor_latin")   # 기본 템플릿: minor latin = Cambria
+    assert theme.get("major_latin")   # major latin = Calibri
+    # 토큰 해석: minorHAnsi→minor 라틴, majorHAnsi→major 라틴
+    assert _resolve_theme_token("minorHAnsi", theme) == theme["minor_latin"]
+    assert _resolve_theme_token("majorHAnsi", theme) == theme["major_latin"]
+    # 빈 동아시아 테마는 조용히 None(오탐 유발 안 함)
+    assert _resolve_theme_token("minorEastAsia", theme) == theme.get("minor_ea")
+    # docDefaults: 기본 폰트는 asciiTheme=minorHAnsi → minor 라틴
+    asc, _ea = _doc_default_fonts(d, theme)
+    assert asc == theme["minor_latin"]
+    # docDefaults: 기본 크기 sz=22(half-point) → 11pt
+    assert _doc_default_size_pt(d) == 11.0
+
+
+def test_theme_referenced_font_mixing_detected():
+    """폰트가 테마 참조로만 지정돼도(run 명시 폰트 0) 혼용을 검출한다.
+
+    전에는 run.font.name(w:ascii)만 봐서 asciiTheme 참조 폰트가 0종으로 통과했다.
+    이제 테마를 해석해 minor(상속) vs major(참조) = 2종을 잡는다.
+    """
+    from docx.oxml.ns import qn
+    d = _doc()
+    # bare 단락 — docDefault asciiTheme=minorHAnsi 상속(테마 minor 라틴)
+    d.add_paragraph().add_run("본문 상속 텍스트")
+    # 테마 major 를 참조하는 run(w:asciiTheme=majorHAnsi, 명시 폰트명은 없음)
+    run = d.add_paragraph().add_run("제목 참조 텍스트")
+    run._element.get_or_add_rPr().get_or_add_rFonts().set(qn("w:asciiTheme"), "majorHAnsi")
+    r = check_font_name_mixing(d, AcceptanceConfig(allowed_fonts=1))
+    assert r.defects >= 1, r.as_dict()          # minor+major = ascii 2종 > 허용 1
+    joined = " ".join(r.samples)
+    assert "ascii:" in joined, r.as_dict()
+
+
+def test_docdefault_only_font_check_is_alive():
+    """명시 폰트가 하나도 없는 변환본이라도 폰트 검사가 '0종'으로 죽지 않는다."""
+    d = _doc()
+    for _ in range(3):
+        d.add_paragraph().add_run("전부 문서 기본 서식만 쓰는 본문")
+    r = check_font_name_mixing(d)
+    # 최소 1종(docDefault→테마 minor 라틴)은 해석돼야 검사가 살아 있다
+    assert any(s.startswith("ascii:") for s in r.samples), r.as_dict()
+    # 단일 기본 폰트뿐이므로 혼용은 아님(정상 문서 오탐 금지)
+    assert r.defects == 0, r.as_dict()
+
+
+def test_docdefault_size_fallback_is_alive():
+    """크기가 docDefaults 에만 있는 변환본에서도 글자크기 검사가 값을 잡는다."""
+    d = _doc()
+    d.add_paragraph().add_run("크기 명시 없는 본문(문서 기본 11pt 상속)")
+    r = check_font_size_spread(d)
+    assert any("11.0pt" in s for s in r.samples), r.as_dict()  # 전엔 samples 비어 있었음
+    assert r.defects == 0, r.as_dict()                          # 단일 크기 → 정상

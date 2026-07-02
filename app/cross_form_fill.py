@@ -32,7 +32,9 @@ from pathlib import Path
 from auto_write.services.cross_form_autofill import (
     autofill_from_source,
     batch_autofill_from_pool,
+    format_batch_detail_korean,
     format_batch_summary_korean,
+    format_single_summary_korean,
 )
 
 
@@ -114,7 +116,13 @@ def _run_single(args: argparse.Namespace) -> int:
         print(json.dumps(err, ensure_ascii=False, indent=2))
         return 2
 
-    print(json.dumps(report.as_dict(), ensure_ascii=False, indent=2))
+    # 성공(ok) 시 기본은 비개발자용 한국어 요약(무엇이 채워졌고/확인 필요/빈칸+다음 행동).
+    # --json 이거나 실패(ok=False: 비지원 입력·전사 0건 등)면 기계용 원본 JSON(하위호환:
+    # 실패 리포트는 구조화 JSON 으로 남긴다 — traceback/exit1 아님).
+    if getattr(args, "json", False) or not report.ok:
+        print(json.dumps(report.as_dict(), ensure_ascii=False, indent=2))
+    else:
+        print(format_single_summary_korean(report))
     return 0 if report.ok else 2
 
 
@@ -145,6 +153,14 @@ def _run_batch(args: argparse.Namespace) -> int:
 
     summary = format_batch_summary_korean(report)
     print(summary)
+
+    # 양식별 상세(확인 필요 칸의 --confirm 명령 + 빈칸 목록). 집계만으론 "어느 칸?
+    # 무슨 명령?"을 알 수 없던 갭을 메운다. 확인 필요·빈칸이 없으면 빈 문자열이라 생략.
+    detail = format_batch_detail_korean(report)
+    if detail:
+        print()
+        print(detail)
+
     if args.json:
         print(json.dumps({
             "notice_folder": report.notice_folder,
@@ -161,6 +177,8 @@ def _run_batch(args: argparse.Namespace) -> int:
                     "ok": i.ok,
                     "transcribed": i.transcribed,
                     "needs_confirm_count": i.needs_confirm_count,
+                    "needs_confirm": i.needs_confirm,
+                    "unmatched_targets": i.unmatched_targets,
                     "hwp_ok": i.hwp_ok,
                     "notes": i.notes,
                 }
@@ -201,6 +219,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="확정 맵 JSON 파일")
     single.add_argument("--no-checkbox", action="store_true",
                         help="선택칸 자동 체크 끄기")
+    single.add_argument("--json", action="store_true",
+                        help="사람용 요약 대신 기계용 원본 JSON 출력")
 
     # --- 배치: 공고 폴더 ---
     batch = sub.add_parser("batch", help="공고 폴더 양식 일괄 채우기 + HWP")
@@ -233,6 +253,7 @@ def main(argv: list[str] | None = None) -> int:
                         help=argparse.SUPPRESS)
     parser.add_argument("--confirm-file", metavar="PATH", help=argparse.SUPPRESS)
     parser.add_argument("--no-checkbox", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--json", action="store_true", help=argparse.SUPPRESS)
 
     args = parser.parse_args(argv)
 
