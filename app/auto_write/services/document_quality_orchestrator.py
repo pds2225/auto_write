@@ -263,19 +263,15 @@ class DocumentQualityOrchestrator:
         STEP2(빈셀 미입력)에서 날조 대신 표시하는 마커로, 미입력 필수칸의 신뢰 가능한
         신호다. body 단락 + 표 셀(병합셀 중복 제외) 양쪽을 합산한다.
         """
+        from auto_write.services.usage_acceptance import dedup_cells
+
         marker = "[확인필요]"
-        n = 0
-        for p in doc.paragraphs:
-            n += p.text.count(marker)
-        for table in doc.tables:
-            for row in table.rows:
-                seen: set[int] = set()
-                for cell in row.cells:
-                    cid = id(cell._tc)
-                    if cid in seen:
-                        continue
-                    seen.add(cid)
-                    n += cell.text.count(marker)
+        n = sum(p.text.count(marker) for p in doc.paragraphs)
+        # 표 셀은 문서 전체 기준 병합 중복 제거(dedup_cells 단일출처): row 단위 dedup 은
+        # 세로 병합셀을 각 row 마다 다시 세어 과다집계하고, id() 만 저장하면 lxml proxy
+        # id 재사용으로 서로 다른 셀을 '본 것'으로 오판한다(refs 유지로 방지).
+        for cell in dedup_cells(doc):
+            n += cell.text.count(marker)
         return n
 
     @staticmethod
