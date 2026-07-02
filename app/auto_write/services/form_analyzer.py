@@ -30,6 +30,27 @@ _PSST_LABELS = {
     "team": "Team(팀구성)",
 }
 
+_NARRATIVE_HINTS = (
+    "개요", "계획", "방안", "전략", "목표", "추진", "내용", "설명", "서술",
+    "현황", "배경", "필요성", "기대효과", "차별성", "사업화", "로드맵",
+    "problem", "solution", "scale", "team", "psst",
+)
+
+
+def classify_field_kind(label: str) -> str:
+    """양식 항목이 사실 칸인지 서술 칸인지 분류한다."""
+    text = (label or "").strip()
+    if not text:
+        return "fact"
+    lowered = text.lower()
+    if any(kw in lowered for kw in _NARRATIVE_HINTS):
+        return "narrative"
+    if any(kw in text for kws in _PSST_KEYWORDS.values() for kw in kws):
+        return "narrative"
+    if len(text) >= 24:
+        return "narrative"
+    return "fact"
+
 
 @dataclass
 class FormReport:
@@ -43,6 +64,7 @@ class FormReport:
     required_cell_count: int = 0
     psst_present: dict[str, bool] = field(default_factory=dict)
     writable_items: list[str] = field(default_factory=list)
+    writable_item_details: list[dict[str, Any]] = field(default_factory=list)
     analysis_notes: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
@@ -60,6 +82,7 @@ class FormReport:
                 _PSST_LABELS[k] for k, v in self.psst_present.items() if not v
             ],
             "writable_items": self.writable_items,
+            "writable_item_details": self.writable_item_details,
             "analysis_notes": self.analysis_notes,
         }
 
@@ -126,13 +149,20 @@ def analyze_form(path: str | Path, *, max_items: int = 30) -> FormReport:
 
     # 작성 항목 목록(필수 우선)
     items: list[str] = []
+    details: list[dict[str, Any]] = []
     for q in profile.questions:
         label = getattr(q, "label", "").strip()
         if not label:
             continue
         mark = "[필수] " if getattr(q, "required", False) else ""
         items.append(f"{mark}{label}")
+        details.append({
+            "label": label,
+            "field_kind": classify_field_kind(label),
+            "required": bool(getattr(q, "required", False)),
+        })
     items.sort(key=lambda s: (0 if s.startswith("[필수]") else 1))
     report.writable_items = items[:max_items]
+    report.writable_item_details = details[:max_items]
 
     return report
