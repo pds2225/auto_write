@@ -57,6 +57,18 @@ def test_extract_text_docx(tmp_path: Path) -> None:
     assert "문제인식" in text
 
 
+def test_form_analyzer_field_kind_in_report(tmp_path: Path) -> None:
+    from auto_write.services.form_analyzer import analyze_form
+
+    p = tmp_path / "plan.docx"
+    doc = Document()
+    doc.add_heading("1. 문제인식(Problem)", level=1)
+    doc.add_paragraph("(작성)")
+    doc.save(str(p))
+    fr = analyze_form(p)
+    assert any(d.get("field_kind") == "narrative" for d in fr.writable_item_details)
+
+
 def test_extract_missing_file(tmp_path: Path) -> None:
     from auto_write.services.doc_text_extract import extract_text
 
