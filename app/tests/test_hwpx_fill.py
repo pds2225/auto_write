@@ -379,3 +379,84 @@ def test_cli_returns_2_on_bad_input(tmp_path):
     bad.write_bytes(b"not a zip at all")
     rc = main([str(bad), "-o", str(tmp_path / "o.hwpx"), "--set", "기업명=x"])
     assert rc == 2
+
+
+# --------------------------------------------------------------------------- #
+# linesegarray 글씨 겹침 방지 — 채운 셀의 옛 줄위치 캐시 제거 회귀
+# (사용자 실측: STAR·서울 AI 허브 신청서에서 값만 바꾸고 캐시를 안 지워 글씨 겹침 재발)
+# --------------------------------------------------------------------------- #
+
+
+def _section_xml_with_lineseg() -> bytes:
+    """빈 값칸(상호) + 문단·값칸에 hp:linesegarray(옛 줄위치 캐시)를 가진 섹션."""
+    label = (
+        '<hp:tc><hp:cellAddr colAddr="0" rowAddr="0"/>'
+        '<hp:cellSpan colSpan="1" rowSpan="1"/><hp:subList><hp:p>'
+        '<hp:run charPrIDRef="0"><hp:t>상호</hp:t></hp:run></hp:p></hp:subList></hp:tc>'
+    )
+    value = (
+        '<hp:tc><hp:cellAddr colAddr="1" rowAddr="0"/>'
+        '<hp:cellSpan colSpan="1" rowSpan="1"/><hp:subList><hp:p>'
+        '<hp:linesegarray><hp:lineseg textpos="0" vertpos="120"/></hp:linesegarray>'
+        '<hp:run charPrIDRef="0"><hp:t></hp:t></hp:run></hp:p></hp:subList></hp:tc>'
+    )
+    body = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f'<hs:sec xmlns:hp="{_HP}" xmlns:hs="{_HS}">'
+        '<hp:p><hp:linesegarray><hp:lineseg textpos="0" vertpos="0"/></hp:linesegarray>'
+        '<hp:run charPrIDRef="0">'
+        f'<hp:tbl rowCnt="1" colCnt="2"><hp:tr>{label}{value}</hp:tr></hp:tbl>'
+        "</hp:run></hp:p></hs:sec>"
+    )
+    return body.encode("utf-8")
+
+
+def _make_hwpx_ls(path: Path) -> None:
+    with zipfile.ZipFile(path, "w") as z:
+        zi = zipfile.ZipInfo("mimetype")
+        zi.compress_type = zipfile.ZIP_STORED
+        z.writestr(zi, _MIMETYPE)
+        z.writestr("Contents/header.xml", _HEADER_XML)
+        z.writestr("Contents/section0.xml", _section_xml_with_lineseg())
+
+
+def _count_lineseg(path: Path) -> int:
+    from lxml import etree
+
+    with zipfile.ZipFile(path) as z:
+        root = etree.fromstring(z.read("Contents/section0.xml"))
+    return sum(
+        1 for el in root.iter() if etree.QName(el).localname == "linesegarray"
+    )
+
+
+def test_strip_linesegarray_when_filled(tmp_path):
+    """채우면 옛 줄위치 캐시(linesegarray)가 전량 제거돼 한글 글씨 겹침을 막는다."""
+    src = tmp_path / "ls.hwpx"
+    _make_hwpx_ls(src)
+    assert _count_lineseg(src) == 2  # 채우기 전: 문단1 + 값칸1
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"상호": "도보내비"})
+    assert rep.filled.get("상호") == "도보내비"
+    assert _cell_value(out, "상호") == "도보내비"  # 값 채워짐(내용 보존)
+    assert _count_lineseg(out) == 0  # 캐시 전량 제거(겹침 방지)
+
+
+def test_linesegarray_kept_when_no_change(tmp_path):
+    """채울 게 없으면 재직렬화 없이 원본 그대로 — linesegarray 보존(불필요 변형 회피)."""
+    src = tmp_path / "ls.hwpx"
+    _make_hwpx_ls(src)
+    out = tmp_path / "out.hwpx"
+    fill_hwpx(src, out, identity={"존재하지않는라벨": "x"})
+    assert _count_lineseg(out) == 2  # 무변경 → 원본 캐시 유지
+
+
+def test_strip_linesegarray_helper_idempotent():
+    """_strip_linesegarray: 제거 후 재호출은 0(멱등), 텍스트 내용 무손실."""
+    from lxml import etree
+
+    root = etree.fromstring(_section_xml_with_lineseg())
+    assert hwpx_fill._strip_linesegarray(root) == 2
+    assert hwpx_fill._strip_linesegarray(root) == 0  # 멱등
+    texts = [t.text for t in root.iter(f"{{{_HP}}}t")]
+    assert "상호" in texts  # 라벨 텍스트 보존
