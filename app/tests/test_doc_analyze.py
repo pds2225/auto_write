@@ -106,3 +106,60 @@ def test_form_analyzer(tmp_path: Path) -> None:
     # PSST 4영역 라벨이 모두 존재
     assert all(r.psst_present.values())
     assert r.as_dict()["psst_missing"] == []
+
+
+def _make_announcement_txt(path: Path) -> None:
+    path.write_text(
+        "지원대상: 예비창업자\n"
+        "신청 접수기간: 2026.07.01 ~ 2026.07.31\n"
+        "제출서류: 사업계획서, 참가신청서\n",
+        encoding="utf-8",
+    )
+
+
+def test_folder_classify_announcement_and_forms(tmp_path: Path) -> None:
+    from auto_write.services.folder_analyzer import classify_folder_files
+
+    _make_announcement_txt(tmp_path / "모집공고.txt")
+    _make_form(tmp_path / "참가신청서.docx")
+    (tmp_path / "포스터.jpg").write_bytes(b"x")
+
+    ann, forms, other = classify_folder_files(tmp_path)
+    assert any(p.name == "모집공고.txt" for p in ann)
+    assert any(p.name == "참가신청서.docx" for p in forms)
+
+
+def test_analyze_folder_korean_summary(tmp_path: Path) -> None:
+    from auto_write.services.folder_analyzer import (
+        analyze_folder,
+        format_folder_summary_korean,
+    )
+
+    _make_announcement_txt(tmp_path / "공고문.txt")
+    _make_form(tmp_path / "신청서.docx")
+
+    r = analyze_folder(tmp_path, openai_service=_NoAI(), save_json=True)
+    text = format_folder_summary_korean(r)
+    assert "마감" in text
+    assert "양식" in text
+    assert (tmp_path / ".analysis" / "folder_analysis.json").exists()
+
+
+def test_analyze_docs_folder_cli(tmp_path: Path) -> None:
+    import os
+    import subprocess
+
+    app_dir = Path(__file__).resolve().parents[1]
+    _make_announcement_txt(tmp_path / "공고문.txt")
+    _make_form(tmp_path / "양식.docx")
+    env = dict(os.environ)
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONPATH"] = str(app_dir)
+    res = subprocess.run(
+        ["py", "-3.11", str(app_dir / "analyze_docs.py"), "folder", str(tmp_path),
+         "--no-ai", "--no-save-json"],
+        capture_output=True, text=True, encoding="utf-8", cwd=str(app_dir), env=env,
+    )
+    assert res.returncode == 0
+    assert "공고 폴더" in res.stdout
+    assert not res.stdout.strip().startswith("{")

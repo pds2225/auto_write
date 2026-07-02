@@ -26,6 +26,12 @@ import json
 import sys
 from pathlib import Path
 
+from auto_write.services.acceptance_remediation import (
+    build_checklist_markdown,
+    build_remediation,
+    format_remediation_text,
+    remediation_summary,
+)
 from auto_write.services.usage_acceptance import AcceptanceConfig, run_acceptance
 
 _LEDGER_DEFAULT = Path(__file__).resolve().parent.parent / "workspace" / "requirements_ledger.json"
@@ -69,6 +75,9 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="실사용 기준 자가진단 (읽기 전용)")
     ap.add_argument("docx", help="진단할 DOCX 경로")
     ap.add_argument("--json", dest="json_out", help="결과 JSON 저장 경로")
+    ap.add_argument("--checklist", dest="checklist_out",
+                    help="제출 준비 체크리스트(마크다운) 저장 경로 — 결함별 다음 행동을 "
+                         "체크박스 to-do 로 저장(원본 미수정, 새 .md 파일)")
     ap.add_argument("--ledger", default=str(_LEDGER_DEFAULT), help="요구사항 원장 경로")
     ap.add_argument("--blind-review", action="store_true",
                     help="블라인드 공고 모드 — ○○○ 마스킹 허용 + 실명 잔존 검출(fail)")
@@ -106,6 +115,37 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[{mark}] {c.label:<22} {c.detail}")
         for s in c.samples[:3]:
             print(f"       · {s}")
+
+    # 결함별 '다음 행동' 안내 — 개수만 보여주던 것을 "무엇을 어떻게 고치면 제출
+    # 가능한지"(자동 명령 / 사람 값입력 / 한글 수동)로 번역한다. 명령의 {doc} 는
+    # 사용자가 넘긴 경로 그대로 치환해 같은 폴더에서 바로 복붙 실행되게 한다.
+    rem_items = build_remediation(report.results, args.docx)
+    print()
+    for line in format_remediation_text(rem_items):
+        print(line)
+    data["remediation"] = rem_items
+    data["remediation_summary"] = remediation_summary(rem_items)
+
+    # 제출 준비 체크리스트 파일 저장(요청 시) — 결함별 다음 행동을 체크박스 to-do 로.
+    # 원본 문서를 덮어쓰지 않도록 강하게 가드(같은 경로면 거부). JSON 저장과 같이
+    # 부수효과라 실패해도 진단 종료코드(0/2)를 오염시키지 않는다.
+    if args.checklist_out:
+        chk_path = Path(args.checklist_out)
+        try:
+            same = chk_path.resolve() == src.resolve()
+        except OSError:
+            same = str(chk_path) == str(src)
+        if same:
+            print(f"\n[경고] 체크리스트 경로가 원본과 같아 저장을 건너뜀(원본 보호): {src}",
+                  file=sys.stderr)
+        else:
+            md = build_checklist_markdown(rem_items, src.name, report.submittable)
+            try:
+                chk_path.write_text(md, encoding="utf-8")
+                print(f"\n제출 준비 체크리스트 저장: {args.checklist_out}")
+            except OSError as exc:
+                print(f"\n[경고] 체크리스트 저장 실패({type(exc).__name__}: {exc}) — "
+                      f"위 화면 안내를 참조", file=sys.stderr)
 
     failed_ids = {c.check_id for c in report.results if not c.passed and c.severity == "fail"}
     ledger = _load_ledger(Path(args.ledger))

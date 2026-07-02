@@ -496,6 +496,116 @@ def check_masking_violation(doc: Document, config: AcceptanceConfig | None = Non
                        f"마스킹 안 된 실명 의심 {defects}건 — 블라인드 공고 위반(탈락 사유)")
 
 
+# --- 문서 기본 서식(docDefaults)·테마 폰트 해석 (R6 — HWP→DOCX 변환본 사각지대) ---
+# HWP 를 DOCX 로 변환한 정부양식은 폰트·크기를 run 이나 스타일이 아니라
+# 문서 기본 서식(w:docDefaults) 또는 테마(theme1.xml majorFont/minorFont) 참조에만
+# 담는 경우가 많다. 이 폴백이 없으면 폰트 혼용·글자크기 검사가 '0종'으로 조용히
+# 통과한다(변환본에서 검사가 사실상 죽는다). 아래 헬퍼로 상속 사슬을 끝까지 해석한다.
+
+_A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
+
+
+def _load_theme_fonts(doc: Document) -> dict[str, str]:
+    """theme1.xml 의 major/minor 폰트(라틴·동아시아 typeface)를 map 으로 읽는다.
+
+    테마 파트가 없거나 파싱 실패 시 빈 dict(폴백 무효) — 예외로 검사를 막지 않는다.
+    반환 키: major_latin / major_ea / minor_latin / minor_ea (값이 있는 것만).
+    """
+    result: dict[str, str] = {}
+    try:
+        from lxml import etree
+        part = None
+        for rel in doc.part.rels.values():
+            if str(rel.reltype).endswith("/theme"):
+                part = rel.target_part
+                break
+        if part is None:
+            return result
+        root = etree.fromstring(part.blob)
+        scheme = root.find(f".//{{{_A_NS}}}fontScheme")
+        if scheme is None:
+            return result
+        for kind in ("major", "minor"):
+            fnt = scheme.find(f"{{{_A_NS}}}{kind}Font")
+            if fnt is None:
+                continue
+            latin = fnt.find(f"{{{_A_NS}}}latin")
+            if latin is not None and latin.get("typeface"):
+                result[f"{kind}_latin"] = latin.get("typeface")
+            ea = fnt.find(f"{{{_A_NS}}}ea")
+            ea_face = ea.get("typeface") if ea is not None else ""
+            if not ea_face:  # 한글 테마는 <a:font script="Hang" typeface="맑은 고딕"/> 로도 씀
+                for f in fnt.findall(f"{{{_A_NS}}}font"):
+                    if f.get("script") == "Hang":
+                        ea_face = f.get("typeface", "")
+                        break
+            if ea_face:
+                result[f"{kind}_ea"] = ea_face
+    except Exception:
+        return {}
+    return result
+
+
+def _resolve_theme_token(token: str | None, theme_fonts: dict[str, str]) -> str | None:
+    """rFonts 의 asciiTheme/eastAsiaTheme 등 테마 참조 토큰을 실제 폰트명으로 해석."""
+    if not token or not theme_fonts:
+        return None
+    t = token.lower()
+    prefix = "major" if t.startswith("major") else "minor"
+    if "eastasia" in t:
+        return theme_fonts.get(f"{prefix}_ea")
+    return theme_fonts.get(f"{prefix}_latin")   # hAnsi/ascii/bidi 는 라틴 슬롯
+
+
+def _rfonts_names(rfonts, theme_fonts: dict[str, str]) -> tuple[str | None, str | None]:
+    """rFonts 엘리먼트에서 ascii/eastAsia 폰트를 읽되 테마 참조(w:asciiTheme 등)도 해석."""
+    if rfonts is None:
+        return None, None
+    asc = rfonts.get(qn("w:ascii")) or _resolve_theme_token(
+        rfonts.get(qn("w:asciiTheme")), theme_fonts)
+    ea = rfonts.get(qn("w:eastAsia")) or _resolve_theme_token(
+        rfonts.get(qn("w:eastAsiaTheme")), theme_fonts)
+    return asc, ea
+
+
+def _doc_defaults_rpr(doc: Document):
+    """styles.xml 의 docDefaults/rPrDefault/rPr 엘리먼트(없으면 None)."""
+    try:
+        styles_el = doc.styles.element
+    except Exception:
+        return None
+    dd = styles_el.find(qn("w:docDefaults"))
+    if dd is None:
+        return None
+    rprd = dd.find(qn("w:rPrDefault"))
+    if rprd is None:
+        return None
+    return rprd.find(qn("w:rPr"))
+
+
+def _doc_default_fonts(doc: Document, theme_fonts: dict[str, str]) -> tuple[str | None, str | None]:
+    """문서 기본 서식(docDefaults)의 기본 ascii/eastAsia 폰트(테마 참조 포함)."""
+    rpr = _doc_defaults_rpr(doc)
+    if rpr is None:
+        return None, None
+    return _rfonts_names(rpr.find(qn("w:rFonts")), theme_fonts)
+
+
+def _doc_default_size_pt(doc: Document) -> float | None:
+    """문서 기본 서식(docDefaults)의 기본 글자크기(pt) — w:sz 는 half-point 값."""
+    rpr = _doc_defaults_rpr(doc)
+    if rpr is None:
+        return None
+    sz = rpr.find(qn("w:sz"))
+    if sz is None:
+        return None
+    val = sz.get(qn("w:val"))
+    try:
+        return float(val) / 2.0
+    except (TypeError, ValueError):
+        return None
+
+
 def check_font_name_mixing(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
     """폰트 혼용 검사 — ascii(영문)와 eastAsia(한글) 슬롯을 분리 집계한다.
 
@@ -505,22 +615,26 @@ def check_font_name_mixing(doc: Document, config: AcceptanceConfig | None = None
     슬롯 안의 진짜 혼용(예: 한글 폰트 6종)은 그대로 잡는다.
     """
     allowed = config.allowed_fonts if config is not None else _ALLOWED_FONT_KINDS
+    theme_fonts = _load_theme_fonts(doc)
+    dflt_asc, dflt_ea = _doc_default_fonts(doc, theme_fonts)
     ascii_names: set[str] = set()
     ea_names: set[str] = set()
 
     def _style_fonts(style) -> tuple[str | None, str | None]:
-        """단락 스타일 체인(base_style 포함)에서 명시된 ascii/eastAsia 폰트를 찾는다."""
+        """단락 스타일 체인(base_style 포함)에서 명시·테마 ascii/eastAsia 폰트를 찾는다."""
         asc = ea = None
         seen: set[str] = set()
         st = style
         while st is not None and getattr(st, "style_id", None) not in seen:
             seen.add(st.style_id)
             try:
-                if asc is None:
-                    asc = st.font.name
                 rpr = st.element.rPr
-                if ea is None and rpr is not None and rpr.rFonts is not None:
-                    ea = rpr.rFonts.get(qn("w:eastAsia"))
+                s_asc, s_ea = _rfonts_names(
+                    rpr.rFonts if rpr is not None else None, theme_fonts)
+                if asc is None:
+                    asc = s_asc or st.font.name
+                if ea is None:
+                    ea = s_ea
             except Exception:
                 pass
             st = getattr(st, "base_style", None)
@@ -532,11 +646,11 @@ def check_font_name_mixing(doc: Document, config: AcceptanceConfig | None = None
         for run in p.runs:
             if not (run.text or "").strip():
                 continue
-            r_asc = run.font.name
-            r_ea = None
             rpr = run._element.rPr
-            if rpr is not None and rpr.rFonts is not None:
-                r_ea = rpr.rFonts.get(qn("w:eastAsia"))
+            r_asc, r_ea = _rfonts_names(
+                rpr.rFonts if rpr is not None else None, theme_fonts)
+            if r_asc is None:
+                r_asc = run.font.name
             # run 에 직접 지정이 없으면 단락 스타일 체인의 유효 폰트로 해석한다(ACC-7)
             if (r_asc is None or r_ea is None) and not style_resolved:
                 style_asc, style_ea = _style_fonts(getattr(p, "style", None))
@@ -545,6 +659,11 @@ def check_font_name_mixing(doc: Document, config: AcceptanceConfig | None = None
                 r_asc = style_asc
             if r_ea is None:
                 r_ea = style_ea
+            # 최종 폴백: 문서 기본 서식(docDefaults)·테마 (HWP→DOCX 변환본 사각지대, R6)
+            if r_asc is None:
+                r_asc = dflt_asc
+            if r_ea is None:
+                r_ea = dflt_ea
             if r_asc:
                 ascii_names.add(r_asc)
             if r_ea:
@@ -690,10 +809,14 @@ def check_page_overflow(doc: Document, config: AcceptanceConfig | None = None) -
 def check_font_size_spread(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
     sizes: set[float] = set()
     outliers = 0
+    # 변환본은 크기가 run 이 아니라 docDefaults 에만 있을 수 있다 — 그때만 폴백(R6)
+    dflt_size = _doc_default_size_pt(doc)
     for run in _iter_all_runs(doc):
-        if not (run.text or "").strip() or run.font.size is None:
+        if not (run.text or "").strip():
             continue
-        pt = run.font.size.pt
+        pt = run.font.size.pt if run.font.size is not None else dflt_size
+        if pt is None:
+            continue
         sizes.add(pt)
         if pt < 8 or pt > 18:
             outliers += 1
