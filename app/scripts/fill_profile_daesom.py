@@ -82,6 +82,10 @@ def _patch_hwpx(hwpx: Path) -> tuple[Path, list[str]]:
             )
             notes.append("학력: 경영컨설팅 석사, 학교/연월 [확인필요]")
 
+        if len(texts) == 4 and texts[0] == "부 서" and texts[1] == "오토라이트":
+            _set_cell(cells[1], "경영")
+            notes.append("부서: 경영(오매칭 교정)")
+
         if len(texts) == 5 and texts[0] == "소속기관" and not texts[2].strip():
             texts[2] = "오토라이트"
             _set_cell(cells[2], "오토라이트")
@@ -91,7 +95,8 @@ def _patch_hwpx(hwpx: Path) -> tuple[Path, list[str]]:
             _set_cell(cells[1], "중소벤처기업부 경영지도사")
             notes.append("자격: 중소벤처기업부 경영지도사")
 
-    # 경력 데이터행: 헤더(12행) 다음 빈 4칸 행만 순서대로 채움(11행은 학력 보조행이라 제외)    career_idx = 0
+    # 경력 데이터행: 헤더(12행) 다음 빈 4칸 행만 순서대로 채움(11행은 학력 보조행이라 제외)
+    career_idx = 0
     career_rows = [
         (["[확인필요]", "[확인필요]", "컨설팅사", "대표·선임컨설턴트(경영컨설팅 5년+)"],
          "경력1: 컨설팅사, 연월 [확인필요]"),
@@ -114,7 +119,8 @@ def _patch_hwpx(hwpx: Path) -> tuple[Path, list[str]]:
         if career_idx >= len(career_rows):
             break
 
-    etree.ElementTree(root).write(        str(sec), encoding="utf-8", xml_declaration=True, standalone=True
+    etree.ElementTree(root).write(
+        str(sec), encoding="utf-8", xml_declaration=True, standalone=True
     )
 
     out_hwpx = hwpx.with_name(hwpx.stem + "_rows.hwpx")
@@ -136,7 +142,8 @@ def main() -> int:
         except Exception:
             pass
 
-    src = Path(r"C:\Users\ekth3\Downloads\프로필 양식 샘플_개인것 기본작성하기.hwp")    out = Path(r"D:\auto_write\results\프로필_박다솜_작성본.hwp")
+    src = Path(r"C:\Users\ekth3\Downloads\프로필 양식 샘플_개인것 기본작성하기.hwp")
+    out = Path(r"D:\auto_write\results\프로필_박다솜_작성본.hwp")
     dl = Path(r"C:\Users\ekth3\Downloads\프로필_박다솜_작성본.hwp")
 
     identity = {
