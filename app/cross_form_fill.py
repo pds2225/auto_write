@@ -35,6 +35,8 @@ from auto_write.services.cross_form_autofill import (
     format_batch_detail_korean,
     format_batch_summary_korean,
     format_single_summary_korean,
+    format_source_pick_korean,
+    rank_source_pool,
 )
 
 
@@ -126,6 +128,28 @@ def _run_single(args: argparse.Namespace) -> int:
     return 0 if report.ok else 2
 
 
+def _run_pick(args: argparse.Namespace) -> int:
+    target = Path(args.target) if args.target else None
+    try:
+        report = rank_source_pool(
+            args.pool,
+            target,
+            _parse_source_keywords(args.source_keywords),
+            recursive=args.recursive,
+            prefer_resume=args.prefer_resume,
+        )
+    except (FileNotFoundError, ValueError, OSError) as exc:
+        err = {"ok": False, "error": str(exc)}
+        print(json.dumps(err, ensure_ascii=False, indent=2))
+        return 2
+
+    if args.json:
+        print(json.dumps(report.as_dict(), ensure_ascii=False, indent=2))
+    else:
+        print(format_source_pick_korean(report))
+    return 0 if report.recommended else 2
+
+
 def _run_batch(args: argparse.Namespace) -> int:
     notice = args.notice_folder or args.target_folder
     if not notice:
@@ -142,6 +166,8 @@ def _run_batch(args: argparse.Namespace) -> int:
             args.source_pool,
             output_subdir=args.out or "filled",
             source_keywords=_parse_source_keywords(args.source_keywords),
+            recursive=args.recursive,
+            prefer_resume=args.prefer_resume,
             use_ai=args.use_ai,
             confirmations=confirmations or None,
             enable_checkbox=not args.no_checkbox,
@@ -233,6 +259,10 @@ def main(argv: list[str] | None = None) -> int:
                        help="공고 폴더 안 출력 하위폴더명(기본: filled)")
     batch.add_argument("--source-keywords", metavar="KW,KW,...",
                        help="소스 A 선택용 파일명 키워드(쉼표 구분, 기본: 사업계획서,신청서,...)")
+    batch.add_argument("--recursive", action="store_true",
+                       help="소스 풀 하위 폴더까지 재귀 스캔")
+    batch.add_argument("--prefer-resume", action="store_true",
+                       help="이력서 파일명·날짜 우선, 신청/동의/추천서 감점")
     batch.add_argument("--use-ai", action="store_true")
     batch.add_argument("--confirm", action="append", metavar="타깃=소스")
     batch.add_argument("--confirm-file", metavar="PATH")
@@ -243,6 +273,21 @@ def main(argv: list[str] | None = None) -> int:
                        help="완료 시 Windows 팝업(가능할 때만)")
     batch.add_argument("--json", action="store_true",
                        help="한국어 요약 뒤에 기계용 JSON 도 출력")
+
+    # --- 소스 풀 추천 ---
+    pick = sub.add_parser("pick", help="소스 풀에서 최적 완성본 1개 추천")
+    pick.add_argument("--pool", required=True, metavar="PATH",
+                      help="완성본 A 가 있는 폴더")
+    pick.add_argument("--target", metavar="PATH",
+                      help="dry-run 매칭용 타깃 양식(선택)")
+    pick.add_argument("--recursive", action="store_true",
+                      help="하위 폴더까지 재귀 스캔")
+    pick.add_argument("--prefer-resume", action="store_true",
+                      help="이력서 파일명·날짜 우선, 신청/동의/추천서 감점")
+    pick.add_argument("--source-keywords", metavar="KW,KW,...",
+                      help="파일명 키워드(쉼표 구분)")
+    pick.add_argument("--json", action="store_true",
+                      help="한국어 요약 대신 JSON 출력")
 
     # 하위호환: subcommand 없이 --source --target
     parser.add_argument("--source", help=argparse.SUPPRESS)
@@ -259,6 +304,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "batch":
         return _run_batch(args)
+    if args.command == "pick":
+        return _run_pick(args)
     if args.command == "fill":
         return _run_single(args)
 

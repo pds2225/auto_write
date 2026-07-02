@@ -1622,8 +1622,11 @@ _FORM_GLOB_PATTERNS = ("*.docx", "*.hwp", "*.hwpx")
 
 _DEFAULT_SOURCE_KEYWORDS: tuple[str, ...] = (
     "사업계획서", "사업계획", "신청서", "완성", "k-global", "kglobal", "star",
-    "제출", "작성",
+    "제출", "작성", "이력서", "경영지도", "박다솜",
 )
+
+_RESUME_BONUS_KEYWORD = "이력서"
+_RESUME_PENALTY_KEYWORDS: tuple[str, ...] = ("신청서", "동의서", "추천서")
 
 _NON_FORM_NAME_KEYWORDS: tuple[str, ...] = (
     "공고", "공고문", "모집", "안내", "포스터", "poster", "붙임", "첨부",
@@ -1700,16 +1703,17 @@ def discover_form_targets(notice_folder: str | Path) -> list[Path]:
     return found
 
 
-def list_source_pool(pool_dir: str | Path) -> list[Path]:
-    """완성본 A 후보 폴더에서 지원 확장자 파일을 나열한다(최상위만)."""
+def list_source_pool(pool_dir: str | Path, *, recursive: bool = False) -> list[Path]:
+    """완성본 A 후보 폴더에서 지원 확장자 파일을 나열한다."""
     folder = Path(pool_dir)
     if not folder.is_dir():
         raise FileNotFoundError(f"소스 풀 폴더가 없습니다: {folder}")
 
     files: list[Path] = []
     seen: set[str] = set()
+    glob_fn = folder.rglob if recursive else folder.glob
     for pattern in _FORM_GLOB_PATTERNS:
-        for path in sorted(folder.glob(pattern)):
+        for path in sorted(glob_fn(pattern)):
             if path.suffix.lower() not in _SUPPORTED_EXTS:
                 continue
             key = str(path.resolve())
@@ -1720,10 +1724,177 @@ def list_source_pool(pool_dir: str | Path) -> list[Path]:
     return files
 
 
-def _score_source_candidate(path: Path, keywords: tuple[str, ...]) -> tuple[int, float]:
-    """파일명 키워드 적중 수(우선) + 최신 수정시각(동점)으로 소스 A 후보를 점수화한다."""
+def _parse_yyyymmdd_from_name(name: str) -> int | None:
+    """파일명/stem 에서 YYYYMMDD 를 추출한다(없으면 None)."""
+    import re
+
+    for m in re.finditer(r"(\d{4})[.\-_]?(\d{2})[.\-_]?(\d{2})", name):
+        y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if 1900 <= y <= 2100 and 1 <= mo <= 12 and 1 <= d <= 31:
+            return y * 10000 + mo * 100 + d
+    for m in re.finditer(r"(?<!\d)(\d{8})(?!\d)", name):
+        raw = m.group(1)
+        y, mo, d = int(raw[:4]), int(raw[4:6]), int(raw[6:8])
+        if 1900 <= y <= 2100 and 1 <= mo <= 12 and 1 <= d <= 31:
+            return y * 10000 + mo * 100 + d
+    return None
+
+
+def _score_resume_filename(path: Path, *, prefer_resume: bool) -> tuple[int, int, int]:
+    """이력서 소스 선택용 파일명 점수: (이력서보너스, YYYYMMDD, 감점)."""
+    if not prefer_resume:
+        return 0, 0, 0
+    stem = path.stem
+    bonus = 3 if _RESUME_BONUS_KEYWORD in stem else 0
+    date_val = _parse_yyyymmdd_from_name(stem) or 0
+    penalty = sum(1 for kw in _RESUME_PENALTY_KEYWORDS if kw in stem)
+    return bonus, date_val, penalty
+
+
+def _score_source_candidate(
+    path: Path,
+    keywords: tuple[str, ...],
+    *,
+    prefer_resume: bool = False,
+) -> tuple[int, int, int, int, float]:
+    """소스 후보 점수: (키워드적중, 이력서보너스, YYYYMMDD, 감점, mtime)."""
     hits = sum(1 for kw in keywords if kw.lower() in path.stem.lower())
-    return hits, path.stat().st_mtime
+    bonus, date_val, penalty = _score_resume_filename(path, prefer_resume=prefer_resume)
+    return hits, bonus, date_val, penalty, path.stat().st_mtime
+
+
+def _source_sort_key(
+    dry_run: int,
+    kw_hits: int,
+    resume_bonus: int,
+    date_val: int,
+    penalty: int,
+    mtime: float,
+) -> tuple[int, int, int, int, int, float]:
+    """dry-run → 이력서보너스 → 파일명날짜 → 키워드 → 감점(낮을수록 좋음) → mtime."""
+    return dry_run, resume_bonus, date_val, kw_hits, -penalty, mtime
+
+
+@dataclass
+class SourcePickScore:
+    path: str
+    dry_run: int = 0
+    keyword_hits: int = 0
+    resume_bonus: int = 0
+    filename_date: int = 0
+    penalty: int = 0
+    mtime: float = 0.0
+
+    @property
+    def sort_key(self) -> tuple[int, int, int, int, int, float]:
+        return _source_sort_key(
+            self.dry_run, self.keyword_hits, self.resume_bonus,
+            self.filename_date, self.penalty, self.mtime,
+        )
+
+
+@dataclass
+class SourcePickReport:
+    pool_dir: str
+    recommended: str
+    recursive: bool
+    prefer_resume: bool
+    target: str
+    scores: list[SourcePickScore] = field(default_factory=list)
+
+    def as_dict(self) -> dict:
+        return {
+            "pool_dir": self.pool_dir,
+            "recommended": self.recommended,
+            "recursive": self.recursive,
+            "prefer_resume": self.prefer_resume,
+            "target": self.target,
+            "scores": [
+                {
+                    "path": s.path,
+                    "dry_run": s.dry_run,
+                    "keyword_hits": s.keyword_hits,
+                    "resume_bonus": s.resume_bonus,
+                    "filename_date": s.filename_date,
+                    "penalty": s.penalty,
+                    "mtime": s.mtime,
+                }
+                for s in self.scores
+            ],
+        }
+
+
+def rank_source_pool(
+    pool_dir: str | Path,
+    target: Path | None = None,
+    keywords: tuple[str, ...] | None = None,
+    *,
+    recursive: bool = False,
+    prefer_resume: bool = False,
+    use_dry_run: bool = True,
+) -> SourcePickReport:
+    """소스 풀 후보를 점수순으로 정렬해 추천 1개와 breakdown 을 반환한다."""
+    keywords = keywords or _DEFAULT_SOURCE_KEYWORDS
+    pool = Path(pool_dir)
+    candidates = list_source_pool(pool, recursive=recursive)
+    scores: list[SourcePickScore] = []
+    for cand in candidates:
+        dr = 0
+        if use_dry_run and target is not None:
+            dr = dry_run_transcribe_score(cand, target)
+        kw_hits, bonus, date_val, penalty, mtime = _score_source_candidate(
+            cand, keywords, prefer_resume=prefer_resume,
+        )
+        scores.append(SourcePickScore(
+            path=str(cand),
+            dry_run=dr,
+            keyword_hits=kw_hits,
+            resume_bonus=bonus,
+            filename_date=date_val,
+            penalty=penalty,
+            mtime=mtime,
+        ))
+    scores.sort(key=lambda s: s.sort_key, reverse=True)
+    recommended = scores[0].path if scores else ""
+    return SourcePickReport(
+        pool_dir=str(pool),
+        recommended=recommended,
+        recursive=recursive,
+        prefer_resume=prefer_resume,
+        target=str(target) if target else "",
+        scores=scores,
+    )
+
+
+def format_source_pick_korean(report: SourcePickReport) -> str:
+    """pick 서브커맨드용 한국어 요약."""
+    lines = [
+        f"소스 풀: {report.pool_dir}",
+        f"재귀 스캔: {'예' if report.recursive else '아니오'}",
+        f"이력서 우선: {'예' if report.prefer_resume else '아니오'}",
+    ]
+    if report.target:
+        lines.append(f"타깃(dry-run): {report.target}")
+    if not report.recommended:
+        lines.append("추천 소스: (후보 없음)")
+        return "\n".join(lines)
+    lines.append(f"추천 소스: {report.recommended}")
+    lines.append("")
+    lines.append("상위 후보 점수:")
+    for i, s in enumerate(report.scores[:5], 1):
+        name = Path(s.path).name
+        parts = [
+            f"dry-run={s.dry_run}",
+            f"키워드={s.keyword_hits}",
+        ]
+        if report.prefer_resume:
+            parts.extend([
+                f"이력서보너스={s.resume_bonus}",
+                f"파일명날짜={s.filename_date or '-'}",
+                f"감점={s.penalty}",
+            ])
+        lines.append(f"  {i}. {name} ({', '.join(parts)})")
+    return "\n".join(lines)
 
 
 def pick_source_from_pool(
@@ -1731,34 +1902,39 @@ def pick_source_from_pool(
     target: Path,
     keywords: tuple[str, ...] | None = None,
     *,
+    recursive: bool = False,
+    prefer_resume: bool = False,
     use_dry_run: bool = True,
 ) -> Path | None:
     """타깃마다 소스 A 1개를 고른다(dry-run 매칭 점수 → 키워드 → 최신 mtime)."""
-    keywords = keywords or _DEFAULT_SOURCE_KEYWORDS
-    candidates = list_source_pool(pool_dir)
-    if not candidates:
+    report = rank_source_pool(
+        pool_dir, target, keywords,
+        recursive=recursive, prefer_resume=prefer_resume, use_dry_run=use_dry_run,
+    )
+    if not report.recommended:
         return None
-    if len(candidates) == 1:
-        return candidates[0]
+    if len(report.scores) == 1:
+        return Path(report.recommended)
 
-    if use_dry_run:
-        scored: list[tuple[Path, int, int, float]] = []
-        for cand in candidates:
-            dr = dry_run_transcribe_score(cand, target)
-            kw_hits, mtime = _score_source_candidate(cand, keywords)
-            scored.append((cand, dr, kw_hits, mtime))
-        scored.sort(key=lambda item: (item[1], item[2], item[3]), reverse=True)
-        if scored[0][1] > 0:
-            return scored[0][0]
-        # dry-run 전부 0이면 파일명 키워드 경로로 폴백
+    if use_dry_run and report.scores[0].dry_run > 0:
+        return Path(report.recommended)
 
-    scored_kw = [(c, _score_source_candidate(c, keywords)) for c in candidates]
-    scored_kw.sort(key=lambda item: item[1], reverse=True)
-    best_hits = scored_kw[0][1][0]
-    if best_hits > 0:
-        top = [c for c, (hits, _) in scored_kw if hits == best_hits]
-        return max(top, key=lambda p: p.stat().st_mtime)
-    return max(candidates, key=lambda p: p.stat().st_mtime)
+    # dry-run 전부 0이면 파일명 키워드·이력서 점수 경로로 폴백
+    best = report.scores[0]
+    if best.keyword_hits > 0 or best.resume_bonus > 0:
+        top_kw = best.keyword_hits
+        top_bonus = best.resume_bonus
+        top_date = best.filename_date
+        top_penalty = best.penalty
+        tied = [
+            s for s in report.scores
+            if s.keyword_hits == top_kw
+            and s.resume_bonus == top_bonus
+            and s.filename_date == top_date
+            and s.penalty == top_penalty
+        ]
+        return Path(max(tied, key=lambda s: s.mtime).path)
+    return Path(max(report.scores, key=lambda s: s.mtime).path)
 
 
 def dry_run_transcribe_score(source: Path, target: Path) -> int:
@@ -2056,6 +2232,8 @@ def batch_autofill_from_pool(
     output_subdir: str = "filled",
     *,
     source_keywords: tuple[str, ...] | None = None,
+    recursive: bool = False,
+    prefer_resume: bool = False,
     use_ai: bool = False,
     confirmations: Optional[dict[str, str]] = None,
     enable_checkbox: bool = True,
@@ -2085,7 +2263,10 @@ def batch_autofill_from_pool(
 
     for target in targets:
         item = BatchAutofillItem(target=str(target), source="", output="")
-        source = pick_source_from_pool(pool, target, source_keywords)
+        source = pick_source_from_pool(
+            pool, target, source_keywords,
+            recursive=recursive, prefer_resume=prefer_resume,
+        )
         if source is None:
             item.notes.append("완성본 폴더에 소스 파일이 없습니다")
             batch.items.append(item)

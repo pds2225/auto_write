@@ -959,7 +959,9 @@ from auto_write.services.cross_form_autofill import (  # noqa: E402
     format_batch_detail_korean,
     format_batch_summary_korean,
     is_skipped_non_form,
+    list_source_pool,
     pick_source_from_pool,
+    rank_source_pool,
     try_convert_filled_docx_to_hwp,
 )
 
@@ -1459,3 +1461,62 @@ def test_autofill_cell_inline_original_untouched(tmp_path: Path) -> None:
     autofill_from_source(src, tgt, out, use_ai=False)
     assert src.read_bytes() == src_before
     assert tgt.read_bytes() == tgt_before
+
+
+def test_list_source_pool_recursive_finds_nested(tmp_path: Path) -> None:
+    """재귀 스캔 시 하위 폴더의 소스도 풀에 포함된다."""
+    pool = tmp_path / "pool"
+    nested = pool / "2026" / "sub"
+    nested.mkdir(parents=True)
+    top = pool / "top.docx"
+    deep = nested / "박다솜_이력서.docx"
+    _make_source(top)
+    _make_source(deep)
+
+    flat = list_source_pool(pool, recursive=False)
+    assert len(flat) == 1
+    assert flat[0].name == "top.docx"
+
+    recursive = list_source_pool(pool, recursive=True)
+    names = {p.name for p in recursive}
+    assert names == {"top.docx", "박다솜_이력서.docx"}
+
+
+def test_pick_source_prefers_resume_keyword(tmp_path: Path) -> None:
+    """이력서 파일명 보너스로 신청서류보다 이력서 본문을 고른다."""
+    pool = tmp_path / "pool"
+    pool.mkdir()
+    resume = pool / "박다솜_경영지도사_이력서 (20250805).docx"
+    application = pool / "개인정보동의서_박다솜.docx"
+    _make_source(resume)
+    _make_source(application)
+
+    import os
+    import time
+    os.utime(application, (time.time(), time.time()))
+    os.utime(resume, (time.time() - 3600, time.time() - 3600))
+
+    picked = pick_source_from_pool(
+        pool, Path("target.docx"), prefer_resume=True,
+    )
+    assert picked is not None
+    assert "이력서" in picked.name
+
+
+def test_pick_source_penalizes_consent_and_recommendation(tmp_path: Path) -> None:
+    """동의서·추천서는 이력서 소스 후보에서 감점된다."""
+    pool = tmp_path / "pool"
+    pool.mkdir()
+    consent = pool / "개인정보동의서_박다솜.docx"
+    recommend = pool / "경영컨설팅추천서_박다솜.docx"
+    resume = pool / "박다솜_이력서 (20240601).docx"
+    for p in (consent, recommend, resume):
+        _make_source(p)
+
+    report = rank_source_pool(pool, prefer_resume=True)
+    assert report.recommended
+    assert "이력서" in Path(report.recommended).name
+    top = report.scores[0]
+    assert top.penalty == 0
+    penalized = [s for s in report.scores if s.penalty > 0]
+    assert len(penalized) == 2
