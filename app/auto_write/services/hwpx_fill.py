@@ -250,6 +250,23 @@ class HwpxFillReport:
         }
 
 
+def _strip_linesegarray(root) -> int:
+    """채운 섹션의 옛 줄위치 캐시(hp:linesegarray)를 제거한다.
+
+    텍스트를 바꿔도 예시문구 기준의 linesegarray 가 남으면 한글이 새 글씨를 옛
+    좌표에 겹쳐 그린다(사용자 실측: STAR·서울 AI 허브 신청서 글씨 겹침 재발). 제거하면
+    문서를 열 때 줄위치를 새로 계산한다 — 레이아웃 캐시라 내용 무손실·멱등.
+    HWPX 직접 납품(.hwpx→.hwpx) 경로의 글씨 겹침을 엔진 단에서 원천 차단한다.
+    """
+    removed = 0
+    for ls in list(root.iter(_q("linesegarray"))):
+        parent = ls.getparent()
+        if parent is not None:
+            parent.remove(ls)
+            removed += 1
+    return removed
+
+
 def _fill_section_xml(
     xml_bytes: bytes,
     identity: dict[str, str],
@@ -318,6 +335,10 @@ def _fill_section_xml(
 
     if not changed:
         return xml_bytes, filled, replaced, used_keys
+
+    # 채운 셀의 옛 줄위치 캐시(hp:linesegarray) 제거 → 한글이 열 때 줄위치를 새로
+    # 계산해 예시문구 좌표에 새 글씨가 겹치는 것을 막는다(HWPX 직접 납품 겹침 방지).
+    _strip_linesegarray(root)
 
     standalone = _detect_standalone(xml_bytes)
     out = etree.tostring(
