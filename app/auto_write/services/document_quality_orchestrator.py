@@ -212,6 +212,11 @@ class DocumentQualityOrchestrator:
 
         # 4) 출력 저장 (원본 덮어쓰기 아님 — 위에서 보장)
         output_path.parent.mkdir(parents=True, exist_ok=True)
+        # 고정 산출명 재실행이 이전 결과(사용자가 수정했을 수 있는 _DRAFT 등)를
+        # 무경고로 파괴하지 않게, 저장 직전 기존 파일을 타임스탬프 백업으로 보존한다.
+        from auto_write.services import usage_acceptance as _ua
+
+        _ua.backup_existing_output(output_path)
         doc.save(str(output_path))
 
         # 5) 수동 확인 항목 도출
