@@ -11,7 +11,7 @@ import re
 import subprocess
 import sys
 from dataclasses import asdict, dataclass, field
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
@@ -26,15 +26,19 @@ from .folder_analyzer import (
     analyze_folder,
     format_folder_summary_korean,
 )
+from .pipeline_failure_ux import (
+    check_deadline_warning,
+    classify_download_failure,
+    classify_login_wall,
+    collect_all_failures,
+    collect_input_failures,
+    compute_pipeline_exit_code,
+    pdf_only_pool_warning,
+)
 from .user_pipeline_config import load_config, resolve_mail_out_dir, resolve_source_pool
 
 MAIL_ROOT = Path(r"D:\mail")
 MAIL_FETCH_SCRIPT = MAIL_ROOT / "scripts" / "fetch_notice_attachments.py"
-
-_LOGIN_WALL_DOMAINS = ("sbiz24.kr", "smes.go.kr")
-_DATE_IN_TEXT_RE = re.compile(
-    r"(\d{4})\s*[년.\-/]\s*(\d{1,2})\s*[월.\-/]\s*(\d{1,2})"
-)
 
 
 @dataclass
@@ -49,6 +53,7 @@ class PipelineResult:
     todo_text: str = ""
     deadline_warning: str = ""
     download_error: str = ""
+    failure_lines: list[str] = field(default_factory=list)
     d_attempts: list[dict[str, Any]] = field(default_factory=list)
     confirm_files: list[str] = field(default_factory=list)
     exit_code: int = 0
@@ -87,52 +92,6 @@ def _open_folder(path: Path) -> None:
         pass
 
 
-def _parse_date_from_deadline(text: str) -> date | None:
-    if not text:
-        return None
-    m = _DATE_IN_TEXT_RE.search(text)
-    if not m:
-        return None
-    try:
-        return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
-    except ValueError:
-        return None
-
-
-def check_deadline_warning(analysis: FolderAnalysisReport) -> str:
-    """마감이 지났거나 임박하면 경고 문구를 반환한다."""
-    ann = analysis.announcement
-    if not ann or not ann.key_info:
-        return ""
-    raw = ann.key_info.get("deadline")
-    if not raw:
-        return ""
-    text = raw if isinstance(raw, str) else " / ".join(str(x) for x in raw)
-    d = _parse_date_from_deadline(text)
-    if not d:
-        return ""
-    today = date.today()
-    if d < today:
-        return f"⚠ 마감이 지났습니다({d.isoformat()}). 제출이 불가할 수 있습니다."
-    if (d - today).days <= 3:
-        return f"⚠ 마감이 임박했습니다({d.isoformat()}, D-{(d - today).days})."
-    return ""
-
-
-def classify_login_wall(url: str, log_results: list[dict[str, Any]]) -> str:
-    """로그인벽 사이트 실패 시 사용자용 안내."""
-    if not any(dom in (url or "").lower() for dom in _LOGIN_WALL_DOMAINS):
-        return ""
-    bad = [r for r in log_results if r.get("status") in (
-        "PAGE_FETCH_FAILED", "NO_ATTACHMENTS", "EXTRACT_FAILED")]
-    if not bad:
-        return ""
-    return (
-        "이 사이트(소상공인24 등)는 로그인 후에만 첨부를 받을 수 있습니다. "
-        "브라우저에서 받은 파일을 공고 폴더에 넣고 --notice-folder 만 지정해 주세요."
-    )
-
-
 def resolve_notice_folder_from_log(out_dir: Path, url: str = "") -> Path | None:
     """_download_log.json 에서 최근 다운로드 공고 폴더를 찾는다."""
     manifest = out_dir / "_download_log.json"
@@ -153,20 +112,6 @@ def resolve_notice_folder_from_log(out_dir: Path, url: str = "") -> Path | None:
         if r.get("status") == "DOWNLOADED" and r.get("save_path"):
             return Path(r["save_path"]).parent
     return None
-
-
-def _pdf_only_pool_warning(pool: Path) -> str:
-    """UX-4: PDF 만 있는 풀에 대한 정직 안내."""
-    from .cross_form_autofill import list_source_pool
-
-    if list_source_pool(pool, recursive=True):
-        return ""
-    pdfs = list(pool.rglob("*.pdf")) if pool.is_dir() else []
-    if pdfs:
-        return (
-            "완성본 폴더에 PDF만 있습니다. cross-form 소스는 DOCX/HWP/HWPX 만 "
-            "지원합니다 — 변환본을 source-pool에 넣어 주세요.")
-    return ""
 
 
 def run_download(
@@ -195,9 +140,7 @@ def run_download(
         errors="replace",
     )
     stdout = proc.stdout or ""
-    if proc.returncode != 0 and "DOWNLOADED" not in stdout:
-        err = (proc.stderr or stdout).strip()
-        raise RuntimeError(err or f"다운로드 실패(exit {proc.returncode})")
+    stderr = proc.stderr or ""
 
     log_results: list[dict[str, Any]] = []
     manifest = od / "_download_log.json"
@@ -207,19 +150,31 @@ def run_download(
         except (OSError, json.JSONDecodeError):
             pass
 
-    login_msg = classify_login_wall(url, log_results)
-    if login_msg:
-        raise RuntimeError(login_msg)
-
     folder = resolve_notice_folder_from_log(od, url)
+    if not folder:
+        for line in stdout.splitlines():
+            if "저장 위치:" in line or "💾" in line:
+                part = line.split(":", 1)[-1].strip()
+                if part:
+                    folder = Path(part)
+                    break
+
+    dl_fail = classify_download_failure(
+        url,
+        log_results,
+        stderr=stderr,
+        proc_rc=proc.returncode,
+        folder_resolved=folder is not None,
+    )
+    if dl_fail.advices:
+        raise RuntimeError(dl_fail.advices[0].message)
+
+    if proc.returncode != 0 and "DOWNLOADED" not in stdout:
+        err = (stderr or stdout).strip()
+        raise RuntimeError(err or f"다운로드 실패(exit {proc.returncode})")
+
     if folder:
         return folder, stdout
-
-    for line in stdout.splitlines():
-        if "저장 위치:" in line or "💾" in line:
-            part = line.split(":", 1)[-1].strip()
-            if part:
-                return Path(part), stdout
     return None, stdout
 
 
@@ -269,13 +224,17 @@ def build_todo_text(
     confirm_files: list[Path] | None = None,
     d_attempts: list[dict[str, Any]] | None = None,
     download_error: str = "",
+    failure_lines: list[str] | None = None,
 ) -> str:
     """비개발자용 다음할일.txt 본문."""
     lines: list[str] = []
     if deadline_warning:
         lines.append(deadline_warning)
     if download_error:
-        lines.append(f"[안내] {download_error}")
+        lines.append(f"[실패] {download_error}")
+    for fl in failure_lines or []:
+        if fl not in lines:
+            lines.append(fl)
 
     n_ok = report.ok_count
     n_hwp = report.hwp_count
@@ -308,10 +267,6 @@ def build_todo_text(
                 f"[서술 작성] {d.get('form', '')} — "
                 f"{'시도함' if d.get('ok') else '건너뜀'}: {d.get('note', '')}")
 
-    if n_hwp < n_ok and n_ok:
-        lines.append(
-            "[HWP] 일부는 DOCX만 저장됨 — 한글에서 열거나 hwp_docx.py 로 변환하세요.")
-
     if not lines:
         lines.append("[안내] 채울 양식이 없거나 작업이 완료되지 않았습니다.")
     return "\n".join(lines)
@@ -333,6 +288,7 @@ def write_run_manifest(
         "output_dir": result.output_dir,
         "deadline_warning": result.deadline_warning,
         "download_error": result.download_error,
+        "failure_lines": result.failure_lines,
         "analysis": analysis.as_dict() if analysis else None,
         "batch": {
             "ok_count": batch.ok_count if batch else 0,
@@ -433,12 +389,14 @@ def run_pipeline(
     try:
         pool = resolve_source_pool(source_pool)
     except ValueError as exc:
-        result.notes.append(str(exc))
-        result.exit_code = 1
+        inp = collect_input_failures(missing_source_pool=str(exc))
+        result.failure_lines = inp.lines()
+        result.notes.extend(result.failure_lines)
+        result.exit_code = inp.exit_code
         return result
     result.source_pool = pool
 
-    pdf_warn = _pdf_only_pool_warning(Path(pool))
+    pdf_warn = pdf_only_pool_warning(Path(pool))
     if pdf_warn:
         result.notes.append(pdf_warn)
 
@@ -456,15 +414,20 @@ def run_pipeline(
             notice_path = folder
         except Exception as exc:  # noqa: BLE001
             result.download_error = str(exc)
+            result.failure_lines = [f"[실패] {result.download_error}"]
             result.exit_code = 2
             result.todo_text = build_todo_text(
                 BatchAutofillReport("", pool, ""),
                 download_error=result.download_error,
+                failure_lines=result.failure_lines,
             )
             return result
     elif not notice_path or not notice_path.is_dir():
-        result.notes.append("--url 또는 --notice-folder 가 필요합니다.")
-        result.exit_code = 1
+        inp = collect_input_failures(
+            missing_notice="--url 또는 --notice-folder 가 필요합니다.")
+        result.failure_lines = inp.lines()
+        result.notes.extend(result.failure_lines)
+        result.exit_code = inp.exit_code
         return result
 
     result.notice_folder = str(notice_path)
@@ -497,12 +460,24 @@ def run_pipeline(
         result.d_attempts = run_conditional_bizplan(
             batch, ann_path, use_ai=use_ai_bizplan)
 
+    failure_report = collect_all_failures(
+        analysis=analysis,
+        batch=batch,
+        pool=Path(pool),
+        d_attempts=result.d_attempts,
+        extra_notes=result.notes,
+    )
+    result.failure_lines = failure_report.lines()
+    if result.download_error:
+        result.failure_lines.insert(0, f"[실패] {result.download_error}")
+
     result.todo_text = build_todo_text(
         batch,
         deadline_warning=result.deadline_warning,
         confirm_files=confirm_paths,
         d_attempts=result.d_attempts,
         download_error=result.download_error,
+        failure_lines=result.failure_lines,
     )
 
     todo_path = Path(batch.output_dir) / "다음할일.txt"
@@ -512,12 +487,11 @@ def run_pipeline(
     write_run_manifest(notice_path, result, analysis, batch)
 
     result.ok = batch.ok_count > 0 or bool(retry_confirm)
-    if result.deadline_warning.startswith("⚠ 마감이 지났습니다"):
-        result.exit_code = 2
-    elif not batch.items or batch.ok_count == 0:
-        result.exit_code = 2
-    else:
-        result.exit_code = 0
+    result.exit_code = compute_pipeline_exit_code(
+        failure_report,
+        batch_ok_count=batch.ok_count,
+        has_download_error=bool(result.download_error),
+    )
 
     if notify:
         headline = result.batch_summary.split("\n")[0] if result.batch_summary else "파이프라인 완료"
@@ -538,6 +512,10 @@ def format_pipeline_summary_korean(result: PipelineResult) -> str:
         parts.append(result.deadline_warning)
     if result.download_error:
         parts.append(result.download_error)
+    if result.failure_lines:
+        parts.append("")
+        parts.append("── 주의·실패 안내 ──")
+        parts.extend(result.failure_lines)
     if result.notice_folder:
         parts.append(f"📁 {Path(result.notice_folder).name}")
     if result.analysis_summary:

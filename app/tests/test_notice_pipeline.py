@@ -279,3 +279,98 @@ def test_e2e_matrix_case5_login_wall_message() -> None:
         [{"status": "PAGE_FETCH_FAILED"}],
     )
     assert msg and "로그인" in msg
+
+
+# --- UX-4: 실패·환경 정직 안내 ---
+
+def test_download_failure_no_attachments() -> None:
+    from auto_write.services.pipeline_failure_ux import classify_download_failure
+
+    rep = classify_download_failure(
+        "https://example.com",
+        [{"status": "NO_ATTACHMENTS"}],
+    )
+    assert any("첨부파일" in a.message for a in rep.advices)
+    assert rep.exit_code == 2
+
+
+def test_download_failure_ssl_hint() -> None:
+    from auto_write.services.pipeline_failure_ux import classify_download_failure
+
+    rep = classify_download_failure(
+        "https://gov.kr/x",
+        [{"status": "PAGE_FETCH_FAILED", "error": "SSL certificate verify failed"}],
+        stderr="unexpected_eof_while_reading",
+    )
+    assert any("SSL" in a.message or "연결" in a.message for a in rep.advices)
+
+
+def test_pdf_only_pool_warning(tmp_path: Path) -> None:
+    from auto_write.services.pipeline_failure_ux import pdf_only_pool_warning
+
+    pool = tmp_path / "pool"
+    pool.mkdir()
+    (pool / "완성본.pdf").write_bytes(b"%PDF")
+    msg = pdf_only_pool_warning(pool)
+    assert msg and "PDF" in msg
+
+
+def test_kstartup_junk_attachments(tmp_path: Path) -> None:
+    from auto_write.services.pipeline_failure_ux import detect_kstartup_junk_attachments
+
+    notice = tmp_path / "공고"
+    notice.mkdir()
+    (notice / "첨부파일.html").write_text("<html>", encoding="utf-8")
+    (notice / "location.href = file.downloadPath").write_text("x", encoding="utf-8")
+    msg = detect_kstartup_junk_attachments(notice)
+    assert msg and "K-Startup" in msg
+
+
+def test_merge_cell_address_hint() -> None:
+    from auto_write.services.pipeline_failure_ux import _hint_for_batch_item
+
+    item = BatchAutofillItem(
+        target="/n/신청서.docx",
+        source="s.docx",
+        output="/n/filled/out.docx",
+        ok=True,
+        unmatched_targets=[{"target_label": "주소지"}],
+    )
+    hints = _hint_for_batch_item(item)
+    assert any("병합" in h.message or "직접" in h.message for h in hints)
+
+
+def test_empty_source_pool_failure(tmp_path: Path) -> None:
+    from auto_write.services.pipeline_failure_ux import collect_batch_failures
+
+    notice, _, _ = _make_pair(tmp_path)
+    empty_pool = tmp_path / "empty_pool"
+    empty_pool.mkdir()
+    batch = BatchAutofillReport(str(notice), str(empty_pool), str(notice / "filled"), items=[])
+    rep = collect_batch_failures(batch, empty_pool)
+    assert any(a.code == "BATCH_NO_TARGETS" for a in rep.advices)
+
+
+def test_no_forms_analysis_failure(tmp_path: Path) -> None:
+    from auto_write.services.pipeline_failure_ux import collect_analysis_failures
+
+    notice = tmp_path / "공고만"
+    notice.mkdir()
+    (notice / "공고문.txt").write_text("모집공고", encoding="utf-8")
+    analysis = FolderAnalysisReport(folder=str(notice), forms=[])
+    rep = collect_analysis_failures(analysis)
+    assert any(a.code == "NOTICE_NO_FORMS" for a in rep.advices)
+
+
+def test_pipeline_failure_lines_in_todo(tmp_path: Path, monkeypatch) -> None:
+    notice, pool, _ = _make_pair(tmp_path)
+    monkeypatch.setattr(
+        "auto_write.services.hwp_docx_convert.docx_to_hwp",
+        lambda *a, **k: type("R", (), {"ok": False, "notes": ["HWP COM 없음"]})(),
+    )
+    result = run_pipeline(
+        notice_folder=notice, source_pool=pool,
+        run_bizplan=False, convert_hwp=True,
+    )
+    blob = result.todo_text + "\n".join(result.failure_lines)
+    assert "HWP" in blob or "DOCX" in blob
