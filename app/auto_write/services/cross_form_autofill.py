@@ -104,6 +104,31 @@ def _logical_cells(row) -> list:
     return SubmittableFiller._logical_cells(row)
 
 
+def _iter_all_tables(container) -> list:
+    """문서/셀의 모든 표를 문서 순서로(중첩표 포함) 평탄화해 반환한다.
+
+    재발 클래스 D 차단용 **단일 순회 헬퍼**. ``python-docx`` 의 ``doc.tables`` 는
+    **최상위 표만** 준다(표 셀 '안'에 들어간 중첩표를 통째로 놓친다). 이 헬퍼는 각 표의
+    논리 셀 안 중첩표까지 재귀로 훑어, 소스추출·타깃탐지·체크박스·전사기입이 **동일한
+    표 좌표계**(같은 평탄화 순서 = ``table_index``)를 공유하게 한다. 과거 앵커탐색·셀
+    인라인 갭이 함수마다 제각각 순회하다 표 셀·중첩표를 반복해 놓친 재발을 구조적으로 막는다.
+
+    - **순서**: 전위(부모 표 → 그 셀 안 중첩표 → 다음 부모). 탐지와 기입이 같은 함수를
+      쓰므로 인덱스가 항상 정합한다.
+    - **회귀 0**: 중첩표가 없으면 결과는 ``list(container.tables)`` 와 완전히 동일하다
+      (기존 최상위-표 동작을 그대로 보존).
+    - ``_logical_cells`` 로 병합 중복 셀을 건너뛰어 같은 중첩표를 두 번 담지 않는다.
+      표는 아래로만 중첩되므로 재귀는 유한하다.
+    """
+    out: list = []
+    for table in container.tables:
+        out.append(table)
+        for row in table.rows:
+            for cell in _logical_cells(row):
+                out.extend(_iter_all_tables(cell))
+    return out
+
+
 # --- 동의어 클러스터 ----------------------------------------------------------
 # 각 클러스터는 의미가 같은 라벨들의 모음이다. 정규화(_key) 기준으로 비교한다.
 # 확장 가능: 새 클러스터를 리스트에 추가하면 _CLUSTER_OF 가 자동 반영된다.
@@ -417,7 +442,7 @@ def _collect_label_keys(doc) -> set[str]:
     keys: set[str] = set()
     # (col_index, key) → 출현 횟수
     col_counts: dict[tuple[int, str], int] = {}
-    for table in doc.tables:
+    for table in _iter_all_tables(doc):
         rows = table.rows
         for ri, row in enumerate(rows):
             logical = _logical_cells(row)
@@ -518,7 +543,7 @@ def _extract_vertical_cards(doc, put) -> None:
     가로에 라벨→라벨로 오염되는 것을 막기 위해), 위 '아래 행 라벨 가드'가 진짜 가로
     행을 세로가 잘못 선점하는 유일한 경로를 차단한다.
     """
-    for table in doc.tables:
+    for table in _iter_all_tables(doc):
         rows = table.rows
         for ri in range(len(rows) - 1):
             header = _logical_cells(rows[ri])
@@ -601,7 +626,7 @@ def _extract_source(docx_path: str | Path) -> tuple[dict[str, str], dict[str, st
     # 세로-우선은 올바른 가로 추출을 절대 덮지 않는다(오추출<빈칸).
     _extract_vertical_cards(doc, _put)
 
-    for table in doc.tables:
+    for table in _iter_all_tables(doc):
         rows = table.rows
         for ri, row in enumerate(rows):
             logical = _logical_cells(row)
@@ -801,7 +826,7 @@ def find_target_fields(docx_path: str | Path) -> list[dict[str, Any]]:
     """
     doc = Document(str(docx_path))
     targets: list[dict[str, Any]] = []
-    for ti, table in enumerate(doc.tables):
+    for ti, table in enumerate(_iter_all_tables(doc)):
         for ri, row in enumerate(table.rows):
             logical = _logical_cells(row)
             for i in range(len(logical) - 1):
@@ -1117,7 +1142,7 @@ def find_checkbox_targets(docx_path: str | Path) -> list[dict[str, Any]]:
     """
     doc = Document(str(docx_path))
     groups: list[dict[str, Any]] = []
-    for ti, table in enumerate(doc.tables):
+    for ti, table in enumerate(_iter_all_tables(doc)):
         for ri, row in enumerate(table.rows):
             logical = _logical_cells(row)
             n = len(logical)
@@ -1470,6 +1495,10 @@ def autofill_from_source(
         # 직접 쓰기: 타깃을 열어 (table_index,row,value_cell) 좌표에 set_cell_text 로
         # 값을 직접 기입한다. 잔여물/안내 청소 패스를 돌리지 않으므로 ○○○·OOO-… 보존.
         doc = Document(str(tgt_docx))
+        # 탐지(find_target_fields/find_checkbox_targets)와 **동일한 평탄화 순서**로
+        # 표를 나열해 table_index 정합을 보장한다(중첩표 포함). 루프마다 재계산하지 않게
+        # 한 번만 만든다.
+        all_tables = _iter_all_tables(doc)
         transcribed = 0
         confirmed_written = 0
         para_groups: dict[int, list[Match]] = {}
@@ -1485,10 +1514,10 @@ def autofill_from_source(
                     (m.table_index, m.row, m.value_cell, m.cell_para_index), []
                 ).append(m)
                 continue
-            if m.table_index >= len(doc.tables):
+            if m.table_index >= len(all_tables):
                 report.notes.append(f"전사 표 범위초과 ti={m.table_index}")
                 continue
-            table = doc.tables[m.table_index]
+            table = all_tables[m.table_index]
             if m.row >= len(table.rows):
                 report.notes.append(f"전사 행 범위초과 ti={m.table_index} ri={m.row}")
                 continue
@@ -1521,10 +1550,10 @@ def autofill_from_source(
         # 표 셀 '안' 인라인 빈칸: 셀 단락을 찾아 본문 단락과 동일하게 한 번에 기입.
         # (표-라벨 경로는 '빈/예시' 값셀만 덮으므로, 글자가 든 인라인 셀과 겹치지 않는다.)
         for (ti, ri, ci, cpi), group in cell_para_groups.items():
-            if ti < 0 or ti >= len(doc.tables):
+            if ti < 0 or ti >= len(all_tables):
                 report.notes.append(f"전사 셀단락 표범위초과 ti={ti}")
                 continue
-            rows = doc.tables[ti].rows
+            rows = all_tables[ti].rows
             if ri < 0 or ri >= len(rows):
                 report.notes.append(f"전사 셀단락 행범위초과 ti={ti} ri={ri}")
                 continue
@@ -1559,9 +1588,9 @@ def autofill_from_source(
                     ci = d["checked_option_index"]
                     if ci < 0:
                         continue
-                    if d["table_index"] >= len(doc.tables):
+                    if d["table_index"] >= len(all_tables):
                         continue
-                    rows = doc.tables[d["table_index"]].rows
+                    rows = all_tables[d["table_index"]].rows
                     if d["row"] >= len(rows):
                         continue
                     logical = _logical_cells(rows[d["row"]])
