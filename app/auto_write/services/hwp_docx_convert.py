@@ -114,7 +114,7 @@ def _convert_via_com(src: Path, dst: Path, save_formats: tuple[str, ...]) -> Non
 # --- 경로/검증 도우미 ---------------------------------------------------------
 
 def _resolve_paths(in_path: str | Path, out_path: Optional[str | Path],
-                   default_suffix: str) -> tuple[Path, Path]:
+                   default_suffix: str) -> tuple[Path, Path, str]:
     src = Path(in_path)
     if not src.exists():
         raise FileNotFoundError(f"입력 파일이 없습니다: {src}")
@@ -122,7 +122,12 @@ def _resolve_paths(in_path: str | Path, out_path: Optional[str | Path],
     if src.resolve() == dst.resolve():
         raise ValueError("입력과 출력 경로가 같습니다. 원본 덮어쓰기는 금지입니다.")
     dst.parent.mkdir(parents=True, exist_ok=True)
-    return src, dst
+    # 기존 출력 파일(사용자가 수정했을 수 있음)을 무경고로 덮어쓰지 않게 타임스탬프
+    # 백업으로 보존한다(단일출처 usage_acceptance.backup_existing_output 재사용).
+    from .usage_acceptance import backup_existing_output
+
+    prev_backup = backup_existing_output(dst) if dst.exists() else ""
+    return src, dst, prev_backup
 
 
 def _nonempty_file(path: Path) -> bool:
@@ -134,11 +139,13 @@ def _nonempty_file(path: Path) -> bool:
 def hwp_to_docx(in_path: str | Path, out_path: Optional[str | Path] = None,
                 *, use_com: bool = True) -> ConvertReport:
     """HWP/HWPX 를 DOCX 로 변환한다(COM → 구조 변환 → PrvText 순 폴백)."""
-    src, dst = _resolve_paths(in_path, out_path, ".docx")
+    src, dst, prev_bak = _resolve_paths(in_path, out_path, ".docx")
     ext = src.suffix.lower()
     if ext not in _HWP_EXTS:
         raise ValueError(f"HWP/HWPX 입력만 지원합니다: {src.name}")
     report = ConvertReport(direction="hwp->docx", output=str(dst))
+    if prev_bak:
+        report.notes.append(f"기존 출력 파일을 백업했습니다: {prev_bak}")
 
     # 1) 한글 COM — 가장 충실한 변환
     if use_com and hancom_com_available():
@@ -195,13 +202,15 @@ def docx_to_hwp(in_path: str | Path, out_path: Optional[str | Path] = None) -> C
     한글 COM 이 유일한 자동 경로다. 미가용/실패 시 예외 대신 ``ok=False`` 와
     사람이 할 일(대화형 PowerShell 에서 실행, 보안 승인 클릭)을 notes 에 담는다.
     """
-    src, dst = _resolve_paths(in_path, out_path, ".hwp")
+    src, dst, prev_bak = _resolve_paths(in_path, out_path, ".hwp")
     if src.suffix.lower() != ".docx":
         raise ValueError(f"DOCX 입력만 지원합니다: {src.name}")
     dst_ext = dst.suffix.lower()
     if dst_ext not in _HWP_EXTS:
         raise ValueError(f"출력은 .hwp/.hwpx 만 지원합니다: {dst.name}")
     report = ConvertReport(direction="docx->hwp", output=str(dst))
+    if prev_bak:
+        report.notes.append(f"기존 출력 파일을 백업했습니다: {prev_bak}")
 
     if not hancom_com_available():
         report.notes.append(
