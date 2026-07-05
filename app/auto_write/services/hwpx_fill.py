@@ -51,6 +51,8 @@ from .cross_form_autofill import (
     _cluster_rep,
     _is_noise_label,
     _is_obvious_placeholder,
+    _is_visible_blank,
+    _iter_line_fields,
     _key,
 )
 
@@ -154,6 +156,50 @@ def _set_cell_text(tc, value: str) -> bool:
         run.set("charPrIDRef", _inherit_charpr(tc))
     t = etree.SubElement(run, _q("t"))
     t.text = value
+    return True
+
+
+def _inline_texts(p) -> list:
+    """hp:p 의 '직계 텍스트 흐름' hp:t 목록(문서순).
+
+    p 의 직계 hp:run 들만 순회하고, run 이 중첩 표(hp:tbl)를 품으면 그 run 은
+    통째로 건너뛴다 — 중첩 표/subList 텍스트를 인라인 흐름에 흡수하지 않는다(AC8).
+    각 run 에서는 '직계' hp:t 만 취한다. flat 문자열 빌드와 offset→hp:t 매핑이
+    반드시 이 함수의 동일 결과를 공유해야 offset 이 어긋나지 않는다(AC9).
+    """
+    texts: list = []
+    for run in _direct(p, "run"):
+        if _direct(run, "tbl"):
+            continue
+        texts.extend(_direct(run, "t"))
+    return texts
+
+
+def _splice_run_text(p, fill_start: int, fill_end: int, value: str) -> bool:
+    """p 직계 텍스트 흐름의 flat 문자 구간 [fill_start, fill_end) 만 value 로 교체.
+
+    형제 run/hp:t 의 텍스트·charPrIDRef 는 전부 보존한다(대상 hp:t 의 text 만 수정).
+    flat 문자열은 _inline_texts(p) 의 text 를 공백 정규화 없이 그대로 이어붙인 것과
+    동일해야 한다. 구간이 두 hp:t 에 걸치면(cross-run span) 채우지 않고 False
+    (오채움<빈칸 — 보수적 skip).
+    """
+    ts = _inline_texts(p)
+    pos = 0
+    start_t = start_off = end_t = end_off = None
+    for t in ts:
+        s = t.text or ""
+        if start_t is None and fill_start < pos + len(s):
+            start_t, start_off = t, fill_start - pos
+        if fill_end <= pos + len(s):
+            end_t, end_off = t, fill_end - pos
+            break
+        pos += len(s)
+    if start_t is None or end_t is None:
+        return False
+    if start_t is not end_t:
+        return False  # cross-run span: 보수적 skip(오채움<빈칸)
+    cur = start_t.text or ""
+    start_t.text = cur[:start_off] + value + cur[end_off:]
     return True
 
 
@@ -272,7 +318,7 @@ def _fill_section_xml(
     identity: dict[str, str],
     replacements: dict[str, str],
 ) -> tuple[bytes, dict[str, str], int, set[str]]:
-    """한 섹션 XML 에서 표 라벨-값 칸 채움 + (보호된) 직접 치환을 수행한다.
+    """한 섹션 XML 에서 표 라벨-값 칸 채움 + 셀 인라인 빈칸 채움 + (보호된) 직접 치환.
 
     반환: (새 XML 바이트, 채운 라벨→값, 치환건수, 채운 identity 라벨키 집합).
     변경이 없으면 입력 바이트를 그대로 반환한다(불필요한 재직렬화·선언 변형 회피).
@@ -314,6 +360,41 @@ def _fill_section_xml(
                         used_keys.add(want_key)
                         changed = True
                     break
+
+    # 1.5) 셀 '안' 인라인 빈칸(`라벨 : ______`) 채움 — 표 경로 '뒤'에 실행하며
+    #      동일한 used_keys 를 공유한다(AC7: 표가 채운 라벨은 인라인이 재채움 금지).
+    #      scope 는 각 hp:p 의 직계 텍스트 흐름만(_inline_texts, AC8 — 중첩 표 제외).
+    #      '가시 빈칸'(밑줄/점/대시 채움선)만 채운다 — '라벨 :'(콜론+공백만)은
+    #      옆 값칸을 가리키는 경우와 구별이 안 되므로 제외(_is_visible_blank).
+    if wants:
+        for tc in root.iter(_q("tc")):
+            for sub in _direct(tc, "subList"):
+                for p in _direct(sub, "p"):
+                    ts = _inline_texts(p)
+                    if not ts:
+                        continue
+                    # flat = 직계 hp:t 를 문서순 그대로 결합(공백 정규화 금지, AC9)
+                    flat = "".join(t.text or "" for t in ts)
+                    if ":" not in flat and "：" not in flat:
+                        continue
+                    fields = list(_iter_line_fields(flat))
+                    # 역순 스플라이스: 뒤 구간부터 교체해야 앞 필드 offset 이 유효.
+                    for label_raw, value_raw, f_start, f_end in reversed(fields):
+                        if not _is_visible_blank(value_raw):
+                            continue
+                        field_key = _key(label_raw)
+                        if not field_key:
+                            continue
+                        for want_key, lbl, val in wants:
+                            if want_key in used_keys:
+                                continue
+                            if not _label_matches(field_key, want_key):
+                                continue
+                            if _splice_run_text(p, f_start, f_end, " " + str(val)):
+                                filled[lbl] = str(val)
+                                used_keys.add(want_key)
+                                changed = True
+                            break
 
     # 2) 직접 텍스트 치환 — 라벨/실값 칸은 보호(채울 수 있는 칸·본문에만 적용).
     #    lxml proxy id 재사용을 피하려 id() 집합 대신 조상(tc) 순회로 판별한다.
