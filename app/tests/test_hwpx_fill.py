@@ -460,3 +460,353 @@ def test_strip_linesegarray_helper_idempotent():
     assert hwpx_fill._strip_linesegarray(root) == 0  # 멱등
     texts = [t.text for t in root.iter(f"{{{_HP}}}t")]
     assert "상호" in texts  # 라벨 텍스트 보존
+
+
+# --------------------------------------------------------------------------- #
+# 구조 (a): 한 셀 '안' 인라인 빈칸(`라벨 : ______`) 채움 — offset 스플라이스
+# (가시 빈칸만 채움 · used_keys 공유 · 형제 run 보존 · cross-run 은 보수적 skip)
+# --------------------------------------------------------------------------- #
+
+
+def _read_cell_runs_by_col(path: Path, col: int) -> list[tuple[str, str]]:
+    """colAddr==col 셀의 run 목록을 (charPrIDRef, 직계 hp:t 결합 텍스트)로 반환."""
+    from lxml import etree
+
+    with zipfile.ZipFile(path) as z:
+        root = etree.fromstring(z.read("Contents/section0.xml"))
+    q = lambda t: f"{{{_HP}}}{t}"  # noqa: E731
+    for tc in root.iter(q("tc")):
+        ca = next((c for c in tc if c.tag == q("cellAddr")), None)
+        if ca is not None and ca.get("colAddr") == str(col):
+            runs = []
+            for run in tc.iter(q("run")):
+                txt = "".join(t.text or "" for t in run if t.tag == q("t"))
+                runs.append((run.get("charPrIDRef"), txt))
+            return runs
+    return []
+
+
+def test_inline_cell_single_field(tmp_path):
+    """한 셀 안 `신청기업명 : ______` — 밑줄 자리만 값으로, 라벨·콜론 보존."""
+    src = tmp_path / "inline1.hwpx"
+    _make_hwpx_cells(src, [_cellx(0, "신청기업명 : ______")])
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"기업명": "도보네비(주)"})
+    txt = _read_cell_by_col(out, 0)
+    assert "도보네비(주)" in txt
+    assert "______" not in txt
+    assert txt.startswith("신청기업명 :")       # 라벨 보존
+    assert rep.filled.get("기업명") == "도보네비(주)"
+    assert rep.filled_count == 1
+
+
+def test_inline_cell_multi_field(tmp_path):
+    """한 문단 멀티필드 — 각 자리에 각 값, 서로 안 섞이고 라벨 둘 다 보존."""
+    src = tmp_path / "inline2.hwpx"
+    _make_hwpx_cells(src, [_cellx(0, "신청기업명 : ______  대표자 : ____")])
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"기업명": "A(주)", "대표자": "홍길동"})
+    txt = _read_cell_by_col(out, 0)
+    assert "A(주)" in txt and "홍길동" in txt
+    assert "_" not in txt                        # 밑줄 전부 값으로 교체
+    assert txt.startswith("신청기업명 :")
+    # 값이 제 라벨 자리에: 기업명 값 < 대표자 라벨 < 대표자 값 순서
+    assert txt.index("A(주)") < txt.index("대표자") < txt.index("홍길동")
+    assert rep.filled_count == 2
+
+
+def test_inline_colon_space_only_not_filled(tmp_path):
+    """`비고 : `(콜론+공백만, 가시 빈칸 없음)는 옆 값칸과 모호 → 안 채운다."""
+    src = tmp_path / "inline3.hwpx"
+    _make_hwpx_cells(src, [_cellx(0, "비고 : ")])
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"비고": "채우면안됨"})
+    assert "채우면안됨" not in _read_cell_by_col(out, 0)
+    assert rep.filled_count == 0
+    assert "비고" in rep.residual               # 못 채웠으니 정직 보고
+
+
+def test_inline_shares_used_keys_no_double_fill(tmp_path):
+    """같은 라벨이 표 값칸 + 인라인 둘 다 있으면 한 번만 채움(이중기입 금지)."""
+    src = tmp_path / "inline4.hwpx"
+    _make_hwpx_cells(src, [
+        _cellx(0, "신청기업명"),
+        _cellx(1, ""),
+        _cellx(2, "신청기업명 : ______"),
+    ])
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"기업명": "한번만(주)"})
+    assert _read_cell_by_col(out, 1) == "한번만(주)"   # 표 경로가 먼저 채움
+    inline = _read_cell_by_col(out, 2)
+    assert "한번만(주)" not in inline                  # 인라인 재채움 없음
+    assert "______" in inline                          # 인라인 빈칸 그대로
+    assert rep.filled_count == 1
+
+
+def test_inline_sibling_run_preserved(tmp_path):
+    """인라인 필드 앞뒤 형제 run 의 텍스트·charPrIDRef 가 불변."""
+    tc = (
+        '<hp:tc><hp:cellAddr colAddr="0" rowAddr="0"/>'
+        '<hp:cellSpan colSpan="1" rowSpan="1"/><hp:subList><hp:p>'
+        '<hp:run charPrIDRef="7"><hp:t>비고 : 참고내용</hp:t></hp:run>'
+        '<hp:run charPrIDRef="0"><hp:t>  신청기업명 : ______</hp:t></hp:run>'
+        '<hp:run charPrIDRef="9"><hp:t>  ※주의</hp:t></hp:run>'
+        "</hp:p></hp:subList></hp:tc>"
+    )
+    src = tmp_path / "inline5.hwpx"
+    _make_hwpx_cells(src, [tc])
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"기업명": "보존(주)"})
+    runs = _read_cell_runs_by_col(out, 0)
+    assert runs[0] == ("7", "비고 : 참고내용")   # 앞 형제 run 불변
+    assert runs[2] == ("9", "  ※주의")           # 뒤 형제 run 불변
+    assert runs[1][0] == "0"                      # 대상 run 서식 참조 불변
+    assert "보존(주)" in runs[1][1] and "______" not in runs[1][1]
+    assert rep.filled_count == 1
+
+
+def test_inline_cross_run_span_skipped(tmp_path):
+    """밑줄이 두 hp:t 로 쪼개지면(cross-run span) 채우지 않는다(오채움<빈칸)."""
+    tc = (
+        '<hp:tc><hp:cellAddr colAddr="0" rowAddr="0"/>'
+        '<hp:cellSpan colSpan="1" rowSpan="1"/><hp:subList><hp:p>'
+        '<hp:run charPrIDRef="0"><hp:t>신청기업명 : ___</hp:t></hp:run>'
+        '<hp:run charPrIDRef="1"><hp:t>___</hp:t></hp:run>'
+        "</hp:p></hp:subList></hp:tc>"
+    )
+    src = tmp_path / "inline6.hwpx"
+    _make_hwpx_cells(src, [tc])
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"기업명": "안채움(주)"})
+    txt = _read_cell_by_col(out, 0)
+    assert "안채움(주)" not in txt
+    assert "______" in txt                       # 빈칸 그대로(미채움)
+    assert rep.filled_count == 0
+    assert "기업명" in rep.residual              # 정직 보고
+
+
+# --------------------------------------------------------------------------- #
+# 구조 (d): 체크박스(□→■) 자동 체크 — 정확일치·모호스킵·used_keys 공유
+# --------------------------------------------------------------------------- #
+
+
+def test_checkbox_left_label_marks_option(tmp_path):
+    """행 [라벨 | □옵션들] — 왼쪽 셀 라벨로 매칭해 값 옵션의 □ 만 ■ 로."""
+    src = tmp_path / "cb1.hwpx"
+    _make_hwpx_cells(src, [_cellx(0, "사업자형태"), _cellx(1, "□개인 □법인")])
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"사업자형태": "개인"})
+    assert _read_cell_by_col(out, 1) == "■개인 □법인"
+    assert rep.filled.get("사업자형태") == "개인"
+    assert rep.filled_count == 1
+    assert "사업자형태" not in rep.residual
+
+
+def test_checkbox_inline_label_marks_option(tmp_path):
+    """한 셀 '사업자형태 □개인 □법인' — 첫 □ 앞 텍스트가 인라인 라벨."""
+    src = tmp_path / "cb2.hwpx"
+    _make_hwpx_cells(src, [_cellx(0, "사업자형태 □개인 □법인")])
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"사업자형태": "개인"})
+    assert _read_cell_by_col(out, 0) == "사업자형태 ■개인 □법인"
+    assert rep.filled.get("사업자형태") == "개인"
+    assert rep.filled_count == 1
+
+
+def test_checkbox_exact_match_no_substring(tmp_path):
+    """'개인정보' 값이 '개인' 옵션을 부분문자열로 오체크하면 안 된다(정확일치만)."""
+    src = tmp_path / "cb3.hwpx"
+    _make_hwpx_cells(src, [_cellx(0, "사업자형태"), _cellx(1, "□개인 □법인")])
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"사업자형태": "개인정보"})
+    txt = _read_cell_by_col(out, 1)
+    assert txt == "□개인 □법인"                # 아무것도 체크 안 됨
+    assert "■" not in txt
+    assert rep.filled_count == 0
+    assert "사업자형태" in rep.residual         # 정직 보고
+
+
+def test_checkbox_no_match_preserves_all(tmp_path):
+    """값이 어느 옵션과도 일치하지 않으면 모든 □ 보존(날조 0)."""
+    src = tmp_path / "cb4.hwpx"
+    _make_hwpx_cells(src, [_cellx(0, "사업자형태"), _cellx(1, "□개인 □법인")])
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"사업자형태": "협동조합"})
+    txt = _read_cell_by_col(out, 1)
+    assert txt.count("□") == 2 and "■" not in txt
+    assert rep.filled_count == 0
+
+
+def test_checkbox_other_options_preserved(tmp_path):
+    """'법인' 체크 시 '개인' 의 □ 는 그대로 — 매칭된 한 글자만 ■."""
+    src = tmp_path / "cb5.hwpx"
+    _make_hwpx_cells(src, [_cellx(0, "사업자형태"), _cellx(1, "□개인 □법인")])
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"사업자형태": "법인"})
+    txt = _read_cell_by_col(out, 1)
+    assert txt == "□개인 ■법인"
+    assert txt.count("□") == 1 and txt.count("■") == 1
+    assert rep.filled_count == 1
+
+
+def test_checkbox_ambiguous_skipped(tmp_path):
+    """값이 옵션 2개와 매칭(모호)이면 아무 박스도 안 건드림(오체크<빈칸)."""
+    src = tmp_path / "cb6.hwpx"
+    _make_hwpx_cells(src, [_cellx(0, "동의여부"), _cellx(1, "□예 □예")])
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"동의여부": "예"})
+    txt = _read_cell_by_col(out, 1)
+    assert txt.count("□") == 2 and "■" not in txt
+    assert rep.filled_count == 0
+    assert "동의여부" in rep.residual
+
+
+def test_checkbox_shares_used_keys(tmp_path):
+    """같은 라벨이 값칸+체크박스 둘 다면 한 번만 처리(used_keys 공유·이중 금지)."""
+    src = tmp_path / "cb7.hwpx"
+    _make_hwpx_cells(src, [
+        _cellx(0, "사업자형태"),
+        _cellx(1, ""),
+        _cellx(2, "사업자형태 □개인 □법인"),
+    ])
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"사업자형태": "개인"})
+    assert _read_cell_by_col(out, 1) == "개인"     # 표 값칸 경로가 먼저 채움
+    cb = _read_cell_by_col(out, 2)
+    assert "■" not in cb and "□개인" in cb         # 체크박스 재처리 없음
+    assert rep.filled_count == 1
+
+
+# --------------------------------------------------------------------------- #
+# 구조 (b): 표 '밖' 본문 단락 인라인 빈칸(`라벨 : ______`) 채움 — 1.5 와 동일 커널
+# (hs:sec 직계 hp:p 만 · 가시 빈칸만 · used_keys 공유 · 형제 run 보존 · 산문 보호)
+# --------------------------------------------------------------------------- #
+
+
+def _body_para(text: str, charpr: str = "0") -> str:
+    """표 밖 본문 단락(hs:sec 직계 hp:p) 하나."""
+    return (
+        f'<hp:p><hp:run charPrIDRef="{charpr}"><hp:t>{text}</hp:t></hp:run></hp:p>'
+    )
+
+
+def _make_hwpx_body(
+    path: Path, body_paras: list[str], cell_xmls: list[str] | None = None
+) -> None:
+    """본문 단락(표 밖 hp:p) + (선택) 단일행 표를 담은 최소 HWPX 픽스처."""
+    tbl = ""
+    if cell_xmls:
+        row = f"<hp:tr>{''.join(cell_xmls)}</hp:tr>"
+        tbl = (
+            '<hp:p><hp:run charPrIDRef="0">'
+            f'<hp:tbl rowCnt="1" colCnt="5">{row}</hp:tbl></hp:run></hp:p>'
+        )
+    section = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f'<hs:sec xmlns:hp="{_HP}" xmlns:hs="{_HS}">'
+        f"{tbl}{''.join(body_paras)}</hs:sec>"
+    ).encode("utf-8")
+    with zipfile.ZipFile(path, "w") as z:
+        zi = zipfile.ZipInfo("mimetype")
+        zi.compress_type = zipfile.ZIP_STORED
+        z.writestr(zi, _MIMETYPE)
+        z.writestr("Contents/section0.xml", section)
+
+
+def _read_body_runs(path: Path) -> list[tuple[str, str]]:
+    """hs:sec 직계 hp:p(표 run 제외)의 run 목록 (charPrIDRef, 직계 hp:t 결합 텍스트)."""
+    from lxml import etree
+
+    with zipfile.ZipFile(path) as z:
+        root = etree.fromstring(z.read("Contents/section0.xml"))
+    q = lambda t: f"{{{_HP}}}{t}"  # noqa: E731
+    runs: list[tuple[str, str]] = []
+    for p in root:
+        if p.tag != q("p"):
+            continue
+        for run in p:
+            if run.tag != q("run"):
+                continue
+            if any(c.tag == q("tbl") for c in run):
+                continue  # 표를 품은 run 은 본문 텍스트 흐름이 아님
+            txt = "".join(t.text or "" for t in run if t.tag == q("t"))
+            runs.append((run.get("charPrIDRef"), txt))
+    return runs
+
+
+def _read_body_text(path: Path) -> str:
+    return "".join(txt for _, txt in _read_body_runs(path))
+
+
+def test_body_paragraph_visible_blank_filled(tmp_path):
+    """본문 `신청인 성명 : ______` — 밑줄 자리에만 값, 라벨·콜론 보존(동의어 매칭)."""
+    src = tmp_path / "body1.hwpx"
+    _make_hwpx_body(src, [_body_para("신청인 성명 : ______")])
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"성명": "홍길동"})
+    body = _read_body_text(out)
+    assert "홍길동" in body
+    assert "______" not in body
+    assert body.startswith("신청인 성명 :")        # 라벨 보존
+    assert rep.filled.get("성명") == "홍길동"
+    assert rep.filled_count == 1
+
+
+def test_body_colon_space_only_not_filled(tmp_path):
+    """본문 `비고 : `(콜론+공백만, 가시 빈칸 없음) → 절대 안 채운다."""
+    src = tmp_path / "body2.hwpx"
+    _make_hwpx_body(src, [_body_para("비고 : ")])
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"비고": "채우면안됨"})
+    assert "채우면안됨" not in _read_body_text(out)
+    assert rep.filled_count == 0
+    assert "비고" in rep.residual                  # 못 채웠으니 정직 보고
+
+
+def test_body_sibling_run_preserved(tmp_path):
+    """본문 필드 앞뒤 charPrIDRef 다른 형제 run 의 텍스트·속성 불변."""
+    p = (
+        "<hp:p>"
+        '<hp:run charPrIDRef="7"><hp:t>비고 : 참고내용</hp:t></hp:run>'
+        '<hp:run charPrIDRef="0"><hp:t>  신청인 성명 : ______</hp:t></hp:run>'
+        '<hp:run charPrIDRef="9"><hp:t>  ※주의</hp:t></hp:run>'
+        "</hp:p>"
+    )
+    src = tmp_path / "body3.hwpx"
+    _make_hwpx_body(src, [p])
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"성명": "홍길동"})
+    runs = _read_body_runs(out)
+    assert runs[0] == ("7", "비고 : 참고내용")     # 앞 형제 run 불변(산문값 보호 포함)
+    assert runs[2] == ("9", "  ※주의")             # 뒤 형제 run 불변
+    assert runs[1][0] == "0"                        # 대상 run 서식 참조 불변
+    assert "홍길동" in runs[1][1] and "______" not in runs[1][1]
+    assert rep.filled_count == 1
+
+
+def test_body_shares_used_keys_with_table(tmp_path):
+    """같은 라벨이 표 값칸 + 본문 둘 다 있으면 한 번만 채움(used_keys 공유)."""
+    src = tmp_path / "body4.hwpx"
+    _make_hwpx_body(
+        src,
+        [_body_para("신청기업명 : ______")],
+        cell_xmls=[_cellx(0, "신청기업명"), _cellx(1, "")],
+    )
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"기업명": "한번만(주)"})
+    assert _read_cell_by_col(out, 1) == "한번만(주)"   # 표 경로가 먼저 채움
+    body = _read_body_text(out)
+    assert "한번만(주)" not in body                    # 본문 재채움 없음
+    assert "______" in body                            # 본문 빈칸 그대로
+    assert rep.filled_count == 1
+
+
+def test_body_prose_colon_sentence_not_filled(tmp_path):
+    """`주의 : 아래 사항을 확인하세요` 산문(값 자리에 실제 문장) → 절대 안 건드림."""
+    src = tmp_path / "body5.hwpx"
+    _make_hwpx_body(src, [_body_para("주의 : 아래 사항을 확인하세요")])
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"주의": "채우면안됨"})
+    assert _read_body_text(out) == "주의 : 아래 사항을 확인하세요"  # 원문 그대로
+    assert rep.filled_count == 0
+    assert "주의" in rep.residual

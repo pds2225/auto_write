@@ -53,10 +53,20 @@ class TestKeywordSlidePrompt:
         out = _keyword_slide_prompt("타임라인", "[그림] 추진 일정")
         assert "만들어 넣지 마" in out
 
-    def test_ends_with_design_guide(self):
+    def test_no_design_content_by_default(self):
+        # 2026-07-05 사용자 지시: 프롬프트에는 내용만 — 디자인 지시([디자인] 블록)
+        # 는 기본적으로 붙이지 않는다(DESIGN_GUIDE_ENABLED=False).
         out = _keyword_slide_prompt("조직도", "[그림] 팀 구성")
+        assert "[디자인]" not in out
+        assert not out.endswith(_SLIDE_DESIGN_GUIDE)
+
+    def test_design_guide_appended_when_enabled(self, monkeypatch):
+        # 스위치를 켜면 과거 동작(디자인 규칙 부가)이 그대로 복원된다.
+        import auto_write.services.infographic_suggest as ig
+
+        monkeypatch.setattr(ig, "DESIGN_GUIDE_ENABLED", True)
+        out = ig._keyword_slide_prompt("조직도", "[그림] 팀 구성")
         assert "[디자인]" in out
-        assert out.endswith(_SLIDE_DESIGN_GUIDE)
 
 
 class TestMatchAnchor:

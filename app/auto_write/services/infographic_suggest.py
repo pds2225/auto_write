@@ -132,7 +132,13 @@ def suggest_images_docx(path: str | Path, *, max_suggestions: int = 8) -> Infogr
 
 
 # --------------------------------------------------------------------------- 슬라이드 프롬프트
-# 모든 슬라이드 프롬프트에 디폴트로 덧붙이는 디자인 규칙(흰 배경·블루/무채색·키워드 위주 등).
+# 디자인 규칙 자동 부가 스위치 — 2026-07-05 사용자 지시로 기본 OFF:
+# "프롬프트 입력 시 디자인 내용 제외" = 프롬프트에는 '무엇을 담을지(내용)'만 남기고
+# 색상·레이아웃 등 디자인 지시는 넣지 않는다(디자인은 NotebookLM 에 맡김).
+# 다시 켜려면 True 로만 바꾸면 됨(_append_design_guide 는 순수 헬퍼로 유지).
+DESIGN_GUIDE_ENABLED = False
+
+# (참고 보존) 과거 디폴트로 덧붙이던 디자인 규칙(흰 배경·블루/무채색·키워드 위주 등).
 _SLIDE_DESIGN_GUIDE = (
     "[디자인] 흰 배경에 블루 계열 또는 무채색 텍스트로 단정하고 깔끔하게. "
     "의미 전달이 최우선이며 가독성·가시성을 중시한다. "
@@ -153,7 +159,11 @@ def _append_design_guide(slide_prompt: str) -> str:
 
 
 def _keyword_slide_prompt(visual_type: str, caption: str) -> str:
-    """키워드 폴백용 NotebookLM 슬라이드 생성 프롬프트(결정론). 디자인 규칙 포함."""
+    """키워드 폴백용 NotebookLM 슬라이드 생성 프롬프트(결정론).
+
+    내용(주제·형식·날조금지)만 담는다 — 디자인 지시는 DESIGN_GUIDE_ENABLED(기본 OFF)
+    가 켜진 경우에만 덧붙인다(2026-07-05 사용자 지시: 디자인 내용 제외).
+    """
     topic = caption.replace("[그림] ", "").strip() or visual_type
     body = (
         f"다음 내용을 사업계획서용 슬라이드 1장으로 만들어줘: '{topic}'. "
@@ -162,7 +172,7 @@ def _keyword_slide_prompt(visual_type: str, caption: str) -> str:
         f"문서에 없는 데이터는 추측하거나 만들어 넣지 마. "
         f"한국어, 정부지원사업 보고서 톤."
     )
-    return _append_design_guide(body)
+    return _append_design_guide(body) if DESIGN_GUIDE_ENABLED else body
 
 
 def _match_anchor(anchor: str, para_texts: list[str]) -> str:
@@ -189,8 +199,8 @@ _AI_SYSTEM_PROMPT = (
     "3. anchor 는 반드시 입력 문서에 실제로 등장한 문구의 일부를 그대로 사용한다(창작 금지).\n"
     "4. slide_prompt 에는 문서에 실제로 있는 수치·항목만 쓰고, 없는 수치는 절대 지어내지 않는다.\n"
     "5. slide_prompt 는 한국어로, 상세 설명이 아니라 '키워드 위주'(항목당 최대 1~2문장)로 간결히 쓴다.\n"
-    "6. 색상·레이아웃 등 디자인 규칙은 시스템이 자동으로 덧붙이므로, slide_prompt 에는 "
-    "무엇을 담을지(내용)에만 집중한다.\n"
+    "6. slide_prompt 에는 무엇을 담을지(내용)만 쓴다 — 색상·레이아웃·폰트·배경 등 "
+    "디자인 지시는 절대 넣지 않는다(디자인은 NotebookLM 이 알아서 정한다).\n"
     "7. 서로 다른 유형 위주로 최대 {max} 개까지만 제안한다.\n\n"
     "반환 형식(JSON object):\n"
     '{"suggestions": [{"anchor": "문서 문구 일부", "visual_type": "유형", '
@@ -241,7 +251,8 @@ def suggest_images_ai(
             continue
         anchor = str(item.get("anchor", "")).strip()
         caption = str(item.get("caption", "")).strip() or f"[그림] {vtype}"
-        slide_prompt = _append_design_guide(slide_prompt)  # 디자인 규칙 디폴트 부가
+        if DESIGN_GUIDE_ENABLED:                 # 기본 OFF — 내용만(디자인 제외 지시)
+            slide_prompt = _append_design_guide(slide_prompt)
         matched = _match_anchor(anchor, para_texts)
         report.suggestions.append(ImageSuggestion(
             anchor_text=matched or anchor,
