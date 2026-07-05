@@ -134,6 +134,23 @@ submission_orchestrator·image_apply). 신규 에이전트는 `cross-form-filler
 
 ---
 
+## 하네스: 지원사업 문서 단일 진입점 (bizdoc-hub)
+
+**목표:** 스킬이 많아 헷갈리는 문제 해소 — 문서 작업 요청의 **입구를 1개**로 통일하고,
+의도(분석/작성/채움/다듬기/변환/제출)를 파악해 알맞은 기존 스킬·CLI 로 자동 라우팅한다.
+기존 스킬을 대체하지 않는다(직접 지목 호출도 계속 가능).
+
+**트리거:** "지원사업 문서 도와줘", "문서 도와줘", "사업계획서 도와줘", "공고부터 제출까지",
+"이 문서 뭘로 처리해", "어떤 스킬 써야 해", "문서허브", "bizdoc" — 또는 공고/양식/사업계획서
+요청인데 어느 단계인지 불분명할 때 `bizdoc-hub` 스킬 사용.
+
+**연계 흐름:** 분석(announcement-form-analysis) → 본문 작성(bizplan-orchestrator) →
+값 채움(cross-form-submission | HWPX 직접: hwp_fill_direct/hwpx_submit) →
+품질·검수(document-quality-orchestrator | hwpx_submit 게이트) → 제출본. HWPX 파리티는
+PR #60(2026-07-05) 기준 — 채움 4경로·제출 파이프라인(exit 0/1/2/3·fail 시 _DRAFT) 완성.
+
+---
+
 **변경 이력**
 
 | 날짜 | 변경 내용 | 대상 | 사유 |
