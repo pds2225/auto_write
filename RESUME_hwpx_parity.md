@@ -34,10 +34,16 @@
 - **AC6 판정: (c) 세로 라벨 보류 확정** — 코퍼스 수요 4칸(전체 0.5% 미만)으로 근거 부족.
   matrix-header 오채움 위험 > recall 이득. 코퍼스가 요구하면 재개.
 
+## ★ B 트랙 완결 — PR #60 병합됨 (2026-07-05, master)
+- B① 채움 4경로(표·셀인라인·체크박스·본문) + B②③ 제출 파이프라인(hwpx_submit,
+  fail-closed·exit 0/1/2/3) + 커버리지/변환 도구 + 프롬프트 디자인 제외 +
+  공고분석 스킬 '고객사 확인 항목'. **py-3.11 723 passed(회귀 0)**.
+- 사용: `py -3.11 hwpx_submit.py 양식.hwpx -o 결과.hwpx --identity identity.json`
+
 ## 다음 액션
-1. **B② hwpx_acceptance 게이트 배선** (검출 코드 완성돼 있음 → CLI·게이트 연결).
-2. **B③ 제출 오케 HWPX 경로** (submission_orchestrator).
-3. B 완료 후 → 보류된 A(허브 오케 통합·중복 정리).
+1. 보류된 **A(허브 오케 통합·중복 정리)** — 사용자 승인 후.
+2. (c) 세로 라벨 — 코퍼스가 요구하면(현재 수요 4칸, AC6 보류).
+3. 이 워크트리는 병합 완료로 정리 가능: `git worktree remove ../auto_write-wt-hwpxparity`.
 
 ## 안전 불변
 원본 미수정·날조0·오매칭<빈칸<덮어쓰기·결정론·양식 100% 보존. 계획 정본: `workspace/PLAN_hwpx_fill_hardening.md`(v3.1).
