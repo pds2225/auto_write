@@ -675,3 +675,138 @@ def test_checkbox_shares_used_keys(tmp_path):
     cb = _read_cell_by_col(out, 2)
     assert "■" not in cb and "□개인" in cb         # 체크박스 재처리 없음
     assert rep.filled_count == 1
+
+
+# --------------------------------------------------------------------------- #
+# 구조 (b): 표 '밖' 본문 단락 인라인 빈칸(`라벨 : ______`) 채움 — 1.5 와 동일 커널
+# (hs:sec 직계 hp:p 만 · 가시 빈칸만 · used_keys 공유 · 형제 run 보존 · 산문 보호)
+# --------------------------------------------------------------------------- #
+
+
+def _body_para(text: str, charpr: str = "0") -> str:
+    """표 밖 본문 단락(hs:sec 직계 hp:p) 하나."""
+    return (
+        f'<hp:p><hp:run charPrIDRef="{charpr}"><hp:t>{text}</hp:t></hp:run></hp:p>'
+    )
+
+
+def _make_hwpx_body(
+    path: Path, body_paras: list[str], cell_xmls: list[str] | None = None
+) -> None:
+    """본문 단락(표 밖 hp:p) + (선택) 단일행 표를 담은 최소 HWPX 픽스처."""
+    tbl = ""
+    if cell_xmls:
+        row = f"<hp:tr>{''.join(cell_xmls)}</hp:tr>"
+        tbl = (
+            '<hp:p><hp:run charPrIDRef="0">'
+            f'<hp:tbl rowCnt="1" colCnt="5">{row}</hp:tbl></hp:run></hp:p>'
+        )
+    section = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f'<hs:sec xmlns:hp="{_HP}" xmlns:hs="{_HS}">'
+        f"{tbl}{''.join(body_paras)}</hs:sec>"
+    ).encode("utf-8")
+    with zipfile.ZipFile(path, "w") as z:
+        zi = zipfile.ZipInfo("mimetype")
+        zi.compress_type = zipfile.ZIP_STORED
+        z.writestr(zi, _MIMETYPE)
+        z.writestr("Contents/section0.xml", section)
+
+
+def _read_body_runs(path: Path) -> list[tuple[str, str]]:
+    """hs:sec 직계 hp:p(표 run 제외)의 run 목록 (charPrIDRef, 직계 hp:t 결합 텍스트)."""
+    from lxml import etree
+
+    with zipfile.ZipFile(path) as z:
+        root = etree.fromstring(z.read("Contents/section0.xml"))
+    q = lambda t: f"{{{_HP}}}{t}"  # noqa: E731
+    runs: list[tuple[str, str]] = []
+    for p in root:
+        if p.tag != q("p"):
+            continue
+        for run in p:
+            if run.tag != q("run"):
+                continue
+            if any(c.tag == q("tbl") for c in run):
+                continue  # 표를 품은 run 은 본문 텍스트 흐름이 아님
+            txt = "".join(t.text or "" for t in run if t.tag == q("t"))
+            runs.append((run.get("charPrIDRef"), txt))
+    return runs
+
+
+def _read_body_text(path: Path) -> str:
+    return "".join(txt for _, txt in _read_body_runs(path))
+
+
+def test_body_paragraph_visible_blank_filled(tmp_path):
+    """본문 `신청인 성명 : ______` — 밑줄 자리에만 값, 라벨·콜론 보존(동의어 매칭)."""
+    src = tmp_path / "body1.hwpx"
+    _make_hwpx_body(src, [_body_para("신청인 성명 : ______")])
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"성명": "홍길동"})
+    body = _read_body_text(out)
+    assert "홍길동" in body
+    assert "______" not in body
+    assert body.startswith("신청인 성명 :")        # 라벨 보존
+    assert rep.filled.get("성명") == "홍길동"
+    assert rep.filled_count == 1
+
+
+def test_body_colon_space_only_not_filled(tmp_path):
+    """본문 `비고 : `(콜론+공백만, 가시 빈칸 없음) → 절대 안 채운다."""
+    src = tmp_path / "body2.hwpx"
+    _make_hwpx_body(src, [_body_para("비고 : ")])
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"비고": "채우면안됨"})
+    assert "채우면안됨" not in _read_body_text(out)
+    assert rep.filled_count == 0
+    assert "비고" in rep.residual                  # 못 채웠으니 정직 보고
+
+
+def test_body_sibling_run_preserved(tmp_path):
+    """본문 필드 앞뒤 charPrIDRef 다른 형제 run 의 텍스트·속성 불변."""
+    p = (
+        "<hp:p>"
+        '<hp:run charPrIDRef="7"><hp:t>비고 : 참고내용</hp:t></hp:run>'
+        '<hp:run charPrIDRef="0"><hp:t>  신청인 성명 : ______</hp:t></hp:run>'
+        '<hp:run charPrIDRef="9"><hp:t>  ※주의</hp:t></hp:run>'
+        "</hp:p>"
+    )
+    src = tmp_path / "body3.hwpx"
+    _make_hwpx_body(src, [p])
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"성명": "홍길동"})
+    runs = _read_body_runs(out)
+    assert runs[0] == ("7", "비고 : 참고내용")     # 앞 형제 run 불변(산문값 보호 포함)
+    assert runs[2] == ("9", "  ※주의")             # 뒤 형제 run 불변
+    assert runs[1][0] == "0"                        # 대상 run 서식 참조 불변
+    assert "홍길동" in runs[1][1] and "______" not in runs[1][1]
+    assert rep.filled_count == 1
+
+
+def test_body_shares_used_keys_with_table(tmp_path):
+    """같은 라벨이 표 값칸 + 본문 둘 다 있으면 한 번만 채움(used_keys 공유)."""
+    src = tmp_path / "body4.hwpx"
+    _make_hwpx_body(
+        src,
+        [_body_para("신청기업명 : ______")],
+        cell_xmls=[_cellx(0, "신청기업명"), _cellx(1, "")],
+    )
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"기업명": "한번만(주)"})
+    assert _read_cell_by_col(out, 1) == "한번만(주)"   # 표 경로가 먼저 채움
+    body = _read_body_text(out)
+    assert "한번만(주)" not in body                    # 본문 재채움 없음
+    assert "______" in body                            # 본문 빈칸 그대로
+    assert rep.filled_count == 1
+
+
+def test_body_prose_colon_sentence_not_filled(tmp_path):
+    """`주의 : 아래 사항을 확인하세요` 산문(값 자리에 실제 문장) → 절대 안 건드림."""
+    src = tmp_path / "body5.hwpx"
+    _make_hwpx_body(src, [_body_para("주의 : 아래 사항을 확인하세요")])
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"주의": "채우면안됨"})
+    assert _read_body_text(out) == "주의 : 아래 사항을 확인하세요"  # 원문 그대로
+    assert rep.filled_count == 0
+    assert "주의" in rep.residual

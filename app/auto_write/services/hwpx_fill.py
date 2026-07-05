@@ -207,6 +207,44 @@ def _splice_run_text(p, fill_start: int, fill_end: int, value: str) -> bool:
     return True
 
 
+def _fill_inline_fields_in_p(p, wants, used_keys: set, filled: dict) -> bool:
+    """hp:p 하나의 인라인 필드(`라벨 : ______`)를 채운다 — 1.5(셀)·1.8(본문) 공용 커널.
+
+    '가시 빈칸'(밑줄/점/대시 채움선)만 채운다(_is_visible_blank) — '라벨 :'(콜론+공백만)
+    은 옆 값칸·산문과 구별이 안 되므로 제외(_is_fill_blank 금지). flat 은 _inline_texts
+    의 직계 hp:t 를 문서순 그대로 결합(공백 정규화 금지, AC9)하고, 역순 스플라이스로
+    앞 필드 offset 을 보존한다. 형제 run 의 텍스트·charPrIDRef 보존은 _splice_run_text
+    가 보장(대상 hp:t 부분 교체만). used_keys 는 표(1)/인라인(1.5)/체크박스(1.7)/
+    본문(1.8)이 공유한다(이중 기입 금지). 반환: 이 단락에서 하나라도 채웠으면 True.
+    """
+    ts = _inline_texts(p)
+    if not ts:
+        return False
+    flat = "".join(t.text or "" for t in ts)
+    if ":" not in flat and "：" not in flat:
+        return False
+    changed = False
+    fields = list(_iter_line_fields(flat))
+    # 역순 스플라이스: 뒤 구간부터 교체해야 앞 필드 offset 이 유효.
+    for label_raw, value_raw, f_start, f_end in reversed(fields):
+        if not _is_visible_blank(value_raw):
+            continue
+        field_key = _key(label_raw)
+        if not field_key:
+            continue
+        for want_key, lbl, val in wants:
+            if want_key in used_keys:
+                continue
+            if not _label_matches(field_key, want_key):
+                continue
+            if _splice_run_text(p, f_start, f_end, " " + str(val)):
+                filled[lbl] = str(val)
+                used_keys.add(want_key)
+                changed = True
+            break
+    return changed
+
+
 def _parse_checkbox_options(flat: str) -> tuple[str, list[tuple[int, str]]]:
     """flat 문자열에서 (인라인 라벨, [(box_pos, 옵션라벨), ...]) 을 파싱한다.
 
@@ -374,7 +412,8 @@ def _fill_section_xml(
     identity: dict[str, str],
     replacements: dict[str, str],
 ) -> tuple[bytes, dict[str, str], int, set[str]]:
-    """한 섹션 XML 에서 표 라벨-값 칸 채움 + 셀 인라인 빈칸 채움 + (보호된) 직접 치환.
+    """한 섹션 XML 에서 표 라벨-값 칸(1) + 셀 인라인 빈칸(1.5) + 체크박스(1.7) +
+    표 밖 본문 단락 인라인 빈칸(1.8) 채움 + (보호된) 직접 치환(2).
 
     반환: (새 XML 바이트, 채운 라벨→값, 치환건수, 채운 identity 라벨키 집합).
     변경이 없으면 입력 바이트를 그대로 반환한다(불필요한 재직렬화·선언 변형 회피).
@@ -426,31 +465,8 @@ def _fill_section_xml(
         for tc in root.iter(_q("tc")):
             for sub in _direct(tc, "subList"):
                 for p in _direct(sub, "p"):
-                    ts = _inline_texts(p)
-                    if not ts:
-                        continue
-                    # flat = 직계 hp:t 를 문서순 그대로 결합(공백 정규화 금지, AC9)
-                    flat = "".join(t.text or "" for t in ts)
-                    if ":" not in flat and "：" not in flat:
-                        continue
-                    fields = list(_iter_line_fields(flat))
-                    # 역순 스플라이스: 뒤 구간부터 교체해야 앞 필드 offset 이 유효.
-                    for label_raw, value_raw, f_start, f_end in reversed(fields):
-                        if not _is_visible_blank(value_raw):
-                            continue
-                        field_key = _key(label_raw)
-                        if not field_key:
-                            continue
-                        for want_key, lbl, val in wants:
-                            if want_key in used_keys:
-                                continue
-                            if not _label_matches(field_key, want_key):
-                                continue
-                            if _splice_run_text(p, f_start, f_end, " " + str(val)):
-                                filled[lbl] = str(val)
-                                used_keys.add(want_key)
-                                changed = True
-                            break
+                    if _fill_inline_fields_in_p(p, wants, used_keys, filled):
+                        changed = True
 
     # 1.7) 체크박스(□→■) 자동 체크 — 인라인/왼쪽셀 라벨 그룹을 보수적으로 마킹.
     #      표(1)·인라인(1.5)과 동일한 used_keys 를 공유한다(이중처리 금지).
@@ -491,6 +507,16 @@ def _fill_section_xml(
                             used_keys.add(want_key)
                             changed = True
                         break
+
+    # 1.8) 표 '밖' 본문 단락 인라인 필드(`라벨 : ______`) — hs:sec 직계 hp:p 만 대상.
+    #      표 셀 안 단락(hp:tc 하위)은 1.5 가 담당 — 직계 자식만 보므로 자동 배제
+    #      (중복 처리 금지). 채움 규칙은 1.5 와 동일 커널(_fill_inline_fields_in_p)
+    #      공유: 가시 빈칸만(산문 `주의 : ...`·콜론+공백만 `비고 : ` 는 절대 안 채움)·
+    #      used_keys 공유(표/인라인/체크박스와 이중 기입 금지)·형제 run 보존.
+    if wants:
+        for p in _direct(root, "p"):
+            if _fill_inline_fields_in_p(p, wants, used_keys, filled):
+                changed = True
 
     # 2) 직접 텍스트 치환 — 라벨/실값 칸은 보호(채울 수 있는 칸·본문에만 적용).
     #    lxml proxy id 재사용을 피하려 id() 집합 대신 조상(tc) 순회로 판별한다.
