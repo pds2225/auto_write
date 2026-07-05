@@ -583,3 +583,95 @@ def test_inline_cross_run_span_skipped(tmp_path):
     assert "______" in txt                       # 빈칸 그대로(미채움)
     assert rep.filled_count == 0
     assert "기업명" in rep.residual              # 정직 보고
+
+
+# --------------------------------------------------------------------------- #
+# 구조 (d): 체크박스(□→■) 자동 체크 — 정확일치·모호스킵·used_keys 공유
+# --------------------------------------------------------------------------- #
+
+
+def test_checkbox_left_label_marks_option(tmp_path):
+    """행 [라벨 | □옵션들] — 왼쪽 셀 라벨로 매칭해 값 옵션의 □ 만 ■ 로."""
+    src = tmp_path / "cb1.hwpx"
+    _make_hwpx_cells(src, [_cellx(0, "사업자형태"), _cellx(1, "□개인 □법인")])
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"사업자형태": "개인"})
+    assert _read_cell_by_col(out, 1) == "■개인 □법인"
+    assert rep.filled.get("사업자형태") == "개인"
+    assert rep.filled_count == 1
+    assert "사업자형태" not in rep.residual
+
+
+def test_checkbox_inline_label_marks_option(tmp_path):
+    """한 셀 '사업자형태 □개인 □법인' — 첫 □ 앞 텍스트가 인라인 라벨."""
+    src = tmp_path / "cb2.hwpx"
+    _make_hwpx_cells(src, [_cellx(0, "사업자형태 □개인 □법인")])
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"사업자형태": "개인"})
+    assert _read_cell_by_col(out, 0) == "사업자형태 ■개인 □법인"
+    assert rep.filled.get("사업자형태") == "개인"
+    assert rep.filled_count == 1
+
+
+def test_checkbox_exact_match_no_substring(tmp_path):
+    """'개인정보' 값이 '개인' 옵션을 부분문자열로 오체크하면 안 된다(정확일치만)."""
+    src = tmp_path / "cb3.hwpx"
+    _make_hwpx_cells(src, [_cellx(0, "사업자형태"), _cellx(1, "□개인 □법인")])
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"사업자형태": "개인정보"})
+    txt = _read_cell_by_col(out, 1)
+    assert txt == "□개인 □법인"                # 아무것도 체크 안 됨
+    assert "■" not in txt
+    assert rep.filled_count == 0
+    assert "사업자형태" in rep.residual         # 정직 보고
+
+
+def test_checkbox_no_match_preserves_all(tmp_path):
+    """값이 어느 옵션과도 일치하지 않으면 모든 □ 보존(날조 0)."""
+    src = tmp_path / "cb4.hwpx"
+    _make_hwpx_cells(src, [_cellx(0, "사업자형태"), _cellx(1, "□개인 □법인")])
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"사업자형태": "협동조합"})
+    txt = _read_cell_by_col(out, 1)
+    assert txt.count("□") == 2 and "■" not in txt
+    assert rep.filled_count == 0
+
+
+def test_checkbox_other_options_preserved(tmp_path):
+    """'법인' 체크 시 '개인' 의 □ 는 그대로 — 매칭된 한 글자만 ■."""
+    src = tmp_path / "cb5.hwpx"
+    _make_hwpx_cells(src, [_cellx(0, "사업자형태"), _cellx(1, "□개인 □법인")])
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"사업자형태": "법인"})
+    txt = _read_cell_by_col(out, 1)
+    assert txt == "□개인 ■법인"
+    assert txt.count("□") == 1 and txt.count("■") == 1
+    assert rep.filled_count == 1
+
+
+def test_checkbox_ambiguous_skipped(tmp_path):
+    """값이 옵션 2개와 매칭(모호)이면 아무 박스도 안 건드림(오체크<빈칸)."""
+    src = tmp_path / "cb6.hwpx"
+    _make_hwpx_cells(src, [_cellx(0, "동의여부"), _cellx(1, "□예 □예")])
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"동의여부": "예"})
+    txt = _read_cell_by_col(out, 1)
+    assert txt.count("□") == 2 and "■" not in txt
+    assert rep.filled_count == 0
+    assert "동의여부" in rep.residual
+
+
+def test_checkbox_shares_used_keys(tmp_path):
+    """같은 라벨이 값칸+체크박스 둘 다면 한 번만 처리(used_keys 공유·이중 금지)."""
+    src = tmp_path / "cb7.hwpx"
+    _make_hwpx_cells(src, [
+        _cellx(0, "사업자형태"),
+        _cellx(1, ""),
+        _cellx(2, "사업자형태 □개인 □법인"),
+    ])
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"사업자형태": "개인"})
+    assert _read_cell_by_col(out, 1) == "개인"     # 표 값칸 경로가 먼저 채움
+    cb = _read_cell_by_col(out, 2)
+    assert "■" not in cb and "□개인" in cb         # 체크박스 재처리 없음
+    assert rep.filled_count == 1

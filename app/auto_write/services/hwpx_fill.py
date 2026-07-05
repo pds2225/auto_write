@@ -48,12 +48,16 @@ from typing import Any, Optional
 from lxml import etree
 
 from .cross_form_autofill import (
+    _CHECK_MARK,
+    _EMPTY_BOX_RE,
     _cluster_rep,
     _is_noise_label,
     _is_obvious_placeholder,
     _is_visible_blank,
     _iter_line_fields,
     _key,
+    _normalize_choice,
+    _option_text,
 )
 
 # OWPML 단락 네임스페이스(본문/표/텍스트 전부 hp:).
@@ -201,6 +205,58 @@ def _splice_run_text(p, fill_start: int, fill_end: int, value: str) -> bool:
     cur = start_t.text or ""
     start_t.text = cur[:start_off] + value + cur[end_off:]
     return True
+
+
+def _parse_checkbox_options(flat: str) -> tuple[str, list[tuple[int, str]]]:
+    """flat 문자열에서 (인라인 라벨, [(box_pos, 옵션라벨), ...]) 을 파싱한다.
+
+    옵션 = 빈 체크박스(□류, _EMPTY_BOX_RE) 1글자 + 그 뒤 텍스트(다음 빈 박스
+    또는 끝까지)의 라벨. 인라인 라벨 = 첫 박스 '앞' 텍스트(없으면 "").
+    이미 체크된 박스(■/☑ 등)는 옵션으로 세지 않는다 → 재실행이 안 건드림(멱등).
+    box_pos 는 flat offset — _splice_run_text 와 동일한 _inline_texts 결합 기준.
+    """
+    boxes = list(_EMPTY_BOX_RE.finditer(flat))
+    if not boxes:
+        return "", []
+    inline_label = flat[: boxes[0].start()].strip()
+    options: list[tuple[int, str]] = []
+    for i, m in enumerate(boxes):
+        end = boxes[i + 1].start() if i + 1 < len(boxes) else len(flat)
+        options.append((m.start(), _option_text(flat[m.end():end])))
+    return inline_label, options
+
+
+def _left_label_text(tc) -> str:
+    """같은 행에서 tc 보다 colAddr 이 작은 셀 중 '가장 가까운' 라벨칸 텍스트.
+
+    빈칸·체크박스 옵션칸(□ 포함)은 라벨로 보지 않고 건너뛴다. cellAddr 미지정
+    양식은 행 내 위치 인덱스로 폴백한다. 라벨칸이 없으면 ""(그룹 스킵 신호).
+    """
+    row = _row_of(tc)
+    if row is None:
+        return ""
+    cells = _direct(row, "tc")
+    my_addr = _cell_addr(tc)
+    if my_addr is not None:
+        lefts = []
+        for c in cells:
+            addr = _cell_addr(c)
+            if addr is not None and addr < my_addr:
+                lefts.append((addr, c))
+        lefts.sort(key=lambda pair: -pair[0])   # 가까운(큰 colAddr) 순
+        candidates = [c for _, c in lefts]
+    else:
+        try:
+            idx = cells.index(tc)
+        except ValueError:
+            return ""
+        candidates = list(reversed(cells[:idx]))
+    for c in candidates:
+        txt = _cell_text(c)
+        if not txt or _EMPTY_BOX_RE.search(txt):
+            continue                             # 빈칸/옵션칸은 라벨이 아님
+        return txt
+    return ""
 
 
 def _cell_is_fillable(tc) -> bool:
@@ -395,6 +451,46 @@ def _fill_section_xml(
                                 used_keys.add(want_key)
                                 changed = True
                             break
+
+    # 1.7) 체크박스(□→■) 자동 체크 — 인라인/왼쪽셀 라벨 그룹을 보수적으로 마킹.
+    #      표(1)·인라인(1.5)과 동일한 used_keys 를 공유한다(이중처리 금지).
+    #      값↔옵션은 _normalize_choice 환원 후 **정확일치가 정확히 1개**일 때만 체크
+    #      (부분문자열 금지 — '개인정보'가 '개인'을 체크하면 안 됨. 0개/2개+ = 모호 → 스킵).
+    #      ■ 는 □ 와 같은 1글자라 splice 후에도 flat offset 이 불변이고, 한 그룹당
+    #      최대 1개 박스만 마킹(break)하므로 역순 처리 없이도 offset 이 유효하다.
+    if wants:
+        for tc in root.iter(_q("tc")):
+            for sub in _direct(tc, "subList"):
+                for p in _direct(sub, "p"):
+                    ts = _inline_texts(p)
+                    if not ts:
+                        continue
+                    flat = "".join(t.text or "" for t in ts)
+                    inline_label, options = _parse_checkbox_options(flat)
+                    if not options:
+                        continue
+                    # 그룹 라벨: 첫 □ 앞 텍스트(인라인) 우선, 비면 왼쪽 이웃 셀.
+                    group_key = _key(inline_label or _left_label_text(tc))
+                    if not group_key:
+                        continue
+                    for want_key, lbl, val in wants:
+                        if want_key in used_keys:
+                            continue
+                        if not _label_matches(group_key, want_key):
+                            continue
+                        vnorm = _normalize_choice(_key(str(val)))
+                        hits = [
+                            pos for pos, opt_label in options
+                            if _key(opt_label)
+                            and _normalize_choice(_key(opt_label)) == vnorm
+                        ]
+                        if len(hits) != 1:
+                            break   # 0개/다수 매칭 → 모호, 아무 박스도 안 건드림
+                        if _splice_run_text(p, hits[0], hits[0] + 1, _CHECK_MARK):
+                            filled[lbl] = str(val)
+                            used_keys.add(want_key)
+                            changed = True
+                        break
 
     # 2) 직접 텍스트 치환 — 라벨/실값 칸은 보호(채울 수 있는 칸·본문에만 적용).
     #    lxml proxy id 재사용을 피하려 id() 집합 대신 조상(tc) 순회로 판별한다.
