@@ -264,6 +264,20 @@ def _parse_checkbox_options(flat: str) -> tuple[str, list[tuple[int, str]]]:
     return inline_label, options
 
 
+_OPT_TRAIL_PUNCT = ",.;:·"
+
+
+def _opt_key(s: str) -> str:
+    """체크박스 옵션/값 비교용 키 — ``_key`` 후 꼬리 구두점 제거.
+
+    실측(008 서식): 옵션 `자가(소유자   ),` 가 ``_key`` 정규화 후에도 `자가,`
+    처럼 꼬리 콤마가 남아 값 `자가` 와 정확일치에 실패했다(보수 스킵 → 미채움).
+    꼬리 구두점(콤마·마침표·세미콜론·콜론·가운뎃점)만 벗긴다 — 부분문자열
+    매칭은 여전히 금지(`개인정보보호,` → `개인정보보호` ≠ `개인`).
+    """
+    return _key(s).rstrip(_OPT_TRAIL_PUNCT)
+
+
 def _left_label_text(tc) -> str:
     """같은 행에서 tc 보다 colAddr 이 작은 셀 중 '가장 가까운' 라벨칸 텍스트.
 
@@ -470,7 +484,8 @@ def _fill_section_xml(
 
     # 1.7) 체크박스(□→■) 자동 체크 — 인라인/왼쪽셀 라벨 그룹을 보수적으로 마킹.
     #      표(1)·인라인(1.5)과 동일한 used_keys 를 공유한다(이중처리 금지).
-    #      값↔옵션은 _normalize_choice 환원 후 **정확일치가 정확히 1개**일 때만 체크
+    #      값↔옵션은 _opt_key(꼬리 구두점 제거)·_normalize_choice 환원 후
+    #      **정확일치가 정확히 1개**일 때만 체크
     #      (부분문자열 금지 — '개인정보'가 '개인'을 체크하면 안 됨. 0개/2개+ = 모호 → 스킵).
     #      ■ 는 □ 와 같은 1글자라 splice 후에도 flat offset 이 불변이고, 한 그룹당
     #      최대 1개 박스만 마킹(break)하므로 역순 처리 없이도 offset 이 유효하다.
@@ -494,11 +509,11 @@ def _fill_section_xml(
                             continue
                         if not _label_matches(group_key, want_key):
                             continue
-                        vnorm = _normalize_choice(_key(str(val)))
+                        vnorm = _normalize_choice(_opt_key(str(val)))
                         hits = [
                             pos for pos, opt_label in options
-                            if _key(opt_label)
-                            and _normalize_choice(_key(opt_label)) == vnorm
+                            if _opt_key(opt_label)
+                            and _normalize_choice(_opt_key(opt_label)) == vnorm
                         ]
                         if len(hits) != 1:
                             break   # 0개/다수 매칭 → 모호, 아무 박스도 안 건드림
