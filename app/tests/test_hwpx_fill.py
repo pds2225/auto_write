@@ -677,6 +677,44 @@ def test_checkbox_shares_used_keys(tmp_path):
     assert rep.filled_count == 1
 
 
+def test_checkbox_trailing_punct_option_matched(tmp_path):
+    """실측(008 서식): 옵션 꼬리 구두점 — `□ 자가(소유자   ),` 이 값 `자가` 와 일치.
+
+    `_key` 정규화 후에도 꼬리 콤마가 남아(`자가,`) 정확일치가 실패하던 갭.
+    꼬리 구두점(,.;:·)을 벗긴 뒤 정확일치해야 한다.
+    """
+    src = tmp_path / "cb8.hwpx"
+    _make_hwpx_cells(src, [
+        _cellx(0, "사업장구분"),
+        _cellx(1, "□ 자가(소유자   ),  □ 임차(전세, 월세)"),
+    ])
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"사업장구분": "자가"})
+    txt = _read_cell_by_col(out, 1)
+    assert txt == "■ 자가(소유자   ),  □ 임차(전세, 월세)"   # ■ 1개·나머지 보존
+    assert rep.filled.get("사업장구분") == "자가"
+    assert rep.filled_count == 1
+    assert "사업장구분" not in rep.residual
+
+
+def test_checkbox_trailing_punct_still_no_substring(tmp_path):
+    """꼬리 구두점 제거가 부분문자열 매칭을 부활시키면 안 된다.
+
+    옵션 `개인정보보호,` → rstrip 후 `개인정보보호` ≠ 값 `개인` → 체크 금지.
+    """
+    src = tmp_path / "cb9.hwpx"
+    _make_hwpx_cells(src, [
+        _cellx(0, "사업자형태"),
+        _cellx(1, "□개인정보보호, □법인"),
+    ])
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"사업자형태": "개인"})
+    txt = _read_cell_by_col(out, 1)
+    assert txt.count("□") == 2 and "■" not in txt   # 아무것도 체크 안 됨
+    assert rep.filled_count == 0
+    assert "사업자형태" in rep.residual              # 정직 보고
+
+
 # --------------------------------------------------------------------------- #
 # 구조 (b): 표 '밖' 본문 단락 인라인 빈칸(`라벨 : ______`) 채움 — 1.5 와 동일 커널
 # (hs:sec 직계 hp:p 만 · 가시 빈칸만 · used_keys 공유 · 형제 run 보존 · 산문 보호)
