@@ -18,12 +18,13 @@ def _q(tag: str) -> str:
 
 
 def _set_cell(tc, value: str, *, char_pr: str | None = None) -> None:
-    """칸 텍스트만 교체. 원본 단락·런 속성 유지(한글 열림 안정성)."""
+    """칸 텍스트만 교체. 원본 단락·런 속성을 최대한 유지하되 잔여 t 제거."""
     sub = tc.find(_q("subList"))
     if sub is None:
         return
-    p = next(sub.iter(_q("p")), None)
-    if p is None:
+    # 칸에 단락이 여러 개면 첫 단락만 남김(중복 글자 방지)
+    paras = list(sub.findall(_q("p")))
+    if not paras:
         p = etree.SubElement(sub, _q("p"))
         p.set("id", "2147483648")
         p.set("paraPrIDRef", "17")
@@ -31,17 +32,29 @@ def _set_cell(tc, value: str, *, char_pr: str | None = None) -> None:
         p.set("pageBreak", "0")
         p.set("columnBreak", "0")
         p.set("merged", "0")
-    run = next(p.iter(_q("run")), None)
-    if run is None:
+        paras = [p]
+    for extra in paras[1:]:
+        sub.remove(extra)
+    p = paras[0]
+    runs = list(p.findall(_q("run")))
+    if not runs:
         run = etree.SubElement(p, _q("run"))
         run.set("charPrIDRef", char_pr or "51")
-    elif char_pr is not None:
-        run.set("charPrIDRef", char_pr)
-    t = next(run.iter(_q("t")), None)
-    if t is None:
-        t = etree.SubElement(run, _q("t"))
+        runs = [run]
+    # 첫 런만 남기고 나머지 run 제거(텍스트가 여러 t/run에 쪼개진 경우 잔여 방지)
+    keep = runs[0]
+    if char_pr is not None:
+        keep.set("charPrIDRef", char_pr)
+    for extra in runs[1:]:
+        # 표를 담은 run은 건드리지 않음
+        if extra.find(_q("tbl")) is not None or extra.find(_q("pic")) is not None:
+            continue
+        p.remove(extra)
+    for child in list(keep):
+        if child.tag == _q("t"):
+            keep.remove(child)
+    t = etree.SubElement(keep, _q("t"))
     t.text = value
-    # 줄배치 메타가 비면 한글이 거부하는 경우가 있어 최소 lineseg 유지
     lsa = p.find(_q("linesegarray"))
     if lsa is None:
         lsa = etree.SubElement(p, _q("linesegarray"))
@@ -313,60 +326,6 @@ def _patch_summary_and_cleanup(section_path: Path) -> list[str]:
     return notes
 
 
-def _set_cell(tc, value: str, *, char_pr: str | None = None) -> None:
-    """칸 텍스트만 교체. 원본 단락·런 속성을 최대한 유지하되 잔여 t 제거."""
-    sub = tc.find(_q("subList"))
-    if sub is None:
-        return
-    # 칸에 단락이 여러 개면 첫 단락만 남김(중복 글자 방지)
-    paras = list(sub.findall(_q("p")))
-    if not paras:
-        p = etree.SubElement(sub, _q("p"))
-        p.set("id", "2147483648")
-        p.set("paraPrIDRef", "17")
-        p.set("styleIDRef", "0")
-        p.set("pageBreak", "0")
-        p.set("columnBreak", "0")
-        p.set("merged", "0")
-        paras = [p]
-    for extra in paras[1:]:
-        sub.remove(extra)
-    p = paras[0]
-    runs = list(p.findall(_q("run")))
-    if not runs:
-        run = etree.SubElement(p, _q("run"))
-        run.set("charPrIDRef", char_pr or "51")
-        runs = [run]
-    # 첫 런만 남기고 나머지 run 제거(텍스트가 여러 t/run에 쪼개진 경우 잔여 방지)
-    keep = runs[0]
-    if char_pr is not None:
-        keep.set("charPrIDRef", char_pr)
-    for extra in runs[1:]:
-        # 표를 담은 run은 건드리지 않음
-        if extra.find(_q("tbl")) is not None or extra.find(_q("pic")) is not None:
-            continue
-        p.remove(extra)
-    for child in list(keep):
-        if child.tag == _q("t"):
-            keep.remove(child)
-    t = etree.SubElement(keep, _q("t"))
-    t.text = value
-    lsa = p.find(_q("linesegarray"))
-    if lsa is None:
-        lsa = etree.SubElement(p, _q("linesegarray"))
-    if next(lsa.iter(_q("lineseg")), None) is None:
-        ls = etree.SubElement(lsa, _q("lineseg"))
-        ls.set("textpos", "0")
-        ls.set("vertpos", "0")
-        ls.set("vertsize", "1000")
-        ls.set("textheight", "1000")
-        ls.set("baseline", "850")
-        ls.set("spacing", "600")
-        ls.set("horzpos", "0")
-        ls.set("horzsize", "1000")
-        ls.set("flags", "393216")
-
-
 def _bump_row_addrs(tbl, from_row: int, delta: int = 1) -> None:
     for tr in tbl.findall(_q("tr")):
         for tc in tr.findall(_q("tc")):
@@ -483,7 +442,31 @@ def _verify_hwpx(path: Path) -> tuple[bool, str]:
             ids = [tbl.get("id") for tbl in root.iter(_q("tbl"))]
             if len(ids) != len(set(ids)):
                 return False, f"표 ID 중복: {ids}"
-            return True, f"표 {consult_rows}건, 실적총괄표 OK, 그림 0장, 표ID {len(ids)}개"
+            first = next(root.iter(_q("tbl")))
+            actual_rows = len(list(first.findall(_q("tr"))))
+            declared = int(first.get("rowCnt") or "0")
+            if actual_rows != declared:
+                return False, f"상단표 rowCnt 불일치: 선언 {declared} / 실제 {actual_rows}"
+            # rowAddr 중복·역전 검사
+            seen_addrs: set[tuple[int, int]] = set()
+            for tr in first.findall(_q("tr")):
+                for tc in tr.findall(_q("tc")):
+                    addr = tc.find(_q("cellAddr"))
+                    if addr is None:
+                        continue
+                    key = (int(addr.get("rowAddr", "0")), int(addr.get("colAddr", "0")))
+                    if key in seen_addrs:
+                        return False, f"상단표 cellAddr 중복: {key}"
+                    seen_addrs.add(key)
+            top_text = "".join(t.text or "" for t in first.iter(_q("t")))
+            if "경영분야분야" in top_text:
+                return False, "경영분야 라벨 중복 잔존"
+            if "경영분야" not in top_text:
+                return False, "경영분야 미반영"
+            return True, (
+                f"표 {consult_rows}건, 실적총괄표 OK, 그림 0장, "
+                f"표ID {len(ids)}개, 상단행 {actual_rows}"
+            )
     except Exception as exc:
         return False, str(exc)
 
