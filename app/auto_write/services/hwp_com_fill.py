@@ -294,6 +294,7 @@ def fill_hwp_via_hwpx(
     *,
     identity: Optional[dict[str, str]] = None,
     replacements: Optional[dict[str, str]] = None,
+    check_options: Optional[list[str]] = None,
     use_com: bool = True,
 ) -> HwpPipelineReport:
     """표 양식 .hwp 를 한 번에 채운다: .hwp →(한글 COM) .hwpx → 표 칸 채움 →(COM) .hwp.
@@ -307,6 +308,7 @@ def fill_hwp_via_hwpx(
         out_hwp: 출력 .hwp/.hwpx. out==in 이면 ValueError.
         identity: 라벨→값(동의어·장식 라벨 자동 매칭).
         replacements: 직접 치환 {예시토큰: 실제값}(선택).
+        check_options: hp:checkBtn 폼 컨트롤로 체크할 옵션 라벨 목록(선택).
         use_com: False 면 COM 시도 없이 안내만(드라이런).
 
     Returns:
@@ -317,6 +319,7 @@ def fill_hwp_via_hwpx(
     report = HwpPipelineReport(input=str(src), output=str(dst))
     identity = dict(identity or {})
     replacements = dict(replacements or {})
+    check_options = list(check_options or [])
 
     # 1) 안전장치
     if not src.exists():
@@ -354,11 +357,14 @@ def fill_hwp_via_hwpx(
 
         # 3) HWPX 표 칸 채움(양식 보존 검증된 경로)
         filled = work / "filled.hwpx"
-        fr = fill_hwpx(mid, filled, identity=identity, replacements=replacements)
+        fr = fill_hwpx(mid, filled, identity=identity, replacements=replacements,
+                       check_options=check_options)
         report.filled = dict(fr.filled)
         report.filled_count = fr.filled_count
         report.replaced = fr.replaced
         report.residual = list(fr.residual)
+        if fr.checked:
+            report.filled.update({f"[체크] {o}": "CHECKED" for o in fr.checked})
         report.notes.extend(fr.notes)
 
         # 4) 구조 보존 측정(채움 전/후 표·셀 수 동일해야 함)

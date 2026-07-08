@@ -848,3 +848,433 @@ def test_body_prose_colon_sentence_not_filled(tmp_path):
     assert _read_body_text(out) == "주의 : 아래 사항을 확인하세요"  # 원문 그대로
     assert rep.filled_count == 0
     assert "주의" in rep.residual
+
+
+# --------------------------------------------------------------------------- #
+# 구조 (c): 폼 컨트롤 보호 + 유색 예시체 검정화 + hp:checkBtn 체크
+# (실측 회귀 — 수원 멘토위원 신청서: ①채운 값이 파란 예시체 charPr 를 승계
+#  ②checkBtn 폼 컨트롤 칸에 ■ 텍스트가 들어가 ☐■ 이중 표시)
+# --------------------------------------------------------------------------- #
+
+_HH = "http://www.hancom.co.kr/hwpml/2011/head"
+
+# charPr 0=검정, 34=파랑(양식 예시체 — 실측 파일과 같은 id) 인 실제형 헤더.
+_HEADER_COLOR_XML = (
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    f'<hh:head xmlns:hh="{_HH}"><hh:refList><hh:charProperties itemCnt="2">'
+    '<hh:charPr id="0" textColor="#000000" height="1000"/>'
+    '<hh:charPr id="34" textColor="#0000FF" height="1000"/>'
+    "</hh:charProperties></hh:refList></hh:head>"
+).encode("utf-8")
+
+
+def _tc_runs(col: int, row: int, runs_xml: str) -> str:
+    """run XML 을 직접 지정하는 셀(서식·컨트롤 픽스처용)."""
+    return (
+        f'<hp:tc><hp:cellAddr colAddr="{col}" rowAddr="{row}"/>'
+        f'<hp:cellSpan colSpan="1" rowSpan="1"/>'
+        f"<hp:subList><hp:p>{runs_xml}</hp:p></hp:subList></hp:tc>"
+    )
+
+
+def _make_hwpx_color(path: Path, rows_xml: str,
+                     header: bytes = _HEADER_COLOR_XML) -> None:
+    """색 있는 헤더 + 임의 표 행들을 담은 최소 HWPX 픽스처."""
+    body = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f'<hs:sec xmlns:hp="{_HP}" xmlns:hs="{_HS}">'
+        '<hp:p><hp:run charPrIDRef="0">'
+        f'<hp:tbl rowCnt="9" colCnt="9">{rows_xml}</hp:tbl>'
+        "</hp:run></hp:p></hs:sec>"
+    ).encode("utf-8")
+    with zipfile.ZipFile(path, "w") as z:
+        zi = zipfile.ZipInfo("mimetype")
+        zi.compress_type = zipfile.ZIP_STORED
+        z.writestr(zi, _MIMETYPE)
+        z.writestr("Contents/header.xml", header)
+        z.writestr("Contents/section0.xml", body)
+
+
+def _text_color_of(path: Path, text: str) -> str | None:
+    """text 를 담은 run 의 charPr textColor 를 출력 헤더에서 해석."""
+    from lxml import etree
+
+    with zipfile.ZipFile(path) as z:
+        hroot = etree.fromstring(z.read("Contents/header.xml"))
+        root = etree.fromstring(z.read("Contents/section0.xml"))
+    colors = {
+        el.get("id"): el.get("textColor")
+        for el in hroot.iter()
+        if str(el.tag).rsplit("}", 1)[-1] == "charPr"
+    }
+    q = lambda t: f"{{{_HP}}}{t}"  # noqa: E731
+    for run in root.iter(q("run")):
+        for t in run:
+            if t.tag == q("t") and (t.text or "").strip() == text:
+                return colors.get(run.get("charPrIDRef"))
+    return None
+
+
+def _checkbtn_states(path: Path) -> dict[str, str]:
+    from lxml import etree
+
+    with zipfile.ZipFile(path) as z:
+        root = etree.fromstring(z.read("Contents/section0.xml"))
+    q = lambda t: f"{{{_HP}}}{t}"  # noqa: E731
+    return {b.get("name"): b.get("value") for b in root.iter(q("checkBtn"))}
+
+
+def test_blue_placeholder_fill_becomes_black(tmp_path):
+    """파란 예시체 플레이스홀더 교체 → 값 run 은 '검정 클론' charPr 로.
+
+    원본 파란 charPr(34)는 불변(양식 다른 부분 보존), itemCnt 는 +1.
+    """
+    rows = "<hp:tr>" + _tc_runs(
+        0, 0, '<hp:run charPrIDRef="0"><hp:t>사업자등록번호</hp:t></hp:run>'
+    ) + _tc_runs(
+        1, 0, '<hp:run charPrIDRef="34"><hp:t>000-00-00000</hp:t></hp:run>'
+    ) + "</hp:tr>"
+    src = tmp_path / "blue.hwpx"
+    _make_hwpx_color(src, rows)
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"사업자등록번호": "123-45-67890"})
+    assert rep.filled.get("사업자등록번호") == "123-45-67890"
+    assert _text_color_of(out, "123-45-67890") == "#000000"   # 값은 검정
+    from lxml import etree
+    with zipfile.ZipFile(out) as z:
+        hroot = etree.fromstring(z.read("Contents/header.xml"))
+    charprs = {
+        el.get("id"): el.get("textColor")
+        for el in hroot.iter()
+        if str(el.tag).rsplit("}", 1)[-1] == "charPr"
+    }
+    assert charprs["34"] == "#0000FF"        # 원본 예시체 불변
+    assert charprs["35"] == "#000000"        # 검정 클론 추가
+    props = next(el for el in hroot.iter()
+                 if str(el.tag).rsplit("}", 1)[-1] == "charProperties")
+    assert props.get("itemCnt") == "3"       # 개수 정합
+
+
+def test_empty_cell_in_blue_row_gets_black(tmp_path):
+    """행에 파란 run 뿐인 빈 칸 채움 → 승계도 검정 클론(유색 상속 차단)."""
+    rows = "<hp:tr>" + _tc_runs(
+        0, 0, '<hp:run charPrIDRef="34"><hp:t>연락처</hp:t></hp:run>'
+    ) + _tc_runs(1, 0, '<hp:run charPrIDRef="34"/>') + "</hp:tr>"
+    src = tmp_path / "bluerow.hwpx"
+    _make_hwpx_color(src, rows)
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"연락처": "010-1234-5678"})
+    assert rep.filled.get("연락처") == "010-1234-5678"
+    assert _text_color_of(out, "010-1234-5678") == "#000000"
+    assert _text_color_of(out, "연락처") == "#0000FF"   # 라벨(양식)은 그대로
+
+
+def test_force_black_off_keeps_example_style(tmp_path):
+    """force_black=False 옵트아웃 → 종전 동작(예시체 그대로 승계)."""
+    rows = "<hp:tr>" + _tc_runs(
+        0, 0, '<hp:run charPrIDRef="0"><hp:t>사업자등록번호</hp:t></hp:run>'
+    ) + _tc_runs(
+        1, 0, '<hp:run charPrIDRef="34"><hp:t>000-00-00000</hp:t></hp:run>'
+    ) + "</hp:tr>"
+    src = tmp_path / "blue2.hwpx"
+    _make_hwpx_color(src, rows)
+    out = tmp_path / "out.hwpx"
+    fill_hwpx(src, out, identity={"사업자등록번호": "123-45-67890"},
+              force_black=False)
+    assert _text_color_of(out, "123-45-67890") == "#0000FF"
+
+
+def test_form_control_cell_not_text_filled(tmp_path):
+    """checkBtn 폼 컨트롤이 든 값칸 → 텍스트 기입 금지(☐■ 이중 표시 방지)."""
+    rows = "<hp:tr>" + _tc_runs(
+        0, 0, '<hp:run charPrIDRef="0"><hp:t>연락처</hp:t></hp:run>'
+    ) + _tc_runs(
+        1, 0,
+        '<hp:run charPrIDRef="0">'
+        '<hp:checkBtn name="CB1" value="UNCHECKED"/><hp:t/></hp:run>',
+    ) + "</hp:tr>"
+    src = tmp_path / "ctl.hwpx"
+    _make_hwpx_color(src, rows)
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"연락처": "010-1234-5678"})
+    assert rep.filled_count == 0
+    assert "연락처" in rep.residual                 # 못 채움 정직 보고
+    assert _text_color_of(out, "010-1234-5678") is None   # 어디에도 미기입
+    assert _checkbtn_states(out) == {"CB1": "UNCHECKED"}  # 컨트롤 불변
+
+
+def test_check_options_checks_unique_label(tmp_path):
+    """check_options: 오른쪽 인접 라벨이 정확일치하는 컨트롤 1개만 CHECKED."""
+    rows = (
+        "<hp:tr>"
+        + _tc_runs(0, 0, '<hp:run charPrIDRef="0">'
+                         '<hp:checkBtn name="CB_A" value="UNCHECKED"/><hp:t/></hp:run>')
+        + _tc_runs(1, 0, '<hp:run charPrIDRef="0"><hp:t>경영분야</hp:t></hp:run>')
+        + "</hp:tr><hp:tr>"
+        + _tc_runs(0, 1, '<hp:run charPrIDRef="0">'
+                         '<hp:checkBtn name="CB_B" value="UNCHECKED"/><hp:t/></hp:run>')
+        + _tc_runs(1, 1, '<hp:run charPrIDRef="0"><hp:t>기술분야</hp:t></hp:run>')
+        + "</hp:tr>"
+    )
+    src = tmp_path / "cbtn.hwpx"
+    _make_hwpx_color(src, rows)
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, check_options=["경영분야"])
+    assert rep.ok
+    assert rep.checked == ["경영분야"]
+    assert rep.check_residual == []
+    states = _checkbtn_states(out)
+    assert states == {"CB_A": "CHECKED", "CB_B": "UNCHECKED"}
+    # ■ 텍스트는 어디에도 안 들어감(속성 체크 방식)
+    with zipfile.ZipFile(out) as z:
+        assert "■".encode("utf-8") not in z.read("Contents/section0.xml")
+
+
+def test_check_options_ambiguous_label_skipped(tmp_path):
+    """같은 옵션 라벨이 2곳(예: '기타'가 대분류·멘토분야 양쪽) → 모호, 아무것도 안 켬."""
+    rows = (
+        "<hp:tr>"
+        + _tc_runs(0, 0, '<hp:run charPrIDRef="0">'
+                         '<hp:checkBtn name="CB_1" value="UNCHECKED"/><hp:t/></hp:run>')
+        + _tc_runs(1, 0, '<hp:run charPrIDRef="0"><hp:t>기타</hp:t></hp:run>')
+        + "</hp:tr><hp:tr>"
+        + _tc_runs(0, 1, '<hp:run charPrIDRef="0">'
+                         '<hp:checkBtn name="CB_2" value="UNCHECKED"/><hp:t/></hp:run>')
+        + _tc_runs(1, 1, '<hp:run charPrIDRef="0"><hp:t>기타</hp:t></hp:run>')
+        + "</hp:tr>"
+    )
+    src = tmp_path / "cbtn2.hwpx"
+    _make_hwpx_color(src, rows)
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, check_options=["기타"])
+    assert rep.checked == []
+    assert rep.check_residual == ["기타"]
+    assert set(_checkbtn_states(out).values()) == {"UNCHECKED"}
+
+
+# --------------------------------------------------------------------------- #
+# 구조 (d): 적대검증(멀티에이전트) 확정 결함 회귀 — 문서 전체 유일성·셀당 1컨트롤·
+# 라벨 규칙·멱등·치환 recall/검정화·클론 하위 색·폴백 '0'·괄호/동의어 매칭
+# --------------------------------------------------------------------------- #
+
+
+def _make_hwpx_sections(path: Path, sections_rows: list[str],
+                        header: bytes = _HEADER_COLOR_XML) -> None:
+    """섹션 여러 개(section0..N)를 가진 최소 HWPX 픽스처."""
+    with zipfile.ZipFile(path, "w") as z:
+        zi = zipfile.ZipInfo("mimetype")
+        zi.compress_type = zipfile.ZIP_STORED
+        z.writestr(zi, _MIMETYPE)
+        z.writestr("Contents/header.xml", header)
+        for i, rows in enumerate(sections_rows):
+            body = (
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                f'<hs:sec xmlns:hp="{_HP}" xmlns:hs="{_HS}">'
+                '<hp:p><hp:run charPrIDRef="0">'
+                f'<hp:tbl rowCnt="9" colCnt="9">{rows}</hp:tbl>'
+                "</hp:run></hp:p></hs:sec>"
+            ).encode("utf-8")
+            z.writestr(f"Contents/section{i}.xml", body)
+
+
+def _checkbtn_states_all(path: Path) -> dict[str, str]:
+    """모든 섹션의 checkBtn name→value."""
+    from lxml import etree
+
+    q = lambda t: f"{{{_HP}}}{t}"  # noqa: E731
+    states: dict[str, str] = {}
+    with zipfile.ZipFile(path) as z:
+        for n in z.namelist():
+            if not (n.startswith("Contents/section") and n.endswith(".xml")):
+                continue
+            root = etree.fromstring(z.read(n))
+            for b in root.iter(q("checkBtn")):
+                states[b.get("name")] = b.get("value")
+    return states
+
+
+def _ctrl_cell(col: int, row: int, name: str, value: str = "UNCHECKED",
+               caption: str = "") -> str:
+    cap = f"<hp:t>{caption}</hp:t>" if caption else "<hp:t/>"
+    return _tc_runs(col, row, f'<hp:run charPrIDRef="0">'
+                              f'<hp:checkBtn name="{name}" value="{value}"/>{cap}</hp:run>')
+
+
+def _label_cell(col: int, row: int, text: str) -> str:
+    return _tc_runs(col, row, f'<hp:run charPrIDRef="0"><hp:t>{text}</hp:t></hp:run>')
+
+
+def test_check_cross_section_ambiguity_skipped(tmp_path):
+    """[D1] 같은 라벨이 섹션0·섹션1에 각 1개(문서 전체 2개=모호) → 아무것도 안 켬."""
+    s0 = "<hp:tr>" + _ctrl_cell(0, 0, "CB_S0") + _label_cell(1, 0, "기타") + "</hp:tr>"
+    s1 = "<hp:tr>" + _ctrl_cell(0, 0, "CB_S1") + _label_cell(1, 0, "기타") + "</hp:tr>"
+    src = tmp_path / "ms.hwpx"
+    _make_hwpx_sections(src, [s0, s1])
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, check_options=["기타"])
+    assert rep.checked == []
+    assert rep.check_residual == ["기타"]
+    assert set(_checkbtn_states_all(out).values()) == {"UNCHECKED"}
+
+
+def test_check_multi_control_cell_skipped(tmp_path):
+    """[D2] 한 셀에 checkBtn 2개(유/무 스택) → 어느 박스인지 모호, 안 켬."""
+    rows = ("<hp:tr>" + _tc_runs(
+        0, 0,
+        '<hp:run charPrIDRef="0"><hp:checkBtn name="CB_Y" value="UNCHECKED"/>'
+        '<hp:checkBtn name="CB_N" value="UNCHECKED"/><hp:t/></hp:run>',
+    ) + _label_cell(1, 0, "수출유무") + "</hp:tr>")
+    src = tmp_path / "stack.hwpx"
+    _make_hwpx_color(src, rows)
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, check_options=["수출유무"])
+    assert rep.checked == []
+    assert rep.check_residual == ["수출유무"]
+    assert set(_checkbtn_states_all(out).values()) == {"UNCHECKED"}
+
+
+def test_check_same_cell_caption_matches_own_box(tmp_path):
+    """[D3] 같은셀-캡션 배치([박스+경영분야][박스+기술분야]) → 자기 셀 박스를 켠다.
+
+    종전 '오른쪽 이웃=라벨' 단정은 '기술분야' 요청에 경영분야 박스를 켰다(오체크).
+    """
+    rows = ("<hp:tr>" + _ctrl_cell(0, 0, "CB_MGMT", caption="경영분야")
+            + _ctrl_cell(1, 0, "CB_TECH", caption="기술분야") + "</hp:tr>")
+    src = tmp_path / "caption.hwpx"
+    _make_hwpx_color(src, rows)
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, check_options=["기술분야"])
+    assert rep.checked == ["기술분야"]
+    states = _checkbtn_states_all(out)
+    assert states == {"CB_MGMT": "UNCHECKED", "CB_TECH": "CHECKED"}
+
+
+def test_check_already_checked_idempotent(tmp_path):
+    """[D4] 유일 후보가 이미 CHECKED → 변경·checked 보고 없음(멱등)·재직렬화 없음."""
+    rows = ("<hp:tr>" + _ctrl_cell(0, 0, "CB1", value="CHECKED")
+            + _label_cell(1, 0, "동의함") + "</hp:tr>")
+    src = tmp_path / "idem.hwpx"
+    _make_hwpx_color(src, rows)
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, check_options=["동의함"])
+    assert rep.checked == []
+    assert rep.check_residual == []            # 처리는 됨(잔여 아님)
+    assert rep.sections_changed == 0           # 재직렬화 없음
+    assert any("이미 체크" in n for n in rep.notes)
+    assert _checkbtn_states_all(out) == {"CB1": "CHECKED"}
+
+
+def test_replacement_allowed_in_control_cell(tmp_path):
+    """[D5] 컨트롤 옆 같은 셀의 예시토큰 치환은 종전대로 허용(recall 보존)."""
+    rows = ("<hp:tr>" + _tc_runs(
+        0, 0,
+        '<hp:run charPrIDRef="0"><hp:checkBtn name="CB1" value="UNCHECKED"/><hp:t/></hp:run>'
+        '<hp:run charPrIDRef="0"><hp:t>000-00-00000</hp:t></hp:run>',
+    ) + "</hp:tr>")
+    src = tmp_path / "repl_ctl.hwpx"
+    _make_hwpx_color(src, rows)
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, replacements={"000-00-00000": "123-45-67890"})
+    assert rep.replaced == 1
+    assert _text_color_of(out, "123-45-67890") is not None   # 치환 반영됨
+    assert _checkbtn_states_all(out) == {"CB1": "UNCHECKED"}  # 컨트롤 불변
+
+
+def test_black_clone_normalizes_underline_and_shade(tmp_path):
+    """[D6] 검정 클론은 밑줄색·형광배경(shadeColor)도 정규화 — '검정 글자+파란 밑줄' 방지."""
+    header = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f'<hh:head xmlns:hh="{_HH}"><hh:refList><hh:charProperties itemCnt="2">'
+        '<hh:charPr id="0" textColor="#000000" height="1000"/>'
+        '<hh:charPr id="34" textColor="#0000FF" shadeColor="#FFFF00" height="1000">'
+        '<hh:underline type="BOTTOM" color="#0000FF"/></hh:charPr>'
+        "</hh:charProperties></hh:refList></hh:head>"
+    ).encode("utf-8")
+    rows = "<hp:tr>" + _label_cell(0, 0, "사업자등록번호") + _tc_runs(
+        1, 0, '<hp:run charPrIDRef="34"><hp:t>000-00-00000</hp:t></hp:run>'
+    ) + "</hp:tr>"
+    src = tmp_path / "shade.hwpx"
+    _make_hwpx_color(src, rows, header=header)
+    out = tmp_path / "out.hwpx"
+    fill_hwpx(src, out, identity={"사업자등록번호": "123-45-67890"})
+    from lxml import etree
+    with zipfile.ZipFile(out) as z:
+        hroot = etree.fromstring(z.read("Contents/header.xml"))
+    clones = [el for el in hroot.iter()
+              if str(el.tag).rsplit("}", 1)[-1] == "charPr" and el.get("id") == "35"]
+    assert clones, "검정 클론(id 35)이 생성돼야 함"
+    cl = clones[0]
+    assert cl.get("textColor") == "#000000"
+    assert cl.get("shadeColor") == "none"                     # 형광 제거
+    uls = [el for el in cl.iter() if str(el.tag).rsplit("}", 1)[-1] == "underline"]
+    assert uls and uls[0].get("color") == "#000000"           # 밑줄색 검정
+    # 원본 34 는 그대로(양식 불변)
+    orig = next(el for el in hroot.iter()
+                if str(el.tag).rsplit("}", 1)[-1] == "charPr" and el.get("id") == "34")
+    assert orig.get("shadeColor") == "#FFFF00"
+
+
+def test_inherit_fallback_zero_blackened(tmp_path):
+    """[D8] 행에 charPrIDRef 있는 run 이 전무 → 폴백 '0'도 검정 검사(id 0 이 파랑인 양식)."""
+    header = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f'<hh:head xmlns:hh="{_HH}"><hh:refList><hh:charProperties itemCnt="1">'
+        '<hh:charPr id="0" textColor="#0000FF" height="1000"/>'
+        "</hh:charProperties></hh:refList></hh:head>"
+    ).encode("utf-8")
+    rows = ("<hp:tr>" + _tc_runs(0, 0, "<hp:run><hp:t>연락처</hp:t></hp:run>")
+            + f'<hp:tc><hp:cellAddr colAddr="1" rowAddr="0"/>'
+              f'<hp:cellSpan colSpan="1" rowSpan="1"/>'
+              f"<hp:subList><hp:p/></hp:subList></hp:tc>" + "</hp:tr>")
+    src = tmp_path / "fallback.hwpx"
+    _make_hwpx_color(src, rows, header=header)
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"연락처": "010-1234-5678"})
+    assert rep.filled.get("연락처") == "010-1234-5678"
+    assert _text_color_of(out, "010-1234-5678") == "#000000"
+
+
+def test_replacement_value_becomes_black(tmp_path):
+    """[D9] 파란 예시토큰 치환값(값 전용 run)도 검정 — 결함① 사이드도어 차단."""
+    rows = "<hp:tr>" + _tc_runs(
+        0, 0, '<hp:run charPrIDRef="34"><hp:t>000-00-00000</hp:t></hp:run>'
+    ) + "</hp:tr>"
+    src = tmp_path / "repl_blue.hwpx"
+    _make_hwpx_color(src, rows)
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, replacements={"000-00-00000": "123-45-67890"})
+    assert rep.replaced == 1
+    assert _text_color_of(out, "123-45-67890") == "#000000"
+
+
+def test_check_paren_variants_not_conflated(tmp_path):
+    """[괄호] '동의(필수)'만 있는 양식에 '동의(선택)' 요청 → 오체크 없이 잔여 보고."""
+    rows = ("<hp:tr>" + _ctrl_cell(0, 0, "CB_REQ")
+            + _label_cell(1, 0, "동의(필수)") + "</hp:tr>")
+    src = tmp_path / "paren.hwpx"
+    _make_hwpx_color(src, rows)
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, check_options=["동의(선택)"])
+    assert rep.checked == []
+    assert rep.check_residual == ["동의(선택)"]
+    assert _checkbtn_states_all(out) == {"CB_REQ": "UNCHECKED"}
+    # 정확한 라벨을 주면 켜진다
+    out2 = tmp_path / "out2.hwpx"
+    rep2 = fill_hwpx(src, out2, check_options=["동의(필수)"])
+    assert rep2.checked == ["동의(필수)"]
+    assert _checkbtn_states_all(out2) == {"CB_REQ": "CHECKED"}
+
+
+def test_check_no_corporate_synonym_conflation(tmp_path):
+    """[동의어] '유한회사' 요청이 '주식회사' 박스를 켜면 안 됨(법인 환원 미적용)."""
+    rows = ("<hp:tr>" + _ctrl_cell(0, 0, "CB_JUSIK")
+            + _label_cell(1, 0, "주식회사")
+            + _ctrl_cell(3, 0, "CB_GAEIN")
+            + _label_cell(4, 0, "개인사업자") + "</hp:tr>")
+    src = tmp_path / "corp.hwpx"
+    _make_hwpx_color(src, rows)
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, check_options=["유한회사"])
+    assert rep.checked == []
+    assert rep.check_residual == ["유한회사"]
+    assert set(_checkbtn_states_all(out).values()) == {"UNCHECKED"}
