@@ -37,6 +37,218 @@ def _set_cell(tc, value: str, *, char_pr: str = "51") -> None:
     etree.SubElement(p, _q("linesegarray"))
 
 
+def _cell_text(tc) -> str:
+    parts = [str(el.text or "") for el in tc.iter(_q("t"))]
+    return re.sub(r"\s+", " ", "".join(parts)).strip()
+
+
+def _text_para(text: str, *, bold: bool = False) -> etree._Element:
+    p = etree.Element(_q("p"))
+    p.set("id", "2147483648")
+    p.set("paraPrIDRef", "45")
+    p.set("styleIDRef", "19")
+    p.set("pageBreak", "0")
+    p.set("columnBreak", "0")
+    p.set("merged", "0")
+    run = etree.SubElement(p, _q("run"))
+    run.set("charPrIDRef", "52" if bold else "51")
+    t = etree.SubElement(run, _q("t"))
+    t.text = text
+    etree.SubElement(p, _q("linesegarray"))
+    return p
+
+
+def _is_consulting_table(tbl) -> bool:
+    rows = list(tbl.iter(_q("tr")))
+    if len(rows) < 20:
+        return False
+    header = "".join(_cell_text(c) for c in rows[0].iter(_q("tc")))
+    if "유형" in header and "사업명" in header:
+        return True
+    # 헤더가 비어 있어도 4열·날짜 패턴 데이터 행이면 수행리스트로 본다
+    for tr in rows[1:4]:
+        cells = [_cell_text(c) for c in tr.iter(_q("tc"))]
+        if len(cells) >= 4 and re.search(r"20\d{2}", cells[0]):
+            return True
+    return False
+
+
+def _parse_consulting_stats(root) -> dict[str, str]:
+    for tbl in root.iter(_q("tbl")):
+        if not _is_consulting_table(tbl):
+            continue
+        rows = list(tbl.iter(_q("tr")))
+        items: list[tuple[str, str, str, str]] = []
+        for tr in rows[1:]:
+            cells = [_cell_text(c) for c in tr.iter(_q("tc"))]
+            if len(cells) < 4 or not any(cells):
+                continue
+            items.append((cells[0], cells[1], cells[2], cells[3]))
+        if not items:
+            continue
+        orgs = {x[2] for x in items if x[2]}
+        dates = [x[0] for x in items if x[0]]
+
+        def _date_sort_key(d: str) -> tuple[int, int]:
+            m = re.search(r"(20\d{2})\.(\d{1,2})", d)
+            if m:
+                return int(m.group(1)), int(m.group(2))
+            m = re.search(r"(20\d{2})", d)
+            return (int(m.group(1)), 0) if m else (0, 0)
+
+        def _period_label(d: str) -> str:
+            return re.split(r"~", d)[0].strip()
+
+        if dates:
+            min_d = min(dates, key=_date_sort_key)
+            max_d = max(dates, key=_date_sort_key)
+            period = f"{_period_label(min_d)} ~ {_period_label(max_d)}"
+        else:
+            period = ""
+        return {
+            "cases": str(len(items)),
+            "companies": str(len(orgs)),
+            "period": period,
+            "amount": "[확인필요]",
+            "items": items,
+        }
+    raise RuntimeError("컨설팅 수행리스트 표를 찾지 못했습니다")
+
+
+def _make_summary_table(template_tbl, stats: dict[str, str]) -> etree._Element:
+    tbl = copy.deepcopy(template_tbl)
+    tbl.set("rowCnt", "5")
+    tbl.set("colCnt", "2")
+    old_rows = list(tbl.iter(_q("tr")))
+    for tr in old_rows:
+        tbl.remove(tr)
+    rows_data = [
+        ("실적 총괄", "컨설팅/멘토링 수행실적 합계"),
+        ("총 컨설팅기간", stats["period"]),
+        ("수행건수", f"{stats['cases']}건"),
+        ("수행기업(기관)", f"{stats['companies']}개사"),
+        ("컨설팅 매출(합계)", stats["amount"]),
+    ]
+    template_tr = old_rows[0]
+    for label, value in rows_data:
+        tr = copy.deepcopy(template_tr)
+        all_cells = list(tr.iter(_q("tc")))
+        cells = all_cells[:2]
+        for extra in all_cells[2:]:
+            tr.remove(extra)
+        if len(cells) < 2:
+            continue
+        _set_cell(cells[0], label, char_pr="2")
+        _set_cell(cells[1], value, char_pr="52" if label == "실적 총괄" else "51")
+        tbl.append(tr)
+    return tbl
+
+
+def _clean_consulting_orphans(root, items: list[tuple[str, str, str, str]]) -> int:
+    type_set = {x[1] for x in items}
+    title_set = {x[3] for x in items}
+    org_set = {x[2] for x in items}
+    wrap = None
+    for p in root.findall(_q("p")):
+        tbl = p.find(".//" + _q("tbl"))
+        if tbl is not None and _is_consulting_table(tbl):
+            wrap = p
+            break
+    if wrap is None:
+        return 0
+    parent = wrap.getparent()
+    if parent is None:
+        return 0
+    remove_ps: list[etree._Element] = []
+    for sib in list(parent)[parent.index(wrap) + 1 :]:
+        if sib.tag != _q("p"):
+            continue
+        if sib.find(".//" + _q("tbl")) is not None:
+            break
+        t_raw = "".join(x.text or "" for x in sib.iter(_q("t")))
+        t = re.sub(r"\s+", "", t_raw)
+        if not t:
+            continue
+        if t.startswith("["):
+            break
+        if t in {"일시", "유형", "수진기업/기관", "사업명"}:
+            remove_ps.append(sib)
+            continue
+        if re.fullmatch(r"20\d{2}(\.\d{1,2})?(~\d{1,2})?", t):
+            remove_ps.append(sib)
+            continue
+        if t in type_set and len(t) <= 12:
+            remove_ps.append(sib)
+            continue
+        if t in title_set or t in org_set:
+            remove_ps.append(sib)
+    for p in remove_ps:
+        parent.remove(p)
+    return len(remove_ps)
+
+
+def _patch_summary_and_cleanup(section_path: Path) -> list[str]:
+    notes: list[str] = []
+    root = etree.parse(str(section_path)).getroot()
+    stats = _parse_consulting_stats(root)
+    items = stats.pop("items")  # type: ignore[misc]
+
+    already = any(
+        "실적 총괄" in "".join(t.text or "" for t in tbl.iter(_q("t")))
+        for tbl in root.iter(_q("tbl"))
+    )
+    if not already:
+        template_tbl = None
+        insert_parent = None
+        insert_idx = None
+        for p in root.iter(_q("p")):
+            t = "".join(x.text or "" for x in p.iter(_q("t")))
+            if "[컨설팅/멘토링]" in t:
+                insert_parent = p.getparent()
+                insert_idx = insert_parent.index(p)
+                break
+        for tbl in root.iter(_q("tbl")):
+            if len(list(tbl.iter(_q("tr")))) == 5:
+                h = "".join(_cell_text(c) for c in next(tbl.iter(_q("tr"))).iter(_q("tc")))
+                if "자격" in h:
+                    template_tbl = tbl
+                    break
+        if insert_parent is not None and insert_idx is not None and template_tbl is not None:
+            title_p = _text_para("[실적 총괄]", bold=True)
+            summary_tbl = _make_summary_table(template_tbl, stats)
+            wrap = (
+                copy.deepcopy(insert_parent[insert_idx - 1])
+                if insert_idx > 0
+                else etree.Element(_q("p"))
+            )
+            for child in list(wrap):
+                wrap.remove(child)
+            wrap.set("id", "2147483648")
+            run = etree.SubElement(wrap, _q("run"))
+            run.set("charPrIDRef", "35")
+            run.append(summary_tbl)
+            etree.SubElement(wrap, _q("linesegarray"))
+            insert_parent.insert(insert_idx, title_p)
+            insert_parent.insert(insert_idx + 1, wrap)
+            notes.append(
+                "실적총괄표 추가: "
+                f"기간 {stats['period']} / {stats['cases']}건 / {stats['companies']}개사 / 매출 {stats['amount']}"
+            )
+        else:
+            notes.append("경고: 실적총괄표 삽입 위치를 찾지 못함")
+    else:
+        notes.append("실적총괄표 유지")
+
+    removed = _clean_consulting_orphans(root, items)
+    if removed:
+        notes.append(f"수행리스트 표 아래 깨진 중복 단락 {removed}개 정리")
+
+    etree.ElementTree(root).write(
+        str(section_path), encoding="utf-8", xml_declaration=True, standalone=True
+    )
+    return notes
+
+
 def _patch_management_fields(section_path: Path) -> list[str]:
     notes: list[str] = []
     root = etree.parse(str(section_path)).getroot()
@@ -90,21 +302,31 @@ def _verify_hwpx(path: Path) -> tuple[bool, str]:
             consult_rows = 0
             for tbl in tbls:
                 rows = list(tbl.iter(_q("tr")))
-                if len(rows) < 20:
+                if not _is_consulting_table(tbl):
                     continue
-                header = "".join(
-                    "".join(t.text or "" for t in c.iter(_q("t")))
-                    for c in rows[0].iter(_q("tc"))
-                )
-                if "일 시" in header and "유형" in header and "사업명" in header:
-                    consult_rows = len(rows) - 1
-                    break
-            pics = len(list(root.iter(_q("pic"))))
+                consult_rows = len(rows) - 1
+                break
+            sec_date_orphans = 0
+            for p in root.findall(_q("p")):
+                if p.find(".//" + _q("tbl")) is not None:
+                    continue
+                t = re.sub(r"\s+", "", "".join(x.text or "" for x in p.iter(_q("t"))))
+                if re.fullmatch(r"20\d{2}(\.\d{1,2})?(~\d{1,2})?", t):
+                    sec_date_orphans += 1
+            if sec_date_orphans > 0:
+                return False, f"표 밖 날짜 단락 잔존: {sec_date_orphans}개"
             if consult_rows < 26:
                 return False, f"수행리스트 표 행 부족: {consult_rows}건"
+            pics = len(list(root.iter(_q("pic"))))
             if pics > 0:
                 return False, f"타임라인 그림 잔존: {pics}장"
-            return True, f"표 {consult_rows}건, 그림 0장"
+            summary_found = any(
+                "실적 총괄" in "".join(t.text or "" for t in tbl.iter(_q("t")))
+                for tbl in root.iter(_q("tbl"))
+            )
+            if not summary_found:
+                return False, "실적총괄표 미발견"
+            return True, f"표 {consult_rows}건, 실적총괄표 OK, 그림 0장"
     except Exception as exc:
         return False, str(exc)
 
@@ -122,6 +344,7 @@ def restore_profile(src: Path, out: Path) -> list[str]:
 
     sec = next(work.glob("Contents/section*.xml"))
     notes = _patch_management_fields(sec)
+    notes.extend(_patch_summary_and_cleanup(sec))
 
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zout:
         mimetype = work / "mimetype"
