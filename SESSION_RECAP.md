@@ -1,3 +1,24 @@
+## 🧾 세션 회고 — 2026-07-08
+**주제:** 공고 첨부 다운로더(D:\mail) 캠코 오탐·미인식 수정 + 범용 견고화 (/team /ultragoal)
+
+### ✅ 한 일
+- 전에는 캠코 공고 링크를 넣으면 **엉뚱한 인증 PDF 2개**만 받고 진짜 첨부 HWP 3개는 못 받았는데, 이제 **HWP 3개를 정확한 파일명·폴더명으로** 받는다(실사이트 검증). 정부 표준(eGovFrame) JS 첨부 방식을 지원하게 돼 **다른 공공기관 사이트에서도 같은 실패가 예방**된다.
+- 전에는 footer의 사이트 공통 PDF가 첨부로 오인됐는데, 이제 footer·메뉴·배너 영역 링크는 자동 제외된다(+미닫힘 HTML이 본문을 삼키는 엣지 가드까지, PR #128).
+- 덤으로 잠복 버그 4건 수정: soft-404가 .hwp로 저장·cp949 콘솔 크래시·완료 팝업 미발동·파일명 `+` 미복원.
+- 실사용 폴더(문서전용_20260625)에 캠코 공고 재다운로드 완료(폴더 17), 오탐 폴더 16은 휴지통.
+
+### 🧭 정한 것
+- 15에이전트 적대 리뷰로 11주장→5확정→전부 반영. 잔여 저위험 1건은 D:\mail TASKS.md TASK-010(eGov 컨텍스트패스 폴백).
+- 네이티브 팀 도구(TeamCreate) 부재 시 /team 의도는 Workflow 오케스트레이션으로 수행.
+
+### 📂 손댄 파일 (모두 D:\mail, PR #127·#128 병합됨)
+- `scripts/fetch_notice_attachments.py`(최초 커밋)·`scripts/download_kstartup_targets.py`·`test_fetch_notice_attachments.py`·`fixtures/notice_attachments/kamco_view.html`·`TASKS.md`
+
+### ⏭️ 다음 할 일
+- TASK-010: eGov FileDown.do 합성 URL 컨텍스트 패스(/portal/ 하위 배포) 폴백
+
+---
+
 ## 🧾 세션 회고 — 2026-07-06
 **주제:** 마포 여성 예비창업자(박다솜) 사업화자금 조사 + 야간 자동개발 점검·캘린더 버그 뿌리뽑기
 
