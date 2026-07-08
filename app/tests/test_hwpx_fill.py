@@ -1278,3 +1278,186 @@ def test_check_no_corporate_synonym_conflation(tmp_path):
     assert rep.checked == []
     assert rep.check_residual == ["유한회사"]
     assert set(_checkbtn_states_all(out).values()) == {"UNCHECKED"}
+
+
+# --------------------------------------------------------------------------- #
+# 그리드 선택칸(□ 기호 없음) — 표의 셀 자체가 선택지, 아래 빈 셀에 마크(○/√).
+# 실측 구조 모사: 중기부 공통서식(053) '취득방법(해당란에 ‘○’표시)' — 라벨셀
+# rowSpan=2 + 옵션 헤더 행 + 같은 colAddr 의 빈 마크 행. 서울AI허브 '신청 Track'
+# (지시문 없음, 사용자 실기입 ○)은 needs_confirm 강등을 검증한다.
+
+
+def _gcell(col: int, row: int, text: str, colspan: int = 1, rowspan: int = 1) -> str:
+    return (
+        f'<hp:tc><hp:cellAddr colAddr="{col}" rowAddr="{row}"/>'
+        f'<hp:cellSpan colSpan="{colspan}" rowSpan="{rowspan}"/>'
+        f'<hp:subList><hp:p><hp:run charPrIDRef="0"><hp:t>{text}</hp:t>'
+        f"</hp:run></hp:p></hp:subList></hp:tc>"
+    )
+
+
+def _make_hwpx_grid(path: Path, rows_xml: list[str]) -> None:
+    trs = "".join(f"<hp:tr>{r}</hp:tr>" for r in rows_xml)
+    section = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f'<hs:sec xmlns:hp="{_HP}" xmlns:hs="{_HS}">'
+        f'<hp:p><hp:run charPrIDRef="0">'
+        f'<hp:tbl rowCnt="{len(rows_xml)}" colCnt="6">{trs}</hp:tbl>'
+        "</hp:run></hp:p></hs:sec>"
+    ).encode("utf-8")
+    with zipfile.ZipFile(path, "w") as z:
+        zi = zipfile.ZipInfo("mimetype")
+        zi.compress_type = zipfile.ZIP_STORED
+        z.writestr(zi, _MIMETYPE)
+        z.writestr("Contents/section0.xml", section)
+
+
+def _read_cell_at(path: Path, col: int, row: int) -> str:
+    from lxml import etree
+
+    with zipfile.ZipFile(path) as z:
+        root = etree.fromstring(z.read("Contents/section0.xml"))
+    q = lambda t: f"{{{_HP}}}{t}"  # noqa: E731
+    for tc in root.iter(q("tc")):
+        ca = next((c for c in tc if c.tag == q("cellAddr")), None)
+        if (ca is not None and ca.get("colAddr") == str(col)
+                and ca.get("rowAddr") == str(row)):
+            return "".join(t.text or "" for t in tc.iter(q("t"))).strip()
+    return "<not found>"
+
+
+def _grid_rows_instructed() -> list[str]:
+    """실측 053 취득방법 그룹 모사(지시문 ○)."""
+    return [
+        _gcell(0, 0, "취득방법(해당란에 ‘○’표시)", rowspan=2)
+        + _gcell(1, 0, "구 매") + _gcell(2, 0, "임 대") + _gcell(3, 0, "제작의뢰"),
+        _gcell(1, 1, "") + _gcell(2, 1, "") + _gcell(3, 1, ""),
+    ]
+
+
+def test_grid_choice_instructed_marks_single_option(tmp_path):
+    """[그리드] 지시문(○) 라벨 + 값 정확일치 1개 → 해당 옵션 아래 칸에만 ○ 기입."""
+    src = tmp_path / "grid.hwpx"
+    _make_hwpx_grid(src, _grid_rows_instructed())
+    before = src.read_bytes()
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"취득방법": "임대"})
+    assert rep.filled.get("취득방법") == "임대"
+    assert rep.grid_needs_confirm == []
+    assert _read_cell_at(out, 2, 1) == "○"          # 선택 옵션 아래에만 마크
+    assert _read_cell_at(out, 1, 1) == ""
+    assert _read_cell_at(out, 3, 1) == ""
+    assert _read_cell_at(out, 2, 0) == "임 대"       # 옵션 헤더는 불변(양식 보존)
+    assert src.read_bytes() == before               # 원본 미수정
+
+
+def test_grid_choice_sqrt_instruction_uses_instructed_glyph(tmp_path):
+    """[그리드] 지시문 기호가 √ 면(수출바우처 동의여부 실측) √ 를 기입한다."""
+    rows = [
+        _gcell(0, 0, "동의여부(해당란에 √표시)", rowspan=2)
+        + _gcell(1, 0, "동의함") + _gcell(2, 0, "동의하지 않음"),
+        _gcell(1, 1, "") + _gcell(2, 1, ""),
+    ]
+    src = tmp_path / "grid_sqrt.hwpx"
+    _make_hwpx_grid(src, rows)
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"동의여부": "동의함"})
+    assert rep.filled.get("동의여부") == "동의함"
+    assert _read_cell_at(out, 1, 1) == "√"
+    assert _read_cell_at(out, 2, 1) == ""
+
+
+def test_grid_choice_no_instruction_demoted_to_needs_confirm(tmp_path):
+    """[그리드] 지시문 없는 구조(서울AI허브 '신청 Track' 실측) → 자동 기입 금지,
+    grid_needs_confirm 보고 + residual 정직 보고(오체크<미체크)."""
+    rows = [
+        _gcell(0, 0, "신청 Track", rowspan=2)
+        + _gcell(1, 0, "(Track 1) 모델 개발 지원", colspan=7)
+        + _gcell(8, 0, "(Track 2) PoC 지원", colspan=6),
+        _gcell(1, 1, "", colspan=7) + _gcell(8, 1, "", colspan=6),
+    ]
+    src = tmp_path / "grid_track.hwpx"
+    _make_hwpx_grid(src, rows)
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"신청 Track": "(Track 1) 모델 개발 지원"})
+    assert rep.filled == {}
+    assert _read_cell_at(out, 1, 1) == ""            # 아무 칸도 안 건드림
+    assert _read_cell_at(out, 8, 1) == ""
+    assert len(rep.grid_needs_confirm) == 1
+    assert "신청 Track" in rep.grid_needs_confirm[0]
+    assert "신청 Track" in rep.residual
+
+
+def test_grid_choice_ambiguous_duplicate_options_no_mark(tmp_path):
+    """[그리드] 정규화 후 같은 옵션이 2개('구 매'·'구매(외자)') → 모호, 기입 0."""
+    rows = [
+        _gcell(0, 0, "취득방법(해당란에 ‘○’표시)", rowspan=2)
+        + _gcell(1, 0, "구 매") + _gcell(2, 0, "구매(외자)"),
+        _gcell(1, 1, "") + _gcell(2, 1, ""),
+    ]
+    src = tmp_path / "grid_dup.hwpx"
+    _make_hwpx_grid(src, rows)
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"취득방법": "구매"})
+    assert rep.filled == {}
+    assert _read_cell_at(out, 1, 1) == ""
+    assert _read_cell_at(out, 2, 1) == ""
+    assert "취득방법" in rep.residual
+
+
+def test_grid_choice_premarked_group_untouched(tmp_path):
+    """[그리드] 마크행에 이미 값(○)이 있으면 그룹 전체 보류 — 기존 선택 보존·멱등."""
+    rows = [
+        _gcell(0, 0, "취득방법(해당란에 ‘○’표시)", rowspan=2)
+        + _gcell(1, 0, "구 매") + _gcell(2, 0, "임 대"),
+        _gcell(1, 1, "○") + _gcell(2, 1, ""),
+    ]
+    src = tmp_path / "grid_pre.hwpx"
+    _make_hwpx_grid(src, rows)
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"취득방법": "임대"})
+    assert rep.filled == {}
+    assert _read_cell_at(out, 1, 1) == "○"           # 기존 사용자 선택 그대로
+    assert _read_cell_at(out, 2, 1) == ""            # 이중 마크 없음
+    assert "취득방법" in rep.residual
+
+
+def test_grid_choice_rerun_idempotent(tmp_path):
+    """[그리드] 채운 출력에 같은 identity 로 재실행 → 이중 마크 없이 그대로."""
+    src = tmp_path / "grid.hwpx"
+    _make_hwpx_grid(src, _grid_rows_instructed())
+    out1 = tmp_path / "out1.hwpx"
+    fill_hwpx(src, out1, identity={"취득방법": "임대"})
+    out2 = tmp_path / "out2.hwpx"
+    rep2 = fill_hwpx(out1, out2, identity={"취득방법": "임대"})
+    assert rep2.filled == {}                         # 이미 마크됨 → 그룹 보류
+    assert _read_cell_at(out2, 2, 1) == "○"          # 마크 1개 그대로
+    assert _read_cell_at(out2, 1, 1) == ""
+
+
+def test_grid_choice_value_without_option_no_mark(tmp_path):
+    """[그리드] 값이 어떤 옵션과도 불일치(날조0) → 기입 0·residual 정직 보고."""
+    src = tmp_path / "grid.hwpx"
+    _make_hwpx_grid(src, _grid_rows_instructed())
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"취득방법": "기타취득"})
+    assert rep.filled == {}
+    for col in (1, 2, 3):
+        assert _read_cell_at(out, col, 1) == ""
+    assert "취득방법" in rep.residual
+
+
+def test_grid_choice_box_options_left_to_checkbox_path(tmp_path):
+    """[그리드×1.7 경계] 옵션 셀에 □ 가 있으면 그리드 그룹이 아니다 — 마크행 불변
+    (체크박스 경로 1.7 의 영역, 이중 처리 금지)."""
+    rows = [
+        _gcell(0, 0, "취득방법(해당란에 ‘○’표시)", rowspan=2)
+        + _gcell(1, 0, "□ 구매") + _gcell(2, 0, "□ 임대"),
+        _gcell(1, 1, "") + _gcell(2, 1, ""),
+    ]
+    src = tmp_path / "grid_box.hwpx"
+    _make_hwpx_grid(src, rows)
+    out = tmp_path / "out.hwpx"
+    fill_hwpx(src, out, identity={"취득방법": "임대"})
+    assert _read_cell_at(out, 1, 1) == ""            # 그리드 마크 기입 없음
+    assert _read_cell_at(out, 2, 1) == ""

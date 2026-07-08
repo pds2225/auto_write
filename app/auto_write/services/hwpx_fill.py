@@ -52,6 +52,7 @@ from typing import Any, Optional
 from lxml import etree
 
 from .cross_form_autofill import (
+    _ANY_BOX_RE,
     _CHECK_MARK,
     _EMPTY_BOX_RE,
     _cluster_rep,
@@ -565,6 +566,78 @@ def _value_cell(label_tc, cells: list):
     return cells[idx + 1] if idx + 1 < len(cells) else None
 
 
+def _cell_rowspan(tc) -> int:
+    cs = next(iter(_direct(tc, "cellSpan")), None)
+    return _int_attr(cs, "rowSpan", 1)
+
+
+# 그리드 선택칸 마크 지시문 — 실측: "취득방법(해당란에 ‘○’표시)"(중기부 공통서식 053
+# 취득방법·분류1~5·예비타당성 등 6곳+), "동의여부(해당란에 √표시)"(수출바우처 016/128).
+# 괄호 안 '해당…에 <기호> 표(시)' 만 지시문으로 인정한다 — "확인 후 √ 표시" 같은
+# 체크리스트 안내(행별 확인, 선택 아님)는 '해당'이 없어 매칭되지 않는다(오탐 차단).
+_GRID_INSTR_RE = re.compile(
+    r"[(（]\s*해당\s*(?:란|칸|항목|사항)?\s*(?:에|되는\s*곳에)?\s*"
+    r"[‘'\"“]?\s*([○●VvＶ√✔✓])\s*[’'\"”]?\s*표\s*시?\s*[)）]"
+)
+
+
+def _grid_choice_groups(tbl) -> list:
+    """표에서 '그리드 선택칸' 그룹을 찾는다 — □ 기호 없이 셀 자체가 선택지인 구조.
+
+    실측 구조(053 공통서식 취득방법/분류1~5/예비타당성·서울AI허브 '신청 Track'):
+      행 R  : [라벨셀(rowSpan≥2)] [옵션셀…(각각 비지 않은 짧은 텍스트)]
+      행 R+1: [옵션과 같은 colAddr·colSpan 의 빈 마크셀…]  ← 여기에 ○/√ 기입
+    한 행에 그룹이 여러 개면(053 #143: 예비타당성|사전기획|수요조사) rowSpan≥2 인
+    다음 라벨셀에서 그룹을 끊는다. 보수 게이트(전부 만족해야 그룹 인정):
+      cellAddr 필수 · 옵션 ≥2 · 옵션에 □/■류 기호 없음(체크박스는 1.7 담당) ·
+      마크행 셀이 옵션과 정확 정렬(colAddr+colSpan 동일)·전부 빈칸·폼컨트롤 없음.
+    마크행에 하나라도 값/마크가 있으면 그룹 전체 보류 — 멱등(재실행 무변경)·기존
+    선택 보존. 반환: [(라벨키, 지시문 마크기호 or None, [(옵션텍스트, 마크셀), …])].
+    """
+    groups: list = []
+    rows = _direct(tbl, "tr")
+    for ri in range(len(rows) - 1):
+        cells = _direct(rows[ri], "tc")
+        below: dict[int, Any] = {}
+        for mc in _direct(rows[ri + 1], "tc"):
+            addr = _cell_addr(mc)
+            if addr is not None:
+                below[addr] = mc
+        for idx, tc in enumerate(cells):
+            if _cell_rowspan(tc) < 2:
+                continue                       # 라벨은 마크행까지 세로 병합돼 있어야 함
+            raw = _cell_text(tc)
+            if not raw:
+                continue
+            instr = _GRID_INSTR_RE.search(raw)
+            label_key = _key(_GRID_INSTR_RE.sub("", raw))
+            if not label_key:
+                continue
+            opts: list = []
+            valid = True
+            for tc2 in cells[idx + 1:]:
+                if _cell_rowspan(tc2) >= 2:
+                    break                      # 다음 그룹 라벨 — 이 그룹 끝
+                txt2 = _cell_text(tc2)
+                addr2 = _cell_addr(tc2)
+                if addr2 is None or not txt2 or _ANY_BOX_RE.search(txt2):
+                    valid = False              # 주소 불명·빈 헤더·체크박스 혼입 → 구조 불명
+                    break
+                mc = below.get(addr2)
+                if (mc is None or _cell_colspan(mc) != _cell_colspan(tc2)
+                        or _has_form_control(mc) or _cell_text(mc)):
+                    valid = False              # 마크행 미정렬·컨트롤·이미 값 → 그룹 보류
+                    break
+                opts.append((txt2, mc))
+            if valid and len(opts) >= 2:
+                mark = None
+                if instr:
+                    ch = instr.group(1)
+                    mark = "V" if ch in "vＶ" else ch
+                groups.append((label_key, mark, opts))
+    return groups
+
+
 @dataclass
 class HwpxFillReport:
     input: str
@@ -576,6 +649,9 @@ class HwpxFillReport:
     residual: list[str] = field(default_factory=list)      # 매칭 못 한 identity 라벨
     checked: list[str] = field(default_factory=list)       # 체크한 폼컨트롤 옵션
     check_residual: list[str] = field(default_factory=list)  # 못 체크한 옵션(모호/부재)
+    # 그리드 선택칸(□ 없음) 후보 — 구조·값은 일치하나 마크 지시문이 없어 자동 기입을
+    # 보류한 항목(needs_confirm, 오체크<미체크). 사람이 확인 후 직접 기입한다.
+    grid_needs_confirm: list[str] = field(default_factory=list)
     sections_changed: int = 0
     notes: list[str] = field(default_factory=list)
 
@@ -590,6 +666,7 @@ class HwpxFillReport:
             "residual": list(self.residual),
             "checked": list(self.checked),
             "check_residual": list(self.check_residual),
+            "grid_needs_confirm": list(self.grid_needs_confirm),
             "sections_changed": self.sections_changed,
             "notes": list(self.notes),
         }
@@ -617,9 +694,11 @@ def _fill_section_xml(
     identity: dict[str, str],
     replacements: dict[str, str],
     black: Optional[_BlackCharPr] = None,
+    grid_confirm: Optional[list] = None,
 ) -> tuple[bytes, dict[str, str], int, set[str]]:
     """한 섹션 XML 에서 표 라벨-값 칸(1) + 셀 인라인 빈칸(1.5) + 체크박스(1.7) +
-    표 밖 본문 단락 인라인 빈칸(1.8) 채움 + (보호된) 직접 치환(2).
+    그리드 선택칸(1.75, □ 없음) + 표 밖 본문 단락 인라인 빈칸(1.8) 채움 +
+    (보호된) 직접 치환(2). grid_confirm: 그리드 needs_confirm 수집 리스트(선택).
 
     black: 유색 예시체 상속 차단용 헤더 charPr 관리자 — 표 라벨→값 경로와
     '값 전용 run' 치환 경로에 적용. 인라인 스플라이스(1.5/1.8)·텍스트 체크(1.7)는
@@ -721,6 +800,46 @@ def _fill_section_xml(
                             used_keys.add(want_key)
                             changed = True
                         break
+
+    # 1.75) 그리드 선택칸(□ 기호 없음) — 표의 셀 자체가 선택지이고 아래 빈 셀에
+    #      마크(○/√)를 기입하는 구조. 실측: 중기부 공통서식(053) '취득방법(해당란에
+    #      ‘○’표시)'·분류1~5·예비타당성, 수출바우처(016/128) '동의여부(해당란에
+    #      √표시)', 서울AI허브 '신청 Track'(사용자 실기입 ○). 1.7 과 동일한
+    #      used_keys 공유(이중처리 금지). 보수 규칙(오체크<미체크·날조0):
+    #        ① 라벨 정확일치/동의어(_label_matches)
+    #        ② 값↔옵션 _opt_key·_normalize_choice 환원 후 **정확일치 1개**
+    #           (0개/2개+ = 모호 → 아무 칸도 안 건드림, 부분문자열 금지)
+    #        ③ 마크행 전부 빈칸이어야 그룹 인정(이미 마크·값 있으면 보류 = 멱등)
+    #        ④ **라벨에 마크 지시문("해당란에 ○표시" 류)이 있을 때만 자동 기입**
+    #           (기입 기호 = 지시문 기호 그대로). 지시문 없는 구조·값 일치는
+    #           needs_confirm 강등(자동 기입 금지) — grid_confirm 에 보고만.
+    if wants:
+        for tbl in root.iter(_q("tbl")):
+            for label_key, mark, opts in _grid_choice_groups(tbl):
+                for want_key, lbl, val in wants:
+                    if want_key in used_keys:
+                        continue
+                    if not _label_matches(label_key, want_key):
+                        continue
+                    vnorm = _normalize_choice(_opt_key(str(val)))
+                    hits = [
+                        mc for opt_text, mc in opts
+                        if _opt_key(opt_text)
+                        and _normalize_choice(_opt_key(opt_text)) == vnorm
+                    ]
+                    if len(hits) != 1:
+                        break   # 0개/다수 매칭 → 모호, 아무 칸도 안 건드림
+                    if mark is None:
+                        if grid_confirm is not None:
+                            grid_confirm.append(
+                                f"{lbl}={val} — 그리드 선택칸 후보(마크 지시문 없음, "
+                                "직접 확인 후 기입 필요)")
+                        break   # 오체크 위험 → needs_confirm 강등(자동 기입 금지)
+                    if _set_cell_text(hits[0], mark, black):
+                        filled[lbl] = str(val)
+                        used_keys.add(want_key)
+                        changed = True
+                    break
 
     # 1.8) 표 '밖' 본문 단락 인라인 필드(`라벨 : ______`) — hs:sec 직계 hp:p 만 대상.
     #      표 셀 안 단락(hp:tc 하위)은 1.5 가 담당 — 직계 자식만 보므로 자동 배제
@@ -865,10 +984,12 @@ def fill_hwpx(
     # 3) 섹션 XML 만 채움/치환
     all_used: set[str] = set()
     changed_names: set[str] = set()
+    grid_confirm: list[str] = []
     for name in section_names:
         try:
             new_bytes, filled, replaced, used = _fill_section_xml(
-                data[name], identity, replacements, black=black
+                data[name], identity, replacements, black=black,
+                grid_confirm=grid_confirm,
             )
         except etree.XMLSyntaxError as exc:
             report.notes.append(f"{name} 파싱 실패(건너뜀): {exc}")
@@ -954,6 +1075,11 @@ def fill_hwpx(
         report.notes.append(
             "체크하지 못한 옵션(라벨 부재 또는 동일 라벨 다수=모호): "
             + ", ".join(report.check_residual))
+    report.grid_needs_confirm = list(dict.fromkeys(grid_confirm))
+    if report.grid_needs_confirm:
+        report.notes.append(
+            "그리드 선택칸 확인 필요(마크 지시문이 없어 자동 기입하지 않음): "
+            + "; ".join(report.grid_needs_confirm))
 
     # 4) 원자적 쓰기 — 임시파일에 다시 압축 후 os.replace.
     #    mimetype 선두 + STORED, 그 외 원본 압축방식·내용 유지.
