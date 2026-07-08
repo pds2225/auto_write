@@ -8,8 +8,11 @@ HWPX→DOCX→채움→DOCX→HWP 로 **변환을 왕복**하기 때문에 표·
 
 이 모듈은 변환을 전혀 하지 않는다. HWPX 가 본질적으로 ZIP(OWPML XML) 이라는 점을
 이용해, 압축을 풀고 ``Contents/section*.xml`` 의 **값 칸 텍스트(hp:t)만** 바꾼 뒤
-다시 압축한다. 표 구조·셀 속성·테두리/채우기·글꼴(header.xml)·이미지(BinData) 는
+다시 압축한다. 표 구조·셀 속성·테두리/채우기·이미지(BinData) 는
 **한 바이트도 건드리지 않는다** → 원본 양식 100% 보존 + 값만 입력.
+글꼴(header.xml)은 원칙적으로 불변이나, 채운 값이 유색 예시체를 승계하는 것을
+막기 위해 **'검정 클론' charPr 추가만** 허용한다(기존 항목은 절대 수정하지 않음
+— force_black 참조, 실측: 수원 멘토위원 신청서 파란 예시체 상속 결함).
 
 OWPML 표 구조(실측)
 -------------------
@@ -38,6 +41,7 @@ OWPML 표 구조(실측)
 
 from __future__ import annotations
 
+import copy
 import os
 import re
 import zipfile
@@ -122,25 +126,187 @@ def _row_of(tc):
     return None
 
 
-def _inherit_charpr(tc) -> str:
+# 양식 폼 컨트롤 요소(OWPML) — 이 중 하나라도 든 칸은 텍스트 채움 대상이 아니다.
+_FORM_CONTROL_TAGS = ("checkBtn", "radioBtn", "comboBox", "edit", "listBox", "btn")
+
+
+def _has_form_control(tc) -> bool:
+    """셀 안에 폼 컨트롤(체크박스·라디오·입력필드 등)이 있으면 True.
+
+    컨트롤 칸은 텍스트가 비어 보여도 '빈칸'이 아니다 — 글자를 기입하면 컨트롤과
+    겹쳐 이중 표시된다(실측: 수원 멘토위원 신청서 ☐ 옆 ■). 체크는 컨트롤의
+    value 속성으로 해야 한다(check_options 참조).
+    """
+    for name in _FORM_CONTROL_TAGS:
+        for _ in tc.iter(_q(name)):
+            return True
+    return False
+
+
+def _direct_form_checkbtns(tc) -> list:
+    """이 셀 '자신'에 속한 hp:checkBtn 목록(중첩 표 내부 것은 제외).
+
+    가장 가까운 조상 hp:tc 가 tc 자신인 것만 취한다 — 셀 안 중첩 표의 컨트롤을
+    바깥 셀 것으로 오인해 엉뚱한 체크박스를 켜는 것을 막는다.
+    """
+    out = []
+    for btn in tc.iter(_q("checkBtn")):
+        cur = btn.getparent()
+        owner = None
+        while cur is not None:
+            if _local(getattr(cur, "tag", "")) == "tc":
+                owner = cur
+                break
+            cur = cur.getparent()
+        if owner is tc:
+            out.append(btn)
+    return out
+
+
+def _opt_key_preserving(s: str) -> str:
+    """폼컨트롤 체크 매칭용 '괄호 보존' 키 — 공백 제거 + 꼬리 구두점만 벗김.
+
+    ``_opt_key``(→``_key``)는 괄호 내용을 통째로 지워 '동의(필수)'/'동의(선택)'을
+    동일시하고, ``_normalize_choice`` 는 주식회사/유한회사를 전부 '법인'으로 환원해
+    '유한회사' 요청이 '주식회사' 박스를 켜는 오체크를 만든다(적대검증 실측 재현).
+    폼컨트롤 체크의 입력은 사용자가 양식에서 보고 지정한 '옵션 라벨'이므로
+    환원 없이 괄호 보존 정확일치만 쓴다(오체크<미체크).
+    """
+    return re.sub(r"\s+", "", str(s or "")).rstrip(_OPT_TRAIL_PUNCT)
+
+
+def _checkbtn_label(tc, cells) -> str:
+    """checkBtn 컨트롤 셀의 옵션 라벨 — 같은 셀 캡션 1순위, 오른쪽 인접 셀 2순위.
+
+    오른쪽 이웃 셀이 또 폼컨트롤 셀이면(컨트롤 연속 그리드·같은셀 캡션 배치)
+    라벨로 인정하지 않는다 — '오른쪽 이웃=라벨' 단정이 한 칸 옆의 엉뚱한
+    박스를 켜던 결함(적대검증 실측 재현) 차단. 라벨을 못 정하면 ""(후보 제외).
+    """
+    own = _cell_text(tc)
+    if own:
+        return own
+    label_tc = _value_cell(tc, cells)
+    if label_tc is None or label_tc is tc or _has_form_control(label_tc):
+        return ""
+    return _cell_text(label_tc)
+
+
+def _is_black_color(color: Optional[str]) -> bool:
+    """textColor 값이 '검정으로 렌더링되는' 값인가(미지정·auto 포함)."""
+    c = (color or "").strip().upper().lstrip("#")
+    return c in ("", "000000", "AUTO", "NONE")
+
+
+class _BlackCharPr:
+    """헤더 charPr 색 지도 + '검정 클론' 관리 — 유색 예시체 상속 차단.
+
+    양식의 예시 문구(파란 안내체 등)가 든 칸을 교체하거나 그 행의 서식을
+    승계하면 채운 값이 유색으로 들어간다(실측: 수원 멘토위원 신청서 학력·경력
+    값 전부 파랑 = 제출본 검정 원칙 위반). 유색 charPr 를 만나면 글꼴·크기는
+    그대로 두고 textColor 만 #000000 인 클론을 헤더에 '추가'해 그 id 로
+    갈아끼운다 — 기존 charPr·다른 유색 요소(제목 등)는 절대 수정하지 않는다.
+    헤더가 없거나 charPr 색 정보가 없으면 완전 no-op(기존 동작 보존).
+    """
+
+    def __init__(self, header_root=None) -> None:
+        self.root = header_root
+        self.colors: dict[str, str] = {}
+        self.changed = False
+        self._byid: dict[str, Any] = {}
+        self._clones: dict[str, str] = {}
+        if header_root is None:
+            return
+        for el in header_root.iter():
+            if _local(getattr(el, "tag", "")) == "charPr" and el.get("id"):
+                self._byid[el.get("id")] = el
+                self.colors[el.get("id")] = el.get("textColor") or ""
+
+    def is_black(self, ref: Optional[str]) -> bool:
+        if not self.colors:
+            return True  # 색 정보 없음(헤더 부재/무색 헤더) → 관여하지 않음
+        return _is_black_color(self.colors.get(ref or ""))
+
+    def black_ref(self, ref: str) -> str:
+        """ref 가 유색이면 검정 클론의 id, 아니면 ref 그대로."""
+        if self.is_black(ref):
+            return ref
+        if ref in self._clones:
+            return self._clones[ref]
+        orig = self._byid.get(ref)
+        if orig is None:
+            return ref
+        numeric = [int(k) for k in self._byid if str(k).isdigit()]
+        if not numeric:
+            return ref  # 숫자 id 체계가 아니면 보수적으로 포기(무변경)
+        new_id = str(max(numeric) + 1)
+        clone = copy.deepcopy(orig)
+        clone.set("id", new_id)
+        clone.set("textColor", "#000000")
+        # 하위 색 속성도 정규화(적대검증 D6): 유색 예시체는 밑줄·취소선·그림자
+        # 색이 글자색과 동색(#0000FF 밑줄 실측 106건)이거나 형광 배경(shadeColor)을
+        # 갖는 경우가 있어 textColor 만 바꾸면 '검정 글자+파란 밑줄/노란 배경'이 남는다.
+        if clone.get("shadeColor") not in (None, "", "none", "NONE"):
+            clone.set("shadeColor", "none")
+        for sub in clone.iter():
+            if _local(getattr(sub, "tag", "")) in ("underline", "strikeout", "shadow") \
+                    and sub.get("color"):
+                sub.set("color", "#000000")
+        parent = orig.getparent()
+        if parent is None:
+            return ref
+        parent.append(clone)
+        cnt = parent.get("itemCnt")
+        if cnt and str(cnt).isdigit():
+            parent.set("itemCnt", str(int(cnt) + 1))
+        self._byid[new_id] = clone
+        self.colors[new_id] = "#000000"
+        self._clones[ref] = new_id
+        self.changed = True
+        return new_id
+
+    def fix_run(self, run) -> bool:
+        """run 의 charPr 가 유색이면 검정 클론으로 교체. 바꿨으면 True."""
+        ref = run.get("charPrIDRef")
+        if ref is None or self.is_black(ref):
+            return False
+        new_ref = self.black_ref(ref)
+        if new_ref == ref:
+            return False
+        run.set("charPrIDRef", new_ref)
+        return True
+
+
+def _inherit_charpr(tc, black: Optional[_BlackCharPr] = None) -> str:
     """빈 칸에 run 을 새로 만들 때 승계할 charPrIDRef.
 
     같은 행의 기존 run 글자속성을 재사용해 양식 폰트를 보존한다. 없으면 '0'.
+    black 이 주어지면 행 안에서 '검정' run 을 우선 고른다 — 예시행처럼 유색
+    run 뿐이면 첫 run 의 검정 클론을 쓴다(유색 상속 차단).
     """
     row = _row_of(tc)
     scope = row if row is not None else tc
+    first = None
     for run in scope.iter(_q("run")):
         ref = run.get("charPrIDRef")
-        if ref:
+        if not ref:
+            continue
+        if first is None:
+            first = ref
+        if black is None or black.is_black(ref):
             return ref
-    return "0"
+    if first is not None:
+        return first if black is None else black.black_ref(first)
+    # 폴백 '0' 도 검정 검사를 거친다(적대검증 D8) — 실코퍼스에 id 0 이
+    # #0000FF(013 딥테크)·#FFFFFF(012 K-Convergence, 흰 글자=비가시)인 양식 실재.
+    return "0" if black is None else black.black_ref("0")
 
 
-def _set_cell_text(tc, value: str) -> bool:
+def _set_cell_text(tc, value: str, black: Optional[_BlackCharPr] = None) -> bool:
     """셀의 텍스트를 value 로 설정한다(첫 hp:t 에 기입, 나머지 hp:t 는 비움).
 
     빈/플레이스홀더 칸에만 호출되므로 잔여 hp:t 를 비워도 실데이터 손실은 없다.
     hp:t/hp:run 이 없으면 단락 서식(charPrIDRef 승계)을 유지하며 최소 생성한다.
+    black 이 주어지면 값이 들어간 run 의 유색 charPr 를 검정 클론으로 바꾼다.
     """
     paras = list(tc.iter(_q("p")))
     if not paras:
@@ -151,13 +317,19 @@ def _set_cell_text(tc, value: str) -> bool:
         ts[0].text = value
         for extra in ts[1:]:
             extra.text = ""
+        if black is not None:
+            run = ts[0].getparent()
+            if run is not None and _local(getattr(run, "tag", "")) == "run":
+                black.fix_run(run)
         return True
     runs = list(p.iter(_q("run")))
     if runs:
         run = runs[0]
+        if black is not None:
+            black.fix_run(run)
     else:
         run = etree.SubElement(p, _q("run"))
-        run.set("charPrIDRef", _inherit_charpr(tc))
+        run.set("charPrIDRef", _inherit_charpr(tc, black))
     t = etree.SubElement(run, _q("t"))
     t.text = value
     return True
@@ -311,16 +483,29 @@ def _left_label_text(tc) -> str:
     return ""
 
 
-def _cell_is_fillable(tc) -> bool:
-    """그 칸에 값을 넣어도 되는가 — 비었거나 '명백한 예시 플레이스홀더'면 True.
+def _cell_text_fillable(tc) -> bool:
+    """텍스트 기준 채움 가능 판정 — 비었거나 '명백한 예시 플레이스홀더'면 True.
 
     이미 실제 값이 있으면 False(덮어쓰기 금지). 빈칸 외에는 _is_obvious_placeholder
     (불가능 날짜·전부-0 수량·더미 등록번호)만 채울 대상으로 본다(O마스크 제외).
+    치환(replacements) 보호 판정은 이 기준만 쓴다 — 치환은 '기존 텍스트 덮어쓰기'라
+    폼 컨트롤 존재와 무관하다(컨트롤 옆 예시토큰 치환은 종전대로 허용, 적대검증 D5).
     """
     txt = _cell_text(tc)
     if not txt:
         return True
     return _is_obvious_placeholder(txt)
+
+
+def _cell_is_fillable(tc) -> bool:
+    """그 칸에 '새 값을 기입'해도 되는가 — 텍스트 기준 + 폼 컨트롤 가드.
+
+    폼 컨트롤(체크박스·입력필드 등)이 든 칸은 텍스트가 비어 보여도 채우지 않는다
+    (컨트롤과 글자 이중 표시 방지 — 실측: 수원 멘토위원 신청서 ☐■ 이중).
+    """
+    if _has_form_control(tc):
+        return False
+    return _cell_text_fillable(tc)
 
 
 def _is_label_like(tc) -> bool:
@@ -335,13 +520,15 @@ def _is_label_like(tc) -> bool:
 def _in_protected_cell(t) -> bool:
     """hp:t 가 '채울 수 없는'(라벨·실값) 표 셀 안에 있으면 True(치환 보호 대상).
 
-    가장 가까운 조상 hp:tc 를 찾아 _cell_is_fillable 로 판정한다. 표 밖(본문)
+    가장 가까운 조상 hp:tc 를 찾아 **텍스트 기준**(_cell_text_fillable)으로
+    판정한다 — 치환은 기존 텍스트 덮어쓰기라 폼 컨트롤 가드를 적용하지 않는다
+    (컨트롤 옆 예시토큰 치환의 종전 recall 보존, 적대검증 D5). 표 밖(본문)
     텍스트는 보호하지 않는다. id() 대신 조상 순회라 lxml proxy 재사용 영향 없음.
     """
     cur = t.getparent()
     while cur is not None:
         if _local(getattr(cur, "tag", "")) == "tc":
-            return not _cell_is_fillable(cur)
+            return not _cell_text_fillable(cur)
         cur = cur.getparent()
     return False
 
@@ -387,6 +574,8 @@ class HwpxFillReport:
     filled_count: int = 0
     replaced: int = 0
     residual: list[str] = field(default_factory=list)      # 매칭 못 한 identity 라벨
+    checked: list[str] = field(default_factory=list)       # 체크한 폼컨트롤 옵션
+    check_residual: list[str] = field(default_factory=list)  # 못 체크한 옵션(모호/부재)
     sections_changed: int = 0
     notes: list[str] = field(default_factory=list)
 
@@ -399,6 +588,8 @@ class HwpxFillReport:
             "filled_count": self.filled_count,
             "replaced": self.replaced,
             "residual": list(self.residual),
+            "checked": list(self.checked),
+            "check_residual": list(self.check_residual),
             "sections_changed": self.sections_changed,
             "notes": list(self.notes),
         }
@@ -425,9 +616,17 @@ def _fill_section_xml(
     xml_bytes: bytes,
     identity: dict[str, str],
     replacements: dict[str, str],
+    black: Optional[_BlackCharPr] = None,
 ) -> tuple[bytes, dict[str, str], int, set[str]]:
     """한 섹션 XML 에서 표 라벨-값 칸(1) + 셀 인라인 빈칸(1.5) + 체크박스(1.7) +
     표 밖 본문 단락 인라인 빈칸(1.8) 채움 + (보호된) 직접 치환(2).
+
+    black: 유색 예시체 상속 차단용 헤더 charPr 관리자 — 표 라벨→값 경로와
+    '값 전용 run' 치환 경로에 적용. 인라인 스플라이스(1.5/1.8)·텍스트 체크(1.7)는
+    라벨과 서식 run 을 공유하는 구조라 미적용(naive 적용 시 라벨까지 검정화 =
+    양식 변조) — 유색 잔존 가능성은 fill_hwpx docstring 에 명시(차기: run 분할).
+    폼컨트롤 체크박스(check_options)는 문서 전체 유일성 판정이 필요해
+    fill_hwpx 레벨(2-패스)에서 처리한다.
 
     반환: (새 XML 바이트, 채운 라벨→값, 치환건수, 채운 identity 라벨키 집합).
     변경이 없으면 입력 바이트를 그대로 반환한다(불필요한 재직렬화·선언 변형 회피).
@@ -463,8 +662,8 @@ def _fill_section_xml(
                     if _is_label_like(target):
                         continue  # 값칸 후보가 또 라벨 → 기입 금지
                     if not _cell_is_fillable(target):
-                        continue  # 실제 값 있는 칸 — 덮어쓰기 금지
-                    if _set_cell_text(target, str(val)):
+                        continue  # 실제 값 있는 칸/폼컨트롤 칸 — 기입 금지
+                    if _set_cell_text(target, str(val), black):
                         filled[lbl] = str(val)
                         used_keys.add(want_key)
                         changed = True
@@ -535,6 +734,9 @@ def _fill_section_xml(
 
     # 2) 직접 텍스트 치환 — 라벨/실값 칸은 보호(채울 수 있는 칸·본문에만 적용).
     #    lxml proxy id 재사용을 피하려 id() 집합 대신 조상(tc) 순회로 판별한다.
+    #    치환값도 유색 예시체 상속을 차단한다(적대검증 D9) — 단, 같은 run 의 다른
+    #    hp:t 에 비치환 텍스트(안내문 등)가 남아 있으면 run 전체 색 교체가 양식을
+    #    변조하므로 '값 전용 run'일 때만 검정화(보수 규칙).
     if replacements:
         for t in root.iter(_q("t")):
             cur = str(t.text or "")
@@ -550,6 +752,13 @@ def _fill_section_xml(
                 t.text = new
                 replaced += 1
                 changed = True
+                if black is not None:
+                    run = t.getparent()
+                    if run is not None and _local(getattr(run, "tag", "")) == "run":
+                        others = [x for x in _direct(run, "t")
+                                  if x is not t and str(x.text or "").strip()]
+                        if not others:
+                            black.fix_run(run)
 
     if not changed:
         return xml_bytes, filled, replaced, used_keys
@@ -589,6 +798,8 @@ def fill_hwpx(
     *,
     identity: Optional[dict[str, str]] = None,
     replacements: Optional[dict[str, str]] = None,
+    check_options: Optional[list[str]] = None,
+    force_black: bool = True,
 ) -> HwpxFillReport:
     """HWPX 원본 양식의 빈 값 칸을 직접 채운다(변환 왕복 없음, 양식 100% 보존).
 
@@ -598,9 +809,20 @@ def fill_hwpx(
         identity: 라벨→값. 예: {"기업명": "도보네비게이션(주)", "대표자": "홍길동"}.
                   동의어(상호/회사명 …)·표 라벨 장식(○·1.)은 자동 정규화 매칭.
         replacements: 직접 치환 {예시토큰: 실제값}. 라벨/실값 칸은 보호된다(선택).
+        check_options: hp:checkBtn 폼 컨트롤로 체크할 옵션 라벨 목록
+                  (예: ["경영분야", "사업계획&BM"]). 라벨은 같은 셀 캡션 →
+                  오른쪽 인접 셀 순으로 찾고 괄호 보존 정확일치만 인정하며,
+                  일치 컨트롤이 '문서 전체'에서 1개(셀당 컨트롤 1개)일 때만
+                  체크한다(모호하면 잔여 보고 — 오체크<미체크).
+        force_black: True(기본)면 채운 값이 유색 예시체(charPr)를 승계할 때
+                  글꼴·크기는 유지하고 색(글자색·밑줄/취소선/그림자색·형광배경)만
+                  검정/제거인 클론으로 바꾼다(제출본 검정 원칙). 적용 범위는
+                  표 라벨→값 채움과 '값 전용 run' 치환 — 인라인 빈칸(1.5/1.8)·
+                  텍스트 체크(1.7)는 라벨과 run 을 공유해 미적용(유색 잔존 가능,
+                  차기 run 분할 과제). 헤더에 색 정보가 없으면 no-op.
 
     Returns:
-        HwpxFillReport — 채운 항목·치환수·잔여(미매칭 라벨)·변경 섹션수.
+        HwpxFillReport — 채운 항목·치환수·잔여(미매칭 라벨)·체크 결과·변경 섹션수.
     """
     src = Path(in_hwpx)
     dst = Path(out_hwpx)
@@ -608,6 +830,7 @@ def fill_hwpx(
 
     identity = dict(identity or {})
     replacements = dict(replacements or {})
+    check_options = [str(o) for o in (check_options or []) if str(o or "").strip()]
 
     # 1) 안전장치
     if not src.exists():
@@ -630,22 +853,95 @@ def fill_hwpx(
     if not section_names:
         report.notes.append("Contents/section*.xml 을 찾지 못했습니다(빈 양식?).")
 
+    # 2.5) 유색 예시체 차단 준비 — 헤더 charPr 색 지도(파싱 실패/부재 시 no-op).
+    header_name = "Contents/header.xml"
+    black: Optional[_BlackCharPr] = None
+    if force_black and header_name in data:
+        try:
+            black = _BlackCharPr(etree.fromstring(data[header_name]))
+        except etree.XMLSyntaxError:
+            black = None
+
     # 3) 섹션 XML 만 채움/치환
     all_used: set[str] = set()
+    changed_names: set[str] = set()
     for name in section_names:
         try:
             new_bytes, filled, replaced, used = _fill_section_xml(
-                data[name], identity, replacements
+                data[name], identity, replacements, black=black
             )
         except etree.XMLSyntaxError as exc:
             report.notes.append(f"{name} 파싱 실패(건너뜀): {exc}")
             continue
         if new_bytes != data[name]:
             data[name] = new_bytes
-            report.sections_changed += 1
+            changed_names.add(name)
         report.filled.update(filled)
         report.replaced += replaced
         all_used |= used
+
+    # 3.3) 폼 컨트롤 체크박스(hp:checkBtn) 2-패스 — '문서 전체' 유일성 판정.
+    #      (섹션 단위 판정은 다섹션 양식에서 전역 모호 라벨을 오체크 — 적대검증.)
+    #      후보 규칙: 셀당 컨트롤 정확히 1개(예/아니오 스택 셀은 모호) ×
+    #      라벨(_checkbtn_label: 같은셀 캡션 1순위·오른쪽 인접 2순위·컨트롤 셀
+    #      불인정) 괄호 보존 정확일치(_opt_key_preserving). 문서 전체 후보가
+    #      정확히 1개일 때만 value="CHECKED" — ■ 텍스트는 넣지 않는다.
+    #      이미 CHECKED 면 변경·보고 없이 멱등 처리(불필요 재직렬화 회피).
+    check_done: set[str] = set()
+    if check_options:
+        sec_roots: dict[str, Any] = {}
+        for name in section_names:
+            try:
+                sec_roots[name] = etree.fromstring(data[name])
+            except etree.XMLSyntaxError:
+                continue
+        dirty: set[str] = set()
+        for opt in check_options:
+            if opt in check_done:
+                continue
+            want = _opt_key_preserving(opt)
+            if not want:
+                continue
+            cands: list = []                      # (섹션명, checkBtn)
+            for name, sroot in sec_roots.items():
+                for tbl in sroot.iter(_q("tbl")):
+                    for tr in _direct(tbl, "tr"):
+                        cells = _direct(tr, "tc")
+                        for tc in cells:
+                            btns = _direct_form_checkbtns(tc)
+                            if len(btns) != 1:
+                                continue
+                            if _opt_key_preserving(
+                                    _checkbtn_label(tc, cells)) == want:
+                                cands.append((name, btns[0]))
+            if len(cands) != 1:
+                continue                          # 0/다수 = 모호 → 미체크(잔여 보고)
+            name, btn = cands[0]
+            if btn.get("value") == "CHECKED":
+                check_done.add(opt)               # 멱등 — 변경·checked 보고 없음
+                report.notes.append(f"'{opt}' 는 이미 체크되어 있어 변경하지 않았습니다.")
+                continue
+            btn.set("value", "CHECKED")
+            check_done.add(opt)
+            report.checked.append(str(opt))
+            dirty.add(name)
+        for name in dirty:
+            standalone = _detect_standalone(data[name])
+            data[name] = etree.tostring(
+                sec_roots[name], xml_declaration=True, encoding="UTF-8",
+                standalone=standalone,
+            )
+            changed_names.add(name)
+
+    report.sections_changed = len(changed_names)
+
+    # 3.5) 검정 클론이 생겼으면 헤더도 갱신(기존 항목 불변·클론 추가만).
+    if black is not None and black.changed:
+        standalone = _detect_standalone(data[header_name])
+        data[header_name] = etree.tostring(
+            black.root, xml_declaration=True, encoding="UTF-8",
+            standalone=standalone,
+        )
 
     report.filled_count = len(report.filled)
     report.residual = [
@@ -653,6 +949,11 @@ def fill_hwpx(
         for lbl, val in identity.items()
         if str(val or "").strip() and _key(lbl) not in all_used
     ]
+    report.check_residual = [o for o in check_options if o not in check_done]
+    if report.check_residual:
+        report.notes.append(
+            "체크하지 못한 옵션(라벨 부재 또는 동일 라벨 다수=모호): "
+            + ", ".join(report.check_residual))
 
     # 4) 원자적 쓰기 — 임시파일에 다시 압축 후 os.replace.
     #    mimetype 선두 + STORED, 그 외 원본 압축방식·내용 유지.
@@ -684,7 +985,7 @@ def fill_hwpx(
         raise
 
     report.ok = True
-    if not report.filled and not report.replaced:
+    if not report.filled and not report.replaced and not report.checked:
         report.notes.append(
             "채운 칸이 없습니다 — 라벨이 양식과 일치하지 않거나 칸에 이미 값이 "
             "있을 수 있습니다(덮어쓰기 금지). identity 라벨/값을 확인하세요.")

@@ -60,6 +60,9 @@ def main(argv: list[str] | None = None) -> int:
                     help=".hwp 라도 COM 시도 없이 안내만(드라이런)")
     ap.add_argument("--field", action="store_true",
                     help=".hwp 가 누름틀 양식일 때 직접 필드 채움(기본은 표 양식 자동 파이프라인)")
+    ap.add_argument("--check", action="append", default=[], metavar="옵션라벨",
+                    help="폼 컨트롤 체크박스(hp:checkBtn)의 옵션 라벨을 체크(반복 가능). "
+                         "예: --check 경영분야 --check 동의")
     args = ap.parse_args(argv)
 
     # Windows 콘솔(cp949)에서 한글·기호 출력이 깨지거나 죽지 않도록 UTF-8 강제.
@@ -95,7 +98,8 @@ def main(argv: list[str] | None = None) -> int:
     if ext == ".hwpx":
         try:
             rep = fill_hwpx(src, out, identity=identity,
-                            replacements=_parse_kv(args.replaces))
+                            replacements=_parse_kv(args.replaces),
+                            check_options=args.check)
         except (ValueError, FileNotFoundError, OSError) as exc:
             print(f"[실패] {exc}", file=sys.stderr)
             return 2
@@ -103,6 +107,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"채운 칸: {rep.filled_count}  치환: {rep.replaced}  변경 섹션: {rep.sections_changed}")
         for lbl, val in rep.filled.items():
             print(f"  [v] {lbl} = {val}")
+        for opt in rep.checked:
+            print(f"  [v] 체크: {opt}")
+        if rep.check_residual:
+            print(f"  못 체크한 옵션(부재/모호): {', '.join(rep.check_residual)}")
         if rep.residual:
             print(f"  남은 라벨(양식에 칸 없음/이미 값 있음): {', '.join(rep.residual)}")
         for n in rep.notes:
@@ -133,6 +141,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         rep3 = fill_hwp_via_hwpx(src, out, identity=identity,
                                  replacements=_parse_kv(args.replaces),
+                                 check_options=args.check,
                                  use_com=not args.no_com)
     except (ValueError, FileNotFoundError, OSError) as exc:
         print(f"[실패] {exc}", file=sys.stderr)
