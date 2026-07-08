@@ -794,3 +794,99 @@ def test_self_diagnose_cli_forwards_blind_review(tmp_path, monkeypatch) -> None:
     assert captured["blind"] is True
     cli.main([str(src), "--ledger", no_ledger])
     assert captured["blind"] is False
+
+
+def test_anchor_forward_match_wins_over_reverse_substring(tmp_path: Path) -> None:
+    """역포함 오매칭 회귀: 앞쪽 본문에 앵커 부분문자열(짧은 키워드)이 있어도
+    뒤쪽 표의 정방향 매칭 앵커가 선택되어야 한다(1차 패스 우선)."""
+    from auto_write.services.image_apply import _find_anchor
+
+    doc = Document()
+    # 앞쪽 본문: 앵커의 부분문자열들 — 구버전 단일 패스(len>=4 역포함)에서는
+    # 이 단락들이 뒤쪽 표 셀의 정방향 앵커보다 먼저 잡혀 오매칭되던 케이스.
+    doc.add_paragraph("사업화")          # 3자 — 2차 패스 임계(len>4) 미달
+    doc.add_paragraph("추진계획")        # 4자 — 구 코드(>=4)에서 오매칭, 신 코드(len>4) 탈락
+    doc.add_paragraph("사업화추진")      # 5자 — 2차 패스 후보지만 1차(정방향)가 항상 우선
+    # 뒤쪽 표: 정방향 매칭 앵커("사업화추진계획 로드맵")
+    table = doc.add_table(rows=1, cols=1)
+    table.rows[0].cells[0].text = "사업화추진계획 로드맵 단계별 마일스톤"
+    doc.add_paragraph("맺음말 단락.")
+
+    # anchor_text 앞 40자 = "사업화추진계획 로드맵 단계별 마일스톤"
+    # 정방향(1차 패스): key in cell_text → 표 셀 매칭이 부분문자열 본문보다 우선
+    anchor = "사업화추진계획 로드맵 단계별 마일스톤"
+    para, table_found = _find_anchor(doc, anchor)
+
+    assert para is not None, "앵커를 찾지 못함 — 표 셀 정방향 매칭이 동작해야 함"
+    assert table_found is not None, "표 안 단락이 아님 — 뒤쪽 표 셀이 선택되어야 함"
+    assert anchor in para.text, "선택된 단락 텍스트가 앵커 키를 포함해야 함"
+
+
+# --- autopilot_pipeline 결함 수정 회귀 테스트 (잔존총계·최종본 재채점) ---
+
+def test_residual_re_matches_confirmation_needed() -> None:
+    """_RESIDUAL_RE 가 [확인필요]와 [산출근거]를 정확히 매칭해야 한다."""
+    from auto_write.services.autopilot_pipeline import _RESIDUAL_RE
+
+    assert _RESIDUAL_RE.search("[확인필요]"), "[확인필요] 미매칭"
+    assert _RESIDUAL_RE.search("[산출근거]"), "[산출근거] 미매칭"
+    # 기존 패턴도 유지되어야 함
+    assert _RESIDUAL_RE.search("___"), "밑줄 패턴 미매칭"
+    assert _RESIDUAL_RE.search("(작성)"), "작성 패턴 미매칭"
+
+
+def test_autopilot_report_fields_and_write_report(tmp_path: Path) -> None:
+    """AutopilotReport 신규 필드(residual_total·final_score_total·final_passed)와
+    리포트 md 표기를 검증한다.
+
+    run_autopilot E2E 대신 _write_report/_build_todo 를 직접 호출해
+    메모리 압박 없이 결정론적으로 검증한다.
+    """
+    from auto_write.services.autopilot_pipeline import AutopilotReport, _build_todo, _write_report
+
+    report = AutopilotReport(
+        input_docx=str(tmp_path / "in.docx"),
+        output_docx=str(tmp_path / "out.docx"),
+        backup_dir=str(tmp_path / "backup"),
+        doc_type="사업계획서 (90%)",
+        score_total=92.0,
+        grade="우수",
+        passed=True,
+        iterations=1,
+        ops_summary="안내문구-2 글머리표-3 표셀-1 빈단락-4 강조-5",
+        prompts_inserted=2,
+        psst_overall_ratio=0.75,
+        psst_areas_scaffolded=1,
+        psst_items_added=3,
+        psst_scaffolded_areas=["팀구성"],
+        residual_placeholders=["[확인필요] 예산", "[산출근거] 매출"],
+        residual_total=5,  # 총 5건(샘플은 2건)
+        final_score_total=84.0,
+        final_passed=False,
+    )
+
+    # AutopilotReport 에 신규 필드가 있어야 함
+    assert hasattr(report, "final_score_total"), "final_score_total 필드 없음"
+    assert hasattr(report, "final_passed"), "final_passed 필드 없음"
+    assert hasattr(report, "residual_total"), "residual_total 필드 없음"
+
+    # as_dict 에도 포함되어야 함
+    d = report.as_dict()
+    assert "final_score_total" in d
+    assert "final_passed" in d
+    assert "residual_total" in d
+    assert d["residual_total"] == 5
+    assert d["final_score_total"] == 84.0
+    assert d["final_passed"] is False
+
+    # _build_todo: 최종점수 미달 → To-Do 항목 추가되어야 함
+    todo = _build_todo(report)
+    assert any("최종본 재채점" in t for t in todo), "최종본 재채점 미달 To-Do 없음"
+    assert any("총 5곳" in t for t in todo), "잔존 총건수 To-Do 없음"
+
+    # _write_report: md 에 '최종본 재채점' 줄과 잔존 총건수 포함
+    report.manual_todo = todo
+    md_path = _write_report(tmp_path, "test_stem", report)
+    md_text = Path(md_path).read_text(encoding="utf-8")
+    assert "최종본 재채점" in md_text, "리포트에 최종본 재채점 줄 없음"
+    assert "잔존 빈칸/[확인필요] 총" in md_text, "리포트에 잔존 총건수 표기 없음"

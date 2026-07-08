@@ -11,7 +11,7 @@
   4) 실사용 수용검사 게이트(R8)   — ``usage_acceptance.run_acceptance``
      (심사위원 관점 하드페일 검사. fail 결함이 있으면 출력 파일명을
       ``_DRAFT`` 로 강제해 '제출본' 이름으로 내보내지 않는다)
-  5) 잔존 빈칸 스캔 + 통합 리포트
+  5) 최종본 재채점(참고) + 잔존 빈칸 스캔 + 통합 리포트
 
 설계 원칙
 ---------
@@ -43,9 +43,10 @@ from .usage_acceptance import (
     AcceptanceConfig, SEV_FAIL, backup_existing_output, force_draft_name, run_acceptance,
 )
 
-# 잔존 빈칸(placeholder) 보수적 탐지 패턴
+# 잔존 빈칸(placeholder) 보수적 탐지 패턴 — [확인필요], [산출근거] 포함
 _RESIDUAL_RE = re.compile(
-    r"(_{3,}|\[\s*\]|\(\s*작성\s*\)|※\s*작성|기재\s*바랍|예\s*:\s*\)|【\s*】)"
+    r"(_{3,}|\[\s*\]|\(\s*작성\s*\)|※\s*작성|기재\s*바랍|예\s*:\s*\)|【\s*】"
+    r"|\[확인필요\]|\[산출근거\])"
 )
 
 
@@ -81,9 +82,13 @@ class AutopilotReport:
     overwrite_backup: str = ""  # 재실행 보호(PIPE-2) — 기존 산출물 백업 경로
     prompt_md: str = ""        # 제출 정리(US-6) — 보존된 슬라이드 프롬프트 md 경로
     strip_removed: int = 0     # 제출 정리(US-6) — 제거한 작업용 블록 단락 수
-    # 5단계(잔존)
+    # 5단계(잔존·최종 재채점)
     residual_placeholders: list[str] = field(default_factory=list)
+    residual_total: int = 0  # 잔존 빈칸/[확인필요] 총 건수(샘플 limit=20 과 별개)
     manual_todo: list[str] = field(default_factory=list)
+    # 최종본 재채점(참고용 — 게이트 판정은 1단계 품질점수·4단계 수용검사 기준)
+    final_score_total: float = 0.0
+    final_passed: bool = False
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -114,32 +119,40 @@ class AutopilotReport:
             "prompt_md": self.prompt_md,
             "strip_removed": self.strip_removed,
             "residual_placeholders": self.residual_placeholders,
+            "residual_total": self.residual_total,
             "manual_todo": self.manual_todo,
+            "final_score_total": round(self.final_score_total, 1),
+            "final_passed": self.final_passed,
         }
 
 
-def _scan_residual(docx_path: str, *, limit: int = 20) -> list[str]:
-    """결과 DOCX 에서 잔존 빈칸 표식을 보수적으로 스캔한다(보고용)."""
+def _scan_residual(docx_path: str, *, limit: int = 20) -> tuple[list[str], int]:
+    """결과 DOCX 에서 잔존 빈칸 표식을 보수적으로 스캔한다(보고용).
+
+    Returns:
+        (샘플 목록, 총 건수) — 샘플은 최대 limit 개, 총 건수는 전체 카운트.
+    """
     found: list[str] = []
+    total: int = 0
     try:
         doc = Document(docx_path)
     except Exception:
-        return found
+        return found, total
     for p in doc.paragraphs:
         t = p.text.strip()
         if t and _RESIDUAL_RE.search(t):
-            found.append(t[:60])
-            if len(found) >= limit:
-                return found
+            total += 1
+            if len(found) < limit:
+                found.append(t[:60])
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
                 t = cell.text.strip()
                 if t and _RESIDUAL_RE.search(t):
-                    found.append(t[:60])
-                    if len(found) >= limit:
-                        return found
-    return found
+                    total += 1
+                    if len(found) < limit:
+                        found.append(t[:60])
+    return found, total
 
 
 def _make_openai_service() -> Optional[Any]:
@@ -341,8 +354,31 @@ def run_autopilot(
                 report.output_docx = str(final_path)
                 report.draft_marked = True
 
-    # --- 5단계: 잔존 빈칸 스캔 + To-Do ---
-    report.residual_placeholders = _scan_residual(str(final_path))
+    # --- 5단계: 최종본 재채점(참고용) + 잔존 빈칸 스캔 + To-Do ---
+    # 재채점은 로컬 룰만 사용(AI 호출 금지). 게이트 판정은 1단계 품질점수·
+    # 4단계 수용검사 기준이므로 변경하지 않는다(참고 지표).
+    try:
+        from .doc_quality_score import score_document
+        from .document_type_classifier import classify_docx
+
+        final_doc_type = classify_docx(str(final_path))
+        final_doc = Document(str(final_path))
+        final_score = score_document(
+            final_doc,
+            doc_type=final_doc_type.type_code,
+            type_confidence=final_doc_type.confidence,
+            psst_ratio=report.psst_overall_ratio if report.psst_overall_ratio else None,
+            image_suggestions=report.prompts_inserted,
+        )
+        report.final_score_total = final_score.total
+        report.final_passed = final_score.total >= 85.0
+    except Exception:
+        report.final_score_total = 0.0
+        report.final_passed = False
+
+    residual_samples, residual_total = _scan_residual(str(final_path))
+    report.residual_placeholders = residual_samples
+    report.residual_total = residual_total
     report.manual_todo = _build_todo(report)
 
     if write_report:
@@ -382,9 +418,15 @@ def _build_todo(report: AutopilotReport) -> list[str]:
         )
     for area in report.psst_scaffolded_areas:
         todo.append(f"PSST 작성 보강: {area}")
-    if report.residual_placeholders:
+    residual_count = report.residual_total if report.residual_total else len(report.residual_placeholders)
+    if residual_count:
         todo.append(
-            f"잔존 빈칸 {len(report.residual_placeholders)}곳 — 직접 채우거나 submittable_filler 로 채움."
+            f"잔존 빈칸/[확인필요] 총 {residual_count}곳 — 직접 채우거나 submittable_filler 로 채움."
+        )
+    if report.final_score_total > 0 and not report.final_passed:
+        todo.append(
+            f"최종본 재채점 {report.final_score_total:.1f}점(<85): "
+            f"NotebookLM 안내 블록 삭제·잔존 빈칸 채움 후 재확인 권장."
         )
     return todo
 
@@ -431,7 +473,19 @@ def _write_report(results_root: Path, stem: str, report: AutopilotReport) -> str
     else:
         lines.append("- (게이트 생략됨 — acceptance_gate=False)")
     lines.append("")
-    lines.append("## 5) 수동 보완 To-Do")
+    lines.append("## 5) 최종본 재채점(참고)")
+    if report.final_score_total > 0:
+        final_gate = "통과" if report.final_passed else "미달"
+        lines.append(
+            f"- 최종본 재채점(참고): {report.final_score_total:.1f}/100 — "
+            f"게이트 판정은 서식수정 단계 기준 ({final_gate})"
+        )
+    else:
+        lines.append("- 최종본 재채점(참고): 측정 불가")
+    residual_count = report.residual_total if report.residual_total else len(report.residual_placeholders)
+    lines.append(f"- 잔존 빈칸/[확인필요] 총 {residual_count}곳")
+    lines.append("")
+    lines.append("## 6) 수동 보완 To-Do")
     if report.manual_todo:
         for t in report.manual_todo:
             lines.append(f"- [ ] {t}")
