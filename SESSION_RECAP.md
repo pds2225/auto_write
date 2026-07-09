@@ -1,3 +1,46 @@
+## 🧾 세션 회고 — 2026-07-09 17:38
+**주제:** auto_write HWPX 방향 정리 + git master 동기화
+
+### ✅ 한 일
+- 전에는 DOCX 품질 하네스만 기준으로 설명돼 혼란 → 이제 **HWPX 직접 작성·검증·제출**이 실사용 주경로임을 정리함.
+- 전에는 로컬 `master`가 오래돼 `hwpx_submit` 등이 없었음 → `origin/master`와 **충돌 없이 동기화** 완료, HWPX 관련 도구가 로컬에 생김.
+- 전에는 Cursor에서 셸 명령이 bkit 훅 때문에 막힘 → 훅이 JSON을내도록 고쳐 **터미널·git 명령이 다시 동작**함.
+- 전에는 강조 로직 튜닝이 git에 안 올라가 있었음 → **커밋 완료** (이전 턴).
+
+### 🧭 정한 것
+- 품질검증 하네스 개발 순서: **3(검증만) → 2(채움 후 자동검증) → 1(제출정리)** — 전부 **HWPX 기준**.
+- DOCX `document_quality_orchestrator`는 보조 경로로만 사용.
+
+### 📂 손댄 파일
+- `C:\Users\ekth3\.claude\plugins\cache\bkit-marketplace\bkit\2.1.21\lib\core\io.js` — Cursor 셸 훅 JSON 출력
+- `D:\auto_write\.omc\skills\auto-write-hwpx-quality-path.md` — 프로젝트 스킬 신규
+- `D:\auto_write\.omc\wiki\auto-write-hwpx-quality-path.md` — 위키 결정 기록
+- `C:\Users\ekth3\.claude\skills\omc-learned\gsync-repo-check.md` — master ff-only 절차 추가
+
+### ⏭️ 다음 할 일
+- HWPX **Phase 3**: `hwpx_acceptance` 검증 전용 CLI (`--verify-only`) 구현
+- 실제 `.hwpx` 파일로 `hwpx_submit --strict` 실측
+
+---
+
+## 🧾 세션 회고 — 2026-07-09
+**주제:** 서울 AI 허브 신청·동의서 자동채움 개발현황 재확인 (코드 수정 없음)
+
+### ✅ 한 일
+- 전에는 7/2에 채워 둔 신청서가 어디까지 자동이고 뭐가 남았는지 헷갈렸는데, 이제 **제품 기능은 없고 7/2 1회 완성본(scratchpad)** 이라는 점과 **한글에서 직접 넣을 칸 목록**이 다시 정리됐어요.
+- 전에는 OneDrive에 신청서 폴더가 있다고 가정했는데, **2026-07-08 기준 그 경로는 PC에서 안 보임** — 제출 파일은 `사용계획완성`·`신청서_박다솜`으로 **PC 전체 검색**이 먼저예요.
+- 전에는 auto_write가 옛 브랜치에 머물 수 있었는데, 지금은 **master 최신(hwpx 파리티 포함)** 으로 맞춰진 상태예요.
+
+### 🧭 정한 것
+- 이번 세션은 **코드 수정 금지·확인만** — 개발/제품화는 하지 않음.
+- 서울 AI 허브 마감은 **약 7/19**(소상공인 7/3 마감과 별개).
+
+### ⏭️ 다음 할 일
+- PC에서 채운 hwpx/hwp 찾기 → 없으면 작성안 md 보고 한글에서 수동 마무리(주소·Track·서명·날짜)
+- 공고문으로 마감·제출 경로 최종 확인 후 접수
+
+---
+
 ## 🧾 세션 회고 — 2026-07-08
 **주제:** 공고 첨부 다운로더(D:\mail) 캠코 오탐·미인식 수정 + 범용 견고화 (/team /ultragoal)
 
