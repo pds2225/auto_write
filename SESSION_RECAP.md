@@ -1,3 +1,31 @@
+## 🧾 세션 회고 — 2026-07-11 18:40
+**주제:** 자가학습 시스템 구축(전역) + auto_write 학습레이어 계획서 + KAMCO 제출
+
+### ✅ 한 일
+- 전에는 내(Claude) 실수를 매번 사용자가 다시 지적해야 했는데, 이제 **사용자의 다음 한마디("틀림"/"ㅇㅋ")로 자동 채점**되어 오답노트(lessons.md)에 교훈이 쌓이고, 같은 주제가 나오면 자동으로 다시 주입됨(전역 훅, mail 포함 모든 폴더).
+- 전에는 구 자가학습(agent-learning)이 만들어진 지 8분 만에 조용히 죽었는데(점수 수동입력·죽어도 무경보), 이제 **감시견(selfcheck.py) + errors.log + SessionStart 경고**로 죽으면 알려줌. 고장 7종 주입 테스트로 실증.
+- 오답노트에 auto_write 과거 규칙 **23건 backfill**(파란→검정·마스킹·날조0·DRAFT게이트 등) + **폰트 위계 갱신**(대제목 유지/중16/소14/본문12/각주10/표11 — 구 "본문10pt" 폐기) + **규칙충돌=최신우선**(L029).
+- 세션 자동 마무리(closeout)를 **40턴→매 턴**으로 전환(Claude·Cursor·Codex 전역).
+- **KAMCO TechBlaze 제출 완료**(v4.hwp, 사용자 확인).
+- auto_write **자가학습 레이어(learning layer) 개발 계획서** 작성 — `.omc/plans/learning-layer-plan.md` (기존 코드 실측 인터페이스 포함, Opus 세션 개발 예정).
+
+### 🧭 정한 것
+- 세션 레벨 학습(`D:/.omc/agent-learning`, 대화 채점) vs 제품 레벨 학습(`workspace/learning/`, 실행 결과 축적)은 **분리** — 1차에선 연결 안 함.
+- learning layer 1차 범위: learning_store·run_evaluator·defect_classifier·learning_report·planner·learn_run CLI + 테스트 5종. 코드 자동수정 금지(selfdev 후보 등록까지).
+
+### 📂 손댄 파일
+- `D:\.omc\agent-learning\` — autoeval_hook.py·selfcheck.py·stats.py·lessons.md(29건)·테스트 2종 (신규)
+- `C:\Users\ekth3\.claude\settings.json` — UserPromptSubmit 자동채점 훅 + SessionStart 감시견 등록
+- `C:\Users\ekth3\.claude\skills\session-closeout-auto\scripts\` — 매 턴 전환(THRESHOLD=1)
+- `D:\auto_write\.omc\plans\learning-layer-plan.md` — 개발 계획서 (신규)
+- `bizplan-writing-rules.md`·`MEMORY.md` — 폰트 위계 최신화
+
+### ⏭️ 다음 할 일
+- Opus 세션에서 `".omc/plans/learning-layer-plan.md 읽고 1차 구현"` (워크트리 `feat/learning-layer`, `origin/master` 기준)
+- 며칠 후 `python D:\.omc\agent-learning\scripts\stats.py` 로 실패율 추세 확인
+
+---
+
 ## 🧾 세션 회고 — 2026-07-09 17:38
 **주제:** auto_write HWPX 방향 정리 + git master 동기화
 
