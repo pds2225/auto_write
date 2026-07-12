@@ -1,0 +1,892 @@
+"""test_auto_write_apply.py — image_apply / psst_fill / autopilot_pipeline 회귀 테스트.
+
+새로 추가한 '실제 수정' 모듈들이:
+  - 원본을 덮어쓰지 않고(out==in 가드)
+  - 표 실측치가 있으면 차트를, 없으면 자리표시를 삽입하며
+  - PSST 미흡/누락 영역에 작성 가이드를 추가하고
+  - autopilot 이 전 단계를 무인 연속 실행하는지
+를 검증한다. (숫자 날조가 없어야 함 — placeholder 폴백 동작 포함)
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+from docx import Document
+
+from auto_write.services.image_apply import apply_images, strip_notebooklm_blocks
+from auto_write.services.psst_fill import apply_psst_scaffold
+from auto_write.services.usage_acceptance import run_acceptance
+
+
+def _make_doc(path: Path, *, with_table: bool = True) -> None:
+    doc = Document()
+    doc.add_heading("사업계획서", 0)
+    doc.add_paragraph("가. 문제인식: 고객 시장 니즈와 기존 대안의 한계로 비용 손실.")
+    doc.add_paragraph("나. 추진일정 로드맵 — 단계별 마일스톤.")          # gantt 트리거
+    doc.add_paragraph("다. 목표 시장규모 TAM SAM SOM 성장률 전망.")       # 막대/도넛 트리거
+    if with_table:
+        t = doc.add_table(rows=2, cols=3)
+        t.rows[0].cells[0].text = "2024년"
+        t.rows[0].cells[1].text = "2025년"
+        t.rows[0].cells[2].text = "2026년"
+        t.rows[1].cells[0].text = "100"
+        t.rows[1].cells[1].text = "200"
+        t.rows[1].cells[2].text = "350"
+    doc.save(str(path))
+
+
+def test_apply_images_in_equals_out_blocked(tmp_path: Path) -> None:
+    src = tmp_path / "in.docx"
+    _make_doc(src)
+    with pytest.raises(ValueError):
+        apply_images(str(src), str(src))
+
+
+def test_apply_images_inserts_notebooklm_prompt(tmp_path: Path) -> None:
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    _make_doc(src, with_table=True)
+    report = apply_images(str(src), str(out))  # openai_service=None → 키워드 폴백
+    assert out.exists()
+    # 원본은 그대로(문단 수 변화 없음)
+    assert len(Document(str(src)).paragraphs) < len(Document(str(out)).paragraphs)
+    # 그림 위치마다 NotebookLM 슬라이드 프롬프트 블록이 삽입되어야 한다
+    assert report.prompts_inserted >= 1
+    text = "\n".join(p.text for p in Document(str(out)).paragraphs)
+    assert "NotebookLM" in text
+
+
+def test_apply_images_placeholder_only_still_inserts_prompt(tmp_path: Path) -> None:
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    _make_doc(src, with_table=True)
+    # placeholder_only 는 하위호환용(동작에 영향 없음) — 항상 프롬프트 블록 삽입
+    report = apply_images(str(src), str(out), placeholder_only=True)
+    assert report.prompts_inserted >= 1
+
+
+def test_apply_images_no_table_still_inserts_prompt(tmp_path: Path) -> None:
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    _make_doc(src, with_table=False)
+    report = apply_images(str(src), str(out))
+    # 표가 없어도 키워드 매칭 위치에 슬라이드 프롬프트가 들어간다 (숫자 날조 없음)
+    assert report.prompts_inserted >= 1
+
+
+def test_apply_images_table_anchor_inserts_after_table_not_end(tmp_path: Path) -> None:
+    """버그① 회귀: 키워드가 '표 헤더'에만 있는(표 기반 양식) 경우에도
+    NotebookLM 프롬프트가 문서 끝에 덤프되지 않고 해당 표 바로 뒤에 들어가야 한다."""
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    doc = Document()
+    doc.add_paragraph("개요: 본 사업계획서 본문(키워드 없음).")
+    table = doc.add_table(rows=2, cols=3)
+    table.rows[0].cells[0].text = "추진 일정"          # 로드맵/간트 트리거(표 헤더)
+    table.rows[0].cells[1].text = "마일스톤"
+    table.rows[0].cells[2].text = "담당"
+    table.rows[1].cells[0].text = "1분기"
+    doc.add_paragraph("맺음말: 마지막 본문 단락.")       # 표보다 뒤에 있는 본문
+    doc.save(str(src))
+
+    report = apply_images(str(src), str(out))            # openai_service=None → 키워드 폴백
+    assert report.prompts_inserted >= 1
+    assert report.anchors_missing == 0                   # 표 앵커를 찾았어야 함
+
+    # 본문 순서상: 표(tbl) < NotebookLM 프롬프트 < 맺음말  (끝에 덤프 아님)
+    from docx.oxml.ns import qn
+    from docx.text.paragraph import Paragraph as _P
+    out_doc = Document(str(out))
+    seq = []
+    for child in out_doc.element.body:
+        if child.tag == qn("w:tbl"):
+            seq.append(("tbl", ""))
+        elif child.tag == qn("w:p"):
+            seq.append(("p", _P(child, out_doc).text))
+    idx_tbl = next(i for i, s in enumerate(seq) if s[0] == "tbl")
+    idx_prompt = next(i for i, s in enumerate(seq) if "NotebookLM" in s[1])
+    idx_end = next(i for i, s in enumerate(seq) if "맺음말" in s[1])
+    assert idx_tbl < idx_prompt < idx_end
+
+
+def test_submittable_filler_paragraph_fill_in_table_cell(tmp_path: Path) -> None:
+    """버그①b 회귀: 채울 본문 앵커가 '표 셀 안'에 있어도 누락 없이 채워야 한다
+    (이전엔 doc.paragraphs 만 봐서 표 셀 앵커를 '본문 앵커 미발견'으로 건너뜀)."""
+    from auto_write.services.submittable_filler import SubmittableFiller
+
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    doc = Document()
+    doc.add_paragraph("머리말")
+    t = doc.add_table(rows=1, cols=1)
+    t.rows[0].cells[0].text = "5. AI 인재활용 계획 세부내용 작성"   # 표 셀 안 앵커
+    doc.save(str(src))
+
+    plan = {"paragraph_fills": [
+        {"anchor": "5. AI 인재활용 계획 세부내용 작성",
+         "lines": ["실제 인재활용 계획 내용입니다.", "하위 항목 1"]}
+    ]}
+    report = SubmittableFiller(plan).finalize(src, out)
+    assert report["paragraphs_filled"] == 1
+    assert not any("앵커 미발견" in n for n in report["notes"])
+    cell_text = "\n".join(
+        c.text for tb in Document(str(out)).tables for r in tb.rows for c in r.cells
+    )
+    assert "실제 인재활용 계획 내용입니다." in cell_text
+
+
+def test_psst_scaffold_adds_guidance(tmp_path: Path) -> None:
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    _make_doc(src)  # team/scale 영역이 비어 미흡/누락
+    report = apply_psst_scaffold(str(src), str(out))
+    assert out.exists()
+    assert report.areas_scaffolded >= 1
+    text = "\n".join(p.text for p in Document(str(out)).paragraphs)
+    assert "작성 보강 가이드" in text
+
+
+def test_psst_scaffold_in_equals_out_blocked(tmp_path: Path) -> None:
+    src = tmp_path / "in.docx"
+    _make_doc(src)
+    with pytest.raises(ValueError):
+        apply_psst_scaffold(str(src), str(src))
+
+
+def test_autopilot_end_to_end(tmp_path: Path) -> None:
+    from auto_write.services.autopilot_pipeline import run_autopilot
+
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    _make_doc(src, with_table=True)
+    report = run_autopilot(str(src), str(out), write_report=False)
+    assert Path(report.output_docx).exists()
+    assert report.backup_dir  # 원본 백업이 생성되어야 함
+    assert report.score_total > 0
+    # 그림 위치에 NotebookLM 프롬프트가 최소 1개, PSST 보강이 일어났을 것
+    assert report.prompts_inserted >= 1
+    assert report.psst_areas_scaffolded >= 1
+    # R8 게이트: NotebookLM 작업용 블록이 삽입된 출력은 '제출본'이 아니다 —
+    # 수용검사 fail → 파일명 _DRAFT 강제, 원래 이름으로는 내보내지 않는다.
+    assert report.acceptance_submittable is False
+    assert report.draft_marked is True
+    assert report.output_docx.endswith("_DRAFT.docx")
+    assert not out.exists()
+
+
+def test_autopilot_acceptance_gate_passes_clean_doc(tmp_path: Path) -> None:
+    """R8: 수용검사를 통과하는 출력은 지정한 이름 그대로 내보낸다."""
+    from auto_write.services.autopilot_pipeline import run_autopilot
+
+    src = tmp_path / "clean.docx"
+    out = tmp_path / "clean_out.docx"
+    doc = Document()
+    doc.add_paragraph("개요: 본 문서는 게이트 검증용입니다.")  # 이미지/PSST 트리거 없음
+    doc.save(str(src))
+    report = run_autopilot(
+        str(src), str(out), max_images=0, psst_scaffold=False, write_report=False
+    )
+    assert report.acceptance_submittable is True
+    assert report.acceptance_verdict == "제출가능"
+    assert report.draft_marked is False
+    assert report.output_docx == str(out) and out.exists()
+
+
+def test_autopilot_strict_acceptance_promotes_paren_warn_to_draft(tmp_path: Path) -> None:
+    """R14: strict_acceptance=True 면 괄호 선택란 warn 만 있는 문서도 _DRAFT 로 막는다.
+
+    기본(strict 미지정)에서는 warn 이라 제출 가능 이름을 유지해야 한다(회귀 없음).
+    """
+    from auto_write.services.autopilot_pipeline import run_autopilot
+
+    src = tmp_path / "paren.docx"
+    doc = Document()
+    doc.add_paragraph("개요: 게이트 검증용 문서.")
+    t = doc.add_table(rows=1, cols=2)
+    t.cell(0, 0).text = "지원 분야(택 1)"
+    t.cell(0, 1).text = "( ) 제조  ( ) 지식서비스"   # 미선택 → paren_choices warn
+    doc.save(str(src))
+
+    base = run_autopilot(str(src), str(tmp_path / "base_out.docx"),
+                         max_images=0, psst_scaffold=False, write_report=False)
+    assert base.acceptance_submittable is True       # 기본: warn → 제출 가능
+    assert base.draft_marked is False
+
+    strict = run_autopilot(str(src), str(tmp_path / "strict_out.docx"),
+                           max_images=0, psst_scaffold=False, write_report=False,
+                           strict_acceptance=True)
+    assert strict.acceptance_submittable is False     # opt-in: fail 승격 → 제출불가
+    assert strict.draft_marked is True
+    assert strict.output_docx.endswith("_DRAFT.docx")
+
+
+def test_autopilot_acceptance_gate_can_be_disabled(tmp_path: Path) -> None:
+    """acceptance_gate=False 면 기존 동작 그대로(이름 유지, 판정 없음)."""
+    from auto_write.services.autopilot_pipeline import run_autopilot
+
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    _make_doc(src, with_table=True)
+    report = run_autopilot(str(src), str(out), acceptance_gate=False, write_report=False)
+    assert report.acceptance_verdict == ""
+    assert report.draft_marked is False
+    assert report.output_docx == str(out) and out.exists()
+
+
+def test_autopilot_gate_fail_closed_on_acceptance_error(tmp_path: Path, monkeypatch) -> None:
+    """R9: 게이트 자신이 죽어도 통과로 취급하지 않는다(fail-closed) —
+    예외가 전파되지 않고 acceptance_error 기록 + _DRAFT 강제 + 리포트 보존."""
+    from auto_write.services import autopilot_pipeline
+
+    def _boom(*_args, **_kwargs):  # 실제 시그니처(path, config) 변화에 둔감하게
+        raise RuntimeError("acceptance crashed")
+
+    monkeypatch.setattr(autopilot_pipeline, "run_acceptance", _boom)
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    _make_doc(src)
+    report = autopilot_pipeline.run_autopilot(
+        str(src), str(out), max_images=0, psst_scaffold=False, write_report=False
+    )
+    assert "RuntimeError" in report.acceptance_error
+    assert report.acceptance_verdict == ""          # 판정 자체는 없었음
+    assert report.draft_marked is True              # 판정 불가 = 제출 금지
+    assert report.output_docx.endswith("_DRAFT.docx")
+    assert Path(report.output_docx).exists() and not out.exists()
+    assert any("수용검사 실행 실패" in t for t in report.manual_todo)
+
+
+def test_autopilot_draft_collision_uses_alternate_name(tmp_path: Path) -> None:
+    """R9: 입력이 '<출력>_DRAFT.docx' 인 재실행 흐름에서도 침묵 스킵 없이
+    _DRAFT2 대체 이름으로 마킹한다(원본 보존 + 제출본 이름 차단)."""
+    from auto_write.services.autopilot_pipeline import run_autopilot
+
+    src = tmp_path / "X_DRAFT.docx"
+    out = tmp_path / "X.docx"
+    _make_doc(src, with_table=True)  # NotebookLM 블록 삽입 → 수용검사 fail 유도
+    report = run_autopilot(str(src), str(out), write_report=False)
+    assert report.acceptance_submittable is False
+    assert report.draft_marked is True
+    assert report.output_docx.endswith("X_DRAFT2.docx")
+    assert src.exists()                             # 입력 원본 보존
+    assert Path(report.output_docx).exists() and not out.exists()
+
+
+def test_autopilot_in_equals_out_blocked(tmp_path: Path) -> None:
+    from auto_write.services.autopilot_pipeline import run_autopilot
+
+    src = tmp_path / "in.docx"
+    _make_doc(src)
+    with pytest.raises(ValueError):
+        run_autopilot(str(src), str(src))
+
+
+# --- bizplan 생성·완성 오케스트레이터 (AI 비의존 결정론 경로) ---
+
+def test_ai_writer_skips_without_key(tmp_path: Path) -> None:
+    from auto_write.services.bizplan_ai_writer import ai_write_areas
+
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    _make_doc(src)
+    r = ai_write_areas(str(src), str(out), openai_service=None)
+    assert r.skipped is True          # AI 키 없으면 본문 작성 생략(안전)
+    assert out.exists()
+    assert r.areas_written == 0
+
+
+def test_bizplan_no_ai_completes(tmp_path: Path) -> None:
+    from auto_write.services.bizplan_autopilot import run_bizplan_autopilot
+
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    _make_doc(src, with_table=True)
+    r = run_bizplan_autopilot(str(src), str(out), use_ai=False, write_report=False)
+    assert Path(r.output_docx).exists()
+    assert r.loops_run == 1           # 공고 없음 → 1회 완성
+    assert r.ai_used is False
+    assert r.backup_dir               # 원본 백업 생성
+    # R8 전파: NotebookLM 블록이 든 중간본이 fail 이면 최종 복사본도 _DRAFT 를 유지해야
+    # 한다 (이전 버그: shutil.copyfile 이 깨끗한 이름으로 복사해 DRAFT 마킹 소실).
+    assert r.acceptance_submittable is False
+    assert r.draft_marked is True
+    assert r.output_docx.endswith("_DRAFT.docx")
+    assert not out.exists()           # '제출' 이름으로는 내보내지 않는다
+    assert any("제출 금지" in t for t in r.manual_todo)
+
+
+def test_bizplan_in_equals_out_blocked(tmp_path: Path) -> None:
+    from auto_write.services.bizplan_autopilot import run_bizplan_autopilot
+
+    src = tmp_path / "in.docx"
+    _make_doc(src)
+    with pytest.raises(ValueError):
+        run_bizplan_autopilot(str(src), str(src), use_ai=False)
+
+
+def test_bizplan_fail_closed_on_acceptance_error(tmp_path: Path, monkeypatch) -> None:
+    """R9 fail-open 차단: 내부 autopilot 수용검사가 예외로 죽으면(검사불능, verdict='')
+    bizplan 최종본도 _DRAFT 로 강제되고 acceptance_error 가 전파돼야 한다.
+    (이전 누수: verdict 가 빈 문자열이라 DRAFT 가드를 건너뛰어 깨끗한 제출 이름으로 복사.)"""
+    from auto_write.services.bizplan_autopilot import run_bizplan_autopilot
+    import auto_write.services.autopilot_pipeline as ap_mod
+
+    def _boom(*a, **k):
+        raise RuntimeError("acceptance crashed")
+
+    monkeypatch.setattr(ap_mod, "run_acceptance", _boom)
+
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    _make_doc(src, with_table=True)
+    r = run_bizplan_autopilot(str(src), str(out), use_ai=False, write_report=False)
+    assert r.acceptance_error, "검사 예외가 acceptance_error 로 전파되어야 함"
+    assert r.draft_marked is True
+    assert r.output_docx.endswith("_DRAFT.docx")
+    assert not out.exists(), "검사불능인데 깨끗한 제출 이름으로 나가면 안 됨"
+    assert any(("판정 불가" in t) or ("실행 실패" in t) for t in r.manual_todo)
+
+
+# --- NotebookLM 블록 제거 (R5 오답노트: 제출본에 작업용 블록 잔존 재발 방지) ---
+
+def _check(path: Path, check_id: str):
+    return next(r for r in run_acceptance(path).results if r.check_id == check_id)
+
+
+def test_strip_notebooklm_in_equals_out_blocked(tmp_path: Path) -> None:
+    src = tmp_path / "in.docx"
+    _make_doc(src)
+    with pytest.raises(ValueError):
+        strip_notebooklm_blocks(str(src), str(src))
+
+
+def test_strip_notebooklm_removes_all_blocks(tmp_path: Path) -> None:
+    """apply_images 가 넣은 블록이 strip 후 0이어야 하고(검출=usage_acceptance),
+    실본문은 한 글자도 사라지면 안 된다."""
+    src = tmp_path / "in.docx"
+    mid = tmp_path / "with_blocks.docx"
+    out = tmp_path / "stripped.docx"
+    _make_doc(src, with_table=True)
+
+    report = apply_images(str(src), str(mid))            # openai_service=None → 키워드 폴백
+    assert report.prompts_inserted >= 1
+    assert _check(mid, "self_inserted_blocks").defects >= 1   # 삽입본은 FAIL 상태
+
+    strip = strip_notebooklm_blocks(str(mid), str(out))
+    assert strip.markers_removed >= 1
+    assert strip.paragraphs_removed >= strip.markers_removed  # 구분선·프롬프트도 삭제
+    assert _check(out, "self_inserted_blocks").defects == 0
+
+    # 블록 5단락이 전부 제거되어 본문이 원본과 동일해야 함(오삭제·잔여물 모두 불가)
+    src_texts = [p.text for p in Document(str(src)).paragraphs if p.text.strip()]
+    out_texts = [p.text for p in Document(str(out)).paragraphs if p.text.strip()]
+    assert out_texts == src_texts
+
+
+def test_strip_notebooklm_partial_block_marker_only(tmp_path: Path) -> None:
+    """실문서 재현: 사용자가 일부만 지워 헤더·안내만 남은 경우에도 마커는 제거하고
+    인접 실본문은 건드리지 않는다(구조 미확인 시 보수적으로 마커만 삭제)."""
+    src = tmp_path / "partial.docx"
+    out = tmp_path / "stripped.docx"
+    doc = Document()
+    doc.add_paragraph("실제 본문 내용 A")
+    doc.add_paragraph("📊 [NotebookLM 슬라이드 생성용 프롬프트] · 유형: pie")
+    doc.add_paragraph("↓ 아래 문장을 NotebookLM 슬라이드 생성에 붙여넣으세요")
+    doc.add_paragraph("실제 본문 내용 B")
+    doc.save(str(src))
+
+    strip = strip_notebooklm_blocks(str(src), str(out))
+    assert strip.markers_removed == 2
+    texts = [p.text for p in Document(str(out)).paragraphs if p.text.strip()]
+    assert texts == ["실제 본문 내용 A", "실제 본문 내용 B"]
+    assert _check(out, "self_inserted_blocks").defects == 0
+
+
+def test_strip_notebooklm_no_blocks_noop_copy(tmp_path: Path) -> None:
+    src = tmp_path / "clean.docx"
+    out = tmp_path / "out.docx"
+    _make_doc(src)
+    strip = strip_notebooklm_blocks(str(src), str(out))
+    assert strip.markers_removed == 0
+    assert strip.paragraphs_removed == 0
+    assert [p.text for p in Document(str(out)).paragraphs] == \
+        [p.text for p in Document(str(src)).paragraphs]
+
+
+# --- R9 잔여 회귀 (findings #10·#11: 검출·제거 불일치 엣지, 구분선 오삭제 엣지) ---
+
+def test_strip_notebooklm_cell_split_marker_removed(tmp_path: Path) -> None:
+    """#10: 검출은 셀 텍스트(단락 \\n 결합)에 매칭하므로 셀 안에서 마커가 두 단락으로
+    갈라져도 잡는다 — 제거도 같은 결합 방식으로 지워 '지웠는데 검출됨'이 없어야 한다."""
+    src = tmp_path / "split.docx"
+    out = tmp_path / "stripped.docx"
+    doc = Document()
+    doc.add_paragraph("실제 본문")
+    cell = doc.add_table(rows=1, cols=1).rows[0].cells[0]
+    cell.paragraphs[0].add_run("📊 [NotebookLM")
+    cell.add_paragraph("슬라이드 생성용 프롬프트] · 유형: bar")
+    cell.add_paragraph("셀 안 실제 내용")
+    doc.save(str(src))
+    assert _check(src, "self_inserted_blocks").defects >= 1     # 갈라져도 검출됨
+
+    strip = strip_notebooklm_blocks(str(src), str(out))
+    assert strip.markers_removed == 2                           # 갈라진 두 조각
+    assert _check(out, "self_inserted_blocks").defects == 0     # 제거 후 검출 0
+    cell_texts = [p.text for p in
+                  Document(str(out)).tables[0].rows[0].cells[0].paragraphs if p.text.strip()]
+    assert cell_texts == ["셀 안 실제 내용"]                    # 셀 실내용 보존
+
+
+def test_strip_notebooklm_cell_cross_match_real_content_preserved(tmp_path: Path) -> None:
+    """#10 안전핀: 실본문 문장이 우연히 단락 경계에서 패턴을 이루면(삽입 헤더 시그니처
+    없음) 지우지 않고 보존한다 — 게이트가 fail 로 사람에게 넘기는 것이 맞다."""
+    src = tmp_path / "real.docx"
+    out = tmp_path / "stripped.docx"
+    doc = Document()
+    cell = doc.add_table(rows=1, cols=1).rows[0].cells[0]
+    cell.paragraphs[0].add_run("당사는 NotebookLM")
+    cell.add_paragraph("슬라이드 생성용 프롬프트를 활용한 콘텐츠 제작 역량을 보유.")
+    doc.save(str(src))
+    assert _check(src, "self_inserted_blocks").defects >= 1     # 검출은 됨(보수적)
+
+    strip = strip_notebooklm_blocks(str(src), str(out))
+    assert strip.paragraphs_removed == 0                        # 오삭제 금지
+    cell_texts = [p.text for p in
+                  Document(str(out)).tables[0].rows[0].cells[0].paragraphs if p.text.strip()]
+    assert cell_texts == ["당사는 NotebookLM",
+                          "슬라이드 생성용 프롬프트를 활용한 콘텐츠 제작 역량을 보유."]
+    assert _check(out, "self_inserted_blocks").defects >= 1     # 사람 검토 영역으로 잔존
+
+
+def test_strip_notebooklm_preserves_user_divider(tmp_path: Path) -> None:
+    """#11: 마커에 인접한 '사용자' 구분선(임의 길이 ─)은 지우지 않는다 —
+    삽입기가 넣는 정확한 구분선(─×30)만 블록의 일부로 제거한다."""
+    src = tmp_path / "divider.docx"
+    out = tmp_path / "stripped.docx"
+    doc = Document()
+    doc.add_paragraph("─" * 15)                                 # 사용자 구분선(길이 다름)
+    doc.add_paragraph("📊 [NotebookLM 슬라이드 생성용 프롬프트] · 유형: pie")
+    doc.add_paragraph("─" * 12)                                 # 사용자 구분선
+    doc.add_paragraph("실제 본문")
+    doc.save(str(src))
+
+    strip = strip_notebooklm_blocks(str(src), str(out))
+    assert strip.markers_removed == 1
+    texts = [p.text for p in Document(str(out)).paragraphs if p.text.strip()]
+    assert texts == ["─" * 15, "─" * 12, "실제 본문"]           # 구분선·본문 보존
+    assert _check(out, "self_inserted_blocks").defects == 0
+
+
+# --- US-3c: 산출 형식 게이트(ACC-5) -------------------------------------------
+
+def test_autopilot_required_format_gate(tmp_path: Path) -> None:
+    """ACC-5: 요구 형식(hwp)과 산출(docx)이 다르면 제출명 차단 + 변환 안내."""
+    from auto_write.services.autopilot_pipeline import run_autopilot
+
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    _make_doc(src, with_table=False)
+    report = run_autopilot(
+        str(src), str(out), max_images=0, psst_scaffold=False,
+        required_format="hwp", write_report=False,
+    )
+    assert report.format_mismatch
+    assert report.output_docx.endswith("_DRAFT.docx") or report.output_docx.endswith("_DRAFT2.docx")
+    assert any("산출 형식 불일치" in t for t in report.manual_todo)
+
+
+def test_autopilot_required_format_match_no_gate(tmp_path: Path) -> None:
+    """요구 형식이 docx 로 일치하면 형식 게이트가 개입하지 않는다."""
+    from auto_write.services.autopilot_pipeline import run_autopilot
+
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    _make_doc(src, with_table=False)
+    report = run_autopilot(
+        str(src), str(out), max_images=0, psst_scaffold=False,
+        required_format="docx", write_report=False,
+    )
+    assert report.format_mismatch == ""
+
+
+# --- US-4: 재실행 보호·--strict 종료코드·공고파일 경고(PIPE-2/3/7) --------------
+
+def test_autopilot_rerun_preserves_previous_output(tmp_path: Path) -> None:
+    from auto_write.services.autopilot_pipeline import run_autopilot
+
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    doc = Document()
+    doc.add_paragraph("개요: 게이트 통과용 깨끗한 문서.")
+    doc.save(str(src))
+    r1 = run_autopilot(str(src), str(out), max_images=0, psst_scaffold=False, write_report=False)
+    assert r1.overwrite_backup == "" and Path(r1.output_docx) == out
+    r2 = run_autopilot(str(src), str(out), max_images=0, psst_scaffold=False, write_report=False)
+    assert r2.overwrite_backup and Path(r2.overwrite_backup).exists()  # 1회차 산출물 보존
+
+
+def test_cli_strict_exit_codes(tmp_path: Path, monkeypatch) -> None:
+    """PIPE-3: --strict 시 0/2/3 계약, 미지정 시 기존 exit 0 호환."""
+    import auto_write_autopilot as cli
+
+    src = tmp_path / "bad.docx"
+    doc = Document()
+    doc.add_paragraph("사업비 [확인필요] 원")
+    doc.save(str(src))
+    common = ["--no-psst", "--max-images", "0", "--no-report"]
+    assert cli.main([str(src), "-o", str(tmp_path / "o1.docx")] + common) == 0
+    assert cli.main([str(src), "-o", str(tmp_path / "o2.docx"), "--strict"] + common) == 2
+
+    from auto_write.services import autopilot_pipeline
+
+    def _boom(*_a, **_k):
+        raise RuntimeError("crash")
+
+    monkeypatch.setattr(autopilot_pipeline, "run_acceptance", _boom)
+    assert cli.main([str(src), "-o", str(tmp_path / "o3.docx"), "--strict"] + common) == 3
+
+
+def test_submit_announcement_missing_warns(tmp_path: Path) -> None:
+    """PIPE-7: 공고 파일 부재를 침묵하지 않는다."""
+    from auto_write.submit import _read_announcement
+
+    ann, warn = _read_announcement("", str(tmp_path / "없는공고.txt"), lambda p: "x")
+    assert ann == "" and "찾을 수 없음" in warn
+    ann2, warn2 = _read_announcement("직접 텍스트", "ignored.txt", lambda p: "x")
+    assert ann2 == "직접 텍스트" and warn2 == ""
+
+
+# --- US-6: extract+strip(--submit-clean) — PIPE-6/LEDG-4 -----------------------
+
+def test_extract_matches_strip_identification(tmp_path: Path) -> None:
+    """extract 와 strip 이 같은 식별을 공유 — 추출 후 strip 하면 블록 0, 본문서 프롬프트 소멸."""
+    from auto_write.services.image_apply import extract_notebooklm_prompts
+
+    src = tmp_path / "in.docx"
+    mid = tmp_path / "mid.docx"
+    out = tmp_path / "stripped.docx"
+    _make_doc(src, with_table=True)
+    apply_images(str(src), str(mid))
+    prompts = extract_notebooklm_prompts(str(mid))
+    assert prompts, "삽입된 프롬프트 본문이 추출돼야 한다"
+    strip_notebooklm_blocks(str(mid), str(out))
+    assert extract_notebooklm_prompts(str(out)) == []          # 동치: 지운 뒤 추출 0
+    assert _check(out, "self_inserted_blocks").defects == 0    # 게이트 기준으로도 잔존 0
+    text_after = "\n".join(p.text for p in Document(str(out)).paragraphs)
+    for pr in prompts:
+        assert pr[:20] not in text_after                       # 추출분이 문서에 안 남음
+
+
+def test_autopilot_submit_clean_passes_gate(tmp_path: Path) -> None:
+    """--submit-clean: 프롬프트 md 보존 + 블록 제거 후 게이트 통과 — '항상 _DRAFT' 해소."""
+    from auto_write.services.autopilot_pipeline import run_autopilot
+
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    _make_doc(src, with_table=True)
+    report = run_autopilot(
+        str(src), str(out), psst_scaffold=False, submit_clean=True, write_report=False
+    )
+    assert report.prompts_inserted >= 1 and report.strip_removed >= 1
+    assert report.prompt_md and Path(report.prompt_md).exists()
+    assert len(Path(report.prompt_md).read_text(encoding="utf-8")) > 10  # 내용 보존
+    assert report.acceptance_submittable is True
+    assert report.output_docx == str(out) and out.exists()
+
+
+def test_strip_cli_gates_final_name(tmp_path: Path) -> None:
+    """strip CLI: fail 잔존 문서는 '_제출용' 명명 차단(_DRAFT), 깨끗하면 _제출용 (LEDG-4)."""
+    import strip_notebooklm as cli
+    from auto_write.services.image_apply import apply_images as _ai
+
+    # (a) 블록 + 다른 fail(빈 명칭 칸) 잔존 → _DRAFT, '_제출용' 금지
+    bad = tmp_path / "bad.docx"
+    doc = Document()
+    doc.add_paragraph("다. 목표 시장규모 TAM SAM SOM 성장률 전망.")
+    t = doc.add_table(rows=1, cols=2)
+    t.cell(0, 0).text = "명 칭"
+    t.cell(0, 1).text = ""
+    doc.save(str(bad))
+    mid = tmp_path / "bad_nlm.docx"
+    _ai(str(bad), str(mid))
+    rc = cli.main([str(mid)])
+    assert rc == 2
+    assert not list(tmp_path.glob("*_제출용.docx"))
+    assert list(tmp_path.glob("*_정리본_DRAFT.docx"))
+
+    # (b) 깨끗한 문서 + 블록 → strip 후 통과 → _제출용
+    good = tmp_path / "good.docx"
+    doc2 = Document()
+    doc2.add_paragraph("다. 목표 시장규모 TAM SAM SOM 성장률 전망.")
+    doc2.save(str(good))
+    mid2 = tmp_path / "good_nlm.docx"
+    _ai(str(good), str(mid2))
+    rc2 = cli.main([str(mid2)])
+    assert rc2 == 0
+    assert list(tmp_path.glob("good_nlm_제출용.docx"))
+    assert list(tmp_path.glob("good_nlm_슬라이드프롬프트.md"))
+
+
+# --- R4: 앵커 정위치 삽입 — 정방향 우선(역포함 오매칭 차단) 회귀 -----------------
+
+def test_anchor_forward_match_wins_over_reverse_substring() -> None:
+    """앞쪽 본문에 앵커의 짧은 부분문자열이 있어도, 뒤쪽 표의 정방향 매칭
+    앵커가 선택되어야 한다(1차 정방향 패스 우선). 구버전은 역포함으로 앞 단락을 먼저
+    잡아 프롬프트 블록을 엉뚱한 위치에 삽입했다."""
+    from auto_write.services.image_apply import _find_anchor
+
+    doc = Document()
+    doc.add_paragraph("사업화")        # 3자 — 역포함 임계(>4) 미달
+    doc.add_paragraph("추진계획")      # 4자 — 구 코드(>=4)에서 오매칭, 신 코드(>4)에서 탈락
+    doc.add_paragraph("사업화추진")    # 5자 — 앵커의 부분문자열(구 코드 오매칭 위험)
+    table = doc.add_table(rows=1, cols=1)
+    table.rows[0].cells[0].text = "사업화추진계획 로드맵 단계별 마일스톤"
+    doc.add_paragraph("맺음말 단락.")
+
+    anchor = "사업화추진계획 로드맵 단계별 마일스톤"
+    para, table_found = _find_anchor(doc, anchor)
+    assert para is not None, "앵커를 찾지 못함 — 표 셀 정방향 매칭이 동작해야 함"
+    assert table_found is not None, "표 안 단락이 아님 — 뒤쪽 표 셀이 선택되어야 함"
+    assert anchor in para.text, "선택된 단락이 앵커 키를 포함해야 함(정방향)"
+
+
+def test_run_autopilot_passes_page_limits_to_config(tmp_path, monkeypatch) -> None:
+    """R12: run_autopilot(max_pages=..) 가 수용검사 AcceptanceConfig 로 전달돼야 한다."""
+    import auto_write.services.autopilot_pipeline as ap
+    captured = {}
+    real = ap.run_acceptance
+
+    def _spy(path, config=None):
+        captured["mp"] = getattr(config, "max_pages", "MISS")
+        captured["ai"] = getattr(config, "ai_section_max", "MISS")
+        return real(path, config)
+
+    monkeypatch.setattr(ap, "run_acceptance", _spy)
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    _make_doc(src, with_table=True)
+    ap.run_autopilot(str(src), str(out), max_pages=15, ai_section_max=2, write_report=False)
+    assert captured["mp"] == 15 and captured["ai"] == 2
+
+
+def test_run_bizplan_passes_format_and_clean(tmp_path, monkeypatch) -> None:
+    """R13/US-6: run_bizplan_autopilot 가 required_format/submit_clean 을 내부 run_autopilot
+    로 전달해야 한다(구버전: 두 인자 미전달 → bizplan 경로만 형식게이트·정리 사각지대)."""
+    import auto_write.services.bizplan_autopilot as bp
+    captured = {}
+    real = bp.run_autopilot
+
+    def _spy(*a, **k):
+        captured["required_format"] = k.get("required_format", "MISS")
+        captured["submit_clean"] = k.get("submit_clean", "MISS")
+        return real(*a, **k)
+
+    monkeypatch.setattr(bp, "run_autopilot", _spy)
+    src = tmp_path / "in.docx"
+    out = tmp_path / "out.docx"
+    _make_doc(src, with_table=True)
+    bp.run_bizplan_autopilot(str(src), str(out), use_ai=False,
+                             required_format="hwp", submit_clean=True, write_report=False)
+    assert captured["required_format"] == "hwp"
+    assert captured["submit_clean"] is True
+
+
+# --- G002: blind_review(--blind-review) CLI→파이프라인 전파 무회귀 -----------------
+# 엔진(usage_acceptance)의 blind 동작 자체는 test_usage_acceptance 가 검증한다.
+# 여기서는 그 플래그가 CLI→파이프라인→run_acceptance 까지 '전달'되는지만 본다.
+# 구버전 회귀: 어느 한 단계라도 blind_review=blind_review 전달을 빠뜨리면, 블라인드
+# 공고에서 ○○○ 마스킹이 자리표시 fail 로 오탐되거나 실명 잔존(masking_violation)이
+# 미검출된다. (전달 누락이면 '기본값 False' 단언이 깨져 잡힌다.)
+
+def test_autopilot_forwards_blind_review_to_config(tmp_path, monkeypatch) -> None:
+    """run_autopilot(blind_review=..) 가 수용검사 AcceptanceConfig.blind_review 로 전달."""
+    import auto_write.services.autopilot_pipeline as ap
+    captured = {}
+    real = ap.run_acceptance
+
+    def _spy(path, config=None):
+        captured["blind"] = getattr(config, "blind_review", "MISS")
+        return real(path, config)
+
+    monkeypatch.setattr(ap, "run_acceptance", _spy)
+    src = tmp_path / "in.docx"
+    _make_doc(src, with_table=False)
+    ap.run_autopilot(str(src), str(tmp_path / "on.docx"),
+                     max_images=0, psst_scaffold=False, blind_review=True, write_report=False)
+    assert captured["blind"] is True
+    ap.run_autopilot(str(src), str(tmp_path / "off.docx"),
+                     max_images=0, psst_scaffold=False, write_report=False)
+    assert captured["blind"] is False          # 기본값 비블라인드(전달 누락 시 깨짐)
+
+
+def test_autopilot_cli_forwards_blind_review(tmp_path, monkeypatch) -> None:
+    """auto_write_autopilot CLI 의 --blind-review 가 run_autopilot 로 전달."""
+    import auto_write_autopilot as cli
+    from auto_write.services.autopilot_pipeline import AutopilotReport
+    captured = {}
+
+    def _spy(input_docx, output_docx=None, **kw):
+        captured["blind"] = kw.get("blind_review", "MISS")
+        return AutopilotReport(input_docx=str(input_docx), output_docx=str(output_docx or ""))
+
+    monkeypatch.setattr(cli, "run_autopilot", _spy)
+    base = [str(tmp_path / "x.docx"), "-o", str(tmp_path / "o.docx"),
+            "--no-psst", "--max-images", "0", "--no-report"]
+    assert cli.main(base + ["--blind-review"]) == 0
+    assert captured["blind"] is True
+    assert cli.main(base) == 0
+    assert captured["blind"] is False
+
+
+def test_bizplan_forwards_blind_review_to_autopilot(tmp_path, monkeypatch) -> None:
+    """run_bizplan_autopilot(blind_review=..) 가 내부 run_autopilot 로 전달(R13 동류)."""
+    import auto_write.services.bizplan_autopilot as bp
+    captured = {}
+    real = bp.run_autopilot
+
+    def _spy(*a, **k):
+        captured["blind"] = k.get("blind_review", "MISS")
+        return real(*a, **k)
+
+    monkeypatch.setattr(bp, "run_autopilot", _spy)
+    src = tmp_path / "in.docx"
+    _make_doc(src, with_table=True)
+    bp.run_bizplan_autopilot(str(src), str(tmp_path / "out.docx"), use_ai=False,
+                             blind_review=True, write_report=False)
+    assert captured["blind"] is True
+
+
+def test_bizplan_cli_forwards_blind_review(tmp_path, monkeypatch) -> None:
+    """bizplan_autopilot CLI 의 --blind-review 가 run_bizplan_autopilot 로 전달."""
+    import bizplan_autopilot as cli
+    from auto_write.services.bizplan_autopilot import BizplanReport
+    captured = {}
+
+    def _spy(input_docx, output_docx=None, **kw):
+        captured["blind"] = kw.get("blind_review", "MISS")
+        return BizplanReport(input_docx=str(input_docx), output_docx=str(output_docx or ""))
+
+    monkeypatch.setattr(cli, "run_bizplan_autopilot", _spy)
+    base = [str(tmp_path / "x.docx"), "-o", str(tmp_path / "o.docx"), "--no-ai", "--no-report"]
+    assert cli.main(base + ["--blind-review"]) == 0
+    assert captured["blind"] is True
+    assert cli.main(base) == 0
+    assert captured["blind"] is False
+
+
+def test_self_diagnose_cli_forwards_blind_review(tmp_path, monkeypatch) -> None:
+    """self_diagnose CLI 의 --blind-review 가 run_acceptance(AcceptanceConfig)로 전달."""
+    import self_diagnose as cli
+    captured = {}
+    real = cli.run_acceptance
+
+    def _spy(src, config=None):
+        captured["blind"] = getattr(config, "blind_review", "MISS")
+        return real(src, config)
+
+    monkeypatch.setattr(cli, "run_acceptance", _spy)
+    src = tmp_path / "d.docx"
+    _make_doc(src, with_table=False)
+    no_ledger = str(tmp_path / "no_ledger.json")   # 없는 원장 → 대조 스킵(_load_ledger=None)
+    cli.main([str(src), "--blind-review", "--ledger", no_ledger])
+    assert captured["blind"] is True
+    cli.main([str(src), "--ledger", no_ledger])
+    assert captured["blind"] is False
+
+
+def test_anchor_forward_match_wins_over_reverse_substring(tmp_path: Path) -> None:
+    """역포함 오매칭 회귀: 앞쪽 본문에 앵커 부분문자열(짧은 키워드)이 있어도
+    뒤쪽 표의 정방향 매칭 앵커가 선택되어야 한다(1차 패스 우선)."""
+    from auto_write.services.image_apply import _find_anchor
+
+    doc = Document()
+    # 앞쪽 본문: 앵커의 부분문자열들 — 구버전 단일 패스(len>=4 역포함)에서는
+    # 이 단락들이 뒤쪽 표 셀의 정방향 앵커보다 먼저 잡혀 오매칭되던 케이스.
+    doc.add_paragraph("사업화")          # 3자 — 2차 패스 임계(len>4) 미달
+    doc.add_paragraph("추진계획")        # 4자 — 구 코드(>=4)에서 오매칭, 신 코드(len>4) 탈락
+    doc.add_paragraph("사업화추진")      # 5자 — 2차 패스 후보지만 1차(정방향)가 항상 우선
+    # 뒤쪽 표: 정방향 매칭 앵커("사업화추진계획 로드맵")
+    table = doc.add_table(rows=1, cols=1)
+    table.rows[0].cells[0].text = "사업화추진계획 로드맵 단계별 마일스톤"
+    doc.add_paragraph("맺음말 단락.")
+
+    # anchor_text 앞 40자 = "사업화추진계획 로드맵 단계별 마일스톤"
+    # 정방향(1차 패스): key in cell_text → 표 셀 매칭이 부분문자열 본문보다 우선
+    anchor = "사업화추진계획 로드맵 단계별 마일스톤"
+    para, table_found = _find_anchor(doc, anchor)
+
+    assert para is not None, "앵커를 찾지 못함 — 표 셀 정방향 매칭이 동작해야 함"
+    assert table_found is not None, "표 안 단락이 아님 — 뒤쪽 표 셀이 선택되어야 함"
+    assert anchor in para.text, "선택된 단락 텍스트가 앵커 키를 포함해야 함"
+
+
+# --- autopilot_pipeline 결함 수정 회귀 테스트 (잔존총계·최종본 재채점) ---
+
+def test_residual_re_matches_confirmation_needed() -> None:
+    """_RESIDUAL_RE 가 [확인필요]와 [산출근거]를 정확히 매칭해야 한다."""
+    from auto_write.services.autopilot_pipeline import _RESIDUAL_RE
+
+    assert _RESIDUAL_RE.search("[확인필요]"), "[확인필요] 미매칭"
+    assert _RESIDUAL_RE.search("[산출근거]"), "[산출근거] 미매칭"
+    # 기존 패턴도 유지되어야 함
+    assert _RESIDUAL_RE.search("___"), "밑줄 패턴 미매칭"
+    assert _RESIDUAL_RE.search("(작성)"), "작성 패턴 미매칭"
+
+
+def test_autopilot_report_fields_and_write_report(tmp_path: Path) -> None:
+    """AutopilotReport 신규 필드(residual_total·final_score_total·final_passed)와
+    리포트 md 표기를 검증한다.
+
+    run_autopilot E2E 대신 _write_report/_build_todo 를 직접 호출해
+    메모리 압박 없이 결정론적으로 검증한다.
+    """
+    from auto_write.services.autopilot_pipeline import AutopilotReport, _build_todo, _write_report
+
+    report = AutopilotReport(
+        input_docx=str(tmp_path / "in.docx"),
+        output_docx=str(tmp_path / "out.docx"),
+        backup_dir=str(tmp_path / "backup"),
+        doc_type="사업계획서 (90%)",
+        score_total=92.0,
+        grade="우수",
+        passed=True,
+        iterations=1,
+        ops_summary="안내문구-2 글머리표-3 표셀-1 빈단락-4 강조-5",
+        prompts_inserted=2,
+        psst_overall_ratio=0.75,
+        psst_areas_scaffolded=1,
+        psst_items_added=3,
+        psst_scaffolded_areas=["팀구성"],
+        residual_placeholders=["[확인필요] 예산", "[산출근거] 매출"],
+        residual_total=5,  # 총 5건(샘플은 2건)
+        final_score_total=84.0,
+        final_passed=False,
+    )
+
+    # AutopilotReport 에 신규 필드가 있어야 함
+    assert hasattr(report, "final_score_total"), "final_score_total 필드 없음"
+    assert hasattr(report, "final_passed"), "final_passed 필드 없음"
+    assert hasattr(report, "residual_total"), "residual_total 필드 없음"
+
+    # as_dict 에도 포함되어야 함
+    d = report.as_dict()
+    assert "final_score_total" in d
+    assert "final_passed" in d
+    assert "residual_total" in d
+    assert d["residual_total"] == 5
+    assert d["final_score_total"] == 84.0
+    assert d["final_passed"] is False
+
+    # _build_todo: 최종점수 미달 → To-Do 항목 추가되어야 함
+    todo = _build_todo(report)
+    assert any("최종본 재채점" in t for t in todo), "최종본 재채점 미달 To-Do 없음"
+    assert any("총 5곳" in t for t in todo), "잔존 총건수 To-Do 없음"
+
+    # _write_report: md 에 '최종본 재채점' 줄과 잔존 총건수 포함
+    report.manual_todo = todo
+    md_path = _write_report(tmp_path, "test_stem", report)
+    md_text = Path(md_path).read_text(encoding="utf-8")
+    assert "최종본 재채점" in md_text, "리포트에 최종본 재채점 줄 없음"
+    assert "잔존 빈칸/[확인필요] 총" in md_text, "리포트에 잔존 총건수 표기 없음"

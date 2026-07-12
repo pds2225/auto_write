@@ -1,0 +1,262 @@
+======================================================================
+template_id: tpl_0bdfafe1fd81 | sections=8 tables=8 images=1 questions=176
+
+### SECTIONS ###
+  [section_002_section_5e151106] excl=False -        | anchor='초기창업패키지 창업기업 사업계획서' | label='초기창업패키지 창업기업 사업계획서'
+  [section_004_section_db74a090] excl=False -        | anchor='□ 일반현황' | label='□ 일반현황'
+  [section_005_section_5163075b] excl=False -        | anchor='□ 창업 아이템 개요(요약)' | label='□ 창업 아이템 개요(요약)'
+  [section_006_1_problem] excl=False PROBLEM  | anchor='1. 문제 인식 (Problem)_창업 아이템의 필요성' | label='1. 문제 인식 (Problem)_창업 아이템의 필요성'
+  [section_011_2_solution] excl=False SOLUTION | anchor='2. 실현 가능성 (Solution)_창업 아이템의 개발 계획' | label='2. 실현 가능성 (Solution)_창업 아이템의 개발 계획'
+  [section_016_3_scale_up] excl=False SCALE    | anchor='3. 성장전략 (Scale-up)_사업화 추진 전략' | label='3. 성장전략 (Scale-up)_사업화 추진 전략'
+  [section_021_4_team] excl=False TEAM     | anchor='4. 팀 구성 (Team)_대표자 및 팀원 구성 계획' | label='4. 팀 구성 (Team)_대표자 및 팀원 구성 계획'
+  [section_033_section_bf4b8be5] excl=False -        | anchor='ㅇ 전체 협약 일정별(월 단위) 추진내용, 목표 성과' | label='ㅇ 전체 협약 일정별(월 단위) 추진내용, 목표 성과'
+
+### TABLES ###
+
+-- table_05 idx=4 23x9 CORE=False | label='창업아이템명'
+   GRID r0: 창업아이템명 | 창업아이템명 | 창업아이템명 | OO기술이 적용된 OO기능의 (혜택을 제공하는) | OO기술이 적용된 OO기능의 (혜택을 제공하는) | OO기술이 적용된 OO기능의 (혜택을 제공하는) | OO기술이 적용된 OO기능의 (혜택을 제공하는) | OO기술이 적용된 OO기능의 (혜택을 제공하는) | OO기술이 적용된 OO기능의 (혜택을 제공하는) | OO기술이 적용된 OO기능의 (혜택을 제공하는) | OO기술이 적용된 OO기능의 (혜택을 제공하는) | OO기술이 적용된 OO기능의 (혜택을 제공하는) | OO기술이 적용된 OO기능의 (혜택을 제공하는) | OO기술이 적용된 OO기능의 (혜택을 제공하는) | OO기술이 적용된 OO기능의 (혜택을 제공하는) | OO기술이 적용된 OO기능의 (혜택을 제공하는) | OO기술이 적용된 OO기능의 (혜택을 제공하는) | OO기술이 적용된 OO기능의 (혜택을 제공하는) | OO기술이 적용된 OO기능의 (혜택을 제공하는) | OO기술이 적용된 OO기능의 (혜택을 제공하는) | OO기술이 적용된 OO기능의 (혜택을 제공하는) | OO기술이 적용된 OO기능의 (혜택을 제공하는)
+   GRID r1: 산출물/(협약기간 내 목표) | 산출물/(협약기간 내 목표) | 산출물/(협약기간 내 목표) | 모바일 어플리케이션(0개), 웹사이트(0개) | 모바일 어플리케이션(0개), 웹사이트(0개) | 모바일 어플리케이션(0개), 웹사이트(0개) | 모바일 어플리케이션(0개), 웹사이트(0개) | 모바일 어플리케이션(0개), 웹사이트(0개) | 모바일 어플리케이션(0개), 웹사이트(0개) | 모바일 어플리케이션(0개), 웹사이트(0개) | 모바일 어플리케이션(0개), 웹사이트(0개) | 모바일 어플리케이션(0개), 웹사이트(0개) | 모바일 어플리케이션(0개), 웹사이트(0개) | 모바일 어플리케이션(0개), 웹사이트(0개) | 모바일 어플리케이션(0개), 웹사이트(0개) | 모바일 어플리케이션(0개), 웹사이트(0개) | 모바일 어플리케이션(0개), 웹사이트(0개) | 모바일 어플리케이션(0개), 웹사이트(0개) | 모바일 어플리케이션(0개), 웹사이트(0개) | 모바일 어플리케이션(0개), 웹사이트(0개) | 모바일 어플리케이션(0개), 웹사이트(0개) | 모바일 어플리케이션(0개), 웹사이트(0개)
+   GRID r2: AI 인재 채용 계획 | AI 인재 채용 계획 | AI 인재 채용 계획 | 정규직 | 정규직 | 정규직 | 정규직 | 정규직 | 정규직 | 정규직 | 정규직 | 정규직 | 계약직 | 계약직 | 계약직 | 계약직 | 계약직 | 계약직 | 계약직 | 계약직 | 계약직 | 계약직
+   GRID r3: 채용인원(명) | 채용인원(명) | 채용인원(명) | 00(명) | 00(명) | 00(명) | 00(명) | 00(명) | 00(명) | 00(명) | 00(명) | 00(명) | 00(명) | 00(명) | 00(명) | 00(명) | 00(명) | 00(명) | 00(명) | 00(명) | 00(명) | 00(명)
+   GRID r4: 지원 분야(택 1) | 지원 분야(택 1) | 지원 분야(택 1) | □ | □ | 제조 | 제조 | 제조 | □ | 지식서비스 | 지식서비스 | 지식서비스 | 지식서비스 | 지식서비스 | 지식서비스 | 지식서비스 |  |  |  |  |  | 
+   GRID r5: 전문기술분야(택 1) | 전문기술분야(택 1) | 전문기술분야(택 1) | □ | □ | 기계·소재 | 기계·소재 | 기계·소재 | □ | 전기·전자 | 전기·전자 | 전기·전자 | 전기·전자 | 전기·전자 | 전기·전자 | 전기·전자 | □ | □ | 정보·통신 | 정보·통신 | 정보·통신 | 정보·통신
+   GRID r6: 전문기술분야(택 1) | 전문기술분야(택 1) | 전문기술분야(택 1) | □ | □ | 화공·섬유 | 화공·섬유 | 화공·섬유 | □ | 바이오·의료·생명 | 바이오·의료·생명 | 바이오·의료·생명 | 바이오·의료·생명 | 바이오·의료·생명 | 바이오·의료·생명 | 바이오·의료·생명 | □ | □ | 에너지·자원 | 에너지·자원 | 에너지·자원 | 에너지·자원
+   GRID r7: 전문기술분야(택 1) | 전문기술분야(택 1) | 전문기술분야(택 1) | □ | □ | 공예·디자인 | 공예·디자인 | 공예·디자인 |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+   GRID r8: 총 사업비/구성 계획 | 총 사업비/구성 계획 | 총 사업비/구성 계획 | 정부지원사업비(A) | 정부지원사업비(A) | 정부지원사업비(A) | 정부지원사업비(A) | 정부지원사업비(A) | 정부지원사업비(A) | 정부지원사업비(A) | 자기부담사업비(B) | 자기부담사업비(B) | 자기부담사업비(B) | 자기부담사업비(B) | 자기부담사업비(B) | 자기부담사업비(B) | 자기부담사업비(B) | 자기부담사업비(B) | 자기부담사업비(B) | 자기부담사업비(B) | 총 사업비/(C=A+B) | 총 사업비/(C=A+B)
+   GRID r9: 총 사업비/구성 계획 | 총 사업비/구성 계획 | 총 사업비/구성 계획 | 정부지원사업비(A) | 정부지원사업비(A) | 정부지원사업비(A) | 정부지원사업비(A) | 정부지원사업비(A) | 정부지원사업비(A) | 정부지원사업비(A) | 현금 | 현금 | 현금 | 현금 | 현금 | 현물 | 현물 | 현물 | 현물 | 현물 | 총 사업비/(C=A+B) | 총 사업비/(C=A+B)
+   GRID r10: 총 사업비/구성 계획 | 총 사업비/구성 계획 | 총 사업비/구성 계획 | 00백만원 | 00백만원 | 00백만원 | 00백만원 | 00백만원 | 00백만원 | 00백만원 | 00백만원 | 00백만원 | 00백만원 | 00백만원 | 00백만원 | 00백만원 | 00백만원 | 00백만원 | 00백만원 | 00백만원 | 00백만원 | 00백만원
+   GRID r11: 지방우대 지역 해당여부 | 지방우대 지역 해당여부 | 지방우대 지역 해당여부 | □ | 특별지원 지역 | 특별지원 지역 | 특별지원 지역 | □ | 우대지원 지역 | 우대지원 지역 | 우대지원 지역 | □ | □ | □ | 일반지역 | 일반지역 | 일반지역 | □ | □ | 지방우대 비해당지역 | 지방우대 비해당지역 | 지방우대 비해당지역
+   GRID r12: 팀 구성 현황(대표자 본인 제외) | 팀 구성 현황(대표자 본인 제외) | 팀 구성 현황(대표자 본인 제외) | 팀 구성 현황(대표자 본인 제외) | 팀 구성 현황(대표자 본인 제외) | 팀 구성 현황(대표자 본인 제외) | 팀 구성 현황(대표자 본인 제외) | 팀 구성 현황(대표자 본인 제외) | 팀 구성 현황(대표자 본인 제외) | 팀 구성 현황(대표자 본인 제외) | 팀 구성 현황(대표자 본인 제외) | 팀 구성 현황(대표자 본인 제외) | 팀 구성 현황(대표자 본인 제외) | 팀 구성 현황(대표자 본인 제외) | 팀 구성 현황(대표자 본인 제외) | 팀 구성 현황(대표자 본인 제외) | 팀 구성 현황(대표자 본인 제외) | 팀 구성 현황(대표자 본인 제외) | 팀 구성 현황(대표자 본인 제외) | 팀 구성 현황(대표자 본인 제외) | 팀 구성 현황(대표자 본인 제외) | 팀 구성 현황(대표자 본인 제외)
+   GRID r13: 순번 | 직위 | 담당 업무 | 담당 업무 | 담당 업무 | 담당 업무 | 보유 역량(경력 및 학력 등) | 보유 역량(경력 및 학력 등) | 보유 역량(경력 및 학력 등) | 보유 역량(경력 및 학력 등) | 보유 역량(경력 및 학력 등) | 보유 역량(경력 및 학력 등) | 보유 역량(경력 및 학력 등) | 보유 역량(경력 및 학력 등) | 보유 역량(경력 및 학력 등) | 보유 역량(경력 및 학력 등) | 보유 역량(경력 및 학력 등) | 보유 역량(경력 및 학력 등) | 보유 역량(경력 및 학력 등) | 보유 역량(경력 및 학력 등) | 보유 역량(경력 및 학력 등) | 구성 상태
+   GRID r14: 1 | 공동대표 | S/W 개발 총괄 | S/W 개발 총괄 | S/W 개발 총괄 | S/W 개발 총괄 | OO학 박사, OO학과 교수 재직(00년) | OO학 박사, OO학과 교수 재직(00년) | OO학 박사, OO학과 교수 재직(00년) | OO학 박사, OO학과 교수 재직(00년) | OO학 박사, OO학과 교수 재직(00년) | OO학 박사, OO학과 교수 재직(00년) | OO학 박사, OO학과 교수 재직(00년) | OO학 박사, OO학과 교수 재직(00년) | OO학 박사, OO학과 교수 재직(00년) | OO학 박사, OO학과 교수 재직(00년) | OO학 박사, OO학과 교수 재직(00년) | OO학 박사, OO학과 교수 재직(00년) | OO학 박사, OO학과 교수 재직(00년) | OO학 박사, OO학과 교수 재직(00년) | OO학 박사, OO학과 교수 재직(00년) | 완료
+   GRID r15: 2 | 대리 | 홍보 및 마케팅 | 홍보 및 마케팅 | 홍보 및 마케팅 | 홍보 및 마케팅 | OO학 학사, OO 관련 경력(00년 이상) | OO학 학사, OO 관련 경력(00년 이상) | OO학 학사, OO 관련 경력(00년 이상) | OO학 학사, OO 관련 경력(00년 이상) | OO학 학사, OO 관련 경력(00년 이상) | OO학 학사, OO 관련 경력(00년 이상) | OO학 학사, OO 관련 경력(00년 이상) | OO학 학사, OO 관련 경력(00년 이상) | OO학 학사, OO 관련 경력(00년 이상) | OO학 학사, OO 관련 경력(00년 이상) | OO학 학사, OO 관련 경력(00년 이상) | OO학 학사, OO 관련 경력(00년 이상) | OO학 학사, OO 관련 경력(00년 이상) | OO학 학사, OO 관련 경력(00년 이상) | OO학 학사, OO 관련 경력(00년 이상) | 예정(’00.0)
+   GRID r16:  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+   GRID r17: AI 인재 채용 계획 | AI 인재 채용 계획 | AI 인재 채용 계획 | AI 인재 채용 계획 | AI 인재 채용 계획 | AI 인재 채용 계획 | AI 인재 채용 계획 | AI 인재 채용 계획 | AI 인재 채용 계획 | AI 인재 채용 계획 | AI 인재 채용 계획 | AI 인재 채용 계획 | AI 인재 채용 계획 | AI 인재 채용 계획 | AI 인재 채용 계획 | AI 인재 채용 계획 | AI 인재 채용 계획 | AI 인재 채용 계획 | AI 인재 채용 계획 | AI 인재 채용 계획 | AI 인재 채용 계획 | AI 인재 채용 계획
+   GRID r18: 순번 | 채용유형 | 채용기간 | 채용기간 | 채용기간 | 채용기간 | 근로시간(1주일 기준) | 근로시간(1주일 기준) | 근로시간(1주일 기준) | 근로시간(1주일 기준) | 근로시간(1주일 기준) | 근로시간(1주일 기준) | 근로시간(1주일 기준) | 담당 업무 | 담당 업무 | 담당 업무 | 담당 업무 | 담당 업무 | 담당 업무 | 담당 업무 | 담당 업무 | 채용시기
+   GRID r19: 1 | 정규직 | - | - | - | - | 40시간 | 40시간 | 40시간 | 40시간 | 40시간 | 40시간 | 40시간 | AX 로드맵 수립 | AX 로드맵 수립 | AX 로드맵 수립 | AX 로드맵 수립 | AX 로드맵 수립 | AX 로드맵 수립 | AX 로드맵 수립 | AX 로드맵 수립 | ‘26.7월
+   GRID r20: 2 | 계약직 | 1년 이상 | 1년 이상 | 1년 이상 | 1년 이상 | 40시간 | 40시간 | 40시간 | 40시간 | 40시간 | 40시간 | 40시간 | 성과측정(ROI 분석) | 성과측정(ROI 분석) | 성과측정(ROI 분석) | 성과측정(ROI 분석) | 성과측정(ROI 분석) | 성과측정(ROI 분석) | 성과측정(ROI 분석) | 성과측정(ROI 분석) | ‘26.7월
+   GRID r21:  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+   GRID r22:  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+   CELL table_05_r0_c2 r0c2 req=False | label='OO기술이 적용된 OO기능의 (혜택을 제공하' rowH='OO기술이 적용된 OO기능의 (혜' colH=''
+   CELL table_05_r0_c3 r0c3 req=False | label='OO기술이 적용된 OO기능의 (혜택을 제공하' rowH='OO기술이 적용된 OO기능의 (혜' colH=''
+   CELL table_05_r0_c4 r0c4 req=False | label='OO기술이 적용된 OO기능의 (혜택을 제공하' rowH='OO기술이 적용된 OO기능의 (혜' colH=''
+   CELL table_05_r0_c5 r0c5 req=False | label='OO기술이 적용된 OO기능의 (혜택을 제공하' rowH='OO기술이 적용된 OO기능의 (혜' colH=''
+   CELL table_05_r0_c6 r0c6 req=False | label='OO기술이 적용된 OO기능의 (혜택을 제공하' rowH='OO기술이 적용된 OO기능의 (혜' colH=''
+   CELL table_05_r0_c7 r0c7 req=False | label='OO기술이 적용된 OO기능의 (혜택을 제공하' rowH='OO기술이 적용된 OO기능의 (혜' colH=''
+   CELL table_05_r0_c8 r0c8 req=False | label='OO기술이 적용된 OO기능의 (혜택을 제공하' rowH='OO기술이 적용된 OO기능의 (혜' colH=''
+   CELL table_05_r1_c2 r1c2 req=False | label='모바일 어플리케이션(0개), 웹사이트(0개)' rowH='모바일 어플리케이션(0개), 웹사' colH=''
+   CELL table_05_r1_c3 r1c3 req=False | label='모바일 어플리케이션(0개), 웹사이트(0개)' rowH='모바일 어플리케이션(0개), 웹사' colH=''
+   CELL table_05_r1_c4 r1c4 req=False | label='모바일 어플리케이션(0개), 웹사이트(0개)' rowH='모바일 어플리케이션(0개), 웹사' colH=''
+   CELL table_05_r1_c5 r1c5 req=False | label='모바일 어플리케이션(0개), 웹사이트(0개)' rowH='모바일 어플리케이션(0개), 웹사' colH=''
+   CELL table_05_r1_c6 r1c6 req=False | label='모바일 어플리케이션(0개), 웹사이트(0개)' rowH='모바일 어플리케이션(0개), 웹사' colH=''
+   CELL table_05_r1_c7 r1c7 req=False | label='모바일 어플리케이션(0개), 웹사이트(0개)' rowH='모바일 어플리케이션(0개), 웹사' colH=''
+   CELL table_05_r1_c8 r1c8 req=False | label='모바일 어플리케이션(0개), 웹사이트(0개)' rowH='모바일 어플리케이션(0개), 웹사' colH=''
+   CELL table_05_r2_c3 r2c3 req=False | label='계약직' rowH='계약직' colH=''
+   CELL table_05_r2_c4 r2c4 req=False | label='계약직' rowH='계약직' colH=''
+   CELL table_05_r2_c5 r2c5 req=False | label='계약직' rowH='계약직' colH=''
+   CELL table_05_r2_c6 r2c6 req=False | label='계약직' rowH='계약직' colH=''
+   CELL table_05_r2_c7 r2c7 req=False | label='계약직' rowH='계약직' colH=''
+   CELL table_05_r2_c8 r2c8 req=False | label='계약직' rowH='계약직' colH=''
+   CELL table_05_r3_c3 r3c3 req=False | label='00(명)' rowH='00(명)' colH=''
+   CELL table_05_r3_c4 r3c4 req=False | label='00(명)' rowH='00(명)' colH=''
+   CELL table_05_r3_c5 r3c5 req=False | label='00(명)' rowH='00(명)' colH=''
+   CELL table_05_r3_c6 r3c6 req=False | label='00(명)' rowH='00(명)' colH=''
+   CELL table_05_r3_c7 r3c7 req=False | label='00(명)' rowH='00(명)' colH=''
+   CELL table_05_r3_c8 r3c8 req=False | label='00(명)' rowH='00(명)' colH=''
+   CELL table_05_r4_c5 r4c5 req=False | label='지식서비스' rowH='지식서비스' colH=''
+   CELL table_05_r4_c6 r4c6 req=False | label='지식서비스' rowH='지식서비스' colH=''
+   CELL table_05_r4_c7 r4c7 req=False | label='지식서비스' rowH='지식서비스' colH=''
+   CELL table_05_r4_c8 r4c8 req=False | label='지식서비스' rowH='지식서비스' colH=''
+   CELL table_05_r5_c7 r5c7 req=False | label='정보·통신' rowH='정보·통신' colH=''
+   CELL table_05_r5_c8 r5c8 req=False | label='정보·통신' rowH='정보·통신' colH=''
+   CELL table_05_r6_c0 r6c0 req=False | label='전문기술분야(택 1)' rowH='' colH='전문기술분야(택 1)'
+   CELL table_05_r6_c7 r6c7 req=False | label='에너지·자원' rowH='에너지·자원' colH=''
+   CELL table_05_r6_c8 r6c8 req=False | label='에너지·자원' rowH='에너지·자원' colH=''
+   CELL table_05_r7_c0 r7c0 req=False | label='전문기술분야(택 1)' rowH='' colH='전문기술분야(택 1)'
+   CELL table_05_r7_c3 r7c3 req=False | label='공예·디자인' rowH='공예·디자인' colH=''
+   CELL table_05_r7_c4 r7c4 req=False | label='공예·디자인 / 바이오·의료·생명' rowH='공예·디자인' colH='바이오·의료·생명'
+   CELL table_05_r7_c5 r7c5 req=False | label='공예·디자인' rowH='공예·디자인' colH=''
+   CELL table_05_r7_c6 r7c6 req=False | label='공예·디자인 / 에너지·자원' rowH='공예·디자인' colH='에너지·자원'
+   CELL table_05_r7_c7 r7c7 req=False | label='공예·디자인' rowH='공예·디자인' colH=''
+   CELL table_05_r7_c8 r7c8 req=False | label='공예·디자인' rowH='공예·디자인' colH=''
+   CELL table_05_r8_c4 r8c4 req=False | label='총 사업비 / (C=A+B) / 바이오·의료' rowH='총 사업비 / (C=A+B)' colH='바이오·의료·생명'
+   CELL table_05_r8_c5 r8c5 req=False | label='총 사업비 / (C=A+B)' rowH='총 사업비 / (C=A+B)' colH=''
+   CELL table_05_r8_c6 r8c6 req=False | label='총 사업비 / (C=A+B) / 에너지·자원' rowH='총 사업비 / (C=A+B)' colH='에너지·자원'
+   CELL table_05_r8_c7 r8c7 req=False | label='총 사업비 / (C=A+B)' rowH='총 사업비 / (C=A+B)' colH=''
+   CELL table_05_r8_c8 r8c8 req=False | label='총 사업비 / (C=A+B)' rowH='총 사업비 / (C=A+B)' colH=''
+   CELL table_05_r9_c0 r9c0 req=False | label='총 사업비 / 구성 계획' rowH='' colH='총 사업비 / 구성 계획'
+   CELL table_05_r9_c1 r9c1 req=False | label='정부지원사업비(A)' rowH='' colH='정부지원사업비(A)'
+   CELL table_05_r9_c4 r9c4 req=False | label='현물 / 바이오·의료·생명' rowH='현물' colH='바이오·의료·생명'
+   CELL table_05_r9_c5 r9c5 req=False | label='현물' rowH='현물' colH=''
+   CELL table_05_r9_c6 r9c6 req=False | label='현물 / 에너지·자원' rowH='현물' colH='에너지·자원'
+   CELL table_05_r9_c7 r9c7 req=False | label='현물' rowH='현물' colH=''
+   CELL table_05_r9_c8 r9c8 req=False | label='현물' rowH='현물' colH=''
+   CELL table_05_r10_c0 r10c0 req=False | label='총 사업비 / 구성 계획' rowH='' colH='총 사업비 / 구성 계획'
+   CELL table_05_r10_c5 r10c5 req=False | label='00백만원' rowH='00백만원' colH=''
+   CELL table_05_r10_c6 r10c6 req=False | label='00백만원 / 에너지·자원' rowH='00백만원' colH='에너지·자원'
+   CELL table_05_r10_c7 r10c7 req=False | label='00백만원' rowH='00백만원' colH=''
+   CELL table_05_r10_c8 r10c8 req=False | label='00백만원' rowH='00백만원' colH=''
+   CELL table_05_r12_c1 r12c1 req=False | label='팀 구성 현황(대표자 본인 제외) / 00백' rowH='팀 구성 현황(대표자 본인 제외)' colH='00백만원'
+   CELL table_05_r12_c3 r12c3 req=False | label='팀 구성 현황(대표자 본인 제외) / 00백' rowH='팀 구성 현황(대표자 본인 제외)' colH='00백만원'
+   CELL table_05_r12_c4 r12c4 req=False | label='팀 구성 현황(대표자 본인 제외) / 우대지' rowH='팀 구성 현황(대표자 본인 제외)' colH='우대지원 지역'
+   CELL table_05_r12_c5 r12c5 req=False | label='팀 구성 현황(대표자 본인 제외)' rowH='팀 구성 현황(대표자 본인 제외)' colH=''
+   CELL table_05_r12_c6 r12c6 req=False | label='팀 구성 현황(대표자 본인 제외) / 일반지' rowH='팀 구성 현황(대표자 본인 제외)' colH='일반지역'
+   CELL table_05_r12_c7 r12c7 req=False | label='팀 구성 현황(대표자 본인 제외)' rowH='팀 구성 현황(대표자 본인 제외)' colH=''
+   CELL table_05_r13_c5 r13c5 req=False | label='구성 상태' rowH='구성 상태' colH=''
+   CELL table_05_r13_c6 r13c6 req=False | label='구성 상태 / 일반지역' rowH='구성 상태' colH='일반지역'
+   CELL table_05_r13_c7 r13c7 req=False | label='구성 상태' rowH='구성 상태' colH=''
+   CELL table_05_r14_c5 r14c5 req=False | label='완료' rowH='완료' colH=''
+   CELL table_05_r14_c6 r14c6 req=False | label='완료 / 일반지역' rowH='완료' colH='일반지역'
+   CELL table_05_r14_c7 r14c7 req=False | label='완료' rowH='완료' colH=''
+   CELL table_05_r15_c5 r15c5 req=False | label='예정(’00.0)' rowH='예정(’00.0)' colH=''
+   CELL table_05_r15_c6 r15c6 req=False | label='예정(’00.0) / 일반지역' rowH='예정(’00.0)' colH='일반지역'
+   CELL table_05_r15_c7 r15c7 req=False | label='예정(’00.0)' rowH='예정(’00.0)' colH=''
+   CELL table_05_r16_c0 r16c0 req=False | label='순번' rowH='' colH='순번'
+   CELL table_05_r16_c1 r16c1 req=False | label='대리' rowH='' colH='대리'
+   CELL table_05_r16_c2 r16c2 req=False | label='홍보 및 마케팅' rowH='' colH='홍보 및 마케팅'
+   CELL table_05_r16_c3 r16c3 req=False | label='OO학 학사, OO 관련 경력(00년 이상)' rowH='' colH='OO학 학사, OO 관련 경력(0'
+   CELL table_05_r16_c4 r16c4 req=False | label='예정(’00.0)' rowH='' colH='예정(’00.0)'
+   CELL table_05_r16_c6 r16c6 req=False | label='일반지역' rowH='' colH='일반지역'
+   CELL table_05_r17_c1 r17c1 req=False | label='AI 인재 채용 계획 / 대리' rowH='AI 인재 채용 계획' colH='대리'
+   CELL table_05_r17_c2 r17c2 req=False | label='AI 인재 채용 계획 / 홍보 및 마케팅' rowH='AI 인재 채용 계획' colH='홍보 및 마케팅'
+   CELL table_05_r17_c3 r17c3 req=False | label='AI 인재 채용 계획 / OO학 학사, OO' rowH='AI 인재 채용 계획' colH='OO학 학사, OO 관련 경력(0'
+   CELL table_05_r17_c4 r17c4 req=False | label='AI 인재 채용 계획 / 예정(’00.0)' rowH='AI 인재 채용 계획' colH='예정(’00.0)'
+   CELL table_05_r17_c5 r17c5 req=False | label='AI 인재 채용 계획' rowH='AI 인재 채용 계획' colH=''
+   CELL table_05_r17_c6 r17c6 req=False | label='AI 인재 채용 계획 / 일반지역' rowH='AI 인재 채용 계획' colH='일반지역'
+   CELL table_05_r17_c7 r17c7 req=False | label='AI 인재 채용 계획' rowH='AI 인재 채용 계획' colH=''
+   CELL table_05_r18_c6 r18c6 req=False | label='채용시기 / 일반지역' rowH='채용시기' colH='일반지역'
+   CELL table_05_r18_c7 r18c7 req=False | label='채용시기' rowH='채용시기' colH=''
+   CELL table_05_r19_c6 r19c6 req=False | label='‘26.7월 / 일반지역' rowH='‘26.7월' colH='일반지역'
+   CELL table_05_r19_c7 r19c7 req=False | label='‘26.7월' rowH='‘26.7월' colH=''
+   CELL table_05_r20_c6 r20c6 req=False | label='‘26.7월 / 일반지역' rowH='‘26.7월' colH='일반지역'
+   CELL table_05_r20_c7 r20c7 req=False | label='‘26.7월' rowH='‘26.7월' colH=''
+   CELL table_05_r21_c0 r21c0 req=False | label='순번' rowH='' colH='순번'
+   CELL table_05_r21_c1 r21c1 req=False | label='계약직' rowH='' colH='계약직'
+   CELL table_05_r21_c2 r21c2 req=False | label='1년 이상' rowH='' colH='1년 이상'
+   CELL table_05_r21_c3 r21c3 req=False | label='40시간' rowH='' colH='40시간'
+   CELL table_05_r21_c4 r21c4 req=False | label='성과측정(ROI 분석)' rowH='' colH='성과측정(ROI 분석)'
+   CELL table_05_r21_c5 r21c5 req=False | label='‘26.7월' rowH='' colH='‘26.7월'
+   CELL table_05_r21_c6 r21c6 req=False | label='일반지역' rowH='' colH='일반지역'
+   CELL table_05_r22_c0 r22c0 req=False | label='순번' rowH='' colH='순번'
+   CELL table_05_r22_c1 r22c1 req=False | label='계약직' rowH='' colH='계약직'
+   CELL table_05_r22_c2 r22c2 req=False | label='1년 이상' rowH='' colH='1년 이상'
+   CELL table_05_r22_c3 r22c3 req=False | label='40시간' rowH='' colH='40시간'
+   CELL table_05_r22_c4 r22c4 req=False | label='성과측정(ROI 분석)' rowH='' colH='성과측정(ROI 분석)'
+   CELL table_05_r22_c5 r22c5 req=False | label='‘26.7월' rowH='' colH='‘26.7월'
+   CELL table_05_r22_c6 r22c6 req=False | label='일반지역' rowH='' colH='일반지역'
+
+-- table_06 idx=5 9x4 CORE=True | label='창업 아이템 개요(요약) / 명 칭'
+   GRID r0: 명     칭 |  | 범     주 | 범     주 | 
+   GRID r1: 아이템 개요 |  |  |  | 
+   GRID r2: 문제 인식/(Problem) |  |  |  | 
+   GRID r3: 실현 가능성/(Solution) |  |  |  | 
+   GRID r4: 성장전략/(Scale-up) |  |  |  | 
+   GRID r5: 팀 구성/(Team) |  |  |  | 
+   GRID r6: AI 인재 활용 계획/(AI) |  |  |  | 
+   GRID r7: 이미지 |  |  |  | 
+   GRID r8: 이미지 | < 사진(이미지) 또는 설계도 제목 > | < 사진(이미지) 또는 설계도 제목 > | < 사진(이미지) 또는 설계도 제목 > | < 사진(이미지) 또는 설계도 제목 >
+   CELL table_06_r0_c1 r0c1 req=False | label='명 칭' rowH='명     칭' colH=''
+   CELL table_06_r0_c3 r0c3 req=False | label='범 주' rowH='범     주' colH=''
+   CELL table_06_r1_c1 r1c1 req=False | label='아이템 개요' rowH='아이템 개요' colH=''
+   CELL table_06_r1_c2 r1c2 req=False | label='아이템 개요 / 범 주' rowH='아이템 개요' colH='범     주'
+   CELL table_06_r1_c3 r1c3 req=False | label='아이템 개요' rowH='아이템 개요' colH=''
+   CELL table_06_r2_c1 r2c1 req=False | label='문제 인식(Problem)' rowH='문제 인식(Problem)' colH=''
+   CELL table_06_r2_c2 r2c2 req=False | label='문제 인식(Problem) / 범 주' rowH='문제 인식(Problem)' colH='범     주'
+   CELL table_06_r2_c3 r2c3 req=False | label='문제 인식(Problem)' rowH='문제 인식(Problem)' colH=''
+   CELL table_06_r3_c1 r3c1 req=False | label='실현 가능성(Solution)' rowH='실현 가능성(Solution)' colH=''
+   CELL table_06_r3_c2 r3c2 req=False | label='실현 가능성(Solution) / 범 주' rowH='실현 가능성(Solution)' colH='범     주'
+   CELL table_06_r3_c3 r3c3 req=False | label='실현 가능성(Solution)' rowH='실현 가능성(Solution)' colH=''
+   CELL table_06_r4_c1 r4c1 req=False | label='성장전략(Scale-up)' rowH='성장전략(Scale-up)' colH=''
+   CELL table_06_r4_c2 r4c2 req=False | label='성장전략(Scale-up) / 범 주' rowH='성장전략(Scale-up)' colH='범     주'
+   CELL table_06_r4_c3 r4c3 req=False | label='성장전략(Scale-up)' rowH='성장전략(Scale-up)' colH=''
+   CELL table_06_r5_c1 r5c1 req=False | label='팀 구성(Team)' rowH='팀 구성(Team)' colH=''
+   CELL table_06_r5_c2 r5c2 req=False | label='팀 구성(Team) / 범 주' rowH='팀 구성(Team)' colH='범     주'
+   CELL table_06_r5_c3 r5c3 req=False | label='팀 구성(Team)' rowH='팀 구성(Team)' colH=''
+   CELL table_06_r6_c1 r6c1 req=False | label='AI 인재 활용 계획 / (AI)' rowH='AI 인재 활용 계획 / (AI)' colH=''
+   CELL table_06_r6_c2 r6c2 req=False | label='AI 인재 활용 계획 / (AI) / 범 주' rowH='AI 인재 활용 계획 / (AI)' colH='범     주'
+   CELL table_06_r6_c3 r6c3 req=False | label='AI 인재 활용 계획 / (AI)' rowH='AI 인재 활용 계획 / (AI)' colH=''
+   CELL table_06_r7_c1 r7c1 req=False | label='이미지' rowH='이미지' colH=''
+   CELL table_06_r7_c2 r7c2 req=False | label='이미지 / 범 주' rowH='이미지' colH='범     주'
+   CELL table_06_r7_c3 r7c3 req=False | label='이미지' rowH='이미지' colH=''
+   CELL table_06_r8_c0 r8c0 req=False | label='이미지' rowH='' colH='이미지'
+
+-- table_07 idx=6 6x4 CORE=False | label='추진 내용'
+   GRID r0: 구분 | 추진 내용 | 추진 기간 | 세부 내용
+   GRID r1: 1 | AI 인재 채용 | 00.00 ~ 00.00 | 정부ㅇㅇ 교육 직원 00명 채용
+   GRID r2: 2 | 데이터 수집 및 전처리 | 00.00 ~ 00.00 | 학습 데이터 확보정제/(목표건수 : 000건)
+   GRID r3: 3 | AI 활용 1차 프로토타입 개발 | 00.00 ~ 00.00 | 시연 가능한 핵심 기능 구현 완료
+   GRID r4: 4 |  |  | 
+   GRID r5: … |  |  | 
+   CELL table_07_r4_c1 r4c1 req=False | label='AI 활용 1차 프로토타입 개발' rowH='' colH='AI 활용 1차 프로토타입 개발'
+   CELL table_07_r4_c2 r4c2 req=False | label='00 ~ 00.00' rowH='' colH='00.00 ~ 00.00'
+   CELL table_07_r4_c3 r4c3 req=False | label='시연 가능한 핵심 기능 구현 완료' rowH='' colH='시연 가능한 핵심 기능 구현 완료'
+   CELL table_07_r5_c1 r5c1 req=False | label='AI 활용 1차 프로토타입 개발' rowH='' colH='AI 활용 1차 프로토타입 개발'
+   CELL table_07_r5_c2 r5c2 req=False | label='00 ~ 00.00' rowH='' colH='00.00 ~ 00.00'
+   CELL table_07_r5_c3 r5c3 req=False | label='시연 가능한 핵심 기능 구현 완료' rowH='' colH='시연 가능한 핵심 기능 구현 완료'
+
+-- table_09 idx=8 8x6 CORE=False | label='실현 가능성 (Solution)_창업 아이템의 개발 계획 / 비목'
+   GRID r0: 비	목 | 집행 계획 | 총사업비(원) (ⓐ+ⓑ) | 총사업비(원) (ⓐ+ⓑ) | 총사업비(원) (ⓐ+ⓑ) | 총사업비(원) (ⓐ+ⓑ)
+   GRID r1: 비	목 | 집행 계획 | 정부지원사업비/(ⓐ) | 자기부담사업비(ⓑ) | 자기부담사업비(ⓑ) | 합계/(ⓐ+ⓑ)
+   GRID r2: 비	목 | 집행 계획 | 정부지원사업비/(ⓐ) | 현금 | 현물 | 합계/(ⓐ+ⓑ)
+   GRID r3: 재료비 | ▪ DMD소켓 구입(00개×0000원) | 3,448,000 |  |  | 3,448,000
+   GRID r4: 재료비 | ▪ 전원IC류 구입(00개×000원) | 7,652,000 |  |  | 7,652,000
+   GRID r5: 외주용역비 | ▪ 시금형제작 외주용역 | 3,000,000 | 7,000,000 |  | 10,000,000
+   GRID r6: … |  |  |  |  | 
+   GRID r7: 합	계 | 합	계 | ... | ... | ... | ...
+   CELL table_09_r0_c3 r0c3 req=False | label='총사업비(원) (ⓐ+ⓑ)' rowH='총사업비(원) (ⓐ+ⓑ)' colH=''
+   CELL table_09_r0_c4 r0c4 req=False | label='총사업비(원) (ⓐ+ⓑ)' rowH='총사업비(원) (ⓐ+ⓑ)' colH=''
+   CELL table_09_r0_c5 r0c5 req=False | label='총사업비(원) (ⓐ+ⓑ)' rowH='총사업비(원) (ⓐ+ⓑ)' colH=''
+   CELL table_09_r1_c0 r1c0 req=False | label='비목' rowH='' colH='비목'
+   CELL table_09_r1_c1 r1c1 req=False | label='집행 계획' rowH='' colH='집행 계획'
+   CELL table_09_r1_c5 r1c5 req=False | label='합계 / (ⓐ+ⓑ)' rowH='합계 / (ⓐ+ⓑ)' colH=''
+   CELL table_09_r2_c0 r2c0 req=False | label='비목' rowH='' colH='비목'
+   CELL table_09_r2_c1 r2c1 req=False | label='집행 계획' rowH='' colH='집행 계획'
+   CELL table_09_r2_c2 r2c2 req=False | label='정부지원사업비 / (ⓐ)' rowH='' colH='정부지원사업비 / (ⓐ)'
+   CELL table_09_r2_c5 r2c5 req=False | label='현물' rowH='현물' colH=''
+   CELL table_09_r4_c0 r4c0 req=False | label='재료비' rowH='' colH='재료비'
+   CELL table_09_r6_c1 r6c1 req=False | label='▪ 시금형제작 외주용역' rowH='' colH='▪ 시금형제작 외주용역'
+   CELL table_09_r6_c4 r6c4 req=False | label='현물' rowH='' colH='현물'
+
+-- table_10 idx=9 6x4 CORE=False | label='추진 내용'
+   GRID r0: 구분 | 추진 내용 | 추진 기간 | 세부 내용
+   GRID r1: 1 | 시제품 설계 | 00년 상반기 | 시제품 설계 및 프로토타입 제작
+   GRID r2: 2 | 시제품 제작 | 00.00 ~ 00.00 | 외주 용역을 통한 시제품 제작
+   GRID r3: 3 | 정식 출시 | 00년 하반기 | 신제품 출시
+   GRID r4: 4 | 신제품 홍보 프로모션 진행 | 00.00 ~ 00.00 | OO, OO 프로모션 진행
+   GRID r5: … |  |  | 
+   CELL table_10_r5_c1 r5c1 req=False | label='신제품 홍보 프로모션 진행' rowH='' colH='신제품 홍보 프로모션 진행'
+   CELL table_10_r5_c2 r5c2 req=False | label='00 ~ 00.00' rowH='' colH='00.00 ~ 00.00'
+   CELL table_10_r5_c3 r5c3 req=False | label='OO, OO 프로모션 진행' rowH='' colH='OO, OO 프로모션 진행'
+
+-- table_11 idx=10 4x5 CORE=False | label='직위'
+   GRID r0: 구분 | 직위 | 담당 업무 | 보유 역량(경력 및 학력 등) | 구성 상태
+   GRID r1: 1 | 공동대표 | S/W 개발 총괄 | OO학 박사, OO학과 교수 재직(00년) | 완료(’00.00)
+   GRID r2: 2 | 대리 | 홍보 및 마케팅 | OO학 학사, OO 관련 경력(00년 이상) | 예정(’00.00)
+   GRID r3: … | AI 인재 |  |  | 
+   CELL table_11_r3_c2 r3c2 req=False | label='AI 인재 / 홍보 및 마케팅' rowH='AI 인재' colH='홍보 및 마케팅'
+   CELL table_11_r3_c3 r3c3 req=False | label='AI 인재 / OO학 학사, OO 관련 경력' rowH='AI 인재' colH='OO학 학사, OO 관련 경력(0'
+   CELL table_11_r3_c4 r3c4 req=False | label='AI 인재 / 예정(’00.00)' rowH='AI 인재' colH='예정(’00.00)'
+
+-- table_12 idx=11 4x5 CORE=False | label='파트너명'
+   GRID r0: 구분 | 파트너명 | 보유 역량 | 협업 방안 | 협력 시기
+   GRID r1: 1 | ○○전자 | 시제품 관련 H/W 제작·개발 | 테스트 장비 지원 | 00.00
+   GRID r2: 2 | ○○기업 | S/W 제작·개발 | 웹사이트 제작 용역 | 00.00
+   GRID r3: ... |  |  |  | 
+   CELL table_12_r3_c1 r3c1 req=False | label='○○기업' rowH='' colH='○○기업'
+   CELL table_12_r3_c2 r3c2 req=False | label='S / W 제작·개발' rowH='' colH='S/W 제작·개발'
+   CELL table_12_r3_c3 r3c3 req=False | label='웹사이트 제작 용역' rowH='' colH='웹사이트 제작 용역'
+   CELL table_12_r3_c4 r3c4 req=False | label='협력 시기' rowH='' colH='협력 시기'
+
+-- table_13 idx=12 4x6 CORE=False | label='채용유형'
+   GRID r0: 구분 | 채용유형 | 담당 업무 | 근로시간(1주일 기준) | 담당 업무 | 구성 상태
+   GRID r1: 1 | 정규직 | - | 40시간 | AX 로드맵 수립 | 완료(’00.00)
+   GRID r2: 2 | 계약직 | 1년 이상 | 40시간 | 성과측정(ROI분석 | 예정(’00.00)
+   GRID r3: … |  |  |  |  | 
+   CELL table_13_r3_c1 r3c1 req=False | label='계약직' rowH='' colH='계약직'
+   CELL table_13_r3_c2 r3c2 req=False | label='1년 이상' rowH='' colH='1년 이상'
+   CELL table_13_r3_c3 r3c3 req=False | label='40시간' rowH='' colH='40시간'
+   CELL table_13_r3_c4 r3c4 req=False | label='성과측정(ROI분석' rowH='' colH='성과측정(ROI분석'
+   CELL table_13_r3_c5 r3c5 req=False | label='예정(’00.00)' rowH='' colH='예정(’00.00)'
+
+### IMAGE SLOTS ###
+  [img_table_5_7_0] table_cell req=True | label='□ 창업 아이템 개요(요약) 이미지' | ref={'table_index': 5, 'row': 7, 'cell': 0}
