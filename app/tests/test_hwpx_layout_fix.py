@@ -11,6 +11,8 @@ from auto_write.services.hwpx_layout_fix import (
     clamp_letter_spacing,
     strip_linesegarray,
     merge_trailing_empty_value_cells,
+    force_black_text,
+    normalize_colors_in_hwpx,
     finalize_layout_hwpx,
 )
 
@@ -157,3 +159,43 @@ def test_finalize_refuses_overwrite(tmp_path):
     inp = _make_hwpx(tmp_path)
     with pytest.raises(ValueError):
         finalize_layout_hwpx(inp, inp)
+
+
+# --- 5) 유색 텍스트 검정 정규화 ----------------------------------------------
+def test_force_black_text_blacks_only_colored():
+    hroot = etree.fromstring(
+        f'<hh:head xmlns:hh="{HH}">'
+        f'<hh:charPr id="0" textColor="#0000FF"/>'
+        f'<hh:charPr id="1" textColor="#FFFFFF"/>'
+        f'<hh:charPr id="2" textColor="#000000"/>'
+        f'<hh:charPr id="3" textColor="auto"/>'
+        f'</hh:head>'.encode("utf-8")
+    )
+    n = force_black_text(hroot)
+    cps = {c.get("id"): c.get("textColor")
+           for c in hroot.iter() if etree.QName(c).localname == "charPr"}
+    assert cps["0"] == "#000000"   # 파랑 → 검정
+    assert cps["1"] == "#FFFFFF"   # 흰색 보존(어두운 칸)
+    assert cps["2"] == "#000000"   # 검정 유지
+    assert cps["3"] == "auto"      # 비-hex(auto) 보존
+    assert n == 1
+
+
+def test_normalize_colors_in_hwpx_inplace_and_idempotent(tmp_path):
+    sec = f'<hp:sec xmlns:hp="{HP}"><hp:p/></hp:sec>'
+    hdr = f'<hh:head xmlns:hh="{HH}"><hh:charPr id="0" textColor="#0000FF"/></hh:head>'
+    p = tmp_path / "colored.hwpx"
+    with zipfile.ZipFile(p, "w") as z:
+        zi = zipfile.ZipInfo("mimetype")
+        zi.compress_type = zipfile.ZIP_STORED
+        z.writestr(zi, "application/hwp+zip")
+        z.writestr("Contents/section0.xml", sec)
+        z.writestr("Contents/header.xml", hdr)
+    assert normalize_colors_in_hwpx(p) == 1
+    with zipfile.ZipFile(p) as z:
+        assert z.testzip() is None
+        assert z.getinfo("mimetype").compress_type == zipfile.ZIP_STORED
+        hroot = etree.fromstring(z.read("Contents/header.xml"))
+    cp = next(c for c in hroot.iter() if etree.QName(c).localname == "charPr")
+    assert cp.get("textColor") == "#000000"
+    assert normalize_colors_in_hwpx(p) == 0  # 멱등 — 두 번째는 무변경
