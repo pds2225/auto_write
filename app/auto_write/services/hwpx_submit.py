@@ -28,6 +28,7 @@ from typing import Any, Optional
 
 from .hwpx_acceptance import run_hwpx_acceptance
 from .hwpx_fill import fill_hwpx
+from .hwpx_layout_fix import normalize_colors_in_hwpx
 from .usage_acceptance import force_draft_name
 
 
@@ -92,6 +93,7 @@ def submit_hwpx(
     identity: Optional[dict[str, str]] = None,
     replacements: Optional[dict[str, str]] = None,
     acceptance_gate: bool = True,
+    normalize_colors: bool = True,
 ) -> SubmitReport:
     """HWPX 양식을 채우고 수용검사 게이트로 판정해 제출 가능 여부를 확정한다.
 
@@ -101,6 +103,8 @@ def submit_hwpx(
         identity: 라벨→값(fill_hwpx 로 전달, 날조0).
         replacements: 직접 치환(선택, 라벨/실값 칸 보호).
         acceptance_gate: False 면 게이트를 생략한다(이름 유지, notes 에 명시).
+        normalize_colors: True(기본)면 채움 직후 잔존 예시 유색체를 검정으로 정규화해
+            수용검사 colored 결함을 자동 해소한다(채운 값 검정은 fill_hwpx 가 이미 처리).
 
     Returns:
         SubmitReport — final 은 항상 실제 존재하는 최종 경로.
@@ -119,6 +123,16 @@ def submit_hwpx(
     report.residual = list(fill_rep.residual)
     report.notes.extend(fill_rep.notes)
     report.final = str(out)
+
+    # 1.5) 잔존 예시 유색체 검정 정규화(채운 값 검정은 fill_hwpx 검정클론이 이미 처리).
+    #      수용검사 colored 결함을 제출 전에 자동 해소한다(opt-out=normalize_colors=False).
+    if normalize_colors:
+        try:
+            n_black = normalize_colors_in_hwpx(out)
+            if n_black:
+                report.notes.append(f"유색 예시체 검정 정규화 {n_black}건")
+        except Exception as exc:  # noqa: BLE001 — 정규화 실패는 치명 아님(검사에서 잡힘)
+            report.notes.append(f"검정 정규화 스킵(오류): {type(exc).__name__}")
 
     # 2) 게이트 생략(opt-out) — 스킵 사실을 정직하게 남긴다.
     if not acceptance_gate:

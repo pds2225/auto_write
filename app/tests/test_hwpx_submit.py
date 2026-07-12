@@ -114,7 +114,9 @@ def test_submit_clean_form_passes_gate(clean_hwpx, tmp_path):
 
 def test_submit_gate_fail_forces_draft(colored_hwpx, tmp_path):
     out = tmp_path / "out.hwpx"
-    rep = submit_hwpx(colored_hwpx, out, identity={"기업명": "도보네비(주)"})
+    # 검정 정규화 opt-out → 유색 예시체가 잔존 → 게이트 fail → _DRAFT 검증(보존)
+    rep = submit_hwpx(colored_hwpx, out, identity={"기업명": "도보네비(주)"},
+                      normalize_colors=False)
     assert rep.ok is False
     final = Path(rep.final)
     assert final.name == "out_DRAFT.hwpx"              # _DRAFT 강제 명명
@@ -125,6 +127,16 @@ def test_submit_gate_fail_forces_draft(colored_hwpx, tmp_path):
     assert "유색" in rep.draft_reason                  # 결함 요약이 사유에 명시
     # 채움 자체는 정상 수행(값은 들어감 — 판정만 제출불가)
     assert rep.filled == {"기업명": "도보네비(주)"}
+
+
+def test_submit_normalizes_colors_by_default(colored_hwpx, tmp_path):
+    """기본(normalize_colors=True): 잔존 예시 유색체가 검정으로 정규화돼 제출가능."""
+    out = tmp_path / "out.hwpx"
+    rep = submit_hwpx(colored_hwpx, out, identity={"기업명": "도보네비(주)"})
+    assert rep.ok is True                              # 유색 자동 해소 → 제출가능
+    assert Path(rep.final).name == "out.hwpx"          # _DRAFT 아님(깨끗한 이름)
+    assert rep.acceptance.get("colored", -1) == 0      # 유색 0
+    assert any("검정 정규화" in n for n in rep.notes)   # 정규화 수행 명시
 
 
 # --------------------------------------------------------------------------- #
@@ -201,9 +213,10 @@ def test_cli_exit_codes(clean_hwpx, colored_hwpx, tmp_path, monkeypatch):
                "--set", "기업명=x"])
     assert rc == 1
 
-    # 2: 게이트 fail(유색) → _DRAFT 강제·제출불가
+    # 2: 게이트 fail(유색) → _DRAFT 강제·제출불가 (검정 정규화 opt-out 으로 유색 잔존)
     out2 = tmp_path / "fail.hwpx"
-    rc = main([str(colored_hwpx), "-o", str(out2), "--set", "기업명=x(주)"])
+    rc = main([str(colored_hwpx), "-o", str(out2), "--set", "기업명=x(주)",
+               "--no-normalize-colors"])
     assert rc == 2
     assert not out2.exists()                           # CLI 경로에서도 이름 세탁 금지
     assert (tmp_path / "fail_DRAFT.hwpx").exists()

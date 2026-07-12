@@ -53,6 +53,8 @@ def main(argv: list[str] | None = None) -> int:
                     metavar="예시=실제", help="직접 텍스트 치환(반복 가능)")
     ap.add_argument("--no-acceptance", action="store_true",
                     help="수용검사 게이트 생략(이름 유지 — 제출 전 별도 점검 필요)")
+    ap.add_argument("--no-normalize-colors", action="store_true",
+                    help="잔존 예시 유색체 자동 검정화 생략(기본은 검정 정규화 ON)")
     args = ap.parse_args(argv)
 
     # Windows 콘솔(cp949)에서 한글·기호 출력이 깨지거나 죽지 않도록 UTF-8 강제.
@@ -87,7 +89,8 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         rep = submit_hwpx(src, out, identity=identity, replacements=replacements,
-                          acceptance_gate=not args.no_acceptance)
+                          acceptance_gate=not args.no_acceptance,
+                          normalize_colors=not args.no_normalize_colors)
     except (ValueError, FileNotFoundError, OSError) as exc:
         print(f"[입력오류] {exc}", file=sys.stderr)
         return 1
