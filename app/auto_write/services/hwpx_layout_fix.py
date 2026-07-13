@@ -36,6 +36,8 @@ __all__ = [
     "merge_trailing_empty_value_cells",
     "force_black_text",
     "normalize_colors_in_hwpx",
+    "merge_trailing_empty_value_cells",
+    "validate_table_grid",
     "finalize_layout_hwpx",
     "DEFAULT_SPACING_FLOOR",
 ]
@@ -311,6 +313,62 @@ def _qname_like(sibling, localname: str) -> str:
     """형제 요소와 같은 네임스페이스로 localname QName 생성."""
     qn = etree.QName(sibling)
     return f"{{{qn.namespace}}}{localname}" if qn.namespace else localname
+
+
+# --- 격자 타일링 검증(rowSpan/colSpan 병합 정합) --------------------------------
+def _tc_row(tc) -> int:
+    a = _child(tc, "cellAddr")
+    if a is None:
+        return -1
+    try:
+        return int(a.get("rowAddr", "-1"))
+    except (TypeError, ValueError):
+        return -1
+
+
+def validate_table_grid(tbl) -> dict:
+    """표 격자 타일링 검증 — 모든 tc의 (rowAddr,colAddr)×(rowSpan,colSpan)이
+    rowCnt×colCnt 를 겹침0·공백0으로 정확히 덮는가.
+
+    행 삽입 후 세로병합 rowSpan 을 안 늘리면(실측 v7 결함: 전문분야 칸 → 선 사라짐)
+    그 열 일부가 미커버(empties)로 잡힌다. 중첩 표는 세지 않는다(직계 tr>tc 만).
+    반환: {"ok", "overlaps":[(r,c)], "empties":[(r,c)], "oob":[...], "rows", "cols"}.
+    """
+    try:
+        R = int(tbl.get("rowCnt") or "0")
+        C = int(tbl.get("colCnt") or "0")
+    except (TypeError, ValueError):
+        return {"ok": False, "overlaps": [], "empties": [], "oob": [],
+                "rows": 0, "cols": 0, "error": "rowCnt/colCnt 파싱 실패"}
+    if R <= 0 or C <= 0:
+        return {"ok": False, "overlaps": [], "empties": [], "oob": [],
+                "rows": R, "cols": C, "error": "rowCnt/colCnt 0"}
+    grid = [[0] * C for _ in range(R)]
+    overlaps: list = []
+    oob: list = []
+    for tr in tbl:
+        if _ln(tr) != "tr":
+            continue
+        for tc in tr:
+            if _ln(tc) != "tc":
+                continue
+            r0, c0 = _tc_row(tc), _tc_col(tc)
+            if r0 < 0 or c0 < 0:
+                continue
+            rs = _tc_span(tc, "rowSpan")
+            cs = _tc_span(tc, "colSpan")
+            for r in range(r0, r0 + rs):
+                for c in range(c0, c0 + cs):
+                    if r >= R or c >= C:
+                        oob.append((r0, c0, rs, cs))
+                        continue
+                    grid[r][c] += 1
+                    if grid[r][c] > 1:
+                        overlaps.append((r, c))
+    empties = [(r, c) for r in range(R) for c in range(C) if grid[r][c] == 0]
+    return {"ok": not overlaps and not oob and not empties,
+            "overlaps": overlaps, "empties": empties, "oob": oob,
+            "rows": R, "cols": C}
 
 
 # --- 파일 진입점 -------------------------------------------------------------
