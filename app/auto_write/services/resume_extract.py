@@ -402,6 +402,59 @@ def _dedup_extend(dst: list, src: list) -> None:
             seen.add(k)
 
 
+# 학위 상태(졸업>수료>재학) — 같은 학교·학과·학위레벨이면 최종 상태만 채택.
+_DEGREE_STATUS_RANK = (("졸업", 3), ("졸", 3), ("수료", 2), ("휴학", 1),
+                       ("재학", 1), ("중퇴", 0))
+_DEGREE_LEVELS = ("박사", "석사", "학사", "전문학사")
+
+
+def _degree_status_rank(degree: Optional[str]) -> int:
+    d = (degree or "").replace(" ", "")
+    for kw, rank in _DEGREE_STATUS_RANK:
+        if kw in d:
+            return rank
+    return 3  # 상태 표기 없으면(예: "석사") 졸업=최종으로 간주
+
+
+def _degree_level(degree: Optional[str]) -> str:
+    d = (degree or "").replace(" ", "")
+    for lv in _DEGREE_LEVELS:
+        if lv in d:
+            return lv
+    return d
+
+
+def _consolidate_education(edus: list) -> tuple[list, list]:
+    """같은 (학교·학과·학위레벨)이면 최종 학위상태(졸업>수료>재학)만 남긴다.
+
+    실측: 한 사람의 '석사'(졸업)와 '석사 수료'가 서로 다른 이력서에서 각각 잡히면
+    dedup(기간 상이)으로 둘 다 살아남는데, 이는 같은 과정의 단계 차이일 뿐 최종=졸업이다.
+    학위레벨이 다르면(학사↔석사) 별개 이력으로 보존(과잉병합 금지). 대체분은 dropped 로
+    반환해 노출(침묵 절단 금지). 학교/학과 정보가 없으면(둘 다 None) 통합하지 않는다."""
+    best: dict = {}
+    order: list = []
+    dropped: list = []
+    for e in edus:
+        level = _degree_level(e.degree)
+        # 학위 공란·레벨 불명·학교/학과 공란이면 통합하지 않고 개별 보존
+        # (기간만 다른 별개 이력을 임의로 합치지 않음 — 학위레벨 명시된 경우만 통합).
+        if (not e.degree) or (level not in _DEGREE_LEVELS) or (not e.school and not e.major):
+            key = ("__unkeyed__", id(e))
+        else:
+            key = (e.school, e.major, level)
+        if key not in best:
+            best[key] = e
+            order.append(key)
+            continue
+        cur = best[key]
+        if _degree_status_rank(e.degree) > _degree_status_rank(cur.degree):
+            dropped.append(cur)
+            best[key] = e
+        else:
+            dropped.append(e)
+    return [best[k] for k in order], dropped
+
+
 def merge_profiles(profiles: list[ResumeProfile]) -> tuple[ResumeProfile, list[str]]:
     """여러 프로필을 상위(우선순위 높은 것 먼저) → 하위 순으로 병합.
 
@@ -410,16 +463,18 @@ def merge_profiles(profiles: list[ResumeProfile]) -> tuple[ResumeProfile, list[s
     """
     merged = ResumeProfile()
     needs_confirm: list[str] = []
+    seen_conflicts: set = set()  # (key, 무시값) — 같은 충돌 소스별 중복 노출 방지
     for prof in profiles:
         merged.sources.extend(prof.sources)
         for key, val in prof.identity.items():
             if key not in merged.identity:
                 merged.identity[key] = val
-            elif merged.identity[key] != val:
+            elif merged.identity[key] != val and (key, val) not in seen_conflicts:
+                seen_conflicts.add((key, val))
                 src = Path(prof.sources[0]).name if prof.sources else "?"
                 needs_confirm.append(
                     f"[충돌] {key}: '{merged.identity[key]}' 채택(상위) / "
-                    f"'{val}'({src}) 무시 — 확인 필요")
+                    f"'{val}' 무시(예: {src}) — 확인 필요")
         _dedup_extend(merged.education, prof.education)
         _dedup_extend(merged.career, prof.career)
         _dedup_extend(merged.certs, prof.certs)
@@ -428,6 +483,13 @@ def merge_profiles(profiles: list[ResumeProfile]) -> tuple[ResumeProfile, list[s
         for pub in prof.publications:
             if pub not in merged.publications:
                 merged.publications.append(pub)
+
+    # 같은 과정의 학위상태 통합(졸업>수료>재학) — 최종만 남기고 대체분은 병기.
+    merged.education, _edu_dropped = _consolidate_education(merged.education)
+    for e in _edu_dropped:
+        needs_confirm.append(
+            f"[대체] 학력 {(e.school or '').strip()} {(e.degree or '').strip()}"
+            f"({e.period or ''}) → 같은 과정의 최종 학위(졸업) 채택")
 
     # 필수 identity 키 누락 → needs_confirm(날조 금지: null 로 남김).
     for k in IDENTITY_KEYS:
