@@ -36,7 +36,6 @@ __all__ = [
     "merge_trailing_empty_value_cells",
     "force_black_text",
     "normalize_colors_in_hwpx",
-    "merge_trailing_empty_value_cells",
     "validate_table_grid",
     "finalize_layout_hwpx",
     "DEFAULT_SPACING_FLOOR",
