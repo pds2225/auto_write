@@ -32,6 +32,9 @@ _SELFDEV_FILE = "selfdev_candidates.jsonl"
 # SFT 데이터 레이어 P0: AI 호출 1회 = 1행. 본문(프롬프트·응답)은 gen_blobs/ 에
 # 해시로 1회만 저장하고 이 파일에는 해시·메타만 남긴다(용량 폭증·중복 방지).
 _GENERATION_FILE = "generation_traces.jsonl"
+# SFT 데이터 레이어 P1: 사람이 AI 초안을 고친 사건(human_approved) 1건 = 1행.
+# {project_id, qid, source, action_type(edited|draft_rejected), feedback:{before,after}, created_at}
+_FEEDBACK_FILE = "feedback.jsonl"
 
 
 def _resolve_root(root: Path | None) -> Path:
@@ -92,6 +95,11 @@ def append_generation_trace(record: dict[str, Any], root: Path | None = None) ->
     return _append_jsonl(_GENERATION_FILE, record, root)
 
 
+def append_feedback(record: dict[str, Any], root: Path | None = None) -> Path:
+    """SFT 데이터 레이어 P1: 사람 수정(human_approved) 1건을 feedback.jsonl 에 append."""
+    return _append_jsonl(_FEEDBACK_FILE, record, root)
+
+
 # --- load ----------------------------------------------------------------
 
 def load_recent_runs(limit: int = 20, root: Path | None = None) -> list[dict[str, Any]]:
@@ -119,6 +127,10 @@ def load_selfdev_candidates(root: Path | None = None) -> list[dict[str, Any]]:
 
 def load_generation_traces(root: Path | None = None) -> list[dict[str, Any]]:
     return _load_jsonl(_GENERATION_FILE, root)
+
+
+def load_feedback(root: Path | None = None) -> list[dict[str, Any]]:
+    return _load_jsonl(_FEEDBACK_FILE, root)
 
 
 def load_defect_stats(last_n_runs: int = 5, root: Path | None = None) -> dict[str, dict[str, Any]]:
