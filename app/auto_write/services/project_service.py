@@ -641,6 +641,42 @@ class ProjectService:
     def _sft_dir(self, project_id: str) -> Path:
         return self.storage.project_dir(project_id) / "sft"
 
+    def _suggest_learned_snippets(self, missing: list[dict[str, Any]]) -> dict[str, str]:
+        """P2(SFT 소비자): 과거 사람 승인본(learned_snippets)을 항목 라벨로 매칭해 few-shot 힌트로.
+
+        **날조0 안전장치**: learned_snippets 는 export 단계에서 수치·PII 가 마스킹돼 저장된다
+        (다른 사업 실제값 유출 방지). 여기서는 **section 계열만**·라벨 정확일치만 주입하고,
+        생성 컨텍스트에만 쓴다(폴백/문서 직접삽입 금지 — 호출부에서 분리). 파일 없으면 무동작.
+        """
+        try:
+            path = learning_store.LEARNING_ROOT / "learned_snippets.json"
+            if not path.exists():
+                return {}
+            data = read_json(path)
+            learned = data.get("snippets", {}) if isinstance(data, dict) else {}
+            if not isinstance(learned, dict) or not learned:
+                return {}
+            out: dict[str, str] = {}
+            for question in missing:
+                qid = str(question.get("question_id", "")).strip()
+                if not qid:
+                    continue
+                if str(question.get("target", {}).get("kind", "")) != "section":
+                    continue
+                norm = re.sub(r"[\s\W_]+", "", str(question.get("label", ""))).lower()
+                if not norm:
+                    continue
+                examples = learned.get(norm)
+                if isinstance(examples, list) and examples:
+                    out[qid] = (
+                        "과거 승인된 유사 항목 예시(문체·구성 참고용 — 수치·고유명사는 본 사업 실제값으로 작성):\n"
+                        + "\n".join(str(e) for e in examples[:2])
+                    )
+            return out
+        except Exception as exc:  # noqa: BLE001 — 소비자 실패는 생성에 영향 없음
+            log_line(f"[WARN] SFT learned_snippets 로드 실패(무시): {exc}")
+            return {}
+
     def _capture_human_edits(
         self,
         project_id: str,
@@ -824,7 +860,10 @@ class ProjectService:
                 else {}
             )
             combined_hints = self._merge_hint_maps(reference_hints, library_hints)
-            full_context = self._merge_context_with_library(context, combined_hints, questions=missing)
+            # P2(SFT 소비자): 과거 승인본 few-shot 은 AI 컨텍스트에만 주입한다.
+            # combined_hints(폴백에 재사용)에는 넣지 않아 문서 직접삽입·오전사를 차단한다.
+            context_hints = self._merge_hint_maps(combined_hints, self._suggest_learned_snippets(missing))
+            full_context = self._merge_context_with_library(context, context_hints, questions=missing)
             writing_provider = str(project_input.project_meta.get("writing_provider", "")).strip().lower()
             writing_model = str(project_input.project_meta.get("writing_model", "")).strip()
             drafted = (
