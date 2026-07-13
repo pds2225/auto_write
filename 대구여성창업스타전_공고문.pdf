@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0, maximum-scale=10, user-scalable=no" />
+<meta name="format-detection" content="telephone=no" />
+<meta http-equiv="imagetoolbar" content="no">
+<meta http-equiv="X-UA-Compatible" content="IE=Edge">
+<meta property="og:type" content="website">
+<meta property="og:title" content="달구벌여성창업플랫폼">
+<meta property="og:description" content="달구벌여성창업플랫폼은 여성 예비 창업자를 위한 서비스를 지원합니다. ">
+<meta name="description" content="달구벌여성창업플랫폼은 여성 예비 창업자를 위한 서비스를 지원합니다.">
+<meta property="og:image" content="http://w-startup.daegu.go.kr/html/img/myimage.jpg">
+<meta property="og:url" content="http://w-startup.daegu.go.kr/">
+
+<title>오류안내 페이지 | 달구벌여성인력개발센터 달구벌여성창업플랫폼</title>
+<link rel="stylesheet" href="https://w-startup.daegu.go.kr/css/default.css?ver=230907">
+<link rel="stylesheet" href="https://w-startup.daegu.go.kr/js/font-awesome/css/font-awesome.min.css?ver=230907">
+<!--[if lte IE 8]>
+<script src="https://w-startup.daegu.go.kr/js/html5.js"></script>
+<![endif]-->
+<script>
+// 자바스크립트에서 사용하는 전역변수 선언
+var g5_url       = "https://w-startup.daegu.go.kr";
+var g5_bbs_url   = "https://w-startup.daegu.go.kr/bbs";
+var g5_is_member = "";
+var g5_is_admin  = "";
+var g5_is_mobile = "";
+var g5_bo_table  = "";
+var g5_sca       = "";
+var g5_editor    = "smarteditor2";
+var g5_cookie_domain = "";
+var g5_shop_url = "https://w-startup.daegu.go.kr/shop";
+</script>
+<script src="https://w-startup.daegu.go.kr/js/jquery-1.12.4.min.js?ver=210618"></script>
+<script src="https://w-startup.daegu.go.kr/js/jquery-migrate-1.4.1.min.js?ver=210618"></script>
+<script src="https://w-startup.daegu.go.kr/js/jquery.menu.js?ver=210618"></script>
+<script src="https://w-startup.daegu.go.kr/js/common.js?ver=210618"></script>
+<script src="https://w-startup.daegu.go.kr/js/wrest.js?ver=210618"></script>
+<script src="https://w-startup.daegu.go.kr/js/placeholders.min.js?ver=210618"></script>
+</head>
+<body>
+
+<link href="/html/css/default.css" rel="stylesheet" />
+<link href="/html/js/font-awesome/css/font-awesome.min.css" rel="stylesheet" />
+<link href="/html/css/slick.css" rel="stylesheet" />
+<link href="/html/css/slick-theme.css" rel="stylesheet" />
+<link href="/html/css/jquery.fullPage.css" rel="stylesheet" />
+<script src="/html/js/jquery-3.6.0.min.js"></script>
+<script src="/html/js/jquery.fullPage.js"></script>
+<script src="/html/js/slick.min.js"></script>
+<script src="/html/js/script.js"></script>
+<script src="/html/js/sub.js"></script><link href="/html/css/animations.css" rel="stylesheet">
+<link href="/html/css/layout.css?ver=230829" rel="stylesheet" />
+<!-- HTLM5shiv ie6~8 -->
+<!--[if lte IE 9]> 
+	<script src="/html/js/html5.js"></script>
+	<div id="browser_update" >
+		<p>
+			이 브라우저는 최신 버전이 아닙니다. <span>안전하고 빠른 최신 브라우저로 <a href="https://www.microsoft.com/ko-kr/edge" target="_balnk">업데이트</a> 하세요.</span>
+		</p>
+	</div>
+<![endif]-->
+
+<script>
+alert("잘못된 접근입니다.");
+history.back();
+</script>
+
+<noscript>
+<div id="validation_check">
+    <h1>다음 항목에 오류가 있습니다.</h1>
+    <p class="cbg">
+        잘못된 접근입니다.    </p>
+        <div class="btn_confirm">
+        <a href="">돌아가기</a>
+    </div>
+    
+</div>
+</noscript>
+
+
+
+<!-- ie6,7에서 사이드뷰가 게시판 목록에서 아래 사이드뷰에 가려지는 현상 수정 -->
+<!--[if lte IE 7]>
+<script>
+$(function() {
+    var $sv_use = $(".sv_use");
+    var count = $sv_use.length;
+
+    $sv_use.each(function() {
+        $(this).css("z-index", count);
+        $(this).css("position", "relative");
+        count = count - 1;
+    });
+});
+</script>
+<![endif]-->
+
+
+</body>
+</html>
