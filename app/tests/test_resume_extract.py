@@ -213,3 +213,23 @@ def test_folder_scan_includes_txt(tmp_path):
     result = build_profile([tmp_path])
     assert result.merged_sources                # txt 가 폴더 스캔에 포함됨
     assert result.profile.identity.get("name") == "박다솜"
+
+
+def test_education_consolidates_graduated_over_completed():
+    """같은 석사 과정의 '석사'(졸업)와 '석사 수료'는 최종(졸업)만 남고, 학사(다른 레벨)는 보존."""
+    top = parse_profile_text(
+        "학력 | 기간 | 학교명 | 전공학과 | 학위\n"
+        "학력 | 2022.03~2025.08 | 한양대학교 | 경영컨설팅학과 | 석사\n"
+        "학력 | 2010.03~2014.02 | 강남대학교 | 세무학과 | 학사\n",
+        source="top.hwp")
+    older = parse_profile_text(
+        "학력 | 기간 | 학교명 | 전공학과 | 학위\n"
+        "학력 | 2022.03~2024.02 | 한양대학교 | 경영컨설팅학과 | 석사 수료\n",
+        source="older.hwp")
+    merged, needs = merge_profiles([top, older])
+    pairs = [(e.school, e.degree) for e in merged.education]
+    assert ("한양대학교", "석사") in pairs          # 졸업(최종)만 채택
+    assert all("수료" not in (e.degree or "") for e in merged.education)
+    assert ("강남대학교", "학사") in pairs          # 다른 레벨은 보존(과잉병합 금지)
+    assert len(merged.education) == 2
+    assert any("[대체]" in n and "수료" in n for n in needs)   # 대체 내역 병기
