@@ -35,6 +35,7 @@ from ..models import (
 )
 from ..storage import Storage
 from ..utils import log_line, read_json, sanitize_user_filename, unique_lines, write_json
+from . import learning_store
 from .evaluation_service import EvalLoopReport, EvaluationService
 from .evidence_service import EvidenceService
 from .image_service import ImageService
@@ -245,6 +246,10 @@ class ProjectService:
             existing_input = self.storage.load_project_input(project_id)
         except Exception:
             existing_input = None
+
+        # P1(SFT): 이 폼 제출이 직전 AI 초안을 사람이 고친 것이면 feedback 페어로 기록.
+        # (generate 재실행 전, 아직 이전 세대의 ai_draft_snapshot 이 남아있는 시점)
+        self._capture_human_edits(project_id, existing_input, answers)
 
         references: list[ReferenceFile] = []
         if existing_input is not None:
@@ -635,6 +640,59 @@ class ProjectService:
 
     def _sft_dir(self, project_id: str) -> Path:
         return self.storage.project_dir(project_id) / "sft"
+
+    def _capture_human_edits(
+        self,
+        project_id: str,
+        existing_input: ProjectInput | None,
+        answers: dict[str, Any],
+    ) -> None:
+        """P1(SFT human_approved): 폼 재제출이 이전 AI 초안을 사람이 고친 것이면 페어로 기록.
+
+        P0 가 남긴 ai_draft_snapshot.reflected(AI 반영본)와 현재 저장값이 같은
+        (=아직 사람손 안 탄) 답변만 대상으로, 이번 POST 에 실제 존재한 필드의
+        **첫 divergence 만** AI→사람 페어로 인정한다(2회차 이후 사람 v1→v2 오라벨 방지).
+        빈값 제출은 draft_rejected 로 구분. 전부 try/except 가드(생성 파이프라인 무영향).
+        """
+        try:
+            if existing_input is None:
+                return
+            snap_path = self._sft_dir(project_id) / "ai_draft_snapshot.json"
+            if not snap_path.exists():
+                return
+            snap = read_json(snap_path)
+            reflected = snap.get("reflected", {}) if isinstance(snap, dict) else {}
+            if not isinstance(reflected, dict) or not reflected:
+                return
+            _KST = timezone(timedelta(hours=9))
+            now = datetime.now(_KST).isoformat()
+            events: list[dict[str, Any]] = []
+            for qid, posted in answers.items():
+                if qid not in reflected:
+                    continue
+                ai_value = str(reflected.get(qid, ""))
+                old_value = str(existing_input.answers.get(qid, ""))
+                # 현재 저장값이 AI 반영본과 다르면 이미 사람이 손댄 것 → 첫 divergence 아님(제외).
+                if old_value != ai_value:
+                    continue
+                new_value = str(posted)
+                if new_value == old_value:
+                    continue  # 변경 없음
+                action = "draft_rejected" if not new_value.strip() else "edited"
+                events.append(
+                    {
+                        "project_id": project_id,
+                        "qid": qid,
+                        "source": "user",
+                        "action_type": action,
+                        "feedback": {"before": old_value, "after": new_value},
+                        "created_at": now,
+                    }
+                )
+            for ev in events:
+                learning_store.append_feedback(ev)
+        except Exception as exc:  # noqa: BLE001 — 사람수정 캡처 실패는 저장/생성에 영향 없음
+            log_line(f"[WARN] SFT 사람수정 캡처 실패(무시): {exc}")
 
     def _save_sft_input_snapshot(self, project_id: str, project_input: ProjectInput) -> None:
         """AI 변형 전 project_input(특히 answers) 스냅샷을 <project>/sft/ 에 남긴다."""
