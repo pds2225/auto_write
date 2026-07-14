@@ -37,6 +37,9 @@ __all__ = [
     "force_black_text",
     "normalize_colors_in_hwpx",
     "validate_table_grid",
+    "repair_table_grid",
+    "repair_all_table_grids",
+    "check_hwpx_semantics",
     "finalize_layout_hwpx",
     "DEFAULT_SPACING_FLOOR",
 ]
@@ -370,6 +373,56 @@ def validate_table_grid(tbl) -> dict:
             "rows": R, "cols": C}
 
 
+def repair_table_grid(tbl) -> dict:
+    """격자가 깨진 표(rowAddr/colAddr 오지정)를 물리 순서로 재주소화해 고친다.
+
+    실측(박다솜 프로필 v3~v7): 수행 표 마지막 행 rowAddr 가 2로 중복 지정돼 한 행이
+    겹치고 다른 행이 비어 한글이 문서 열기를 거부했다(채움 스크립트가 행 추가 시 rowAddr
+    미증가). 원인: 각 tr 의 cellAddr rowAddr/colAddr 가 물리 위치와 어긋남.
+
+    **안전 규칙**: 병합(rowSpan/colSpan>1)이 있는 표는 자동 교정하지 않는다(정상 병합을
+    깨뜨릴 위험 — 그런 표는 needs 사람확인). 이미 정상인 표는 건드리지 않는다(멱등).
+    1x1 셀만 있는 표에 한해 각 tr 의 cellAddr 를 (tr 순서, 셀 순서)로 재지정한다.
+
+    반환: {"repaired": bool, "cells_fixed": int, "skipped_merge": bool}.
+    """
+    if validate_table_grid(tbl).get("ok"):
+        return {"repaired": False, "cells_fixed": 0, "skipped_merge": False}
+    trs = [tr for tr in tbl if _ln(tr) == "tr"]
+    has_merge = any(
+        _tc_span(tc, "rowSpan") != 1 or _tc_span(tc, "colSpan") != 1
+        for tr in trs for tc in tr if _ln(tc) == "tc")
+    if has_merge:
+        return {"repaired": False, "cells_fixed": 0, "skipped_merge": True}
+    cells_fixed = 0
+    for ri, tr in enumerate(trs):
+        ci = 0
+        for tc in tr:
+            if _ln(tc) != "tc":
+                continue
+            addr = _child(tc, "cellAddr")
+            if addr is not None:
+                if addr.get("rowAddr") != str(ri):
+                    addr.set("rowAddr", str(ri)); cells_fixed += 1
+                if addr.get("colAddr") != str(ci):
+                    addr.set("colAddr", str(ci)); cells_fixed += 1
+            ci += 1
+    return {"repaired": validate_table_grid(tbl).get("ok", False),
+            "cells_fixed": cells_fixed, "skipped_merge": False}
+
+
+def repair_all_table_grids(section_root) -> int:
+    """섹션 내 모든 표의 깨진 격자를 자동 교정한다. 교정된 셀 수를 반환한다.
+
+    한글이 못 여는 '깨진 격자 hwpx' 가 생성·제출 경로로 나가지 않게 하는 최종 방어선.
+    병합 있는 표는 건드리지 않으므로 정상 문서엔 무해(멱등)하다."""
+    fixed = 0
+    for el in section_root.iter():
+        if _ln(el) == "tbl":
+            fixed += repair_table_grid(el)["cells_fixed"]
+    return fixed
+
+
 # --- 파일 진입점 -------------------------------------------------------------
 def finalize_layout_hwpx(
     in_path,
@@ -378,8 +431,12 @@ def finalize_layout_hwpx(
     spacing_floor: int | None = DEFAULT_SPACING_FLOOR,
     relax_lines: bool = True,
     merge_empty: bool = True,
+    repair_grid: bool = True,
 ) -> dict:
-    """채워진 HWPX 에 레이아웃 정규화 3종을 적용해 out_path 로 저장. 원본 보존."""
+    """채워진 HWPX 에 레이아웃 정규화 3종을 적용해 out_path 로 저장. 원본 보존.
+
+    repair_grid=True(기본): 표 격자가 깨진(rowAddr/colAddr 오지정) 표를 자동 교정해
+    한글이 못 여는 hwpx 가 나가지 않게 한다(병합 있는 표는 건드리지 않아 무해·멱등)."""
     in_path, out_path = Path(in_path), Path(out_path)
     if in_path.resolve() == out_path.resolve():
         raise ValueError("원본 덮어쓰기 금지: 출력 경로가 입력과 같습니다.")
@@ -388,10 +445,13 @@ def finalize_layout_hwpx(
         infos = zin.infolist()
         store = {i.filename: zin.read(i.filename) for i in infos}
 
-    stats = {"spacing_clamped": 0, "linesegarray_removed": 0, "cells_merged": 0}
+    stats = {"spacing_clamped": 0, "linesegarray_removed": 0, "cells_merged": 0,
+             "grid_cells_fixed": 0}
     for name, data in list(store.items()):
         if _SECTION_RE.search(name):
             root = etree.fromstring(data)
+            if repair_grid:
+                stats["grid_cells_fixed"] += repair_all_table_grids(root)
             if merge_empty:
                 stats["cells_merged"] += merge_trailing_empty_value_cells(root)
             if relax_lines:
@@ -419,3 +479,64 @@ def finalize_layout_hwpx(
             zi.external_attr = info.external_attr
             zout.writestr(zi, store[info.filename])
     return stats
+
+
+def check_hwpx_semantics(path) -> dict:
+    """hwpx 가 한글에서 열리는 데 필요한 '의미 규칙' 검사(구문 유효성 넘어).
+
+    한글은 zip/XML 이 멀쩡해도 ①itemCnt 불일치 ②정의 없는 ID 참조(charPr 등)
+    ③표 격자 깨짐(rowAddr/colAddr 충돌) 이면 문서 열기를 거부한다. 실측(박다솜 v7)
+    에서 표 격자 결함으로 '안 열림' 이 재현·확인됐다. 읽기 전용.
+
+    반환: {"ok", "itemcnt_issues":[...], "dangling_refs":[(attr,id)...],
+           "broken_tables":[{index,rows,cols,overlaps,empties,oob}...], "section_count"}.
+    """
+    path = Path(path)
+    z = zipfile.ZipFile(path)
+    names = z.namelist()
+    defined: set = set()
+    itemcnt_issues: list = []
+    for hn in [n for n in names if _HEADER_RE.search(n)]:
+        hroot = etree.fromstring(z.read(hn))
+        for el in hroot.iter():
+            cnt = el.get("itemCnt")
+            if cnt is None:
+                continue
+            idk = [c for c in el if c.get("id") is not None]
+            for c in idk:
+                defined.add(c.get("id"))
+            try:
+                if idk and int(cnt) != len(idk):
+                    itemcnt_issues.append(f"{_ln(el)}: itemCnt={cnt} 실제={len(idk)}")
+            except (TypeError, ValueError):
+                pass
+    ref_attrs = {"charPrIDRef", "paraPrIDRef", "styleIDRef", "borderFillIDRef"}
+    dangling: set = set()
+    broken: list = []
+    sec_count = 0
+    for sn in [n for n in names if _SECTION_RE.search(n)]:
+        sec_count += 1
+        sroot = etree.fromstring(z.read(sn))
+        for el in sroot.iter():
+            for a, v in el.attrib.items():
+                if a.split("}")[-1] in ref_attrs and v not in defined:
+                    dangling.add((a.split("}")[-1], v))
+        ti = 0
+        for el in sroot.iter():
+            if _ln(el) == "tbl":
+                ti += 1
+                r = validate_table_grid(el)
+                if not r.get("ok"):
+                    broken.append({
+                        "index": ti, "rows": r.get("rows"), "cols": r.get("cols"),
+                        "overlaps": len(r.get("overlaps", [])),
+                        "empties": len(r.get("empties", [])),
+                        "oob": len(r.get("oob", [])),
+                    })
+    return {
+        "ok": not itemcnt_issues and not dangling and not broken,
+        "itemcnt_issues": itemcnt_issues,
+        "dangling_refs": sorted(dangling)[:20],
+        "broken_tables": broken,
+        "section_count": sec_count,
+    }

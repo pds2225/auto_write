@@ -13,6 +13,9 @@ from auto_write.services.hwpx_layout_fix import (
     merge_trailing_empty_value_cells,
     force_black_text,
     normalize_colors_in_hwpx,
+    validate_table_grid,
+    repair_table_grid,
+    repair_all_table_grids,
     finalize_layout_hwpx,
 )
 
@@ -199,3 +202,82 @@ def test_normalize_colors_in_hwpx_inplace_and_idempotent(tmp_path):
     cp = next(c for c in hroot.iter() if etree.QName(c).localname == "charPr")
     assert cp.get("textColor") == "#000000"
     assert normalize_colors_in_hwpx(p) == 0  # 멱등 — 두 번째는 무변경
+
+
+# --- 표 격자 자동 교정(repair) 회귀 (2026-07-13 실측 v7 결함) ------------------
+def _grid_tbl(row_addrs, col_cnt=3, spans=None):
+    """row_addrs = 물리 행별 cellAddr rowAddr 값. spans[(ri,ci)]=(rowSpan,colSpan)."""
+    rowcnt = len(row_addrs)
+    trs = []
+    for ri, ra in enumerate(row_addrs):
+        cells = []
+        for ci in range(col_cnt):
+            rs, cs = (spans or {}).get((ri, ci), (1, 1))
+            cells.append(
+                f'<hp:tc><hp:cellAddr colAddr="{ci}" rowAddr="{ra}"/>'
+                f'<hp:cellSpan colSpan="{cs}" rowSpan="{rs}"/>'
+                f'<hp:subList><hp:p><hp:run><hp:t>x</hp:t></hp:run></hp:p></hp:subList></hp:tc>')
+        trs.append(f'<hp:tr>{"".join(cells)}</hp:tr>')
+    xml = (f'<hp:tbl xmlns:hp="{HP}" colCnt="{col_cnt}" rowCnt="{rowcnt}">'
+           f'{"".join(trs)}</hp:tbl>')
+    return etree.fromstring(xml.encode("utf-8"))
+
+
+def test_repair_fixes_duplicated_rowaddr():
+    """마지막 행 rowAddr 가 2로 중복(정상은 3) → 자동 교정 후 격자 정상(실측 v7 결함)."""
+    tbl = _grid_tbl([0, 1, 2, 2])            # 4행인데 마지막이 row 2 로 잘못
+    assert validate_table_grid(tbl)["ok"] is False
+    res = repair_table_grid(tbl)
+    assert res["repaired"] is True
+    assert res["cells_fixed"] == 3           # 마지막 행 3칸 rowAddr 2→3
+    assert validate_table_grid(tbl)["ok"] is True
+
+
+def test_repair_skips_merged_tables():
+    """병합(rowSpan>1) 있는 깨진 표는 자동 교정하지 않는다(정상 병합 보호)."""
+    tbl = _grid_tbl([0, 1, 2, 2], spans={(0, 0): (2, 1)})
+    res = repair_table_grid(tbl)
+    assert res["skipped_merge"] is True
+    assert res["cells_fixed"] == 0
+    # 주소 미변경(원본 보존): 마지막 행 여전히 rowAddr=2
+    addrs = [ca.get("rowAddr") for ca in tbl.iter() if ca.tag.endswith("cellAddr")]
+    assert addrs[-1] == "2"
+
+
+def test_repair_idempotent_on_valid():
+    """이미 정상인 표는 건드리지 않는다(멱등)."""
+    tbl = _grid_tbl([0, 1, 2])
+    assert validate_table_grid(tbl)["ok"] is True
+    res = repair_table_grid(tbl)
+    assert res["cells_fixed"] == 0 and res["repaired"] is False
+
+
+def test_repair_all_and_finalize_wiring(tmp_path):
+    """repair_all_table_grids 로 섹션 전체 교정 + 재실행 멱등."""
+    sec = etree.fromstring(
+        f'<hp:sec xmlns:hp="{HP}"><hp:p><hp:run>'
+        + etree.tostring(_grid_tbl([0, 1, 2, 2])).decode()
+        .replace(f' xmlns:hp="{HP}"', "")
+        + '</hp:run></hp:p></hp:sec>')
+    fixed = repair_all_table_grids(sec)
+    assert fixed == 3
+    assert repair_all_table_grids(sec) == 0   # 멱등
+
+
+def test_check_semantics_and_finalize_repairs_broken_grid(tmp_path):
+    """파일 수준: 깨진 격자 hwpx → check_hwpx_semantics 결함 검출 → finalize 자동교정 → 정상."""
+    from auto_write.services.hwpx_layout_fix import check_hwpx_semantics
+    bad = etree.tostring(_grid_tbl([0, 1, 2, 2])).decode().replace(f' xmlns:hp="{HP}"', "")
+    sec = f'<hp:sec xmlns:hp="{HP}"><hp:p><hp:run>{bad}</hp:run></hp:p></hp:sec>'
+    inp = tmp_path / "bad.hwpx"
+    with zipfile.ZipFile(inp, "w") as z:
+        zi = zipfile.ZipInfo("mimetype"); zi.compress_type = zipfile.ZIP_STORED
+        z.writestr(zi, "application/hwp+zip")
+        z.writestr("Contents/section0.xml", sec)
+        z.writestr("Contents/header.xml", f'<hh:head xmlns:hh="{HH}"/>')
+    before = check_hwpx_semantics(inp)
+    assert before["ok"] is False and len(before["broken_tables"]) == 1
+    out = tmp_path / "fixed.hwpx"
+    stats = finalize_layout_hwpx(inp, out)          # repair_grid=True 기본
+    assert stats["grid_cells_fixed"] == 3
+    assert check_hwpx_semantics(out)["ok"] is True   # 자동교정으로 한글-열림 회복
