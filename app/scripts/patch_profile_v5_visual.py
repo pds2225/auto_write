@@ -49,6 +49,15 @@ def _q(tag: str) -> str:
     return f"{{{_HP}}}{tag}"
 
 
+def _row_addr(tr) -> int:
+    """행(tr)의 논리 행번호(첫 cellAddr rowAddr). 격자 정합용."""
+    for tc in tr.findall(_q("tc")):
+        a = tc.find(_q("cellAddr"))
+        if a is not None:
+            return int(a.get("rowAddr", "0"))
+    return 0
+
+
 def _qc(tag: str) -> str:
     return f"{{{_HC}}}{tag}"
 
@@ -318,8 +327,25 @@ def _patch_section(section_path: Path, assets: list[tuple[str, Path]], consultin
             )
             for extra in new_cells[2:]:
                 _set_cell(extra, "")
+            # 행 삽입 시 격자 정합 필수: 삽입 위치 이후 논리행 rowAddr +1 밀고,
+            # 새 행 rowAddr 고정, rowCnt +1. 이 처리를 빠뜨리면 새 행이 아래 행과
+            # 같은 rowAddr 를 가져 격자가 겹치고 한글이 문서 열기를 거부한다
+            # (실측 프로필 표 결함의 근본 원인 — deepcopy 한 행이 원본 rowAddr 를 유지).
+            insert_addr = _row_addr(rows[1]) + 1
+            for tr in first_tbl.findall(_q("tr")):
+                if _row_addr(tr) >= insert_addr:
+                    for tc in tr.findall(_q("tc")):
+                        a = tc.find(_q("cellAddr"))
+                        if a is not None:
+                            a.set("rowAddr", str(int(a.get("rowAddr", "0")) + 1))
+            for tc in new_row.findall(_q("tc")):
+                a = tc.find(_q("cellAddr"))
+                if a is not None:
+                    a.set("rowAddr", str(insert_addr))
             rows[1].addnext(new_row)
-            notes.append("경영분야 행 추가")
+            first_tbl.set(
+                "rowCnt", str(int(first_tbl.get("rowCnt") or str(len(rows))) + 1))
+            notes.append("경영분야 행 추가 (rowAddr/rowCnt 정합)")
 
     # 2) 컨설팅 표 → 타임라인 그림 + 깨진 단락 정리
     target_tbl = None
