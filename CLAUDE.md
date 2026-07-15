@@ -72,9 +72,11 @@ backup-and-rollback · document-quality-inspection ·
 
 ### 커맨드 (`.claude/commands/`)
 
-`/improve-doc-quality` · `/auto-write-quality` · `/auto-write-inspect` ·
-`/auto-write-psst` · `/auto-write-images` · `/auto-write-finalize` ·
-`/auto-write-autopilot` · `/auto-write-bizplan` · `/auto-write-analyze` · `/auto-write-selfdev`
+`/improve-doc-quality` · `/auto-write-inspect` · `/auto-write-psst` ·
+`/auto-write-images` · `/auto-write-autopilot` · `/auto-write-bizplan` ·
+`/auto-write-analyze` · `/auto-write-selfdev`
+> ※ `/auto-write-quality`(→`/improve-doc-quality` 와 완전중복)·`/auto-write-finalize`(→`/auto-write-autopilot` 로 흡수)는
+> 2026-07-16 통폐합으로 아카이브(`~/.claude/skills_archive/20260716-autowrite-consolidation/`). CLI(.py)는 보존. 단일 진입점은 `bizdoc-hub`.
 
 ### 핵심 코드 (`app/auto_write/services/`)
 
