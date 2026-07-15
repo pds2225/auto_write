@@ -26,6 +26,9 @@ argument-hint: <입력DOCX경로> [--output 결과.docx] [--underline] [--placeh
    `_DRAFT` 차단 + docx2hwp 변환 안내
 5. **잔존 빈칸 스캔 + 통합 리포트(md/json)**
 
+> (구 `/auto-write-finalize` 통합) 제출 직전 구조 재검수가 필요하면
+> `python _build_chochang.py inspect "<결과DOCX>"` 로 문단·표·잔존 placeholder 를 확인한다.
+
 > ⚠ 수용검사·DRAFT 마킹으로 **최종 파일명이 `--output` 지정 경로와 달라질 수 있다**
 > — 항상 리포트의 `output_docx` 를 최종 경로로 읽어라.
 
