@@ -8,7 +8,7 @@ import shutil
 import subprocess
 import sys
 import zipfile
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from glob import glob
 from pathlib import Path
 from typing import Any
@@ -35,6 +35,7 @@ from ..models import (
 )
 from ..storage import Storage
 from ..utils import log_line, read_json, sanitize_user_filename, unique_lines, write_json
+from . import learning_store
 from .evaluation_service import EvalLoopReport, EvaluationService
 from .evidence_service import EvidenceService
 from .image_service import ImageService
@@ -245,6 +246,10 @@ class ProjectService:
             existing_input = self.storage.load_project_input(project_id)
         except Exception:
             existing_input = None
+
+        # P1(SFT): 이 폼 제출이 직전 AI 초안을 사람이 고친 것이면 feedback 페어로 기록.
+        # (generate 재실행 전, 아직 이전 세대의 ai_draft_snapshot 이 남아있는 시점)
+        self._capture_human_edits(project_id, existing_input, answers)
 
         references: list[ReferenceFile] = []
         if existing_input is not None:
@@ -629,16 +634,199 @@ class ProjectService:
             "generation_summary": str(summary_path),
         }
 
+    # --- SFT 데이터 레이어 P0: 생성 계측(스냅샷·provenance) -------------------
+    # 아래 두 헬퍼는 전부 부수효과(sidecar 파일 쓰기)이며 개별 try/except 로 감싸
+    # 어떤 실패도 생성 파이프라인으로 승격되지 않게 한다(적대검증 HIGH 반영).
+
+    def _sft_dir(self, project_id: str) -> Path:
+        return self.storage.project_dir(project_id) / "sft"
+
+    def _suggest_learned_snippets(self, missing: list[dict[str, Any]]) -> dict[str, str]:
+        """P2(SFT 소비자): 과거 사람 승인본(learned_snippets)을 항목 라벨로 매칭해 few-shot 힌트로.
+
+        **날조0 안전장치**: learned_snippets 는 export 단계에서 수치·PII 가 마스킹돼 저장된다
+        (다른 사업 실제값 유출 방지). 여기서는 **section 계열만**·라벨 정확일치만 주입하고,
+        생성 컨텍스트에만 쓴다(폴백/문서 직접삽입 금지 — 호출부에서 분리). 파일 없으면 무동작.
+        """
+        try:
+            path = learning_store.LEARNING_ROOT / "learned_snippets.json"
+            if not path.exists():
+                return {}
+            data = read_json(path)
+            learned = data.get("snippets", {}) if isinstance(data, dict) else {}
+            if not isinstance(learned, dict) or not learned:
+                return {}
+            out: dict[str, str] = {}
+            for question in missing:
+                qid = str(question.get("question_id", "")).strip()
+                if not qid:
+                    continue
+                if str(question.get("target", {}).get("kind", "")) != "section":
+                    continue
+                norm = re.sub(r"[\s\W_]+", "", str(question.get("label", ""))).lower()
+                if not norm:
+                    continue
+                examples = learned.get(norm)
+                if isinstance(examples, list) and examples:
+                    out[qid] = (
+                        "과거 승인된 유사 항목 예시(문체·구성 참고용 — 수치·고유명사는 본 사업 실제값으로 작성):\n"
+                        + "\n".join(str(e) for e in examples[:2])
+                    )
+            return out
+        except Exception as exc:  # noqa: BLE001 — 소비자 실패는 생성에 영향 없음
+            log_line(f"[WARN] SFT learned_snippets 로드 실패(무시): {exc}")
+            return {}
+
+    def _capture_human_edits(
+        self,
+        project_id: str,
+        existing_input: ProjectInput | None,
+        answers: dict[str, Any],
+    ) -> None:
+        """P1(SFT human_approved): 폼 재제출이 이전 AI 초안을 사람이 고친 것이면 페어로 기록.
+
+        P0 가 남긴 ai_draft_snapshot.reflected(AI 반영본)와 현재 저장값이 같은
+        (=아직 사람손 안 탄) 답변만 대상으로, 이번 POST 에 실제 존재한 필드의
+        **첫 divergence 만** AI→사람 페어로 인정한다(2회차 이후 사람 v1→v2 오라벨 방지).
+        빈값 제출은 draft_rejected 로 구분. 전부 try/except 가드(생성 파이프라인 무영향).
+        """
+        try:
+            if existing_input is None:
+                return
+            snap_path = self._sft_dir(project_id) / "ai_draft_snapshot.json"
+            if not snap_path.exists():
+                return
+            snap = read_json(snap_path)
+            reflected = snap.get("reflected", {}) if isinstance(snap, dict) else {}
+            if not isinstance(reflected, dict) or not reflected:
+                return
+            _KST = timezone(timedelta(hours=9))
+            now = datetime.now(_KST).isoformat()
+            events: list[dict[str, Any]] = []
+            for qid, posted in answers.items():
+                if qid not in reflected:
+                    continue
+                ai_value = str(reflected.get(qid, ""))
+                old_value = str(existing_input.answers.get(qid, ""))
+                # 현재 저장값이 AI 반영본과 다르면 이미 사람이 손댄 것 → 첫 divergence 아님(제외).
+                if old_value != ai_value:
+                    continue
+                new_value = str(posted)
+                if new_value == old_value:
+                    continue  # 변경 없음
+                action = "draft_rejected" if not new_value.strip() else "edited"
+                events.append(
+                    {
+                        "project_id": project_id,
+                        "qid": qid,
+                        "source": "user",
+                        "action_type": action,
+                        "feedback": {"before": old_value, "after": new_value},
+                        "created_at": now,
+                    }
+                )
+            for ev in events:
+                learning_store.append_feedback(ev)
+        except Exception as exc:  # noqa: BLE001 — 사람수정 캡처 실패는 저장/생성에 영향 없음
+            log_line(f"[WARN] SFT 사람수정 캡처 실패(무시): {exc}")
+
+    def _save_sft_input_snapshot(self, project_id: str, project_input: ProjectInput) -> None:
+        """AI 변형 전 project_input(특히 answers) 스냅샷을 <project>/sft/ 에 남긴다."""
+        try:
+            _KST = timezone(timedelta(hours=9))
+            out_dir = self._sft_dir(project_id)
+            out_dir.mkdir(parents=True, exist_ok=True)
+            snapshot = {
+                "captured_at": datetime.now(_KST).isoformat(),
+                "project_id": project_id,
+                "answers": dict(project_input.answers),
+                "answer_keys": sorted(project_input.answers.keys()),
+            }
+            write_json(out_dir / "input_before_generation.json", snapshot)
+        except Exception as exc:  # noqa: BLE001 — 스냅샷 실패는 생성에 영향 없음
+            log_line(f"[WARN] SFT 입력 스냅샷 저장 실패(무시): {exc}")
+
+    def _save_sft_generation_provenance(
+        self,
+        project_id: str,
+        project_input: ProjectInput,
+        *,
+        pre_keys: set[str],
+        seed_keys: set[str],
+        psst_keys: set[str],
+        drafted: dict[str, str],
+        fallback: dict[str, str],
+        needs_confirm_keys: list[str],
+    ) -> None:
+        """답변별 출처(provenance)와 AI 초안(원문)↔반영본 스냅샷을 남긴다.
+
+        provenance source 우선순위(나중 것이 앞선 것을 덮어씀):
+        user(폼 입력) < docx_seed < psst < ai(AI 초안) < fallback < needs_confirm.
+        P1 은 여기서 source=="ai" 인 qid 의 사후 수정만 '사람 승인'으로 페어링한다.
+        """
+        try:
+            _KST = timezone(timedelta(hours=9))
+            out_dir = self._sft_dir(project_id)
+            out_dir.mkdir(parents=True, exist_ok=True)
+
+            provenance: dict[str, dict[str, Any]] = {}
+            for key in pre_keys:
+                provenance[key] = {"source": "user"}
+            for key in seed_keys:
+                provenance[key] = {"source": "docx_seed"}
+            for key in psst_keys:
+                provenance[key] = {"source": "psst"}
+            for key, value in drafted.items():
+                if str(value).strip():
+                    provenance[key] = {"source": "ai"}
+            for key in fallback:
+                provenance[key] = {"source": "fallback"}
+            for key in needs_confirm_keys:
+                provenance[key] = {"source": "needs_confirm"}
+            # 최종 answers 에 없는 키는 provenance 에서 제거(정합).
+            provenance = {k: v for k, v in provenance.items() if k in project_input.answers}
+
+            write_json(
+                out_dir / "answers_provenance.json",
+                {
+                    "captured_at": datetime.now(_KST).isoformat(),
+                    "project_id": project_id,
+                    "provenance": provenance,
+                },
+            )
+            # AI 초안(원문) vs 반영본(후처리·절단 후) — P1 사람 수정 페어링의 기준.
+            reflected = {
+                key: project_input.answers.get(key, "")
+                for key in drafted
+                if str(drafted.get(key, "")).strip()
+            }
+            write_json(
+                out_dir / "ai_draft_snapshot.json",
+                {
+                    "captured_at": datetime.now(_KST).isoformat(),
+                    "project_id": project_id,
+                    "drafted": {k: v for k, v in drafted.items() if str(v).strip()},
+                    "reflected": reflected,
+                },
+            )
+        except Exception as exc:  # noqa: BLE001 — provenance 실패는 생성에 영향 없음
+            log_line(f"[WARN] SFT provenance 저장 실패(무시): {exc}")
+
     def generate(self, project_id: str) -> ArtifactBundle:
         profile = self.load_profile_for_project(project_id)
         project_input = self.storage.load_project_input(project_id)
+        # P0(SFT): AI 변형 전 입력 스냅샷 — 부수효과, 실패해도 생성 계속.
+        pre_answer_keys = set(project_input.answers)
+        self._save_sft_input_snapshot(project_id, project_input)
         source_docx = self._resolve_source_docx(profile, project_id)
         profile.source_docx = str(source_docx)
         improve_partial = self._meta_flag(project_input.project_meta, "improve_partial", True)
         psst_only = self._meta_flag(project_input.project_meta, "psst_only", True)
         disable_images = self._meta_flag(project_input.project_meta, "disable_images", True)
         project_input.answers = self._seed_answers_from_docx(profile, source_docx, project_input.answers)
+        seed_keys = set(project_input.answers) - pre_answer_keys
         project_input.answers = self._apply_psst_from_user_input(project_input.answers, profile)
+        psst_keys = set(project_input.answers) - pre_answer_keys - seed_keys
         # Case A: references uploaded → strict preserve mode
         has_references = bool(project_input.references)
         context = self._build_context(project_input, strict_preserve=has_references)
@@ -652,6 +840,10 @@ class ProjectService:
         missing = self._filter_missing_for_autofill(profile, targets, transfer_mode)
         if psst_only:
             missing = self._restrict_autofill_targets(profile, missing)
+        # P0(SFT): provenance 는 drafting 블록 진입 여부와 무관하게 항상 기록한다.
+        drafted: dict[str, str] = {}
+        fallback: dict[str, str] = {}
+        needs_confirm_keys: list[str] = []
         if missing and (not template_completed or partial_doc):
             reference_hints = self._suggest_reference_snippets(missing, project_input)
             # When project references are uploaded, prioritize them and avoid unrelated library contamination.
@@ -668,7 +860,10 @@ class ProjectService:
                 else {}
             )
             combined_hints = self._merge_hint_maps(reference_hints, library_hints)
-            full_context = self._merge_context_with_library(context, combined_hints, questions=missing)
+            # P2(SFT 소비자): 과거 승인본 few-shot 은 AI 컨텍스트에만 주입한다.
+            # combined_hints(폴백에 재사용)에는 넣지 않아 문서 직접삽입·오전사를 차단한다.
+            context_hints = self._merge_hint_maps(combined_hints, self._suggest_learned_snippets(missing))
+            full_context = self._merge_context_with_library(context, context_hints, questions=missing)
             writing_provider = str(project_input.project_meta.get("writing_provider", "")).strip().lower()
             writing_model = str(project_input.project_meta.get("writing_model", "")).strip()
             drafted = (
@@ -678,6 +873,7 @@ class ProjectService:
                     writing_provider=writing_provider,
                     writing_model=writing_model,
                     strict_preserve=has_references,
+                    project_id=project_id,
                 )
                 if has_user_context
                 else {}
@@ -697,12 +893,25 @@ class ProjectService:
                 _qid = str(_q.get("question_id", "")).strip()
                 if _qid and not str(project_input.answers.get(_qid, "")).strip():
                     project_input.answers[_qid] = "[확인필요]"
+                    needs_confirm_keys.append(_qid)
             project_input.answers = self._postprocess_answers(profile, project_input.answers)
             project_input.answers = {
                 key: self._sanitize_xml_text(value) if isinstance(value, str) else value
                 for key, value in project_input.answers.items()
             }
             self.storage.save_project_input(project_id, project_input)
+
+        # P0(SFT): AI 초안(원문)↔반영본 스냅샷 + 답변별 출처(provenance) — 항상 기록.
+        self._save_sft_generation_provenance(
+            project_id,
+            project_input,
+            pre_keys=pre_answer_keys,
+            seed_keys=seed_keys,
+            psst_keys=psst_keys,
+            drafted=drafted,
+            fallback=fallback,
+            needs_confirm_keys=needs_confirm_keys,
+        )
 
         return self._render_and_publish(
             project_id,
@@ -1546,11 +1755,14 @@ class ProjectService:
         writing_provider: str = "",
         writing_model: str = "",
         strict_preserve: bool = False,
+        project_id: str = "",
     ) -> dict[str, str]:
         if not context.strip():
             return {}
         drafted: dict[str, str] = {}
         chunk_size = 40
+        # P0(SFT): 이 호출들이 남기는 trace 에 project_id·purpose 를 태깅한다.
+        log_meta = {"project_id": project_id, "purpose": "draft_answers"}
 
         def _draft_group(
             questions: list[dict[str, Any]],
@@ -1565,6 +1777,7 @@ class ProjectService:
                     provider_override=provider_override,
                     model_override=model_override,
                     strict_preserve=strict_preserve,
+                    log_meta=log_meta,
                 )
                 if not result:
                     continue

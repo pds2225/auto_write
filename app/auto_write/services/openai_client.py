@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -117,6 +118,7 @@ class OpenAIService:
         model: str | None = None,
         provider_override: str | None = None,
         max_tokens: int = 4096,
+        log_meta: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
         provider = self._resolve_provider(provider_override)
         if not self.provider_available(provider):
@@ -128,11 +130,55 @@ class OpenAIService:
             temperature=0.2,
             provider_override=provider,
             max_tokens=max_tokens,
+            log_meta=log_meta,
         )
         payload = self._extract_json(output_text)
         if isinstance(payload, dict):
             return payload
         return None
+
+    def _effective_model(self, provider: str, model: str | None) -> str:
+        if model:
+            return model
+        if provider == "openai":
+            return self.settings.openai_model
+        if provider == "anthropic":
+            return self.settings.anthropic_model
+        return ""
+
+    def _record_generation_trace(
+        self,
+        *,
+        provider: str,
+        model: str,
+        system_prompt: str,
+        user_prompt: str,
+        raw_response: str,
+        duration_ms: int,
+        log_meta: dict[str, Any] | None,
+    ) -> None:
+        """SFT 데이터 레이어 P0: AI 호출 1건을 generation_traces.jsonl 에 남긴다.
+
+        fail-safe(적대검증 HIGH): 로깅 실패가 절대 AI 호출·생성 파이프라인 실패로
+        승격되면 안 된다 — 어떤 예외도 여기서 흡수하고 경고 한 줄만 남긴다.
+        """
+        try:
+            from . import generation_store
+
+            meta = log_meta or {}
+            generation_store.record_ai_call(
+                provider=provider,
+                model=model,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                raw_response=raw_response,
+                purpose=str(meta.get("purpose", "")),
+                project_id=str(meta.get("project_id", "")),
+                attempt=int(meta.get("attempt", 1) or 1),
+                duration_ms=duration_ms,
+            )
+        except Exception as exc:  # noqa: BLE001 — 로깅 실패는 생성에 영향 주지 않는다
+            log_line(f"[WARN] generation trace 기록 실패(무시): {exc}")
 
     def _complete_text(
         self,
@@ -143,13 +189,27 @@ class OpenAIService:
         tools: list[dict[str, Any]] | None = None,
         max_tokens: int = 4096,
         provider_override: str | None = None,
+        log_meta: dict[str, Any] | None = None,
     ) -> str:
         provider = self._resolve_provider(provider_override)
+        started = time.perf_counter()
         if provider == "openai":
-            return self._complete_text_openai(system_prompt, user_prompt, model, temperature, tools)
-        if provider == "anthropic":
-            return self._complete_text_anthropic(system_prompt, user_prompt, model, temperature, tools, max_tokens)
-        return ""
+            output = self._complete_text_openai(system_prompt, user_prompt, model, temperature, tools)
+        elif provider == "anthropic":
+            output = self._complete_text_anthropic(system_prompt, user_prompt, model, temperature, tools, max_tokens)
+        else:
+            return ""
+        duration_ms = int((time.perf_counter() - started) * 1000)
+        self._record_generation_trace(
+            provider=provider,
+            model=self._effective_model(provider, model),
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            raw_response=output,
+            duration_ms=duration_ms,
+            log_meta=log_meta,
+        )
+        return output
 
     def _complete_text_openai(
         self,
@@ -237,10 +297,15 @@ class OpenAIService:
         provider_override: str | None = None,
         model_override: str | None = None,
         strict_preserve: bool = False,
+        log_meta: dict[str, Any] | None = None,
     ) -> dict[str, str]:
         provider = self._resolve_provider(provider_override)
         if not self.provider_available(provider):
             return {}
+        # SFT trace: 이 호출의 purpose/project_id 를 물려주되 attempt 는 여기서 관리한다.
+        base_meta = dict(log_meta or {})
+        base_meta.setdefault("purpose", "draft_answers")
+        first_meta = {**base_meta, "attempt": 1}
         if strict_preserve:
             system_prompt = (
                 "당신은 기존 사업계획서의 내용을 새 양식에 옮겨 적는 전문가입니다.\n"
@@ -261,7 +326,10 @@ class OpenAIService:
                 "Return a JSON object where each key is question_id and each value is concise Korean text."
             )
         user_prompt = json.dumps({"questions": questions, "context": context}, ensure_ascii=False)
-        result = self.complete_json(system_prompt, user_prompt, model=model_override, provider_override=provider, max_tokens=8192)
+        result = self.complete_json(
+            system_prompt, user_prompt, model=model_override, provider_override=provider,
+            max_tokens=8192, log_meta=first_meta,
+        )
         if (
             not isinstance(result, dict)
             and provider == "anthropic"
@@ -276,6 +344,7 @@ class OpenAIService:
                 model=self.settings.anthropic_model,
                 provider_override="anthropic",
                 max_tokens=8192,
+                log_meta={**base_meta, "attempt": 2},
             )
         if not isinstance(result, dict):
             return {}

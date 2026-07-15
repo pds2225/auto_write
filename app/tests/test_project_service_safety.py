@@ -448,6 +448,7 @@ class ProjectServiceSafetyTests(unittest.TestCase):
             provider_override: str | None = None,
             model_override: str | None = None,
             strict_preserve: bool = False,
+            log_meta: dict[str, object] | None = None,
         ) -> dict[str, str]:
             calls.append(
                 {
@@ -494,6 +495,7 @@ class ProjectServiceSafetyTests(unittest.TestCase):
             provider_override: str | None = None,
             model_override: str | None = None,
             strict_preserve: bool = False,
+            log_meta: dict[str, object] | None = None,
         ) -> dict[str, str]:
             calls.append(
                 {
