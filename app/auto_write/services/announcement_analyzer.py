@@ -23,7 +23,7 @@ from .doc_text_extract import extract_text
 
 # 휴리스틱 패턴(AI 미연결 시)
 _DEADLINE_RE = re.compile(r"(접수|신청|모집|제출).{0,6}(기간|마감|기한|일정)|~?\s*\d{4}[.\-/]\s?\d{1,2}[.\-/]\s?\d{1,2}")
-_AMOUNT_RE = re.compile(r"\d[\d,]*\s*(억원|억|백만원|천만원|만원|원)\b")
+_AMOUNT_RE = re.compile(r"\d[\d,]*\s*(?:억원|억|백만원|천만원|만원|원)\b")
 _DOC_HINT_RE = re.compile(r"(제출\s*서류|구비\s*서류|필수\s*서류|첨부\s*서류)")
 _ELIG_RE = re.compile(r"(지원\s*대상|지원\s*자격|신청\s*자격|지원자격|모집\s*대상)")
 
