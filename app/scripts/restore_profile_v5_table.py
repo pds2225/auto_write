@@ -17,24 +17,58 @@ def _q(tag: str) -> str:
     return f"{{{_HP}}}{tag}"
 
 
-def _set_cell(tc, value: str, *, char_pr: str = "51") -> None:
+def _set_cell(tc, value: str, *, char_pr: str | None = None) -> None:
+    """칸 텍스트만 교체. 원본 단락·런 속성을 최대한 유지하되 잔여 t 제거."""
     sub = tc.find(_q("subList"))
     if sub is None:
         return
-    for old_p in list(sub):
-        sub.remove(old_p)
-    p = etree.SubElement(sub, _q("p"))
-    p.set("id", "2147483648")
-    p.set("paraPrIDRef", "45")
-    p.set("styleIDRef", "19")
-    p.set("pageBreak", "0")
-    p.set("columnBreak", "0")
-    p.set("merged", "0")
-    run = etree.SubElement(p, _q("run"))
-    run.set("charPrIDRef", char_pr)
-    t = etree.SubElement(run, _q("t"))
+    # 칸에 단락이 여러 개면 첫 단락만 남김(중복 글자 방지)
+    paras = list(sub.findall(_q("p")))
+    if not paras:
+        p = etree.SubElement(sub, _q("p"))
+        p.set("id", "2147483648")
+        p.set("paraPrIDRef", "17")
+        p.set("styleIDRef", "0")
+        p.set("pageBreak", "0")
+        p.set("columnBreak", "0")
+        p.set("merged", "0")
+        paras = [p]
+    for extra in paras[1:]:
+        sub.remove(extra)
+    p = paras[0]
+    runs = list(p.findall(_q("run")))
+    if not runs:
+        run = etree.SubElement(p, _q("run"))
+        run.set("charPrIDRef", char_pr or "51")
+        runs = [run]
+    # 첫 런만 남기고 나머지 run 제거(텍스트가 여러 t/run에 쪼개진 경우 잔여 방지)
+    keep = runs[0]
+    if char_pr is not None:
+        keep.set("charPrIDRef", char_pr)
+    for extra in runs[1:]:
+        # 표를 담은 run은 건드리지 않음
+        if extra.find(_q("tbl")) is not None or extra.find(_q("pic")) is not None:
+            continue
+        p.remove(extra)
+    for child in list(keep):
+        if child.tag == _q("t"):
+            keep.remove(child)
+    t = etree.SubElement(keep, _q("t"))
     t.text = value
-    etree.SubElement(p, _q("linesegarray"))
+    lsa = p.find(_q("linesegarray"))
+    if lsa is None:
+        lsa = etree.SubElement(p, _q("linesegarray"))
+    if next(lsa.iter(_q("lineseg")), None) is None:
+        ls = etree.SubElement(lsa, _q("lineseg"))
+        ls.set("textpos", "0")
+        ls.set("vertpos", "0")
+        ls.set("vertsize", "1000")
+        ls.set("textheight", "1000")
+        ls.set("baseline", "850")
+        ls.set("spacing", "600")
+        ls.set("horzpos", "0")
+        ls.set("horzsize", "1000")
+        ls.set("flags", "393216")
 
 
 def _cell_text(tc) -> str:
@@ -42,20 +76,45 @@ def _cell_text(tc) -> str:
     return re.sub(r"\s+", " ", "".join(parts)).strip()
 
 
-def _text_para(text: str, *, bold: bool = False) -> etree._Element:
-    p = etree.Element(_q("p"))
-    p.set("id", "2147483648")
-    p.set("paraPrIDRef", "45")
-    p.set("styleIDRef", "19")
-    p.set("pageBreak", "0")
-    p.set("columnBreak", "0")
-    p.set("merged", "0")
+def _text_para(text: str, *, template: etree._Element | None = None) -> etree._Element:
+    if template is not None:
+        p = copy.deepcopy(template)
+        for child in list(p):
+            if child.tag == _q("run") or child.tag == _q("linesegarray"):
+                p.remove(child)
+    else:
+        p = etree.Element(_q("p"))
+        p.set("id", "0")
+        p.set("paraPrIDRef", "29")
+        p.set("styleIDRef", "0")
+        p.set("pageBreak", "0")
+        p.set("columnBreak", "0")
+        p.set("merged", "0")
     run = etree.SubElement(p, _q("run"))
-    run.set("charPrIDRef", "52" if bold else "51")
+    run.set("charPrIDRef", "2")
     t = etree.SubElement(run, _q("t"))
     t.text = text
-    etree.SubElement(p, _q("linesegarray"))
+    lsa = etree.SubElement(p, _q("linesegarray"))
+    ls = etree.SubElement(lsa, _q("lineseg"))
+    ls.set("textpos", "0")
+    ls.set("vertpos", "0")
+    ls.set("vertsize", "1000")
+    ls.set("textheight", "1000")
+    ls.set("baseline", "850")
+    ls.set("spacing", "600")
+    ls.set("horzpos", "0")
+    ls.set("horzsize", "1000")
+    ls.set("flags", "393216")
     return p
+
+
+def _next_table_id(root) -> str:
+    ids = []
+    for tbl in root.iter(_q("tbl")):
+        raw = tbl.get("id")
+        if raw and raw.isdigit():
+            ids.append(int(raw))
+    return str((max(ids) + 1) if ids else 2000000001)
 
 
 def _is_consulting_table(tbl) -> bool:
@@ -115,32 +174,30 @@ def _parse_consulting_stats(root) -> dict[str, str]:
     raise RuntimeError("컨설팅 수행리스트 표를 찾지 못했습니다")
 
 
-def _make_summary_table(template_tbl, stats: dict[str, str]) -> etree._Element:
+def _make_summary_table(
+    template_tbl, stats: dict[str, str], *, new_id: str
+) -> etree._Element:
+    """자격/교육 표(5×4) 구조를 그대로 복제해 셀 텍스트만 교체.
+
+    열 수·셀주소·폭을 건드리면 한글이 파일을 거부할 수 있어
+    colCnt=4 구조를 유지하고 뒤 2칸은 비운다.
+    """
     tbl = copy.deepcopy(template_tbl)
-    tbl.set("rowCnt", "5")
-    tbl.set("colCnt", "2")
-    old_rows = list(tbl.iter(_q("tr")))
-    for tr in old_rows:
-        tbl.remove(tr)
+    tbl.set("id", new_id)
+    rows = list(tbl.findall(_q("tr")))
     rows_data = [
-        ("실적 총괄", "컨설팅/멘토링 수행실적 합계"),
-        ("총 컨설팅기간", stats["period"]),
-        ("수행건수", f"{stats['cases']}건"),
-        ("수행기업(기관)", f"{stats['companies']}개사"),
-        ("컨설팅 매출(합계)", stats["amount"]),
+        ("실적 총괄", "컨설팅/멘토링 수행실적 합계", "", ""),
+        ("총 컨설팅기간", stats["period"], "", ""),
+        ("수행건수", f"{stats['cases']}건", "", ""),
+        ("수행기업(기관)", f"{stats['companies']}개사", "", ""),
+        ("컨설팅 매출(합계)", stats["amount"], "", ""),
     ]
-    template_tr = old_rows[0]
-    for label, value in rows_data:
-        tr = copy.deepcopy(template_tr)
-        all_cells = list(tr.iter(_q("tc")))
-        cells = all_cells[:2]
-        for extra in all_cells[2:]:
-            tr.remove(extra)
-        if len(cells) < 2:
-            continue
-        _set_cell(cells[0], label, char_pr="2")
-        _set_cell(cells[1], value, char_pr="52" if label == "실적 총괄" else "51")
-        tbl.append(tr)
+    for tr, values in zip(rows, rows_data):
+        cells = list(tr.findall(_q("tc")))
+        for i, value in enumerate(values):
+            if i >= len(cells):
+                break
+            _set_cell(cells[i], value, char_pr="2" if i == 0 else None)
     return tbl
 
 
@@ -214,20 +271,40 @@ def _patch_summary_and_cleanup(section_path: Path) -> list[str]:
                     template_tbl = tbl
                     break
         if insert_parent is not None and insert_idx is not None and template_tbl is not None:
-            title_p = _text_para("[실적 총괄]", bold=True)
-            summary_tbl = _make_summary_table(template_tbl, stats)
-            wrap = (
-                copy.deepcopy(insert_parent[insert_idx - 1])
-                if insert_idx > 0
-                else etree.Element(_q("p"))
+            consult_p = insert_parent[insert_idx]
+            title_p = _text_para("[실적 총괄]", template=consult_p)
+            summary_tbl = _make_summary_table(
+                template_tbl, stats, new_id=_next_table_id(root)
             )
-            for child in list(wrap):
-                wrap.remove(child)
-            wrap.set("id", "2147483648")
-            run = etree.SubElement(wrap, _q("run"))
-            run.set("charPrIDRef", "35")
-            run.append(summary_tbl)
-            etree.SubElement(wrap, _q("linesegarray"))
+            # 자격/교육 표를 감싼 단락을 복제해 표만 교체(단락/런 속성 보존)
+            wrap_src = None
+            for p in root.findall(_q("p")):
+                tbl = p.find(_q("run") + "/" + _q("tbl"))
+                if tbl is None:
+                    tbl = p.find(".//" + _q("tbl"
+                    ))
+                if tbl is template_tbl or (
+                    tbl is not None
+                    and "자격" in "".join(_cell_text(c) for c in next(tbl.iter(_q("tr"))).iter(_q("tc")))
+                ):
+                    wrap_src = p
+                    break
+            if wrap_src is None:
+                wrap_src = consult_p
+            wrap = copy.deepcopy(wrap_src)
+            for run in list(wrap.findall(_q("run"))):
+                for child in list(run):
+                    if child.tag == _q("tbl"):
+                        run.remove(child)
+                        run.append(summary_tbl)
+                        break
+                else:
+                    continue
+                break
+            else:
+                run = etree.SubElement(wrap, _q("run"))
+                run.set("charPrIDRef", "35")
+                run.append(summary_tbl)
             insert_parent.insert(insert_idx, title_p)
             insert_parent.insert(insert_idx + 1, wrap)
             notes.append(
@@ -249,15 +326,26 @@ def _patch_summary_and_cleanup(section_path: Path) -> list[str]:
     return notes
 
 
+def _bump_row_addrs(tbl, from_row: int, delta: int = 1) -> None:
+    for tr in tbl.findall(_q("tr")):
+        for tc in tr.findall(_q("tc")):
+            addr = tc.find(_q("cellAddr"))
+            if addr is None:
+                continue
+            row = int(addr.get("rowAddr", "0"))
+            if row >= from_row:
+                addr.set("rowAddr", str(row + delta))
+
+
 def _patch_management_fields(section_path: Path) -> list[str]:
     notes: list[str] = []
     root = etree.parse(str(section_path)).getroot()
     first_tbl = next(root.iter(_q("tbl")))
-    rows = list(first_tbl.iter(_q("tr")))
+    rows = list(first_tbl.findall(_q("tr")))
     if len(rows) < 3:
         return ["경고: 상단 표 구조 인식 실패"]
 
-    cells = list(rows[1].iter(_q("tc")))
+    cells = list(rows[1].findall(_q("tc")))
     if len(cells) >= 3:
         _set_cell(
             cells[2],
@@ -265,11 +353,27 @@ def _patch_management_fields(section_path: Path) -> list[str]:
         )
         notes.append("경영부문 체크 반영")
 
-    # 이미 경영분야 행이 있으면 스킵
     row2_text = "".join(t.text or "" for t in rows[2].iter(_q("t")))
     if "경영분야" not in row2_text:
-        new_row = copy.deepcopy(rows[2])
-        new_cells = list(new_row.iter(_q("tc")))
+        lecture_row = rows[2]
+        lecture_addr = None
+        for tc in lecture_row.findall(_q("tc")):
+            addr = tc.find(_q("cellAddr"))
+            if addr is not None:
+                lecture_addr = int(addr.get("rowAddr", "2"))
+                break
+        if lecture_addr is None:
+            lecture_addr = 2
+
+        # 기존 강의분야 행부터 아래 rowAddr를 +1 밀고, 그 자리에 경영분야 삽입
+        _bump_row_addrs(first_tbl, from_row=lecture_addr, delta=1)
+        new_row = copy.deepcopy(lecture_row)
+        # deepcopy 후 lecture_row 도 이미 +1된 주소를 가지므로 new_row를 lecture_addr로 고정
+        for tc in new_row.findall(_q("tc")):
+            addr = tc.find(_q("cellAddr"))
+            if addr is not None:
+                addr.set("rowAddr", str(lecture_addr))
+        new_cells = list(new_row.findall(_q("tc")))
         if len(new_cells) >= 2:
             _set_cell(new_cells[0], "경영분야")
             _set_cell(
@@ -279,8 +383,17 @@ def _patch_management_fields(section_path: Path) -> list[str]:
             )
             for extra in new_cells[2:]:
                 _set_cell(extra, "")
-            rows[1].addnext(new_row)
-            notes.append("경영분야 행 추가")
+            lecture_row.addprevious(new_row)
+            # 강의분야 행 재확인(이미 _bump로 +1됨)
+            for tc in lecture_row.findall(_q("tc")):
+                addr = tc.find(_q("cellAddr"))
+                if addr is not None and int(addr.get("rowAddr", "0")) != lecture_addr + 1:
+                    addr.set("rowAddr", str(lecture_addr + 1))
+            actual = len(list(first_tbl.findall(_q("tr"))))
+            first_tbl.set("rowCnt", str(actual))
+            notes.append(f"경영분야 행 추가 (rowCnt={actual})")
+        else:
+            notes.append("경고: 경영분야 행 셀 부족")
     else:
         notes.append("경영분야 행 유지")
 
@@ -326,7 +439,34 @@ def _verify_hwpx(path: Path) -> tuple[bool, str]:
             )
             if not summary_found:
                 return False, "실적총괄표 미발견"
-            return True, f"표 {consult_rows}건, 실적총괄표 OK, 그림 0장"
+            ids = [tbl.get("id") for tbl in root.iter(_q("tbl"))]
+            if len(ids) != len(set(ids)):
+                return False, f"표 ID 중복: {ids}"
+            first = next(root.iter(_q("tbl")))
+            actual_rows = len(list(first.findall(_q("tr"))))
+            declared = int(first.get("rowCnt") or "0")
+            if actual_rows != declared:
+                return False, f"상단표 rowCnt 불일치: 선언 {declared} / 실제 {actual_rows}"
+            # rowAddr 중복·역전 검사
+            seen_addrs: set[tuple[int, int]] = set()
+            for tr in first.findall(_q("tr")):
+                for tc in tr.findall(_q("tc")):
+                    addr = tc.find(_q("cellAddr"))
+                    if addr is None:
+                        continue
+                    key = (int(addr.get("rowAddr", "0")), int(addr.get("colAddr", "0")))
+                    if key in seen_addrs:
+                        return False, f"상단표 cellAddr 중복: {key}"
+                    seen_addrs.add(key)
+            top_text = "".join(t.text or "" for t in first.iter(_q("t")))
+            if "경영분야분야" in top_text:
+                return False, "경영분야 라벨 중복 잔존"
+            if "경영분야" not in top_text:
+                return False, "경영분야 미반영"
+            return True, (
+                f"표 {consult_rows}건, 실적총괄표 OK, 그림 0장, "
+                f"표ID {len(ids)}개, 상단행 {actual_rows}"
+            )
     except Exception as exc:
         return False, str(exc)
 
