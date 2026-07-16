@@ -58,6 +58,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("-o", "--out", default=None, help="출력 경로(기본 <첫입력폴더>/company_master.json)")
     parser.add_argument("--key", default="", help="기업키(미지정 시 기업명 값 사용)")
     parser.add_argument("--no-partials", action="store_true", help="partial_NNN.json 저장 생략")
+    parser.add_argument("--coverage", default=None, metavar="양식파일",
+                        help="②역설계: 이 기업 마스터로 지정 양식을 얼마나 채울 수 있는지 대조(coverage.json 저장)")
     args = parser.parse_args(argv)
 
     files = _collect_files(args.inputs)
@@ -92,6 +94,34 @@ def main(argv: list[str] | None = None) -> int:
         if note.startswith("[skip]"):
             print(f"  {note}")
     print(f"\n저장: {out_path}")
+
+    # ②역설계: 지정 양식을 이 마스터로 얼마나 채울 수 있는지 대조.
+    # 정부양식은 표 중심이라 표 칸 빈칸을 찾는 find_target_fields 를 쓴다
+    # (form_analyzer.writable_item_details 는 본문 항목만 담아 표 셀을 놓침).
+    if args.coverage:
+        try:
+            from auto_write.document_ingest import ensure_template_docx
+            from auto_write.services.cross_form_autofill import find_target_fields
+            from auto_write.services.form_analyzer import classify_field_kind
+
+            docx_form, _conv_notes = ensure_template_docx(Path(args.coverage))
+            targets = find_target_fields(docx_form)
+            fact_labels = [
+                str(t.get("orig_label", ""))
+                for t in targets
+                if str(t.get("orig_label", "")).strip()
+                and classify_field_kind(str(t.get("orig_label", ""))) == "fact"
+            ]
+            cov = company_extract.coverage(master, fact_labels)
+            print("\n" + company_extract.format_coverage_korean(cov, Path(args.coverage).name))
+            cov_path = out_path.parent / "coverage.json"
+            cov_path.write_text(
+                json.dumps({"form": Path(args.coverage).name, **cov}, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            print(f"저장: {cov_path}")
+        except Exception as exc:  # noqa: BLE001 — 커버리지 실패가 마스터 생성(성공)을 무효화하지 않음
+            print(f"[경고] 커버리지 대조 실패(무시): {exc}", file=sys.stderr)
     return 0
 
 

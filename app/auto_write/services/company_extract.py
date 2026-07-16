@@ -210,6 +210,80 @@ def master_to_json(master: CompanyMaster, *, indent: int = 2) -> str:
     return json.dumps(asdict(master), ensure_ascii=False, indent=indent)
 
 
+def coverage(master: CompanyMaster | dict, form_fact_labels: list[str]) -> dict[str, Any]:
+    """②필요정보 역설계 — 이 기업 마스터로 양식(fact 칸)을 얼마나 채울 수 있는지 대조.
+
+    양식의 사실 칸(fact) 라벨을 기업 정체성 필드로 정규화(_canon_field)해 마스터와 대조한다.
+    - fillable: 마스터에 값이 있고 충돌 아님 → 이 양식에 바로 채울 수 있음
+    - conflict: 마스터가 파일 간 불일치(사람 확인 필요) → 채우기 전 검수
+    - missing_in_master: 이 양식이 요구하나 마스터에 없음 → 준비(추가 자료) 필요
+    - unmapped: 기업 정체성 필드가 아닌 양식 칸(사업내용 등) → 이 마스터 범위 밖
+    coverage = fillable / (fillable+conflict+missing) — '기업 사실칸' 기준 채움 가능 비율.
+    """
+    if isinstance(master, CompanyMaster):
+        fields = master.fields
+        conflicts = master.conflicts
+    else:
+        fields = master.get("fields", {}) if isinstance(master, dict) else {}
+        conflicts = master.get("conflicts", []) if isinstance(master, dict) else []
+    conflict_canons = {c.get("field") for c in conflicts if isinstance(c, dict)}
+
+    fillable: list[dict[str, str]] = []
+    conflict: list[dict[str, str]] = []
+    missing_in_master: list[dict[str, str]] = []
+    unmapped: list[str] = []
+    seen_canon: set[str] = set()
+    for label in form_fact_labels:
+        canon = _canon_field(label)
+        if canon is None:
+            unmapped.append(label)
+            continue
+        if canon in seen_canon:
+            continue  # 같은 기업 필드가 양식에 여러 번 나와도 1회만 집계
+        seen_canon.add(canon)
+        fv = fields.get(canon)
+        if not isinstance(fv, dict) or not str(fv.get("value", "")).strip():
+            missing_in_master.append({"label": label, "field": canon})
+        elif fv.get("confidence") == "conflict" or canon in conflict_canons:
+            conflict.append({"label": label, "field": canon, "value": str(fv.get("value", ""))})
+        else:
+            fillable.append({
+                "label": label, "field": canon,
+                "value": str(fv.get("value", "")), "confidence": str(fv.get("confidence", "")),
+            })
+    mappable = len(fillable) + len(conflict) + len(missing_in_master)
+    return {
+        "fillable": fillable,
+        "conflict": conflict,
+        "missing_in_master": missing_in_master,
+        "unmapped": unmapped,
+        "counts": {
+            "fillable": len(fillable), "conflict": len(conflict),
+            "missing_in_master": len(missing_in_master), "unmapped": len(unmapped),
+            "mappable": mappable,
+        },
+        "coverage_pct": round(100.0 * len(fillable) / mappable, 1) if mappable else 0.0,
+    }
+
+
+def format_coverage_korean(cov: dict, form_name: str = "") -> str:
+    c = cov["counts"]
+    head = f"양식 커버리지{(' (' + form_name + ')') if form_name else ''}: "
+    head += f"채움가능 {c['fillable']}/{c['mappable']}칸 ({cov['coverage_pct']}%)"
+    lines = [head]
+    if cov["fillable"]:
+        lines.append("  ▸ 바로 채움:")
+        for f in cov["fillable"]:
+            lines.append(f"    · {f['label']} = {f['value']} [{f['confidence']}]")
+    if cov["conflict"]:
+        lines.append("  ⚠ 검수 후 채움(충돌):")
+        for f in cov["conflict"]:
+            lines.append(f"    · {f['label']} (마스터 충돌: {f['value']})")
+    if cov["missing_in_master"]:
+        lines.append("  ✗ 마스터에 없음(자료 준비 필요): " + ", ".join(f["label"] for f in cov["missing_in_master"]))
+    return "\n".join(lines)
+
+
 def format_korean(master: CompanyMaster) -> str:
     lines = [f"기업 마스터: {master.company_key} (파일 {len(master.sources)}개)"]
     for canon, fv in master.fields.items():
