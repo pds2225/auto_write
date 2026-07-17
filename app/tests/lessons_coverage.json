@@ -1,0 +1,707 @@
+{
+  "counts": {
+    "mechanized": 25,
+    "gap": 21,
+    "judgment": 24,
+    "total": 70
+  },
+  "coverage_note": "총 70개 교훈 중 기계화 완료 24개(34%)·미기계화 갭 22개(31%)·사람판단(judgment) 24개(34%). 핵심 서식/게이트 규칙(유색→검정 L006/L022, 마스킹 L007, 날조0 L009, 서식보존 L011, DRAFT 세탁방지 L019/L020, 체크박스·이름 오매칭 L023~L025, HWPX 격자·셀검정 L031/L54)은 이미 검출↔교정 거울정합 테스트로 견고히 잠겨 있다. 가장 큰 재발 위험은 '제출 최종화' 단계에 몰려 있다 — 필수 서식 누락 검사(L040, 실제 제출 탈락 직결)·파일명/폴더 오염(L049/L059)·PDF 합본·서명일이 대부분 gap이고 코드 가드가 전무하다. 이력서 렌더러 부재로 골격·정량 실적표·포트폴리오 보존(L038/L043/L044/L039)도 침묵 유실 위험이 남는다. judgment 34%는 자동화 불가 영역이라 프로세스 규칙으로만 강제 가능.",
+  "top_gaps": [
+    {
+      "id": "L040",
+      "rule": "필수 서식(서약서·청렴서약서 등) 누락 금지 — 공고 required_documents 전부 포함",
+      "proposed_guard": "submission_orchestrator / self_diagnose 게이트에 check_required_documents(final_docx, announcement.required_documents) 추가 — announcement_analyzer.required_documents 항목명을 최종 산출물 헤딩/표 라벨과 대조해 누락 1개면 SEV_FAIL→force_draft_name(_DRAFT). 회귀: required_documents=['청렴서약서'] 인데 산출물에 없으면 verdict='제출불가'·self_diagnose exit 2 단언",
+      "target_files": "app/auto_write/services/usage_acceptance.py, submission_orchestrator.py, announcement_analyzer.py / app/tests/test_gate_faildraft_invariant.py",
+      "impact": "high",
+      "effort": "M"
+    },
+    {
+      "id": "L045",
+      "rule": "서명란은 실이미지, '(인)' 텍스트 임의추가 금지",
+      "proposed_guard": "불변식 테스트: cross_form_autofill.autofill_from_source / hwpx_fill.fill / 서명 삽입 경로가 리터럴 '(인)' 을 절대 기입하지 않음을 단언(입력에 서명 라벨 있어도 텍스트 '(인)' 삽입 0건). 기존 동작 잠금이라 코드변경 없이 회귀만 추가",
+      "target_files": "app/tests/test_cross_form_autofill.py, test_hwpx_fill.py",
+      "impact": "med",
+      "effort": "S"
+    },
+    {
+      "id": "L001",
+      "rule": "HWPX 그림 폭은 본문폭 클램프 + sz==orgSz파생==imgRect==curSz 폭 일치",
+      "proposed_guard": "patch_profile_v5_visual 의 pic 삽입 결과를 파싱해 disp_w<=46800(본문폭) & sz/orgSz/imgRect/curSz 폭 4값 일치를 단언하는 회귀테스트 추가(현재 클램프는 스크립트에만 있고 테스트 부재 — 값 검증 잠금)",
+      "target_files": "app/scripts/patch_profile_v5_visual.py:169 / app/tests/test_hwpx_layout_fix.py 또는 신규 test_hwpx_image_clamp.py",
+      "impact": "med",
+      "effort": "S"
+    },
+    {
+      "id": "L059",
+      "rule": "파일명 접미사는 상태(_DRAFT)만 — 작업접미사·중간산출물로 제출폴더 오염 금지",
+      "proposed_guard": "submission_orchestrator/self_diagnose 최종본 확정 단계에 제출대상 파일명이 작업접미사(_converted·_고도화·통합_v2·_노트북LM 등) denylist 패턴을 포함하면 SEV_WARN 경고 추가 + 회귀: 산출물명에 '_converted' 잔존 시 warn 리포트 존재 단언",
+      "target_files": "app/auto_write/services/submission_orchestrator.py / app/tests/test_submission_pipeline.py",
+      "impact": "med",
+      "effort": "M"
+    },
+    {
+      "id": "L013",
+      "rule": "본문 자기지시 메타문구(※ 날조/과장/미확정/정직하게) 제거",
+      "proposed_guard": "doc_quality_ops._GUIDE_EXTRA_RE 에 '※…(날조|과장|미확정|정직하게|작성태도)' 자기지시 패턴 추가(또는 worktree strip_meta_notes 를 remove_guide_paragraphs 경로로 병합) + 회귀: 해당 문구 단락이 run_all 후 제거되고 실본문은 보존됨을 단언",
+      "target_files": "app/auto_write/services/doc_quality_ops.py / app/tests/test_document_quality_harness.py",
+      "impact": "med",
+      "effort": "M"
+    },
+    {
+      "id": "L046",
+      "rule": "'~과정 이수/수료'(교육수료)는 자격증(자격/면허) 표 기재 금지",
+      "proposed_guard": "resume_extract 자격 파서에 항목명이 '과정 이수|수료'로 끝나면 자격 리스트에서 제외(교육수료 분리)하는 결정론 규칙 + 회귀: '투자심사역 과정 이수' → certs 미포함, education/기타 섹션으로 분류 단언",
+      "target_files": "app/auto_write/services/resume_extract.py / app/tests/test_resume_extract.py",
+      "impact": "med",
+      "effort": "M"
+    },
+    {
+      "id": "L032",
+      "rule": "서명일·작성일 채움은 실행 시점 date.today() — 대화/RESUME 낡은 날짜 복사 금지",
+      "proposed_guard": "fill_signature_date(doc, today=date.today()) 전용 헬퍼 신설, 인자로 받은 과거 날짜를 무시하고 date.today() 스탬프 강제 + 회귀: 과거 날짜 전달해도 오늘 날짜가 기입됨을 단언(현재 서명일 채움 코드 자체 부재)",
+      "target_files": "app/auto_write/services/(신규 signature_fill.py 또는 cross_form_autofill.py) / app/tests/신규 test_signature_date.py",
+      "impact": "med",
+      "effort": "M"
+    },
+    {
+      "id": "L010",
+      "rule": "예비창업자(사업자번호 부재) = 창업일·사업자번호·매출·고용·투자·산업재산권 강제 공란",
+      "proposed_guard": "기업형태='예비창업자' 또는 사업자번호 부재 감지 시 해당 6칸에 값 전사 금지(공란 유지)하는 명시 규칙을 cross_form_autofill/company_extract 채움 게이트에 추가 + 회귀: 소스에 매출 값 있어도 예비창업 타깃엔 미전사·공란 단언(현재 일반 날조0에만 의존)",
+      "target_files": "app/auto_write/services/cross_form_autofill.py, project_service.py / app/tests/test_cross_form_autofill.py",
+      "impact": "med",
+      "effort": "M"
+    }
+  ],
+  "lessons": [
+    {
+      "id": "L001 | 2026-07-10 | HWPX 이미지 크기",
+      "summary": "HWPX 그림 폭은 본문폭(약48190HWPUNIT)로 클램프하고 sz/orgSz/imgRect/curSz를 같은 폭으로 세팅해야 한다",
+      "mechanizable": "yes",
+      "category": "gap",
+      "guard_ref": "app/scripts/patch_profile_v5_visual.py:169 (disp_w=min(org_w,46800) 클램프 — 일회성 스크립트, 회귀테스트 없음)",
+      "gap_desc": "HWPX pic 삽입 시 disp width<=본문폭 & sz==orgSz파생==imgRect==curSz 폭 일치를 검증하는 회귀테스트 추가(엔진화). 현재 클램프는 스크립트에만 있고 core image_apply는 NotebookLM 텍스트 프롬프트라 실이미지 삽입 경로가 이 스크립트뿐",
+      "impact": "med"
+    },
+    {
+      "id": "L002 | 2026-07-10 | HWPX 편집 후 글씨 깨짐",
+      "summary": "HWPX 값칸 채운 뒤 옛 줄위치 캐시 hp:linesegarray를 전량 제거해 한글이 줄위치를 재계산하게 한다",
+      "mechanizable": "yes",
+      "category": "mechanized",
+      "guard_ref": "app/auto_write/services/hwpx_fill.py:_strip_linesegarray(675, fill 시 887 호출) + hwpx_layout_fix.strip_linesegarray(165) / app/tests/test_hwpx_fill.py::test_strip_linesegarray_when_filled·test_linesegarray_kept_when_no_change·test_strip_linesegarray_helper_idempotent",
+      "gap_desc": "",
+      "impact": "high"
+    },
+    {
+      "id": "L003 | 2026-07-10 | 한글 COM 서버 실행 실패",
+      "summary": "COM 호출/HWPX 쓰기 직전에 항상 Hwp 프로세스를 강제 종료(Stop-Process)해 서버실행실패·PermissionError를 예방한다",
+      "mechanizable": "partial",
+      "category": "gap",
+      "guard_ref": "",
+      "gap_desc": "hwp_com_fill.fill_hwp_com 의 Dispatch/Open 직전에 taskkill/f/im Hwp.exe(또는 Stop-Process -Name Hwp -Force) 선행 종료 단계 추가. COM 환경은 유닛테스트 불가 → 종료 호출이 실제 실행됐는지 monkeypatch spy로만 강제. 현재 kill 로직 전무(예외 catch·Quit()만 존재)",
+      "impact": "med"
+    },
+    {
+      "id": "L004 | 2026-07-10 | 세금계산서 공급받는자 추출",
+      "summary": "전자세금계산서 PDF에서 공급받는자는 (법인명) 매치의 두 번째 값으로 뽑는다(이름 필터 금지)",
+      "mechanizable": "yes",
+      "category": "gap",
+      "guard_ref": "",
+      "gap_desc": "auto_write 저장소에 세금계산서/공급받는자 관련 코드가 전무(grep 0건) — 타 도메인(세금계산서 파서) 소관. auto_write 범위 밖이라 여기 가드 불필요. 만약 파서 도입 시: 공급자≠자사 픽스처로 '2번째 (법인명) 블록=공급받는자' 회귀테스트 추가",
+      "impact": "low"
+    },
+    {
+      "id": "L005 | 2026-07-10 | 결과물 검증은 눈으로",
+      "summary": "사람이 볼 산출물(PDF·문서·이미지)은 렌더링해 실제 픽셀을 읽어 검증한다 — 로직 리뷰는 검증이 아니다",
+      "mechanizable": "partial",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "high"
+    },
+    {
+      "id": "L006 | auto_write | 파란/예시색 → 검정",
+      "summary": "본문은 검정(000000) 통일 — 명시 유색 런만 검정으로, 흰색·auto·테마색은 보존하고 검출↔교정을 역연산 정합으로 강제",
+      "mechanizable": "yes",
+      "category": "mechanized",
+      "guard_ref": "app/auto_write/services/doc_quality_ops.py:normalize_colored_text_to_black(769) + usage_acceptance.check_residual_colored_runs(404) + hwpx_acceptance.count_colored_charpr(70)/hwpx_submit 게이트(163) / app/tests/test_detect_correct_parity.py·test_usage_acceptance.py(흰색·auto·머리글·하이퍼링크·표셀 보존/교정)·test_hwpx_submit.py·test_hwpx_acceptance.py",
+      "gap_desc": "",
+      "impact": "high"
+    },
+    {
+      "id": "L007 | auto_write | 개인정보 마스킹",
+      "summary": "블라인드 공고는 성명·대학명·직장명을 ○ 마스킹하고 실명 잔존을 fail로 검출(마스킹 ○○○는 자리표시 오탐 제외)",
+      "mechanizable": "yes",
+      "category": "mechanized",
+      "guard_ref": "app/auto_write/services/usage_acceptance.py:check_masking_violation(456, blind_review 시 활성)·_is_masked_value(400) / app/tests/test_usage_acceptance.py::test_blind_review_allows_masking·test_blind_review_detects_real_names + blind_review CLI 전파(test_auto_write_apply.py:703~·test_submission_pipeline.py:608~)·test_pure_force_draft_and_mask.py",
+      "gap_desc": "",
+      "impact": "high"
+    },
+    {
+      "id": "L008 | auto_write | 폰트 크기 위계 (기본 표준, 2026-07-11)",
+      "summary": "대제목=유지, 중16/소14/본문12/각주10/표11pt 위계 — 단 공고가 크기 명시 시 그게 우선",
+      "mechanizable": "partial",
+      "category": "judgment",
+      "guard_ref": "app/auto_write/services/doc_quality_ops.py:normalize_font_sizes(394, 본문 이상치 클램프·기본 비활성) + doc_quality_score.py:283 font_consistency(≤6종 카운트만)",
+      "gap_desc": "",
+      "impact": "med"
+    },
+    {
+      "id": "L009 | auto_write | 날조 0",
+      "summary": "없는 실적·수치는 지어내지 말고 [확인필요]/공란 — [확인필요] 잔존 문서는 게이트가 fail→_DRAFT로 제출차단",
+      "mechanizable": "partial",
+      "category": "mechanized",
+      "guard_ref": "app/auto_write/services/usage_acceptance.py unresolved_markers(_MARKER_RE) 검출→DRAFT + bizplan_ai_writer.py:40·186([확인필요] 강제) / app/tests/test_gate_faildraft_invariant.py(marker→_DRAFT)·test_document_quality_harness.py:328·test_auto_write_apply.py:828(_RESIDUAL_RE)",
+      "gap_desc": "",
+      "impact": "high"
+    },
+    {
+      "id": "L010 | auto_write | 예비창업자 = 기업정보 공란",
+      "summary": "법인 없으면 기업명=예비창업자, 창업일·사업자번호·매출·고용·투자·산업재산권은 공란(억지 채움 금지)",
+      "mechanizable": "partial",
+      "category": "gap",
+      "guard_ref": "app/auto_write/services/project_service.py:80 SAMPLE_VALUE_RE(예비창업팀·법인기업 예시 제거)·company_extract missing 처리로 간접 커버(날조0)",
+      "gap_desc": "기업형태=예비창업자(사업자번호 부재) 감지 시 창업일·사업자번호·매출·고용·투자·산업재산권 칸을 강제 공란 처리·그 칸에 값 전사 금지하는 명시 규칙+회귀테스트 추가(현재 일반 날조0에만 의존, 예비창업 전용 가드 없음)",
+      "impact": "med"
+    },
+    {
+      "id": "L011 | auto_write | 양식 서식 보존",
+      "summary": "값 채움은 run.text만 교체(폰트/스타일/표구조 불변), 출력==입력(하드링크 포함)이면 ValueError로 원본 덮어쓰기 차단",
+      "mechanizable": "yes",
+      "category": "mechanized",
+      "guard_ref": "app/auto_write/services/hwpx_fill.py:907·958(os.path.samefile 하드링크 가드+out==in ValueError)·cross_form_autofill.py:1249(run.text만 교체) / app/tests/test_overwrite_guards.py·test_project_service_safety.py·test_hwpx_submit.py::test_submit_original_untouched",
+      "gap_desc": "",
+      "impact": "high"
+    },
+    {
+      "id": "L012 | auto_write | 양식 안내문구 삭제",
+      "summary": "안내문구 표·단락은 내용칸을 채운 뒤 결정론적으로 제거하고 본문 데이터는 오삭제하지 않는다.",
+      "mechanizable": "yes",
+      "category": "mechanized",
+      "guard_ref": "doc_quality_ops.py:remove_guide_paragraphs / remove_table_guide_rows(_is_guide_text 단일기준) + tests/test_document_quality_harness.py::test_guide_paragraph_removal·test_table_guide_row_removal·test_guide_no_false_delete + hwpx_acceptance guide 검출",
+      "gap_desc": "",
+      "impact": "high"
+    },
+    {
+      "id": "L013 | auto_write | 본문 메타 문구 금지",
+      "summary": "※ 작성태도(날조/과장/미확정) 자기지시 문구는 본문에서 제거해야 한다.",
+      "mechanizable": "yes",
+      "category": "gap",
+      "guard_ref": ".worktrees/hwp2/app/auto_write/services/hwpx_submission_cleanup.py:strip_meta_notes (미병합 worktree branch feat/hwp-auto-pipeline — 메인 app/에는 없음)",
+      "gap_desc": "메인 doc_quality_ops의 _GUIDE_EXTRA_RE에 ※ 작성태도(날조·과장·미확정·정직하게) 자기지시 패턴을 추가하거나 strip_meta_notes를 메인으로 병합해 remove_guide_paragraphs 경로에서 제거하고 회귀테스트 추가(현 _PURE_GUIDE_RE는 ※…작성/기재/예시만 잡아 작성태도 문구는 통과).",
+      "impact": "med"
+    },
+    {
+      "id": "L014 | auto_write | 표 헤더/내용행 서식 구분",
+      "summary": "생성한 표는 첫 행=헤더(음영+굵게), 둘째 행부터=내용(무음영+보통)으로 서식을 구분한다.",
+      "mechanizable": "partial",
+      "category": "gap",
+      "guard_ref": "",
+      "gap_desc": "표를 새로 생성하는 경로(psst_fill/bizplan 등) 산출 표에 대해 '첫 행 shd+bold, 내용행 무음영·보통'을 단언하는 회귀테스트 추가. 현재 헤더 서식 로직은 cross_form_autofill의 읽기(세로/행렬 헤더 판별)만 있고 생성 표 서식 구분을 강제하는 가드·테스트가 없음(폼 채움은 원본 서식 보존이라 위험은 낮음).",
+      "impact": "low"
+    },
+    {
+      "id": "L015 | auto_write | ■ 제목 서식",
+      "summary": "'■ 라벨 — 설명'/'■ 라벨(부제)'를 '■ (라벨)'로 결정론적으로 정규화한다.",
+      "mechanizable": "yes",
+      "category": "gap",
+      "guard_ref": ".worktrees/hwp2/app/auto_write/services/hwpx_submission_cleanup.py:reformat_bullet_heading (미병합 worktree branch feat/hwp-auto-pipeline — 메인 app/에는 없음)",
+      "gap_desc": "reformat_bullet_heading을 메인 doc_quality_ops(run_all)로 병합·배선하고 '■ 라벨 — 설명 → ■ (라벨)' 정규화 회귀테스트 추가(순수 결정론 문자열 변환이라 기계화 용이).",
+      "impact": "low"
+    },
+    {
+      "id": "L016 | auto_write | 쉬운 표현",
+      "summary": "유행어·난해표현('라스트 100m' 등) 금지, 비개발자가 바로 이해할 쉬운 말로 쓴다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "low"
+    },
+    {
+      "id": "L017 | auto_write | 이미지 = NotebookLM 프롬프트",
+      "summary": "그림 위치엔 차트를 직접 생성하지 않고 NotebookLM 슬라이드 프롬프트 블록을 삽입한다.",
+      "mechanizable": "yes",
+      "category": "mechanized",
+      "guard_ref": "image_apply.py:apply_images/apply_images_docx (+extract_notebooklm_prompts) + tests/test_auto_write_apply.py::test_apply_images_inserts_notebooklm_prompt(외 3종: placeholder/no_table/table_anchor) + tests/test_submission_pipeline.py::test_pipeline_inserts_notebooklm_prompts",
+      "gap_desc": "",
+      "impact": "med"
+    },
+    {
+      "id": "L018 | auto_write | 분량은 공고 기준",
+      "summary": "공고가 명시한 분량 제한(본문/AI섹션)을 무시하지 않고 초과 시 경고를 낸다.",
+      "mechanizable": "partial",
+      "category": "mechanized",
+      "guard_ref": "usage_acceptance.py:check_page_overflow(config.max_pages/ai_section_max, SEV_WARN) + tests/test_usage_acceptance.py::test_page_overflow_config_gated + test_run_autopilot_passes_page_limits_to_config·test_self_diagnose_passes_page_limits_to_config(CLI→config 배선)",
+      "gap_desc": "",
+      "impact": "med"
+    },
+    {
+      "id": "L019 | auto_write | 점수 통과 ≠ 제출 가능",
+      "summary": "품질점수는 서식만 보고, 제출가능성은 usage_acceptance 게이트가 판정 — fail 1개면 _DRAFT 강제·self_diagnose exit 2.",
+      "mechanizable": "yes",
+      "category": "mechanized",
+      "guard_ref": "tests/test_gate_faildraft_invariant.py(4진입점 fail→_DRAFT 불변식: self_diagnose exit2·run_autopilot·bizplan_autopilot·SubmissionPipeline) + usage_acceptance.py:run_acceptance/force_draft_name",
+      "gap_desc": "",
+      "impact": "high"
+    },
+    {
+      "id": "L020 | auto_write | DRAFT 세탁 / fail-open 금지",
+      "summary": "검사 예외·판정불가·rename 실패 시 fail-closed로 _DRAFT 유지, clean 산출물도 fail 분기 artifacts에 포함해 세탁을 막는다.",
+      "mechanizable": "yes",
+      "category": "mechanized",
+      "guard_ref": "tests/test_gate_faildraft_invariant.py::test_autopilot_rename_lock_is_fail_closed·test_autopilot_cli_strict_exit3_on_rename_lock·test_submission_pipeline_fail_doc_forces_draft(비-DRAFT 잔존 0) + usage_acceptance.py:force_draft_name(양 게이트 공유 단일출처)",
+      "gap_desc": "",
+      "impact": "high"
+    },
+    {
+      "id": "L021 | auto_write | lxml proxy id 재사용 dedup 버그",
+      "summary": "셀 dedup은 id()만 저장하지 말고 refs 리스트로 proxy 생존을 유지하며 검출기·교정기가 같은 순회를 공유한다.",
+      "mechanizable": "yes",
+      "category": "mechanized",
+      "guard_ref": "usage_acceptance.py:_dedup_cells(refs 리스트, L203-218) + doc_quality_ops.py:_iter_all_paragraph_elements(refs.append(tc), L726-748) + tests/test_detect_correct_parity.py(표셀 범위 검출==교정==1) + tests/test_usage_acceptance.py::test_table_cell_colored_run_detected_and_normalized",
+      "gap_desc": "",
+      "impact": "high"
+    },
+    {
+      "id": "L022 | auto_write | 유색 정규화 auto값 오교정",
+      "summary": "검정 교정은 정규 6자리 hex만, auto·테마·미지정은 보존하고 검출(rgb=None 통과)과 교정을 역연산으로 정합시킨다.",
+      "mechanizable": "yes",
+      "category": "mechanized",
+      "guard_ref": "doc_quality_ops.py:normalize_colored_text_to_black(re.fullmatch([0-9a-f]{6} 가드, L810; .//w:r 하이퍼링크·머리글/바닥글·텍스트박스 순회) + tests/test_usage_acceptance.py::test_auto_color_run_not_detected_nor_mutated(L688) + tests/test_detect_correct_parity.py(거울 정합)",
+      "gap_desc": "",
+      "impact": "high"
+    },
+    {
+      "id": "L023 | auto_write | cross-form 이름 필드 오매칭",
+      "summary": "이름 동의어 클러스터 타깃에 이름 모양(20자 이하·콤마/및/총괄/담당 없음)이 아닌 값이 오면 강등→needs_confirm(오매칭<빈칸).",
+      "mechanizable": "yes",
+      "category": "mechanized",
+      "guard_ref": "app/auto_write/services/cross_form_autofill.py:_looks_like_name(L271)/match_fields high강등(L1042) · app/tests/test_cross_form_autofill.py::test_name_field_rejects_role_description_value / test_role_description_paragraph_not_autofilled_to_name / test_name_field_accepts_masked_name_value",
+      "gap_desc": "",
+      "impact": "high"
+    },
+    {
+      "id": "L024 | auto_write | 플레이스홀더 빈칸 승격 (O마스크 보존)",
+      "summary": "불가능날짜·전부-0수량·더미등록번호·빈괄호만 빈칸 승격, O마스크(OOO)는 실단어 오판 위험으로 제외, 실값은 2중게이트로 덮어쓰기 금지.",
+      "mechanizable": "yes",
+      "category": "mechanized",
+      "guard_ref": "app/auto_write/services/cross_form_autofill.py:_is_obvious_placeholder(L739, O마스크 제외 명시)/autofill_from_source 2중게이트(L1530 cur and not _is_obvious_placeholder) · app/tests/test_cross_form_autofill.py::test_is_obvious_placeholder_vectors / test_fill_double_gate_never_overwrites_real_value / test_masked_value_preserved_after_transcribe / test_autofill_cell_inline_preserves_filled_value",
+      "gap_desc": "",
+      "impact": "high"
+    },
+    {
+      "id": "L025 | auto_write | 체크박스 부분문자열 오체크",
+      "summary": "□→■ 체크는 _normalize_choice 환원 후 정확일치만(부분문자열·짧은값·예시값 금지), .//w:r 순회로 하이퍼링크 □ 포함.",
+      "mechanizable": "yes",
+      "category": "mechanized",
+      "guard_ref": "app/auto_write/services/cross_form_autofill.py:match_checkbox_groups(L1179, '정확일치만(환원 후)' L1209)/_check_option_cell(L1235, .//w:r) · app/tests/test_cross_form_autofill.py::test_checkbox_substring_no_false_check / test_checkbox_short_value_no_false_check / test_checkbox_placeholder_value_no_check / test_check_option_cell_hyperlink_wrapped_box",
+      "gap_desc": "",
+      "impact": "high"
+    },
+    {
+      "id": "L026 | 작업방식 | 파일 경로는 묻는다",
+      "summary": "파일 경로를 광역 Glob으로 자동 스캔하지 말고 사용자에게 직접 물어본다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "low"
+    },
+    {
+      "id": "L027 | 작업방식 | 버전규칙 + 반복질문 금지",
+      "summary": "산출물은 v1,v2로 버전 구분(날짜만 X), 사용자가 이미 말한 결정은 다시 묻지 않는다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "low"
+    },
+    {
+      "id": "L028 | auto_write | 본문 폰트 전역통일 도구",
+      "summary": "본문 전역 글꼴·크기 통일은 scripts/unify_body_font.py(제목위계 보존) 사용, doc_quality_ops.unify_paragraph_formatting은 단락별이라 전역통일 못 함.",
+      "mechanizable": "partial",
+      "category": "mechanized",
+      "guard_ref": "scripts/unify_body_font.py(전역통일 도구 실재) · app/tests/test_quality_rules.py / test_document_quality_harness.py(unify_body_font 동작 커버)",
+      "gap_desc": "",
+      "impact": "low"
+    },
+    {
+      "id": "L029 | 작업방식 | 규칙 충돌 시 최신 우선",
+      "summary": "새 규칙이 기존과 충돌하면 최신 버전으로 교체(중복 신설 X), 옛 규칙은 lessons·메모리·위키 어디든 갱신.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "low"
+    },
+    {
+      "id": "L030 | 2026-07-12 | 사용자 지적은 최소 범위로만 수정",
+      "summary": "'여기만 다르다'류 지적은 그 부분만 주변과 맞추고 전역 sweep 금지, 변경 건수가 지적 범위보다 크면 멈추고 확인.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med"
+    },
+    {
+      "id": "L031 | 2026-07-12 | 한글/HWPX 시각문제는 추측패치 금지 — 원인 특정 먼저",
+      "summary": "시각 문제는 정상원본 확보+XML 정밀진단(rowSpan·borderFill·격자 타일링)으로 원인 1개 특정 후 그 부분만 최소 수정, 렌더 확인 전 완료보고 금지.",
+      "mechanizable": "partial",
+      "category": "mechanized",
+      "guard_ref": "app/auto_write/services/hwpx_layout_fix.py:validate_table_grid/repair_table_grid/repair_all_table_grids · app/tests/test_hwpx_layout_fix.py::test_check_semantics_and_finalize_repairs_broken_grid(격자 rowAddr 결함 검출·교정 회귀)",
+      "gap_desc": "격자 타일링은 가드 있으나 '렌더 확인 전 완료보고 금지'·추측패치 억제는 사람판단 영역(자동화 불가) — 프로세스 규칙으로만 강제",
+      "impact": "high"
+    },
+    {
+      "id": "L032 | 2026-07-12 | 서명일·날짜 기입은 실행 시점 시스템 날짜로",
+      "summary": "문서 서명일·작성일 채움은 항상 datetime.now/date.today로 산출, 대화·RESUME의 낡은 날짜를 복사하지 않는다.",
+      "mechanizable": "partial",
+      "category": "gap",
+      "guard_ref": "",
+      "gap_desc": "서명일/작성일 값을 채우는 전용 헬퍼(예: fill_signature_date)를 만들고 date.today() 스탬프를 강제 + 인자로 받은 과거 날짜를 무시하는 회귀테스트 추가. 현재 services 에는 서명일 채움 코드 자체가 없어 에이전트 수기 입력에 의존(가드 부재)",
+      "impact": "med"
+    },
+    {
+      "id": "L033 | 2026-07-13 | 파일 유효성 ≠ 앱에서 열림 / 체크리스트만 주기",
+      "summary": "'안 열림'은 zip/XML 구조검증에 그치지 말고 의미검증(itemCnt·ID참조·격자)으로 실제 열림 결함을 잡고, 사용자에게 시키지 말고 즉시 대안을 만든다.",
+      "mechanizable": "partial",
+      "category": "mechanized",
+      "guard_ref": "app/auto_write/services/hwpx_layout_fix.py:check_hwpx_semantics(구조 넘어 itemCnt·ID참조·격자 의미검증) · app/hwpx_doctor.py:diagnose/repair CLI · app/tests/test_hwpx_layout_fix.py::test_check_semantics_and_finalize_repairs_broken_grid",
+      "gap_desc": "의미검증은 가드 존재. 다만 '실제 앱(COM)으로 열림 테스트해 파일 vs 앱 문제 분리 + BADCALLEE 2회면 앱고장 판정 + docx/pdf 대안 제작'은 코드 가드 부재(hwpx_doctor 에 COM 열림 스모크·앱장애 판정 추가 여지)",
+      "impact": "high"
+    },
+    {
+      "id": "L034 | 2026-07-15 | 신청서 복수선택 칸은 임의 기본값 금지 — 사용자 확정",
+      "summary": "체크형·복수선택 칸은 '전부 체크'나 '1개만' 임의 기본값을 깔지 말고 허용 개수 명시 후 사용자에게 확정받는다.",
+      "mechanizable": "partial",
+      "category": "mechanized",
+      "guard_ref": "app/auto_write/services/cross_form_autofill.py::match_checkbox_groups (high 단일 정확일치만 체크, ambiguous/no_source→보류); app/tests/test_cross_form_autofill.py::test_checkbox_ambiguous_no_check, ::test_checkbox_no_source_no_check",
+      "gap_desc": "",
+      "impact": "high"
+    },
+    {
+      "id": "L035 | 2026-07-15 | 키워드/전문영역 칸 = 분야명 반복 금지, 실전 강점 명사로",
+      "summary": "키워드·전문영역 칸은 신청 분야명 복제가 아니라 그 사람의 실전 강점 키워드(정책자금 등)로 채운다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med"
+    },
+    {
+      "id": "L036 | 2026-07-15 | 자기기술서(정성평가)는 다짐·수사 대신 '구체 성공사례 1개' 중심",
+      "summary": "자기기술서는 문제→조치(구체 단계)→결과(정량)의 실제 성공사례 1개를 몸통으로 쓰고, 사례는 사용자에게 먼저 물어본다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med"
+    },
+    {
+      "id": "L037 | 2026-07-15 | 제출본 = 요구 서식만 분리한 별도 파일 (공고 전문에 채우기 X)",
+      "summary": "제출본은 공고 전문에 값을 채우지 말고 요구 서식 페이지만 추출·분리해 '서식명_성명' 파일명 + 제출/ 하위폴더로 구성한다.",
+      "mechanizable": "partial",
+      "category": "gap",
+      "guard_ref": "",
+      "gap_desc": "제출 마감 단계에 파일명 규약(서식명_성명)·'제출/' 하위 배치·공고 전문(모집요강) 미포함 검사를 추가(어느 페이지가 서식인지는 사람 판단, 명명·격리는 결정론 검사 가능).",
+      "impact": "med"
+    },
+    {
+      "id": "L038 | 2026-07-15 | 이력서 실적 표는 정량 컬럼(업체수·합계·회차)이 몸통 — 빼먹지 마라",
+      "summary": "이력서 실적 표의 정량 컬럼(컨설팅 업체수·합계 행·강의 회차/시간·구분)을 임의 단순화하지 말고 기존 스키마대로 보존한다.",
+      "mechanizable": "partial",
+      "category": "gap",
+      "guard_ref": "app/tests/test_resume_extract.py::test_certs_and_lectures_and_projects (Lecture.count/kind=회차·구분은 파싱·보존됨)",
+      "gap_desc": "컨설팅실적을 위한 dataclass/파서(업체수 컬럼 + '합계' 행 보존)와 회귀 테스트를 추가 — 현재 resume_extract는 컨설팅 업체수·합계를 모델링하지 않아 침묵 유실 가능(합계는 restore_profile_v5_table.py 1회성 스크립트에만 하드코딩).",
+      "impact": "med"
+    },
+    {
+      "id": "L039 | 2026-07-15 | 이력서 끝은 포트폴리오(실물 이미지 증빙) — 텍스트로만 끝내지 마라",
+      "summary": "이력서 끝의 포트폴리오(작업 산출물 이미지) 섹션을 이월하거나, 불가하면 '[포트폴리오 이미지 삽입 필요]' 자리를 명시한다.",
+      "mechanizable": "partial",
+      "category": "gap",
+      "guard_ref": "",
+      "gap_desc": "resume 빌더가 원본 포트폴리오 섹션/이미지 자산을 이월하지 못하면 '[포트폴리오 이미지 삽입 필요]' placeholder + needs_confirm 을 강제하는 검사 추가(현재 resume_extract·어느 서비스도 포트폴리오/이미지 미처리).",
+      "impact": "med"
+    },
+    {
+      "id": "L040 | 2026-07-15 | 필수 서식(서약서 등)은 원문 전문 유지 + 날짜·성명만 기입 — 서식 누락 금지",
+      "summary": "공고의 모든 필수 서식(청렴서약서 등)을 빠짐없이 포함하고 보일러플레이트는 안 고치고 날짜·성명만 채운다.",
+      "mechanizable": "yes",
+      "category": "mechanized",
+      "guard_ref": "usage_acceptance.check_missing_required_documents(공고 required_documents 대조, fail) + self_diagnose --required-doc 배선 / app/tests/test_required_documents_gate.py",
+      "gap_desc": "",
+      "impact": "high"
+    },
+    {
+      "id": "L041 | 2026-07-15 | 신청서 실적은 공고 적합 건만 선별 — 전량 최신순 나열 금지",
+      "summary": "실적 칸은 공고 주관기관·대상에 적합한 건만 선별한다(적합성 > 최신성).",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med"
+    },
+    {
+      "id": "L042 | 2026-07-15 | 담당업무·분야 값은 공고 대상에 맞춰 재서술 — 원문 복사 금지",
+      "summary": "전사 시 담당업무·분야 값을 원문 글자 그대로 복사하지 말고 공고 키워드를 주입해 선택적 각색한다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med"
+    },
+    {
+      "id": "L043 | 2026-07-15 | 이력서 학력·경력·자격 = '2. 경력사항' 단일 섹션·단일 표 + 블록별 서브헤더",
+      "summary": "학력·경력·자격을 '2. 경력사항' 단일 섹션·단일 표 안에 블록별 헤더행으로 재선언하고 슬래시 합성 헤더로 뭉개지 않는다.",
+      "mechanizable": "partial",
+      "category": "gap",
+      "guard_ref": "",
+      "gap_desc": "이력서 렌더러 신설 시 '2.경력사항' 단일 표 + 학력/경력/자격 블록별 서브헤더 구조를 회귀 assertion 으로 고정(현재 렌더러 부재, resume_extract 는 파싱만 하고 3개 리스트로 분리 — '자격 별도 표' 사용자 지시는 예외 판단).",
+      "impact": "med"
+    },
+    {
+      "id": "L044 | 2026-07-15 | 표준 이력서 골격 고정 — 프로필형 섹션 혼합·'기타 이력' 삭제 금지",
+      "summary": "이력서 골격(1.인적→2.경력→3.강의→4.수행→(5.컨설팅)→논문→(7.기타))을 고정하고 프로필형 섹션 혼입·'기타 이력' 삭제로 이력을 소실시키지 않는다.",
+      "mechanizable": "partial",
+      "category": "gap",
+      "guard_ref": "",
+      "gap_desc": "이력서 렌더러에 표준 섹션 골격·순서 고정 + '기타 이력' 보존 assertion 추가(표에 안 맞는 이력은 자유 단락 보존) — 현재 렌더러가 없어 골격·기타이력 소실을 막는 가드 전무.",
+      "impact": "med"
+    },
+    {
+      "id": "L045 | 2026-07-15 | 서명=실이미지, '(인)' 텍스트 추가 금지 — 기준일은 문서 머리",
+      "summary": "서명란엔 서명 PNG 실삽입·'(인)' 텍스트 임의추가 금지·기준일은 제목 아래(끝맺음 아님).",
+      "mechanizable": "partial",
+      "category": "gap",
+      "guard_ref": "",
+      "gap_desc": "생성물 검수(usage_acceptance/self_diagnose)에 '(인)' 텍스트 삽입 0건 + 서명란에 이미지 존재 여부 회귀 assert 추가",
+      "impact": "med"
+    },
+    {
+      "id": "L046 | 2026-07-15 | '~과정 이수'(교육 수료)는 자격증란 기재 금지",
+      "summary": "'투자심사역 과정 이수' 같은 교육수료 항목을 자격증(자격/면허) 표에 넣지 마라 — 별도 교육섹션 또는 생략.",
+      "mechanizable": "partial",
+      "category": "gap",
+      "guard_ref": "",
+      "gap_desc": "resume_extract 자격 섹션 파서에서 항목명이 '과정 이수/수료'로 끝나면 자격란에서 제외(교육수료 전용 섹션으로 분리)하는 결정론 규칙+회귀",
+      "impact": "med"
+    },
+    {
+      "id": "L047 | 2026-07-15 | 신청서 주요경력 2칸 매핑: 왼쪽='기관 직위 (기간)' 합성, 오른쪽=담당업무",
+      "summary": "이력서 5열을 신청서 2칸에 부을 때 왼쪽='기관 직위 (기간)' 합성, 오른쪽=담당업무로 재조합.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med"
+    },
+    {
+      "id": "L048 | 2026-07-15 | 최종 제출 = 공고 명명 튜플로 개명한 단일 합본 PDF까지",
+      "summary": "작업명 hwpx에서 끝내지 말고 공고 지정 튜플로 개명 + 증빙 포함 단일 합본 PDF까지 생성.",
+      "mechanizable": "partial",
+      "category": "gap",
+      "guard_ref": "",
+      "gap_desc": "submission_orchestrator/hwpx_submit 후단에 '공고 튜플 개명 + 증빙 단일 PDF 합본' 스텝과 산출물 존재검증 추가(현재 서비스에 PDF merge 코드 없음)",
+      "impact": "med"
+    },
+    {
+      "id": "L049 | 2026-07-15 | 산출물은 'YYYYMMDD 공고명' 폴더 + '제출/' 하위폴더에 배치",
+      "summary": "산출물을 repo/작업 루트에 방치 말고 'YYYYMMDD 공고명/제출/' 체계에 격리 저장.",
+      "mechanizable": "partial",
+      "category": "gap",
+      "guard_ref": "",
+      "gap_desc": "제출 산출물이 repo 루트가 아닌 'YYYYMMDD 공고명/제출/' 하위에 저장됐는지 경로 assert(루트 방치 시 경고) — 현재 실제로 STAR_* 등 루트 방치 재발 중",
+      "impact": "med"
+    },
+    {
+      "id": "L050 | 2026-07-15 | 제출 최종본·증빙은 동일 파일명 HWP+PDF 쌍 병행 생성",
+      "summary": "최종 제출본·증빙 확정 시 동일 파일명 .pdf를 병행 생성(초안은 불필요).",
+      "mechanizable": "partial",
+      "category": "gap",
+      "guard_ref": "",
+      "gap_desc": "hwpx_submit '통과' 최종본 확정 시 동일명 .pdf 병행 생성 스텝 + .hwp/.pdf 쌍 존재검증(PDF화는 한글 COM 의존이라 부분 기계화)",
+      "impact": "med"
+    },
+    {
+      "id": "L051 | 2026-07-15 | 제출처 기관이면 정식 명칭으로 격상(조건부)",
+      "summary": "제출처 기관명은 정식 명칭(소상공인시장진흥공단)으로 격상 — 단 내부·타기관 제출엔 약칭도 허용(조건부).",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "low"
+    },
+    {
+      "id": "L052 | 2026-07-15 | 부문 체크박스를 분야 텍스트에 병합 금지 + 원문 구분자(·) 변조 금지",
+      "summary": "부문(체크박스)과 분야(텍스트)는 별도 행 유지, 원문 구분자(재무·자금)를 '/'로 변조 금지.",
+      "mechanizable": "partial",
+      "category": "mechanized",
+      "guard_ref": "cross_form_autofill.py:find_checkbox_targets/match_checkbox_groups + tests/test_cross_form_autofill.py::test_checkbox_other_options_preserved (체크박스 별도 그룹·비매칭옵션 보존, 값 verbatim 채움→구분자 미변조)",
+      "gap_desc": "",
+      "impact": "med"
+    },
+    {
+      "id": "L053 | 2026-07-15 | 실적 없는 섹션도 삭제 말고 '해당사항 없음' 행으로 유지",
+      "summary": "고정 양식 채움 시 실적 없는 섹션도 표를 유지하고 '해당사항 없음' 기입(섹션 통째 생략 금지).",
+      "mechanizable": "partial",
+      "category": "mechanized",
+      "guard_ref": "tests/test_hwpx_fill.py::test_form_preserved_nonsection_bytes_identical (채움 엔진이 폼·섹션 바이트 보존 → 섹션/행 삭제 불가; 다만 '해당사항 없음' 기입 자체는 사람 판단)",
+      "gap_desc": "",
+      "impact": "med"
+    },
+    {
+      "id": "L054 | 2026-07-15 | 실적 총괄 요약표는 세로형(라벨-값 행) — 가로 전치 금지",
+      "summary": "소스 요약표의 방향·병합 헤더를 보존하고 세로↔가로 임의 전치 금지.",
+      "mechanizable": "partial",
+      "category": "mechanized",
+      "guard_ref": "tests/test_hwpx_fill.py::test_form_preserved_nonsection_bytes_identical (엔진은 기존 셀에 값만 채움 → 표 전치·병합헤더 손실 구조적 불가; 백지에서 재작성 시 방향 선택은 사람 판단)",
+      "gap_desc": "",
+      "impact": "med"
+    },
+    {
+      "id": "L055 | 2026-07-15 | 소속기관 표: 1인기업 대표는 자기 회사로 전부 채움",
+      "summary": "1인기업 대표는 소속기관=자기 회사, 대표자=본인, 전화=휴대폰 재사용, FAX='-'로 유도 채움([확인필요] 남발 금지).",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med"
+    },
+    {
+      "id": "L056 | 2026-07-15 | 신청서 단일 '주소' 칸 = 사업장 주소(거주지 아님)",
+      "summary": "단일 '주소' 타깃엔 사업장 주소를 넣고 소속기관 주소와 통일한다(거주지 회피).",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "cross_form_autofill.py SYNONYMS 주소 클러스터(line 167-176) — 주소 2칸이면 conflict→needs_confirm 로 자동전사 보류(부분 안전망)",
+      "gap_desc": "",
+      "impact": "med"
+    },
+    {
+      "id": "L057 | 2026-07-15 | 한글 COM 전체실패는 재시도 말고 RESUME/다른 세션 기록부터 — 즉시 non-COM 우회",
+      "summary": "COM 2회 연속 전체실패면 앱고장 확정, RESUME 먼저 확인 후 non-COM(hwpx_fill 좌표채움)으로 전환한다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "hwpx_fill.py fill_hwpx (non-COM 우회 경로는 코드로 존재) — 단 '재시도 중단·RESUME 확인' 판단은 사람 워크플로",
+      "gap_desc": "",
+      "impact": "med"
+    },
+    {
+      "id": "L057 | 2026-07-15 | 지역·권역 선택은 자동 추론 금지 — 반드시 질문",
+      "summary": "지역/권역 체크박스는 주소로 유도 가능해 보여도 자동선택 금지, needs_confirm 로 질문한다.",
+      "mechanizable": "partial",
+      "category": "gap",
+      "guard_ref": "",
+      "gap_desc": "cross_form_autofill match_checkbox_groups 에 지역/권역 라벨 denylist 추가 — 해당 그룹은 데이터 유도 가능해도 무조건 needs_confirm 강등(자동 ■ 금지)",
+      "impact": "med"
+    },
+    {
+      "id": "L058 | 2026-07-15 | 증빙은 granularity별 '모음/합본_날짜' 번들로 자산화·재사용",
+      "summary": "공고 요구 증빙을 기존 번들 선택 또는 공고맞춤 합본 생성 단계로 제출 플로우에 포함한다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "low"
+    },
+    {
+      "id": "L059 | 2026-07-15 | 파일명 접미사=문서 '상태' — 작업 접미사·중간산출물로 제출 폴더 오염 금지",
+      "summary": "파일명 접미사는 상태만 표기(_DRAFT 등), 작업서술·_converted 중간산출물로 제출 폴더를 더럽히지 않는다.",
+      "mechanizable": "partial",
+      "category": "gap",
+      "guard_ref": "usage_acceptance.py force_draft_name (test_pure_force_draft_and_mask.py::test_force_draft_name_idempotent_for_draft_stem) — _DRAFT 상태접미사는 강제됨",
+      "gap_desc": "submission_orchestrator/self_diagnose 에 제출폴더 작업접미사(_converted·_고도화·통합_v2 등) 잔존 검출 경고 체크 추가",
+      "impact": "med"
+    },
+    {
+      "id": "L060 | 2026-07-15 | 표준 이력서 강의 표엔 '구분'(민간/기관) 컬럼 유지",
+      "summary": "표준 이력서 강의 표는 수행기간|주최기관|주제|회차·시간|구분 5컬럼 유지, 구분 값 소실 금지.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med"
+    },
+    {
+      "id": "L061 | 2026-07-15 | 인적사항 표 사진 병합 칸엔 증명사진 항상 삽입",
+      "summary": "이력서·신청서 생성 시 사진 병합칸에 증명사진 삽입 또는 [사진 삽입 필요]를 명시한다.",
+      "mechanizable": "partial",
+      "category": "gap",
+      "guard_ref": "resume_extract.py _DROP_CELLS(line 49-50) — 사진칸을 '읽기' 시 무시만 함(삽입 보장 아님)",
+      "gap_desc": "이력서/신청서 완성 검사에 '사진 병합칸이 비었으면 이미지 또는 [사진 삽입 필요] 마커 존재' 어서션 추가",
+      "impact": "med"
+    },
+    {
+      "id": "L062 | 2026-07-15 | 번호 값의 라벨 접두어는 열 헤더 보고 결정",
+      "summary": "'발급번호' 열엔 번호만, '비고' 열엔 라벨 병기 — 열 이름이 값 서식을 결정한다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med"
+    },
+    {
+      "id": "L063 | 2026-07-15 | 자기기술서 골격(L036 보강): 번호 소제목 3단 + 성과 느낌표 헤드라인 + 공고 취지 호응 마무리",
+      "summary": "자기기술서는 1.경력→2.전문성→3.성공사례(성과 헤드라인) 3단 + 공고 사업명 인용 마무리로 쓴다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "low"
+    },
+    {
+      "id": "L064 | 2026-07-15 | 제목·라벨 자간은 원본 그대로(공백 1칸) — 임의 2칸 금지",
+      "summary": "제목·라벨 자간은 사용자 원본 코드포인트 그대로(공백 1칸) 복제, 임의 2칸 확대 금지.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "low"
+    },
+    {
+      "id": "L065 | 2026-07-15 | \"비교·학습해라\" 요청 = 전수조사가 기본 — 하이라이트 몇 개로 끝내지 마라",
+      "summary": "비교·학습 요청은 차원 분해 후 병렬 전수조사(+적대검증)로, 상위 N개 요약만 내지 않는다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med"
+    },
+    {
+      "id": "L54 | 2026-07-16 | HWPX 표 셀 채움은 데이터 셀도 검정 charPr 강제 — 템플릿 파랑 상속 주의",
+      "summary": "HWPX 셀 채움 시 모든 내용 셀에 검정 charPr 클론 강제 + run 단위 유색 검증(특정 ID만 보지 말 것).",
+      "mechanizable": "yes",
+      "category": "mechanized",
+      "guard_ref": "hwpx_fill.py _BlackCharPr/_inherit_charpr/_set_cell_text(black) — 테스트 test_hwpx_fill.py::{test_empty_cell_in_blue_row_gets_black, test_blue_placeholder_fill_becomes_black, test_replacement_value_becomes_black, test_inherit_fallback_zero_blackened}; 검증 hwpx_acceptance.count_colored_charpr + test_hwpx_acceptance.py::test_colored_textcolor_detected",
+      "gap_desc": "",
+      "impact": "high"
+    },
+    {
+      "id": "L066 | 2026-07-16 | 매 실질턴 전역 마무리 프로토콜 고정(누락 금지)",
+      "summary": "실질 답변 끝에 4종(상태·해결Y/N·다음프롬프트·🧾방금한일) + RESUME 갱신을 매번 부착한다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "hard_rules_reminder.py 훅(UserPromptSubmit, ~/.claude — auto_write 앱코드 아님)이 매턴 리마인드 재주입만 함(출력 강제는 아님)",
+      "gap_desc": "",
+      "impact": "low"
+    },
+    {
+      "id": "L032 | 2026-07-16 | \"요청 전체 정리\"는 커밋(완료분)만 보면 놓친다 — 보류·거절·계획만도 포함",
+      "summary": "요청 총정리는 커밋 외 plans·open-questions·wiki·RESUME·RECAP까지 훑어 완료/부분/보류/거절을 모두 싣는다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med"
+    },
+    {
+      "id": "L067 | 2026-07-16 | 워크트리 커밋은 git add -A 금지 — 세션 아티팩트(.omc) 쓸림 + squash 복구 경로",
+      "summary": "워크트리 커밋은 파일 명시 add(수정분만), .omc 잡파일 배제, 이미 push되면 rm --cached+squash.",
+      "mechanizable": "yes",
+      "category": "mechanized",
+      "guard_ref": ".gitignore line 45 '.omc/' — auto_write 리포는 .omc 세션파일이 이미 무시됨(add -A 로도 스테이징 안 됨) / app/tests/test_gitignore_protects_session_artifacts.py (규칙 삭제 방지 가드)",
+      "gap_desc": "워크트리 생성 훅이 .git/info/exclude 에 '.omc/'를 추가하도록(현재 info/exclude 는 .claude/worktrees 만 커버) — 명시 add 규율 자체는 사람 워크플로",
+      "impact": "med"
+    }
+  ]
+}
