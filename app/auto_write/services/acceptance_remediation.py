@@ -94,6 +94,12 @@ _REMEDIES: dict[str, Remedy] = {
         "특정 폰트가 공고 지정이면 한글에서 확인하세요.",
         f'python document_quality_orchestrator.py "{DOC_TOKEN}"',
     ),
+    "missing_required_documents": Remedy(
+        KIND_HUMAN,
+        "공고가 요구한 필수 서식(청렴서약서·개인정보동의서 등) 중 문서에 없는 것이 "
+        "있습니다. 해당 서식 원문을 문서에 추가하고 날짜·성명 칸만 채우세요"
+        "(보일러플레이트 조항은 한 글자도 고치지 마세요). 서식 누락은 제출 탈락 사유입니다.",
+    ),
     # --- WARN (경고 — 제출 차단 아님, strict_acceptance 시 fail 승격) ---
     "font_size_spread": Remedy(
         KIND_AUTO,
