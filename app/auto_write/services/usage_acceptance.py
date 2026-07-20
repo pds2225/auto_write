@@ -125,6 +125,8 @@ class AcceptanceConfig:
     #   (괄호선택란·라벨변형·빈그림칸). 공고가 해당 항목을 필수로 요구할 때 opt-in.
     #   기본 False = 현행(warn, 오탐 0). 기본값 fail 승격은 음성 코퍼스 검증 후 차기 과제.
     flag_unverified_claims: bool = False   # ⑦ 협업사·실적 사실기반 — warn·기본 off(오탐 위험 큼)
+    required_documents: tuple[str, ...] = ()  # L040: 공고 필수 서식명(청렴서약서 등) — 누락 검사(fail).
+    #   미지정(기본 빈 튜플)이면 검사 비활성(오탐 0). announcement_analyzer.required_documents 를 넘긴다.
 
 
 @dataclass
@@ -907,6 +909,32 @@ def check_unverified_claims(doc: Document, config: AcceptanceConfig | None = Non
                        f"근거 없이 확정 단정한 협업·실적 의심 {defects}건 — 사실 기반 표기 권고")
 
 
+def check_missing_required_documents(doc: Document, config: AcceptanceConfig | None = None) -> CheckResult:
+    """공고가 요구한 필수 서식(청렴서약서·서약서 등)이 문서에 다 있는지 — fail (공고 지정 시에만 활성).
+
+    L040: 공고의 필수 서식을 하나라도 빠뜨리면 제출 탈락이다. 그런데 기존 게이트는
+    required_format(파일 확장자)만 보고 '서식 존재'는 아무도 검사하지 않았다. 여기서
+    config.required_documents(= announcement_analyzer.required_documents)를 최종 산출물의
+    제목·표 라벨 텍스트와 대조해 누락 1개면 fail→_DRAFT 로 제출을 막는다.
+
+    미지정(기본 빈 튜플)이면 검사 비활성 — 오탐 0(현행 동작 불변). 매칭은 공백을 무시한
+    부분일치라 '청렴 서약서'/'청렴서약서' 표기 차이·상위 제목 안 포함('청렴서약서 양식')은
+    포함으로 인정한다(과탐=거짓 제출차단을 줄이는 보수적 방향). 사람이 공고에서 정확한
+    서식명을 넘기는 opt-in 이라 누락 판정의 책임 경계가 분명하다.
+    """
+    label = "필수 서식 누락"
+    required = tuple(config.required_documents) if config and config.required_documents else ()
+    if not required:
+        return CheckResult("missing_required_documents", label, SEV_FAIL, 0, [],
+                           "필수 서식 미지정 — 검사 비활성")
+    haystack = re.sub(r"\s+", "", " ".join(t for _, t in _iter_all_texts(doc)))
+    missing = [str(name) for name in required
+               if re.sub(r"\s+", "", str(name)) and re.sub(r"\s+", "", str(name)) not in haystack]
+    detail = (f"공고 필수 서식 {len(required)}개 전부 포함" if not missing
+              else f"공고 필수 서식 {len(required)}개 중 누락 {len(missing)}개: {missing}")
+    return CheckResult("missing_required_documents", label, SEV_FAIL, len(missing), missing, detail)
+
+
 _ALL_CHECKS = (
     check_unresolved_markers,
     check_self_inserted_blocks,
@@ -924,6 +952,7 @@ _ALL_CHECKS = (
     check_empty_image_slots,
     check_page_overflow,
     check_unverified_claims,
+    check_missing_required_documents,
 )
 
 # US-3c 선도입 warn 검사 중 strict_acceptance 로 fail 승격되는 대상(R14).
