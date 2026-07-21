@@ -2,8 +2,8 @@
   "counts": {
     "mechanized": 25,
     "gap": 21,
-    "judgment": 25,
-    "total": 71
+    "judgment": 26,
+    "total": 72
   },
   "coverage_note": "총 70개 교훈 중 기계화 완료 24개(34%)·미기계화 갭 22개(31%)·사람판단(judgment) 24개(34%). 핵심 서식/게이트 규칙(유색→검정 L006/L022, 마스킹 L007, 날조0 L009, 서식보존 L011, DRAFT 세탁방지 L019/L020, 체크박스·이름 오매칭 L023~L025, HWPX 격자·셀검정 L031/L54)은 이미 검출↔교정 거울정합 테스트로 견고히 잠겨 있다. 가장 큰 재발 위험은 '제출 최종화' 단계에 몰려 있다 — 필수 서식 누락 검사(L040, 실제 제출 탈락 직결)·파일명/폴더 오염(L049/L059)·PDF 합본·서명일이 대부분 gap이고 코드 가드가 전무하다. 이력서 렌더러 부재로 골격·정량 실적표·포트폴리오 보존(L038/L043/L044/L039)도 침묵 유실 위험이 남는다. judgment 34%는 자동화 불가 영역이라 프로세스 규칙으로만 강제 가능.",
   "top_gaps": [
@@ -710,6 +710,15 @@
       "category": "judgment",
       "guard_ref": "",
       "gap_desc": "응답 스타일(장황함 억제)은 코드로 강제 불가 — 대화 규율(judgment). 기계화 대상 아님.",
+      "impact": "low"
+    },
+    {
+      "id": "L069 | 2026-07-21 | Git Bash 에서 git show/cat-file 의 ref:path 콜론이 MSYS 경로변환으로 깨짐",
+      "summary": "Git Bash 에서 ref:path 의 콜론이 MSYS 경로변환으로 깨짐 — MSYS_NO_PATHCONV=1 또는 ./경로·git -C 우회.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "쉘 명령 사용 습관(환경 함정 회피)이라 코드 가드로 강제 불가 — 대화/워크플로 규율.",
       "impact": "low"
     }
   ]
