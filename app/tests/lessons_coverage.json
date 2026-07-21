@@ -2,8 +2,8 @@
   "counts": {
     "mechanized": 25,
     "gap": 21,
-    "judgment": 24,
-    "total": 70
+    "judgment": 25,
+    "total": 71
   },
   "coverage_note": "총 70개 교훈 중 기계화 완료 24개(34%)·미기계화 갭 22개(31%)·사람판단(judgment) 24개(34%). 핵심 서식/게이트 규칙(유색→검정 L006/L022, 마스킹 L007, 날조0 L009, 서식보존 L011, DRAFT 세탁방지 L019/L020, 체크박스·이름 오매칭 L023~L025, HWPX 격자·셀검정 L031/L54)은 이미 검출↔교정 거울정합 테스트로 견고히 잠겨 있다. 가장 큰 재발 위험은 '제출 최종화' 단계에 몰려 있다 — 필수 서식 누락 검사(L040, 실제 제출 탈락 직결)·파일명/폴더 오염(L049/L059)·PDF 합본·서명일이 대부분 gap이고 코드 가드가 전무하다. 이력서 렌더러 부재로 골격·정량 실적표·포트폴리오 보존(L038/L043/L044/L039)도 침묵 유실 위험이 남는다. judgment 34%는 자동화 불가 영역이라 프로세스 규칙으로만 강제 가능.",
   "top_gaps": [
@@ -702,6 +702,15 @@
       "guard_ref": ".gitignore line 45 '.omc/' — auto_write 리포는 .omc 세션파일이 이미 무시됨(add -A 로도 스테이징 안 됨) / app/tests/test_gitignore_protects_session_artifacts.py (규칙 삭제 방지 가드)",
       "gap_desc": "워크트리 생성 훅이 .git/info/exclude 에 '.omc/'를 추가하도록(현재 info/exclude 는 .claude/worktrees 만 커버) — 명시 add 규율 자체는 사람 워크플로",
       "impact": "med"
+    },
+    {
+      "id": "L068 | 2026-07-20 | 역할 부여·페르소나 요청에 장황하게 응답 금지 — 역할은 행동으로 증명",
+      "summary": "역할·페르소나 지시는 한 줄 수락 후 즉시 본 업무 착수. 준수는 말이 아니라 행동으로 보인다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "응답 스타일(장황함 억제)은 코드로 강제 불가 — 대화 규율(judgment). 기계화 대상 아님.",
+      "impact": "low"
     }
   ]
 }
