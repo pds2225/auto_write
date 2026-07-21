@@ -78,6 +78,18 @@ _GUIDE_EXTRA_RE = re.compile(
     r"|하여\s*주(?:십시오|시기\s*바랍니다|세요)|하기\s*바랍니다|할\s*것|바랍니다|바람|요망|요함)"
     r")"
 )
+# L013 — 본문 '자기지시 메타문구' 제거용 패턴(선언형 어미라 _GUIDE_EXTRA_RE 사각지대).
+# '※' 로 시작하고 작성 태도 자기지시어(날조·과장·미확정·정직하게·작성 태도)를 포함한
+# 단락만 대상으로 한다. 실제 성과·수치 본문은 '※' 접두 자체가 없어 오삭제되지 않는다.
+# '※' 로 시작하고 (a)작성태도 키워드와 (b)자기지시 어미/명령이 함께 있는 단락만 잡는다.
+# 두 조건을 모두 요구해 '※ 담당: 홍길동 과장…'(직급)·'※ 일정: 미확정'(정보성) 같은 정보성
+# 주석의 오삭제를 막는다(작성태도 자기지시문만 대상).
+_META_NOTE_RE = re.compile(
+    r"^\s*※"
+    r"(?=[^\n]*(?:날조|지어내|과장|허위|미확정|정직))"
+    r"(?=[^\n]*(?:말고|말\s*것|금지|않는다|없이|주의|사실만|작성한다|작성함|"
+    r"기재한다|표기한다|유의|명심))"
+)
 
 
 def _is_guide_text(text: str) -> bool:
@@ -108,6 +120,7 @@ class QualityOpsReport:
     font_sizes_normalized: int = 0
     paragraphs_unified: int = 0
     colored_runs_normalized: int = 0
+    square_headings_normalized: int = 0
     notes: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict:
@@ -121,6 +134,7 @@ class QualityOpsReport:
             "font_sizes_normalized": self.font_sizes_normalized,
             "paragraphs_unified": self.paragraphs_unified,
             "colored_runs_normalized": self.colored_runs_normalized,
+            "square_headings_normalized": self.square_headings_normalized,
             "notes": list(self.notes),
         }
 
@@ -640,7 +654,8 @@ def remove_guide_paragraphs(doc: Document, *, max_len: int = 120) -> int:
         text = _paragraph_text(para)
         if not text or len(text) > max_len:
             continue
-        if _is_guide_text(text):
+        # L013: 양식 안내문구(_is_guide_text) 또는 '※…작성 태도' 자기지시 메타문구 제거.
+        if _is_guide_text(text) or _META_NOTE_RE.search(text):
             body.remove(para)
             removed += 1
     return removed
@@ -814,6 +829,71 @@ def normalize_colored_text_to_black(doc: Document, *, enable: bool = True) -> in
     return changed
 
 
+# ---------------------------------------------------------------------------
+# 7. ■ 제목 정규화 (L015) — '■ 라벨 — 설명' / '■ 라벨(부제)' → '■ (라벨)'
+# ---------------------------------------------------------------------------
+
+# 이미 '■ (라벨)' 형태면 재변환하지 않는다(멱등성 가드).
+_SQUARE_ALREADY_RE = re.compile(r"^■\s*\(.+\)$")
+# 라벨과 설명을 가르는 대시 구분자 — 양옆 공백을 요구한다(복합어 '스마트—팜'처럼 공백
+# 없이 붙은 대시는 라벨의 일부이므로 자르지 않는다).
+_HEADING_DASH_RE = re.compile(r"\s+[—–]\s+|\s+-\s+")
+# 설명부에 숫자·쉼표가 있으면 '부제'가 아니라 실데이터(성과·수치)로 보고 삭제하지 않는다.
+_HEADING_DATA_RE = re.compile(r"[0-9,，]")
+
+
+def normalize_square_headings(doc: Document) -> int:
+    """'■ 라벨 — 설명' / '■ 라벨(부제)' 형태의 제목을 '■ (라벨)' 로 결정론적 정규화.
+
+    안전 원칙:
+    - '■' 로 시작하지 않는 일반 단락은 절대 건드리지 않는다.
+    - 대시 구분자(— – ' - ')나 괄호 부제가 없는 단순 '■ 라벨' 은 변형하지 않는다
+      (기존 통과 문서 부작용 0).
+    - 이미 '■ (라벨)' 인 단락은 그대로 둔다(멱등 — 재실행 시 0건).
+    - 텍스트만 재배치하고 첫 텍스트 노드의 서식(런)은 보존한다(날조 0).
+    """
+    changed = 0
+    for para in _iter_body_paragraphs(doc):
+        nodes = _text_nodes(para)
+        if not nodes:
+            continue
+        full = "".join(n.text or "" for n in nodes)
+        stripped = full.strip()
+        if not stripped.startswith("■"):
+            continue
+        if _SQUARE_ALREADY_RE.match(stripped):
+            continue  # 이미 '■ (라벨)' → 멱등
+        body_text = stripped[len("■"):].strip()
+        if not body_text:
+            continue
+        # 라벨 = 대시/괄호 이전 부분. 둘 중 더 앞선 지점에서 자른다.
+        cut = len(body_text)
+        dm = _HEADING_DASH_RE.search(body_text)
+        if dm:
+            cut = min(cut, dm.start())
+        for paren in ("(", "（"):
+            idx = body_text.find(paren)
+            if idx != -1:
+                cut = min(cut, idx)
+        if cut == len(body_text):
+            continue  # 구분자·부제 없음 → 단순 '■ 라벨' 보존
+        # 설명부(대시/괄호 뒤)에 숫자·쉼표가 있으면 실데이터(성과·수치)로 보고 절대
+        # 삭제하지 않는다 — '■ 핵심 성과 — 매출 3억, 고용 20명' 같은 데이터 불릿 보호.
+        if _HEADING_DATA_RE.search(body_text[cut:]):
+            continue
+        label = body_text[:cut].strip()
+        if not label:
+            continue
+        new_text = f"■ ({label})"
+        if new_text == stripped:
+            continue
+        nodes[0].text = new_text
+        for n in nodes[1:]:
+            n.text = ""
+        changed += 1
+    return changed
+
+
 def run_all(
     doc: Document,
     *,
@@ -860,6 +940,7 @@ def run_all(
     report.paragraphs_unified = unify_paragraph_formatting(
         doc, enable=unify_formatting, target_pt=target_pt)
     report.colored_runs_normalized = normalize_colored_text_to_black(doc, enable=normalize_colors)
+    report.square_headings_normalized = normalize_square_headings(doc)
     if emphasize:
         report.paragraphs_emphasized = emphasize_key_sentences(doc, underline=underline)
     report.font_sizes_normalized = normalize_font_sizes(doc, enable=normalize_fonts)

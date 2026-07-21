@@ -308,6 +308,91 @@ def _bracket_conflict(label_a: str, label_b: str) -> bool:
     return ta != tb
 
 
+# --- L010: 예비창업자 = 기업정보(창업일·사업자번호·매출·고용·투자·특허) 강제 공란 ---
+# 예비창업자(아직 사업자등록 전)는 기업 실적 칸에 채울 사실이 없다. 소스에 값이
+# '있어도'(잘못 들어갔거나 계획치여도) 아래 성격의 타깃 칸에는 전사하지 않는다
+# (공란 유지). 오매칭·오전사보다 빈칸이 안전하다는 불변 원칙의 연장.
+#
+# 판별은 **명시 신호**(기업형태 값에 '예비창업')로만 한다. "사업자등록번호 없음"은
+# 추출 단계에서 빈 값이 제거돼(값 없는 필드는 애초에 src_fields 에 없음) 관측 불가하므로
+# 신호로 쓸 수 없다 — 사업자번호 필드가 단지 없는 정상 소스(개업연월일만 있는 기창업 등)의
+# 기존 정상 전사를 깨지 않기 위해서다(회귀 보존).
+_PRELIM_FOUNDER_RE = re.compile(r"예비\s*창업")
+
+# 예비창업자에게 공란으로 남길 '기업정보' 성격 타깃 라벨 — 동의어 클러스터 대표키.
+_COMPANY_INFO_DENY_REPS: frozenset[str] = frozenset(
+    r for r in (
+        _CLUSTER_OF.get(_key("설립일")),          # 창업일/설립일/개업연월일
+        _CLUSTER_OF.get(_key("사업자등록번호")),  # 사업자등록번호
+        _CLUSTER_OF.get(_key("매출액")),          # 매출/연매출
+        _CLUSTER_OF.get(_key("직원수")),          # 고용인원/상시근로자수
+    )
+    if r is not None
+)
+# 클러스터에 없는 기업정보 라벨은 정규화 라벨 부분문자열로도 잡는다(투자유치·특허).
+_COMPANY_INFO_DENY_SUBSTR: tuple[str, ...] = (
+    "투자유치", "산업재산권", "지식재산권", "지재권", "특허",
+)
+
+
+# 예비창업 '신호'로 인정할 기업형태/창업단계 계열 라벨(정규화 부분문자열 + 동의어 클러스터).
+# 이 계열 라벨의 값에서만 '예비창업'을 읽는다 — 기업명·사업명·제품명에 '예비창업'이
+# 들어가도(예: '예비창업패키지') 정상 기창업사를 예비창업자로 오판하지 않기 위함.
+_FOUNDER_TYPE_SUBSTR: tuple[str, ...] = (
+    "기업형태", "사업자형태", "기업유형", "사업유형", "창업단계", "창업유형", "설립유형",
+)
+_FOUNDER_TYPE_CLUSTER_REPS: frozenset[str] = frozenset(
+    r for r in (_CLUSTER_OF.get(_key(k)) for k in ("기업형태", "사업자형태", "창업단계"))
+    if r is not None
+)
+
+
+def _label_is_founder_type(norm_label: str) -> bool:
+    """정규화 라벨이 기업형태/창업단계 계열이면 True(예비창업 신호를 여기서만 읽음)."""
+    rep = _cluster_rep(norm_label)
+    if rep is not None and rep in _FOUNDER_TYPE_CLUSTER_REPS:
+        return True
+    return any(kw in norm_label for kw in _FOUNDER_TYPE_SUBSTR)
+
+
+def _is_preliminary_founder(source_fields: dict[str, str]) -> bool:
+    """소스가 예비창업자면 True. '예비창업' 신호는 **기업형태/창업단계 계열 라벨의
+    값**에서만 인정한다(결정론).
+
+    기업명·제품명·사업명 등 비-형태 필드에 '예비창업' 문자열이 있어도(예: 사업명
+    '2026 예비창업패키지', 기업명 '예비창업컨설팅') 예비창업자로 오판하지 않는다 —
+    정상 기창업사의 매출·고용·사업자번호 전사를 지키기 위함(회귀 방지).
+    """
+    for label, val in source_fields.items():
+        if val and _label_is_founder_type(str(label)) and _PRELIM_FOUNDER_RE.search(str(val)):
+            return True
+    return False
+
+
+def _is_company_info_label(norm_label: str) -> bool:
+    """정규화 타깃 라벨이 '기업정보'(예비창업자 공란 대상) 성격이면 True."""
+    rep = _cluster_rep(norm_label)
+    if rep is not None and rep in _COMPANY_INFO_DENY_REPS:
+        return True
+    return any(kw in norm_label for kw in _COMPANY_INFO_DENY_SUBSTR)
+
+
+# --- L045: 도장/서명 마커('(인)' 등)는 값으로 기입하지 않는다 -------------------
+# '(인)'·'(印)'·'(서명)' 은 빈 양식의 날인 자리 표시(폼 아티팩트)이지 채울 사실값이
+# 아니다. 현재는 추출 단계에서 '(인)'→빈 키로 정규화돼 소스값에서 이미 폐기되지만,
+# 향후 경로 변화에도 리터럴 도장마커가 산출물에 기입되지 않도록 기입 게이트에 방어핀을
+# 둔다(오늘 동작 무변경 — confident 에 도달하지 않는 값이라 필터가 아무 것도 바꾸지 않음).
+_SEAL_MARKER_RE = re.compile(
+    r"^[(（]\s*(?:인|印|서명|署名|날인|捺印|도장|sign|seal)\s*[)）]$",
+    re.IGNORECASE,
+)
+
+
+def _is_seal_marker(value: str) -> bool:
+    """값 전체가 도장/서명 마커('(인)'·'(印)'·'(서명)' 등)면 True(기입 금지)."""
+    return bool(_SEAL_MARKER_RE.match((value or "").strip()))
+
+
 # --- 데이터 모델 --------------------------------------------------------------
 
 @dataclass
@@ -1456,11 +1541,25 @@ def autofill_from_source(
         report.tgt_fields = len(tgt_fields)
         all_matches = match_fields(src_fields, tgt_fields, src_originals)
 
-        # confident: confidence=="high" AND value 비어있지 않음 (충돌·퍼지·low 제외)
+        # confident: confidence=="high" AND value 비어있지 않음 (충돌·퍼지·low 제외).
+        # L045: 도장/서명 마커('(인)' 등)는 사실값이 아니므로 전사 대상에서 제외.
         confident = [
             m for m in all_matches
             if m.confidence == "high" and m.source_label and m.value
+            and not _is_seal_marker(m.value)
         ]
+
+        # L010: 예비창업자면 기업정보(창업일·사업자번호·매출·고용·투자·특허) 칸은
+        # 소스 값이 있어도 공란 유지 — high 자동전사 대상에서 뺀다(오전사<빈칸).
+        prelim_blocked_ids: set[int] = set()
+        if _is_preliminary_founder(src_fields):
+            kept: list[Match] = []
+            for m in confident:
+                if _is_company_info_label(m.normalized):
+                    prelim_blocked_ids.add(id(m))
+                else:
+                    kept.append(m)
+            confident = kept
 
         # 사용자 확정(needs_confirm 적용): 비-high 매칭을 소스 실값으로 승격(날조 0).
         conf_norm = _normalize_confirmations(confirmations)
@@ -1473,6 +1572,11 @@ def autofill_from_source(
         write_ids = {id(m) for m in to_write}
         for m in all_matches:
             if id(m) in write_ids:
+                continue
+            if id(m) in prelim_blocked_ids:
+                # L010: 예비창업자 기업정보 칸 — 의도적 공란(needs_confirm 아님).
+                report.notes.append(
+                    f"예비창업 공란 유지(기업정보 '{m.target_label}': 소스값 비전사)")
                 continue
             if m.confidence == "low":
                 report.unmatched_targets.append({

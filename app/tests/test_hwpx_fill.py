@@ -1461,3 +1461,41 @@ def test_grid_choice_box_options_left_to_checkbox_path(tmp_path):
     fill_hwpx(src, out, identity={"취득방법": "임대"})
     assert _read_cell_at(out, 1, 1) == ""            # 그리드 마크 기입 없음
     assert _read_cell_at(out, 2, 1) == ""
+
+
+# --------------------------------------------------------------------------- #
+# L045: 서명/도장/(인) 라벨 상황 — 리터럴 '(인)' 신규 삽입 금지(기존 동작 잠금)
+# (fill_hwpx 는 값만 기입할 뿐 '(인)' 같은 도장 마커를 스스로 만들어내지 않는다)
+# --------------------------------------------------------------------------- #
+
+
+def _count_marker(path: Path, marker: str) -> int:
+    with zipfile.ZipFile(path) as z:
+        return z.read("Contents/section0.xml").decode("utf-8").count(marker)
+
+
+def test_no_in_marker_inserted_when_filling(tmp_path):
+    """대표자 값 칸을 채워도 리터럴 '(인)' 개수가 늘지 않는다(신규 삽입 없음)."""
+    src = tmp_path / "seal.hwpx"
+    _make_hwpx_cells(src, [
+        _cellx(0, "대표자"),          # 라벨
+        _cellx(1, ""),               # 값 칸(채움 대상)
+        _cellx(2, "서명 (인)"),       # 도장 안내 라벨(보존 대상)
+    ])
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"대표자": "홍길동"})
+    assert _read_cell_by_col(out, 1) == "홍길동"        # 값은 정상 기입
+    assert _read_cell_by_col(out, 2) == "서명 (인)"      # 안내 라벨 그대로
+    # 핵심 잠금: '(인)' 마커가 새로 생기지 않음(입력 개수 == 출력 개수)
+    assert _count_marker(out, "(인)") == _count_marker(src, "(인)") == 1
+    assert rep.filled_count == 1
+
+
+def test_no_in_marker_synthesized_on_clean_form(tmp_path):
+    """'(인)' 이 원래 없던 양식은 채운 뒤에도 '(인)' 이 전혀 없다(날조 0)."""
+    src = tmp_path / "clean.hwpx"
+    _make_hwpx_cells(src, [_cellx(0, "대표자"), _cellx(1, "")])
+    out = tmp_path / "out.hwpx"
+    fill_hwpx(src, out, identity={"대표자": "김철수"})
+    assert _read_cell_by_col(out, 1) == "김철수"
+    assert _count_marker(out, "(인)") == 0              # 도장 마커 자동생성 없음

@@ -1,11 +1,11 @@
 {
   "counts": {
-    "mechanized": 25,
-    "gap": 21,
-    "judgment": 24,
-    "total": 70
+    "mechanized": 31,
+    "gap": 15,
+    "judgment": 25,
+    "total": 71
   },
-  "coverage_note": "총 70개 교훈 중 기계화 완료 24개(34%)·미기계화 갭 22개(31%)·사람판단(judgment) 24개(34%). 핵심 서식/게이트 규칙(유색→검정 L006/L022, 마스킹 L007, 날조0 L009, 서식보존 L011, DRAFT 세탁방지 L019/L020, 체크박스·이름 오매칭 L023~L025, HWPX 격자·셀검정 L031/L54)은 이미 검출↔교정 거울정합 테스트로 견고히 잠겨 있다. 가장 큰 재발 위험은 '제출 최종화' 단계에 몰려 있다 — 필수 서식 누락 검사(L040, 실제 제출 탈락 직결)·파일명/폴더 오염(L049/L059)·PDF 합본·서명일이 대부분 gap이고 코드 가드가 전무하다. 이력서 렌더러 부재로 골격·정량 실적표·포트폴리오 보존(L038/L043/L044/L039)도 침묵 유실 위험이 남는다. judgment 34%는 자동화 불가 영역이라 프로세스 규칙으로만 강제 가능.",
+  "coverage_note": "총 71개 교훈: 기계화 31(44%)·갭 15(21%)·사람판단 25(35%). 2026-07-21 세션에서 6건 gap→mechanized 마감(L013 메타문구·L015 ■제목정규화·L010 예비창업 공란·L046 과정이수 분리·L045 '(인)' 미삽입 잠금·L001 이미지 폭클램프) + L068(역할=행동증명, judgment) 신규 분류. 핵심 서식/게이트(유색→검정 L006/L022, 마스킹 L007, 날조0 L009, 서식보존 L011, DRAFT 세탁방지 L019/L020, 체크박스·이름 오매칭 L023~L025, HWPX 격자·셀검정 L031/L54)는 검출↔교정 거울정합으로 잠금. 남은 갭 15는 '제출 최종화'(L037 서식분리·L048 PDF합본·L049 폴더배치·L050 HWP/PDF쌍·L059 파일명오염)와 '이력서 렌더러 부재'(L038 정량표·L043 단일표·L044 골격·L061 사진칸·L039 포트폴리오)에 집중 — 렌더러/제출 후단 코드가 생기면 기계화 가능. 그 외 L003(COM kill)·L014(표헤더)·L032(서명일)·L057b(지역권역)·L004(범위밖). judgment 25는 자동화 불가.",
   "top_gaps": [
     {
       "id": "L040",
@@ -77,9 +77,9 @@
       "id": "L001 | 2026-07-10 | HWPX 이미지 크기",
       "summary": "HWPX 그림 폭은 본문폭(약48190HWPUNIT)로 클램프하고 sz/orgSz/imgRect/curSz를 같은 폭으로 세팅해야 한다",
       "mechanizable": "yes",
-      "category": "gap",
-      "guard_ref": "app/scripts/patch_profile_v5_visual.py:169 (disp_w=min(org_w,46800) 클램프 — 일회성 스크립트, 회귀테스트 없음)",
-      "gap_desc": "HWPX pic 삽입 시 disp width<=본문폭 & sz==orgSz파생==imgRect==curSz 폭 일치를 검증하는 회귀테스트 추가(엔진화). 현재 클램프는 스크립트에만 있고 core image_apply는 NotebookLM 텍스트 프롬프트라 실이미지 삽입 경로가 이 스크립트뿐",
+      "category": "mechanized",
+      "guard_ref": "app/scripts/patch_profile_v5_visual.py:169 (disp_w=min(org_w,46800) 클램프) / app/tests/test_hwpx_image_clamp.py::{test_disp_width_clamped_to_body_width,test_no_clamp_all_four_widths_equal,test_disp_width_follows_min_rule_at_boundaries}(_make_pic_para 순수호출로 폭 클램프·4값 정합 잠금)",
+      "gap_desc": "",
       "impact": "med"
     },
     {
@@ -157,10 +157,10 @@
     {
       "id": "L010 | auto_write | 예비창업자 = 기업정보 공란",
       "summary": "법인 없으면 기업명=예비창업자, 창업일·사업자번호·매출·고용·투자·산업재산권은 공란(억지 채움 금지)",
-      "mechanizable": "partial",
-      "category": "gap",
-      "guard_ref": "app/auto_write/services/project_service.py:80 SAMPLE_VALUE_RE(예비창업팀·법인기업 예시 제거)·company_extract missing 처리로 간접 커버(날조0)",
-      "gap_desc": "기업형태=예비창업자(사업자번호 부재) 감지 시 창업일·사업자번호·매출·고용·투자·산업재산권 칸을 강제 공란 처리·그 칸에 값 전사 금지하는 명시 규칙+회귀테스트 추가(현재 일반 날조0에만 의존, 예비창업 전용 가드 없음)",
+      "mechanizable": "yes",
+      "category": "mechanized",
+      "guard_ref": "app/auto_write/services/cross_form_autofill.py:_is_preliminary_founder/_is_company_info_label — autofill_from_source high 게이트에서 예비창업 소스면 창업일·사업자번호·매출·고용·투자·산업재산권 라벨 전사 skip(공란 유지) / app/tests/test_cross_form_autofill.py::{test_preliminary_founder_leaves_company_info_blank,test_general_founder_transcribes_company_info,test_is_preliminary_founder_signal,test_is_company_info_label_denylist}",
+      "gap_desc": "발동 신호는 기업형태 '예비창업' 명시값 — 값 없는 필드는 추출 단계서 제거돼 '사업자번호 부재'만으론 미발동(정상 기창업 소스 회귀 보존). 예비창업 소스에 한해 기업정보 칸 공란.",
       "impact": "med"
     },
     {
@@ -185,9 +185,9 @@
       "id": "L013 | auto_write | 본문 메타 문구 금지",
       "summary": "※ 작성태도(날조/과장/미확정) 자기지시 문구는 본문에서 제거해야 한다.",
       "mechanizable": "yes",
-      "category": "gap",
-      "guard_ref": ".worktrees/hwp2/app/auto_write/services/hwpx_submission_cleanup.py:strip_meta_notes (미병합 worktree branch feat/hwp-auto-pipeline — 메인 app/에는 없음)",
-      "gap_desc": "메인 doc_quality_ops의 _GUIDE_EXTRA_RE에 ※ 작성태도(날조·과장·미확정·정직하게) 자기지시 패턴을 추가하거나 strip_meta_notes를 메인으로 병합해 remove_guide_paragraphs 경로에서 제거하고 회귀테스트 추가(현 _PURE_GUIDE_RE는 ※…작성/기재/예시만 잡아 작성태도 문구는 통과).",
+      "category": "mechanized",
+      "guard_ref": "app/auto_write/services/doc_quality_ops.py:_META_NOTE_RE(※ + 날조|과장|미확정|정직하게|작성태도) → remove_guide_paragraphs/run_all 삭제경로 / app/tests/test_document_quality_harness.py::{test_meta_note_removal_preserves_real_body,test_meta_note_removed_in_runall}",
+      "gap_desc": "",
       "impact": "med"
     },
     {
@@ -203,9 +203,9 @@
       "id": "L015 | auto_write | ■ 제목 서식",
       "summary": "'■ 라벨 — 설명'/'■ 라벨(부제)'를 '■ (라벨)'로 결정론적으로 정규화한다.",
       "mechanizable": "yes",
-      "category": "gap",
-      "guard_ref": ".worktrees/hwp2/app/auto_write/services/hwpx_submission_cleanup.py:reformat_bullet_heading (미병합 worktree branch feat/hwp-auto-pipeline — 메인 app/에는 없음)",
-      "gap_desc": "reformat_bullet_heading을 메인 doc_quality_ops(run_all)로 병합·배선하고 '■ 라벨 — 설명 → ■ (라벨)' 정규화 회귀테스트 추가(순수 결정론 문자열 변환이라 기계화 용이).",
+      "category": "mechanized",
+      "guard_ref": "app/auto_write/services/doc_quality_ops.py:normalize_square_headings('■ 라벨 — 설명'/'■ 라벨(부제)'→'■ (라벨)', run_all 배선·멱등) / app/tests/test_document_quality_harness.py::{test_square_heading_dash_form,test_square_heading_paren_form,test_square_heading_idempotent_and_plain_unchanged,test_square_heading_runall_wired_and_idempotent}",
+      "gap_desc": "",
       "impact": "low"
     },
     {
@@ -472,19 +472,19 @@
     {
       "id": "L045 | 2026-07-15 | 서명=실이미지, '(인)' 텍스트 추가 금지 — 기준일은 문서 머리",
       "summary": "서명란엔 서명 PNG 실삽입·'(인)' 텍스트 임의추가 금지·기준일은 제목 아래(끝맺음 아님).",
-      "mechanizable": "partial",
-      "category": "gap",
-      "guard_ref": "",
-      "gap_desc": "생성물 검수(usage_acceptance/self_diagnose)에 '(인)' 텍스트 삽입 0건 + 서명란에 이미지 존재 여부 회귀 assert 추가",
+      "mechanizable": "yes",
+      "category": "mechanized",
+      "guard_ref": "app/auto_write/services/cross_form_autofill.py:_is_seal_marker(도장/서명 마커값 confident 제외) + hwpx_fill run.text 교체가 리터럴 '(인)' 미삽입 / app/tests/test_cross_form_autofill.py::{test_is_seal_marker_unit,test_seal_marker_never_written_to_signature_field} · app/tests/test_hwpx_fill.py::{test_no_in_marker_inserted_when_filling,test_no_in_marker_synthesized_on_clean_form}",
+      "gap_desc": "'(인)' 텍스트 미삽입은 잠금 완료. 서명란 실이미지 삽입·기준일 위치는 사람 판단(자동 강제 불가) 잔여.",
       "impact": "med"
     },
     {
       "id": "L046 | 2026-07-15 | '~과정 이수'(교육 수료)는 자격증란 기재 금지",
       "summary": "'투자심사역 과정 이수' 같은 교육수료 항목을 자격증(자격/면허) 표에 넣지 마라 — 별도 교육섹션 또는 생략.",
-      "mechanizable": "partial",
-      "category": "gap",
-      "guard_ref": "",
-      "gap_desc": "resume_extract 자격 섹션 파서에서 항목명이 '과정 이수/수료'로 끝나면 자격란에서 제외(교육수료 전용 섹션으로 분리)하는 결정론 규칙+회귀",
+      "mechanizable": "yes",
+      "category": "mechanized",
+      "guard_ref": "app/auto_write/services/resume_extract.py:_is_training_completion(name '수료'/'이수' 끝·'과정이수' 포함)→ResumeProfile.trainings 분리(certs 제외)·merge/as_dict 반영 / app/tests/test_resume_extract.py::{test_training_completion_split_from_certs,test_normal_cert_not_misclassified_as_training,test_trainings_in_json_and_merge}",
+      "gap_desc": "",
       "impact": "med"
     },
     {
@@ -702,6 +702,15 @@
       "guard_ref": ".gitignore line 45 '.omc/' — auto_write 리포는 .omc 세션파일이 이미 무시됨(add -A 로도 스테이징 안 됨) / app/tests/test_gitignore_protects_session_artifacts.py (규칙 삭제 방지 가드)",
       "gap_desc": "워크트리 생성 훅이 .git/info/exclude 에 '.omc/'를 추가하도록(현재 info/exclude 는 .claude/worktrees 만 커버) — 명시 add 규율 자체는 사람 워크플로",
       "impact": "med"
+    },
+    {
+      "id": "L068 | 2026-07-20 | 역할 부여·페르소나 요청에 장황하게 응답 금지 — 역할은 행동으로 증명",
+      "summary": "역할·페르소나를 부여받으면 장황한 자기소개·선언 대신 곧바로 그 역할의 행동(작업 수행)으로 증명한다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "low"
     }
   ]
 }
