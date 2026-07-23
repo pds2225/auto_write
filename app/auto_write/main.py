@@ -26,7 +26,7 @@ from .services.project_service import ProjectService
 from .services.qa_service import QAService
 from .services.render_service import RenderService
 from .storage import Storage
-from .utils import read_json
+from .utils import read_json, sanitize_user_filename
 
 settings = get_settings()
 ensure_directories(settings)
@@ -84,10 +84,10 @@ def _upload_has_file(upload: UploadFile | object) -> bool:
 
 
 def _extract_text_from_upload(file_name: str, content: bytes) -> str:
-    suffix = Path(file_name).suffix.lower()
+    safe_name = sanitize_user_filename(file_name)
+    suffix = Path(safe_name).suffix.lower()
     if suffix in {".txt", ".md", ".json"}:
         return content.decode("utf-8", errors="ignore")
-    safe_name = Path(file_name).name or f"source{suffix or '.txt'}"
     with tempfile.TemporaryDirectory() as tmp_dir:
         path = Path(tmp_dir) / safe_name
         path.write_bytes(content)
@@ -102,10 +102,14 @@ async def home(request: Request):
 
 @app.post("/api/templates")
 async def upload_template(file: UploadFile = File(...)):
-    if not is_supported_template_file(file.filename):
+    try:
+        safe_name = sanitize_user_filename(file.filename)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not is_supported_template_file(safe_name):
         raise HTTPException(status_code=400, detail=template_upload_detail())
     content = await file.read()
-    profile = project_service.analyze_uploaded_template(file.filename, content)
+    profile = project_service.analyze_uploaded_template(safe_name, content)
     return RedirectResponse(url=f"/templates/{profile.template_id}", status_code=303)
 
 
@@ -316,13 +320,10 @@ async def evaluate_project(
     if not ann_text and announcement_file and announcement_file.filename:
         content = await announcement_file.read()
         file_name = str(announcement_file.filename or "")
-        suffix = Path(file_name).suffix.lower()
-        ann_path = Path(tempfile.mktemp(suffix=suffix))
-        ann_path.write_bytes(content)
         try:
-            ann_text = project_service.extract_reference_text(ann_path)
-        finally:
-            ann_path.unlink(missing_ok=True)
+            ann_text = _extract_text_from_upload(file_name, content)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     # 2. 평가기준 파싱
     criteria = evaluation_service.parse_announcement(ann_text) if ann_text else []
