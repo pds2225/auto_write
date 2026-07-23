@@ -110,7 +110,7 @@ class ProjectService:
         analysis_path, conversion_notes = ensure_template_docx(output_path)
         profile = analyze_template(analysis_path)
         profile.template_id = template_id
-        profile.template_name = file_name
+        profile.template_name = output_path.name
         profile.source_docx = str(analysis_path)
         profile.analysis_notes.extend(note for note in conversion_notes if note not in profile.analysis_notes)
         if self.openai_service.settings.template_ai_refine_enabled and self.openai_service.available:
@@ -120,7 +120,7 @@ class ProjectService:
                     merged = TemplateProfile.model_validate(refined)
                     merged.template_id = template_id
                     merged.source_docx = str(analysis_path)
-                    merged.template_name = file_name
+                    merged.template_name = output_path.name
                     for note in conversion_notes:
                         if note not in merged.analysis_notes:
                             merged.analysis_notes.append(note)
