@@ -97,6 +97,12 @@ def main() -> int:
     ap.add_argument("--subhead-bold", action="store_true", help="소제목 굵게")
     ap.add_argument("--base-charpr", default="auto",
                     help="복제 기반 글자 스타일 id. auto = 소제목 문단들이 쓰는 최빈값 자동 선택")
+    ap.add_argument("--blank-before-subheads", action="store_true",
+                    help="소제목이 바뀔 때 빈 줄 1개 추가(단, 큰 제목 바로 다음 소제목 앞에는 안 넣음)")
+    ap.add_argument("--hanging-indent", default="",
+                    help='내어쓰기 지정 "기호=단위,기호=단위" (예: "ㅇ=1800,-=2400"). '
+                         "해당 기호로 시작하는 문단의 둘째 줄부터를 첫 줄 텍스트 시작에 맞춘다"
+                         "(한글 shift+tab 과 동일). 단위=1/7200인치, 12pt 전각 1자≈1200")
     args = ap.parse_args()
 
     # 원본 보호: 입력과 출력이 같은 파일이면 중단합니다.
@@ -158,6 +164,92 @@ def main() -> int:
                 run.set("charPrIDRef", new_id)
             sub += 1
         print(f"② 소제목 {sub}개 → 새 스타일 charPr {new_id} ({args.subhead_pt:g}pt, 기반 id {base_id})")
+
+    # ③ 소제목 앞 빈 줄 — 문단 덩어리가 눈에 잘 들어오게(사용자 확정 2026-07-23)
+    blanks = 0
+    if args.blank_before_subheads and args.subhead_pattern:
+        top = [p for p in root if p.tag == f"{{{HP}}}p"]
+        b1 = 0
+        b2 = len(top)
+        if args.region_start:
+            b1 = next(i for i, p in enumerate(top) if norm(ptext(p)).startswith(norm(args.region_start)))
+        if args.region_end:
+            b2 = next(i for i, p in enumerate(top) if norm(ptext(p)).startswith(norm(args.region_end)))
+        # 빈 줄로 쓸 틀: 문서에 이미 있는 "빈 문단"을 복제(서식 일관·안전)
+        tmpl = next((p for p in top if not ptext(p)
+                     and not p.findall(".//hp:tbl", NS) and not p.findall(".//hp:pic", NS)), None)
+        if tmpl is None:
+            raise SystemExit("빈 문단 틀을 찾지 못했습니다 — 빈 줄 추가 불가.")
+        for p in list(top[b1:b2]):
+            if not re.match(args.subhead_pattern, ptext(p)):
+                continue
+            idx = top.index(p)
+            prev_txt = ""
+            for q in reversed(top[b1:idx]):          # 바로 위 '내용 있는' 문단을 찾는다
+                if ptext(q):
+                    prev_txt = ptext(q)
+                    break
+                else:
+                    prev_txt = ""                     # 바로 위가 이미 빈 줄이면 중복 삽입 안 함
+                    break
+            # 큰 제목(예: "1. 문제인식") 바로 다음 소제목 앞에는 빈 줄을 넣지 않는다
+            if prev_txt and not (re.match(r"^\d+\.", prev_txt) and not re.match(args.subhead_pattern, prev_txt)):
+                blank = copy.deepcopy(tmpl)
+                for seg in blank.findall(".//hp:linesegarray", NS):   # 복제본의 낡은 줄배치 캐시 제거
+                    seg.getparent().remove(seg)
+                p.addprevious(blank)
+        blanks = sum(1 for _ in ())  # 아래에서 다시 센다
+        top2 = [p for p in root if p.tag == f"{{{HP}}}p"]
+        blanks = len(top2) - len(top)
+        print(f"③ 소제목 앞 빈 줄 {blanks}개 추가")
+
+    # ④ 내어쓰기(hanging indent) — 둘째 줄부터 첫 줄 텍스트 시작 위치에 정렬(한글 shift+tab)
+    if args.hanging_indent:
+        hroot2 = etree.fromstring(payload["Contents/header.xml"])
+        pprops = hroot2.find(".//hh:paraProperties", NS)
+        top = [p for p in root if p.tag == f"{{{HP}}}p"]
+        b1 = 0
+        b2 = len(top)
+        if args.region_start:
+            b1 = next(i for i, p in enumerate(top) if norm(ptext(p)).startswith(norm(args.region_start)))
+        if args.region_end:
+            b2 = next(i for i, p in enumerate(top) if norm(ptext(p)).startswith(norm(args.region_end)))
+        rules = []
+        for item in args.hanging_indent.split(","):
+            mark, _, val = item.partition("=")
+            rules.append((mark, int(val)))
+        made = {}   # 들여쓰기값 -> 새 paraPr id (같은 값이면 스타일 재사용)
+        applied = Counter()
+        for p in top[b1:b2]:
+            t = ptext(p)
+            if not t or re.match(args.subhead_pattern or r"$^", t):
+                continue
+            for mark, unit in rules:
+                if not t.startswith(mark):
+                    continue
+                if unit not in made:
+                    base_pid = p.get("paraPrIDRef")
+                    base_pp = next(pp for pp in pprops if pp.get("id") == base_pid)
+                    npp = copy.deepcopy(base_pp)
+                    nid = str(max(int(pp.get("id")) for pp in pprops) + 1)
+                    npp.set("id", nid)
+                    # 왼쪽여백 = unit, 첫줄들여쓰기 = -unit → 첫 줄만 원위치(=내어쓰기)
+                    for el in npp.iter():
+                        tag = etree.QName(el).localname
+                        if tag == "left":
+                            el.set("value", str(unit))
+                        elif tag == "intent":
+                            el.set("value", str(-unit))
+                    pprops.append(npp)                     # ⚠ 반드시 맨 끝(L076 — charPr 와 동일 원리)
+                    pprops.set("itemCnt", str(len(pprops)))
+                    made[unit] = nid
+                p.set("paraPrIDRef", made[unit])
+                applied[mark] += 1
+                break
+        payload["Contents/header.xml"] = etree.tostring(
+            hroot2, xml_declaration=True, encoding="UTF-8", standalone=True)
+        print(f"④ 내어쓰기 적용: " + ", ".join(f"'{m}' {n}개" for m, n in applied.items())
+              + f" (새 문단 스타일 {len(made)}종)")
 
     # 저장 — mimetype 만은 무압축이 규격(압축하면 한글이 파일을 거부)
     payload["Contents/section0.xml"] = etree.tostring(
