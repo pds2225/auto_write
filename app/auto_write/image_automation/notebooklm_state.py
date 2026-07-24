@@ -184,11 +184,13 @@ class NotebookLMStateMachine:
 
 
 def load_slide_description_bytes() -> bytes:
-    """고정 설명 fixture를 UTF-8 byte-for-byte로 로드 (파일 끝 단일 \\n 허용)."""
+    """고정 설명 fixture를 UTF-8 byte-for-byte로 로드.
+
+    파일 끝 단일 개행은 허용하고, 체크아웃 CRLF 는 LF 로 정규화한다.
+    """
     raw = PROMPT_FIXTURE.read_bytes()
-    if raw.endswith(b"\r\n"):
-        raw = raw[:-2]
-    elif raw.endswith(b"\n"):
+    raw = raw.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    if raw.endswith(b"\n"):
         raw = raw[:-1]
     return raw
 
