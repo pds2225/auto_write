@@ -65,6 +65,47 @@ class VisualAsset(BaseModel):
     width: int = 0
     height: int = 0
     dpi: int = 0
+    psst: str = "99_unclassified"
+    visual_type: str = ""
+    source_label: str = ""
+    parent_hint: str = ""
+    text_hint: str = ""
+
+
+class PsstClass(str, Enum):
+    PROBLEM = "01_problem"
+    SOLUTION = "02_solution"
+    SCALE_UP = "03_scale_up"
+    TEAM = "04_team"
+    UNCLASSIFIED = "99_unclassified"
+
+
+class AnchorCandidate(BaseModel):
+    anchor_id: str
+    section: str = ""
+    psst: str = PsstClass.UNCLASSIFIED.value
+    anchor_hash: str = ""
+    location_id: str = ""
+    needed_visual_type: str = ""
+    keywords: list[str] = Field(default_factory=list)
+    text_preview: str = ""
+
+
+class MatchAction(str, Enum):
+    AUTO = "auto"
+    REVIEW = "review"
+    SKIP = "skip"
+
+
+class MatchDecision(BaseModel):
+    anchor_id: str
+    asset_id: str = ""
+    score: float = 0.0
+    score_detail: dict[str, float] = Field(default_factory=dict)
+    action: MatchAction = MatchAction.SKIP
+    insert_status: str = "pending"
+    reason: str = ""
+    runner_up_score: float | None = None
 
 
 class NotebookLMCheckpoint(BaseModel):
@@ -87,6 +128,8 @@ class RunManifest(BaseModel):
     source_document: SourceDocument | None = None
     assets: list[VisualAsset] = Field(default_factory=list)
     citations: list[SourceCitation] = Field(default_factory=list)
+    anchors: list[AnchorCandidate] = Field(default_factory=list)
+    matches: list[MatchDecision] = Field(default_factory=list)
     notebooklm: NotebookLMCheckpoint | None = None
     draft: bool = False
     extras: dict[str, Any] = Field(default_factory=dict)

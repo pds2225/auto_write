@@ -51,6 +51,9 @@ def ensure_run_dirs(run_id: str, results_root: Path | None = None) -> dict[str, 
         "citations": base / "citations",
         "sidecar": base / "sidecar",
         "browser_profile": base / "browser_profile",
+        "classify": base / "classify",
+        "match": base / "match",
+        "library_view": base / "library_view",
     }
     for p in dirs.values():
         p.mkdir(parents=True, exist_ok=True)
