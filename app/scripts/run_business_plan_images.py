@@ -1,10 +1,12 @@
 #!/usr/bin/env python
-"""사업계획서 이미지 자동화 CLI (M1: NotebookLM + 슬라이드 분리 + 출처목록).
+"""사업계획서 이미지 자동화 CLI (M1 NotebookLM + M2 CLASSIFY/MATCH).
 
 예:
   py -3.11 scripts/run_business_plan_images.py --check-env
   py -3.11 scripts/run_business_plan_images.py --input doc.pdf --mode notebooklm --dry-run
   py -3.11 scripts/run_business_plan_images.py --input doc.pdf --mode notebooklm --allow-external-upload
+  py -3.11 scripts/run_business_plan_images.py --library "C:\\images" --mode library
+  py -3.11 scripts/run_business_plan_images.py --input doc.pdf --library "C:\\images" --mode library
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
 from auto_write.image_automation.m1_pipeline import run_m1
+from auto_write.image_automation.m2_pipeline import run_m2
 from auto_write.image_automation.notebooklm_state import verify_slide_description_fixture
 from auto_write.image_automation.repo_name import RepoNameError, canonical_repo_name
 
@@ -64,9 +67,9 @@ def check_env() -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Business plan image automation (M1)")
+    p = argparse.ArgumentParser(description="Business plan image automation (M1+M2)")
     p.add_argument("--input", type=Path, help="입력 PDF/DOCX/HWP/HWPX")
-    p.add_argument("--library", type=Path, help="이미지 라이브러리 (M2+)")
+    p.add_argument("--library", type=Path, help="이미지 라이브러리 (M2 CLASSIFY/MATCH)")
     p.add_argument(
         "--mode",
         choices=["library", "gpt", "notebooklm", "hybrid"],
@@ -78,10 +81,20 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="NotebookLM 등 외부 업로드 허용 (실행마다 명시 필요)",
     )
-    p.add_argument("--resume", type=str, default="", help="run_id 재개 (M1 부분 지원)")
+    p.add_argument("--resume", type=str, default="", help="run_id 재개")
     p.add_argument("--results-root", type=Path, default=Path("results") / "image_runs")
     p.add_argument("--check-env", action="store_true")
     p.add_argument("--slides-input", type=Path, help="분리할 PDF/PPTX (NotebookLM 다운로드 대체)")
+    p.add_argument(
+        "--slides-dir",
+        type=Path,
+        help="이미 분리된 slides 디렉터리 (M2에서 M1 산출물 재사용)",
+    )
+    p.add_argument(
+        "--doc-text",
+        type=Path,
+        help="앵커 추출용 텍스트 파일(줄 단위). 없으면 기본 PSST 앵커 사용",
+    )
     return p
 
 
@@ -89,8 +102,34 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.check_env:
         return check_env()
+
+    # M2 library-only: --library 만으로 실행 가능
+    if args.mode == "library" or (args.library and not args.input and args.mode != "notebooklm"):
+        if not args.library and not args.slides_dir:
+            print("--mode library 에는 --library 또는 --slides-dir 가 필요합니다.", file=sys.stderr)
+            return 1
+        print(f"mode=library library={args.library} slides_dir={args.slides_dir}")
+        blocks: list[str] | None = None
+        if args.doc_text and Path(args.doc_text).is_file():
+            blocks = [
+                line.strip()
+                for line in Path(args.doc_text).read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+        m2 = run_m2(
+            results_root=args.results_root,
+            library=args.library,
+            slides_dir=args.slides_dir,
+            document_text_blocks=blocks,
+            run_id=args.resume or None,
+        )
+        print(json.dumps(m2.report, ensure_ascii=False, indent=2))
+        print(f"run_dir={m2.run_dir}")
+        print(f"draft={m2.draft}")
+        return 0
+
     if not args.input:
-        print("--input 이 필요합니다 (또는 --check-env).", file=sys.stderr)
+        print("--input 이 필요합니다 (또는 --check-env / --mode library).", file=sys.stderr)
         return 1
 
     if args.mode in {"notebooklm", "hybrid"} and not args.allow_external_upload and not args.dry_run:
@@ -100,7 +139,6 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
 
-    # 실제 업로드 전 대상 요약 (경로 자체는 콘솔만)
     print(f"input={args.input}")
     print(f"mode={args.mode}")
     print(f"allow_external_upload={bool(args.allow_external_upload)}")
@@ -119,7 +157,28 @@ def main(argv: list[str] | None = None) -> int:
     print(json.dumps(result.report, ensure_ascii=False, indent=2))
     print(f"run_dir={result.run_dir}")
     print(f"draft={result.draft}")
-    # exit: 0=성공(비DRAFT 또는 dry-run), 2=DRAFT/차단, 1=입력오류
+
+    # hybrid/library 후속: M1 슬라이드 + 라이브러리 분류·매칭
+    if args.library and args.mode in {"library", "hybrid", "notebooklm"} and not args.dry_run:
+        slides = result.run_dir / "slides"
+        blocks = None
+        if args.doc_text and Path(args.doc_text).is_file():
+            blocks = [
+                line.strip()
+                for line in Path(args.doc_text).read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+        m2 = run_m2(
+            results_root=args.results_root,
+            library=args.library,
+            slides_dir=slides if slides.is_dir() else None,
+            document_text_blocks=blocks,
+            run_id=f"{result.run_id}-m2",
+        )
+        print("--- M2 CLASSIFY/MATCH ---")
+        print(json.dumps(m2.report, ensure_ascii=False, indent=2))
+        print(f"m2_run_dir={m2.run_dir}")
+
     if result.draft and not args.dry_run:
         return 2
     return 0
