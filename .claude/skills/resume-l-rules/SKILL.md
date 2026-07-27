@@ -54,6 +54,8 @@ description: >-
 | L001 | HWPX 이미지 4곳 동기 | sz/orgSz/imgRect/rotationInfo |
 | L002 | linesegarray 제거 | XML 편집 후 재계산 |
 | L003 | 로컬 COM만 | 한컴 클라우드·웹뷰어 경로 금지 |
+| L061 | 출력 형식 승인 | `cross_form_hwp_pipeline --confirm-output-plan` 또는 사용자 명시 승인. RHWP≠DOCX-only |
+| L062 | COM 2024 차단 | `hancom_com_guard` — HOffice130 Dispatch 전 차단 |
 
 ## 검수 절차
 
