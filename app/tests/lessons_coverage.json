@@ -1,11 +1,11 @@
 {
   "counts": {
     "mechanized": 31,
-    "gap": 15,
-    "judgment": 25,
-    "total": 71
+    "gap": 23,
+    "judgment": 32,
+    "total": 86
   },
-  "coverage_note": "총 71개 교훈: 기계화 31(44%)·갭 15(21%)·사람판단 25(35%). 2026-07-21 세션에서 6건 gap→mechanized 마감(L013 메타문구·L015 ■제목정규화·L010 예비창업 공란·L046 과정이수 분리·L045 '(인)' 미삽입 잠금·L001 이미지 폭클램프) + L068(역할=행동증명, judgment) 신규 분류. 핵심 서식/게이트(유색→검정 L006/L022, 마스킹 L007, 날조0 L009, 서식보존 L011, DRAFT 세탁방지 L019/L020, 체크박스·이름 오매칭 L023~L025, HWPX 격자·셀검정 L031/L54)는 검출↔교정 거울정합으로 잠금. 남은 갭 15는 '제출 최종화'(L037 서식분리·L048 PDF합본·L049 폴더배치·L050 HWP/PDF쌍·L059 파일명오염)와 '이력서 렌더러 부재'(L038 정량표·L043 단일표·L044 골격·L061 사진칸·L039 포트폴리오)에 집중 — 렌더러/제출 후단 코드가 생기면 기계화 가능. 그 외 L003(COM kill)·L014(표헤더)·L032(서명일)·L057b(지역권역)·L004(범위밖). judgment 25는 자동화 불가.",
+  "coverage_note": "총 86개 교훈(레지스트리): 기계화 31(36%)·갭 23(27%)·사람판단 32(37%). 2026-07-21 세션: 6건 gap→mechanized 마감(L013 메타문구·L015 ■제목정규화·L010 예비창업 공란·L046 과정이수 분리·L045 '(인)' 미삽입 잠금·L001 이미지 폭클램프). 2026-07-27 세션: 외부 lessons.md 신규 16건(L070~L085) 분류 등록 + 헤딩 형식 변경(분류 컬럼 '| 공통 |' 삽입)으로 어긋난 id 87건을 현재 헤딩에 재동기화해 SSOT drift 해소. 다음 기계화 1순위 = HWPX 렌더 계열 high 갭 5건(L070 양식고유문구 보존·L074 lineseg 편집문단 한정·L076 charPr append-only·L078 서명 앵커·L083 데이터셀 검정). 핵심 서식/게이트(유색→검정 L006/L022, 마스킹 L007, 날조0 L009, 서식보존 L011, DRAFT 세탁방지 L019/L020, 체크박스·이름 오매칭 L023~L025, HWPX 격자·셀검정 L031/L054)는 검출↔교정 거울정합으로 잠금. 기존 갭은 '제출 최종화'(L037 서식분리·L048 PDF합본·L049 폴더배치·L050 HWP/PDF쌍·L059 파일명오염)와 '이력서 렌더러 부재'(L038 정량표·L043 단일표·L044 골격·L061 사진칸·L039 포트폴리오)에 집중.",
   "top_gaps": [
     {
       "id": "L040",
@@ -74,7 +74,7 @@
   ],
   "lessons": [
     {
-      "id": "L001 | 2026-07-10 | HWPX 이미지 크기",
+      "id": "L001 | 문서작성 | 2026-07-10 | HWPX 이미지 크기",
       "summary": "HWPX 그림 폭은 본문폭(약48190HWPUNIT)로 클램프하고 sz/orgSz/imgRect/curSz를 같은 폭으로 세팅해야 한다",
       "mechanizable": "yes",
       "category": "mechanized",
@@ -83,7 +83,7 @@
       "impact": "med"
     },
     {
-      "id": "L002 | 2026-07-10 | HWPX 편집 후 글씨 깨짐",
+      "id": "L002 | 문서작성 | 2026-07-10 | HWPX 편집 후 글씨 깨짐",
       "summary": "HWPX 값칸 채운 뒤 옛 줄위치 캐시 hp:linesegarray를 전량 제거해 한글이 줄위치를 재계산하게 한다",
       "mechanizable": "yes",
       "category": "mechanized",
@@ -92,7 +92,7 @@
       "impact": "high"
     },
     {
-      "id": "L003 | 2026-07-10 | 한글 COM 서버 실행 실패",
+      "id": "L003 | 문서작성 | 2026-07-10 | 한글 COM 서버 실행 실패",
       "summary": "COM 호출/HWPX 쓰기 직전에 항상 Hwp 프로세스를 강제 종료(Stop-Process)해 서버실행실패·PermissionError를 예방한다",
       "mechanizable": "partial",
       "category": "gap",
@@ -101,7 +101,7 @@
       "impact": "med"
     },
     {
-      "id": "L004 | 2026-07-10 | 세금계산서 공급받는자 추출",
+      "id": "L004 | 문서작성 | 2026-07-10 | 세금계산서 공급받는자 추출",
       "summary": "전자세금계산서 PDF에서 공급받는자는 (법인명) 매치의 두 번째 값으로 뽑는다(이름 필터 금지)",
       "mechanizable": "yes",
       "category": "gap",
@@ -110,7 +110,7 @@
       "impact": "low"
     },
     {
-      "id": "L005 | 2026-07-10 | 결과물 검증은 눈으로",
+      "id": "L005 | 공통 | 2026-07-10 | 결과물 검증은 눈으로",
       "summary": "사람이 볼 산출물(PDF·문서·이미지)은 렌더링해 실제 픽셀을 읽어 검증한다 — 로직 리뷰는 검증이 아니다",
       "mechanizable": "partial",
       "category": "judgment",
@@ -119,7 +119,7 @@
       "impact": "high"
     },
     {
-      "id": "L006 | auto_write | 파란/예시색 → 검정",
+      "id": "L006 | 문서작성 | 2026-07-11 | 파란/예시색 → 검정",
       "summary": "본문은 검정(000000) 통일 — 명시 유색 런만 검정으로, 흰색·auto·테마색은 보존하고 검출↔교정을 역연산 정합으로 강제",
       "mechanizable": "yes",
       "category": "mechanized",
@@ -128,7 +128,7 @@
       "impact": "high"
     },
     {
-      "id": "L007 | auto_write | 개인정보 마스킹",
+      "id": "L007 | 문서작성 | 2026-07-11 | 개인정보 마스킹",
       "summary": "블라인드 공고는 성명·대학명·직장명을 ○ 마스킹하고 실명 잔존을 fail로 검출(마스킹 ○○○는 자리표시 오탐 제외)",
       "mechanizable": "yes",
       "category": "mechanized",
@@ -137,7 +137,7 @@
       "impact": "high"
     },
     {
-      "id": "L008 | auto_write | 폰트 크기 위계 (기본 표준, 2026-07-11)",
+      "id": "L008 | 문서작성 | 2026-07-11 | 폰트 크기 위계 (기본 표준, 2026-07-11)",
       "summary": "대제목=유지, 중16/소14/본문12/각주10/표11pt 위계 — 단 공고가 크기 명시 시 그게 우선",
       "mechanizable": "partial",
       "category": "judgment",
@@ -146,7 +146,7 @@
       "impact": "med"
     },
     {
-      "id": "L009 | auto_write | 날조 0",
+      "id": "L009 | 문서작성 | 2026-07-11 | 날조 0",
       "summary": "없는 실적·수치는 지어내지 말고 [확인필요]/공란 — [확인필요] 잔존 문서는 게이트가 fail→_DRAFT로 제출차단",
       "mechanizable": "partial",
       "category": "mechanized",
@@ -155,7 +155,7 @@
       "impact": "high"
     },
     {
-      "id": "L010 | auto_write | 예비창업자 = 기업정보 공란",
+      "id": "L010 | 문서작성 | 2026-07-11 | 예비창업자 = 기업정보 공란",
       "summary": "법인 없으면 기업명=예비창업자, 창업일·사업자번호·매출·고용·투자·산업재산권은 공란(억지 채움 금지)",
       "mechanizable": "yes",
       "category": "mechanized",
@@ -164,7 +164,7 @@
       "impact": "med"
     },
     {
-      "id": "L011 | auto_write | 양식 서식 보존",
+      "id": "L011 | 문서작성 | 2026-07-11 | 양식 서식 보존",
       "summary": "값 채움은 run.text만 교체(폰트/스타일/표구조 불변), 출력==입력(하드링크 포함)이면 ValueError로 원본 덮어쓰기 차단",
       "mechanizable": "yes",
       "category": "mechanized",
@@ -173,7 +173,7 @@
       "impact": "high"
     },
     {
-      "id": "L012 | auto_write | 양식 안내문구 삭제",
+      "id": "L012 | 문서작성 | 2026-07-11 | 양식 안내문구 삭제",
       "summary": "안내문구 표·단락은 내용칸을 채운 뒤 결정론적으로 제거하고 본문 데이터는 오삭제하지 않는다.",
       "mechanizable": "yes",
       "category": "mechanized",
@@ -182,7 +182,7 @@
       "impact": "high"
     },
     {
-      "id": "L013 | auto_write | 본문 메타 문구 금지",
+      "id": "L013 | 문서작성 | 2026-07-11 | 본문 메타 문구 금지",
       "summary": "※ 작성태도(날조/과장/미확정) 자기지시 문구는 본문에서 제거해야 한다.",
       "mechanizable": "yes",
       "category": "mechanized",
@@ -191,7 +191,7 @@
       "impact": "med"
     },
     {
-      "id": "L014 | auto_write | 표 헤더/내용행 서식 구분",
+      "id": "L014 | 문서작성 | 2026-07-11 | 표 헤더/내용행 서식 구분",
       "summary": "생성한 표는 첫 행=헤더(음영+굵게), 둘째 행부터=내용(무음영+보통)으로 서식을 구분한다.",
       "mechanizable": "partial",
       "category": "gap",
@@ -200,7 +200,7 @@
       "impact": "low"
     },
     {
-      "id": "L015 | auto_write | ■ 제목 서식",
+      "id": "L015 | 문서작성 | 2026-07-11 | ■ 제목 서식",
       "summary": "'■ 라벨 — 설명'/'■ 라벨(부제)'를 '■ (라벨)'로 결정론적으로 정규화한다.",
       "mechanizable": "yes",
       "category": "mechanized",
@@ -209,7 +209,7 @@
       "impact": "low"
     },
     {
-      "id": "L016 | auto_write | 쉬운 표현",
+      "id": "L016 | 문서작성 | 2026-07-11 | 쉬운 표현",
       "summary": "유행어·난해표현('라스트 100m' 등) 금지, 비개발자가 바로 이해할 쉬운 말로 쓴다.",
       "mechanizable": "no",
       "category": "judgment",
@@ -218,7 +218,7 @@
       "impact": "low"
     },
     {
-      "id": "L017 | auto_write | 이미지 = NotebookLM 프롬프트",
+      "id": "L017 | 문서작성 | 2026-07-11 | 이미지 = NotebookLM 프롬프트",
       "summary": "그림 위치엔 차트를 직접 생성하지 않고 NotebookLM 슬라이드 프롬프트 블록을 삽입한다.",
       "mechanizable": "yes",
       "category": "mechanized",
@@ -227,7 +227,7 @@
       "impact": "med"
     },
     {
-      "id": "L018 | auto_write | 분량은 공고 기준",
+      "id": "L018 | 문서작성 | 2026-07-11 | 분량은 공고 기준",
       "summary": "공고가 명시한 분량 제한(본문/AI섹션)을 무시하지 않고 초과 시 경고를 낸다.",
       "mechanizable": "partial",
       "category": "mechanized",
@@ -236,7 +236,7 @@
       "impact": "med"
     },
     {
-      "id": "L019 | auto_write | 점수 통과 ≠ 제출 가능",
+      "id": "L019 | 문서작성 | 2026-07-11 | 점수 통과 ≠ 제출 가능",
       "summary": "품질점수는 서식만 보고, 제출가능성은 usage_acceptance 게이트가 판정 — fail 1개면 _DRAFT 강제·self_diagnose exit 2.",
       "mechanizable": "yes",
       "category": "mechanized",
@@ -245,7 +245,7 @@
       "impact": "high"
     },
     {
-      "id": "L020 | auto_write | DRAFT 세탁 / fail-open 금지",
+      "id": "L020 | 문서작성 | 2026-07-11 | DRAFT 세탁 / fail-open 금지",
       "summary": "검사 예외·판정불가·rename 실패 시 fail-closed로 _DRAFT 유지, clean 산출물도 fail 분기 artifacts에 포함해 세탁을 막는다.",
       "mechanizable": "yes",
       "category": "mechanized",
@@ -254,7 +254,7 @@
       "impact": "high"
     },
     {
-      "id": "L021 | auto_write | lxml proxy id 재사용 dedup 버그",
+      "id": "L021 | 문서작성 | 2026-07-11 | lxml proxy id 재사용 dedup 버그",
       "summary": "셀 dedup은 id()만 저장하지 말고 refs 리스트로 proxy 생존을 유지하며 검출기·교정기가 같은 순회를 공유한다.",
       "mechanizable": "yes",
       "category": "mechanized",
@@ -263,7 +263,7 @@
       "impact": "high"
     },
     {
-      "id": "L022 | auto_write | 유색 정규화 auto값 오교정",
+      "id": "L022 | 문서작성 | 2026-07-11 | 유색 정규화 auto값 오교정",
       "summary": "검정 교정은 정규 6자리 hex만, auto·테마·미지정은 보존하고 검출(rgb=None 통과)과 교정을 역연산으로 정합시킨다.",
       "mechanizable": "yes",
       "category": "mechanized",
@@ -272,7 +272,7 @@
       "impact": "high"
     },
     {
-      "id": "L023 | auto_write | cross-form 이름 필드 오매칭",
+      "id": "L023 | 문서작성 | 2026-07-11 | cross-form 이름 필드 오매칭",
       "summary": "이름 동의어 클러스터 타깃에 이름 모양(20자 이하·콤마/및/총괄/담당 없음)이 아닌 값이 오면 강등→needs_confirm(오매칭<빈칸).",
       "mechanizable": "yes",
       "category": "mechanized",
@@ -281,7 +281,7 @@
       "impact": "high"
     },
     {
-      "id": "L024 | auto_write | 플레이스홀더 빈칸 승격 (O마스크 보존)",
+      "id": "L024 | 문서작성 | 2026-07-11 | 플레이스홀더 빈칸 승격 (O마스크 보존)",
       "summary": "불가능날짜·전부-0수량·더미등록번호·빈괄호만 빈칸 승격, O마스크(OOO)는 실단어 오판 위험으로 제외, 실값은 2중게이트로 덮어쓰기 금지.",
       "mechanizable": "yes",
       "category": "mechanized",
@@ -290,7 +290,7 @@
       "impact": "high"
     },
     {
-      "id": "L025 | auto_write | 체크박스 부분문자열 오체크",
+      "id": "L025 | 문서작성 | 2026-07-11 | 체크박스 부분문자열 오체크",
       "summary": "□→■ 체크는 _normalize_choice 환원 후 정확일치만(부분문자열·짧은값·예시값 금지), .//w:r 순회로 하이퍼링크 □ 포함.",
       "mechanizable": "yes",
       "category": "mechanized",
@@ -299,7 +299,7 @@
       "impact": "high"
     },
     {
-      "id": "L026 | 작업방식 | 파일 경로는 묻는다",
+      "id": "L026 | 공통 | 2026-07-11 | 파일 경로는 묻는다",
       "summary": "파일 경로를 광역 Glob으로 자동 스캔하지 말고 사용자에게 직접 물어본다.",
       "mechanizable": "no",
       "category": "judgment",
@@ -308,7 +308,7 @@
       "impact": "low"
     },
     {
-      "id": "L027 | 작업방식 | 버전규칙 + 반복질문 금지",
+      "id": "L027 | 공통 | 2026-07-11 | 버전규칙 + 반복질문 금지",
       "summary": "산출물은 v1,v2로 버전 구분(날짜만 X), 사용자가 이미 말한 결정은 다시 묻지 않는다.",
       "mechanizable": "no",
       "category": "judgment",
@@ -317,7 +317,7 @@
       "impact": "low"
     },
     {
-      "id": "L028 | auto_write | 본문 폰트 전역통일 도구",
+      "id": "L028 | 문서작성 | 2026-07-11 | 본문 폰트 전역통일 도구",
       "summary": "본문 전역 글꼴·크기 통일은 scripts/unify_body_font.py(제목위계 보존) 사용, doc_quality_ops.unify_paragraph_formatting은 단락별이라 전역통일 못 함.",
       "mechanizable": "partial",
       "category": "mechanized",
@@ -326,7 +326,7 @@
       "impact": "low"
     },
     {
-      "id": "L029 | 작업방식 | 규칙 충돌 시 최신 우선",
+      "id": "L029 | 공통 | 2026-07-11 | 규칙 충돌 시 최신 우선",
       "summary": "새 규칙이 기존과 충돌하면 최신 버전으로 교체(중복 신설 X), 옛 규칙은 lessons·메모리·위키 어디든 갱신.",
       "mechanizable": "no",
       "category": "judgment",
@@ -335,7 +335,7 @@
       "impact": "low"
     },
     {
-      "id": "L030 | 2026-07-12 | 사용자 지적은 최소 범위로만 수정",
+      "id": "L030 | 공통 | 2026-07-12 | 사용자 지적은 최소 범위로만 수정",
       "summary": "'여기만 다르다'류 지적은 그 부분만 주변과 맞추고 전역 sweep 금지, 변경 건수가 지적 범위보다 크면 멈추고 확인.",
       "mechanizable": "no",
       "category": "judgment",
@@ -344,7 +344,7 @@
       "impact": "med"
     },
     {
-      "id": "L031 | 2026-07-12 | 한글/HWPX 시각문제는 추측패치 금지 — 원인 특정 먼저",
+      "id": "L031 | 문서작성 | 2026-07-12 | 한글/HWPX 시각문제는 추측패치 금지 — 원인 특정 먼저",
       "summary": "시각 문제는 정상원본 확보+XML 정밀진단(rowSpan·borderFill·격자 타일링)으로 원인 1개 특정 후 그 부분만 최소 수정, 렌더 확인 전 완료보고 금지.",
       "mechanizable": "partial",
       "category": "mechanized",
@@ -353,7 +353,7 @@
       "impact": "high"
     },
     {
-      "id": "L032 | 2026-07-12 | 서명일·날짜 기입은 실행 시점 시스템 날짜로",
+      "id": "L032 | 문서작성 | 2026-07-12 | 서명일·날짜 기입은 실행 시점 시스템 날짜로",
       "summary": "문서 서명일·작성일 채움은 항상 datetime.now/date.today로 산출, 대화·RESUME의 낡은 날짜를 복사하지 않는다.",
       "mechanizable": "partial",
       "category": "gap",
@@ -362,7 +362,7 @@
       "impact": "med"
     },
     {
-      "id": "L033 | 2026-07-13 | 파일 유효성 ≠ 앱에서 열림 / 체크리스트만 주기",
+      "id": "L033 | 문서작성 | 2026-07-13 | 파일 유효성 ≠ 앱에서 열림 / 체크리스트만 주기",
       "summary": "'안 열림'은 zip/XML 구조검증에 그치지 말고 의미검증(itemCnt·ID참조·격자)으로 실제 열림 결함을 잡고, 사용자에게 시키지 말고 즉시 대안을 만든다.",
       "mechanizable": "partial",
       "category": "mechanized",
@@ -371,7 +371,7 @@
       "impact": "high"
     },
     {
-      "id": "L034 | 2026-07-15 | 신청서 복수선택 칸은 임의 기본값 금지 — 사용자 확정",
+      "id": "L034 | 문서작성 | 2026-07-15 | 신청서 복수선택 칸은 임의 기본값 금지 — 사용자 확정",
       "summary": "체크형·복수선택 칸은 '전부 체크'나 '1개만' 임의 기본값을 깔지 말고 허용 개수 명시 후 사용자에게 확정받는다.",
       "mechanizable": "partial",
       "category": "mechanized",
@@ -380,7 +380,7 @@
       "impact": "high"
     },
     {
-      "id": "L035 | 2026-07-15 | 키워드/전문영역 칸 = 분야명 반복 금지, 실전 강점 명사로",
+      "id": "L035 | 문서작성 | 2026-07-15 | 키워드/전문영역 칸 = 분야명 반복 금지, 실전 강점 명사로",
       "summary": "키워드·전문영역 칸은 신청 분야명 복제가 아니라 그 사람의 실전 강점 키워드(정책자금 등)로 채운다.",
       "mechanizable": "no",
       "category": "judgment",
@@ -389,7 +389,7 @@
       "impact": "med"
     },
     {
-      "id": "L036 | 2026-07-15 | 자기기술서(정성평가)는 다짐·수사 대신 '구체 성공사례 1개' 중심",
+      "id": "L036 | 문서작성 | 2026-07-15 | 자기기술서(정성평가)는 다짐·수사 대신 '구체 성공사례 1개' 중심",
       "summary": "자기기술서는 문제→조치(구체 단계)→결과(정량)의 실제 성공사례 1개를 몸통으로 쓰고, 사례는 사용자에게 먼저 물어본다.",
       "mechanizable": "no",
       "category": "judgment",
@@ -398,7 +398,7 @@
       "impact": "med"
     },
     {
-      "id": "L037 | 2026-07-15 | 제출본 = 요구 서식만 분리한 별도 파일 (공고 전문에 채우기 X)",
+      "id": "L037 | 문서작성 | 2026-07-15 | 제출본 = 요구 서식만 분리한 별도 파일 (공고 전문에 채우기 X)",
       "summary": "제출본은 공고 전문에 값을 채우지 말고 요구 서식 페이지만 추출·분리해 '서식명_성명' 파일명 + 제출/ 하위폴더로 구성한다.",
       "mechanizable": "partial",
       "category": "gap",
@@ -407,7 +407,7 @@
       "impact": "med"
     },
     {
-      "id": "L038 | 2026-07-15 | 이력서 실적 표는 정량 컬럼(업체수·합계·회차)이 몸통 — 빼먹지 마라",
+      "id": "L038 | 문서작성 | 2026-07-15 | 이력서 실적 표는 정량 컬럼(업체수·합계·회차)이 몸통 — 빼먹지 마라",
       "summary": "이력서 실적 표의 정량 컬럼(컨설팅 업체수·합계 행·강의 회차/시간·구분)을 임의 단순화하지 말고 기존 스키마대로 보존한다.",
       "mechanizable": "partial",
       "category": "gap",
@@ -416,7 +416,7 @@
       "impact": "med"
     },
     {
-      "id": "L039 | 2026-07-15 | 이력서 끝은 포트폴리오(실물 이미지 증빙) — 텍스트로만 끝내지 마라",
+      "id": "L039 | 문서작성 | 2026-07-15 | 이력서 끝은 포트폴리오(실물 이미지 증빙) — 텍스트로만 끝내지 마라",
       "summary": "이력서 끝의 포트폴리오(작업 산출물 이미지) 섹션을 이월하거나, 불가하면 '[포트폴리오 이미지 삽입 필요]' 자리를 명시한다.",
       "mechanizable": "partial",
       "category": "gap",
@@ -425,7 +425,7 @@
       "impact": "med"
     },
     {
-      "id": "L040 | 2026-07-15 | 필수 서식(서약서 등)은 원문 전문 유지 + 날짜·성명만 기입 — 서식 누락 금지",
+      "id": "L040 | 문서작성 | 2026-07-15 | 필수 서식(서약서 등)은 원문 전문 유지 + 날짜·성명만 기입 — 서식 누락 금지",
       "summary": "공고의 모든 필수 서식(청렴서약서 등)을 빠짐없이 포함하고 보일러플레이트는 안 고치고 날짜·성명만 채운다.",
       "mechanizable": "yes",
       "category": "mechanized",
@@ -434,7 +434,7 @@
       "impact": "high"
     },
     {
-      "id": "L041 | 2026-07-15 | 신청서 실적은 공고 적합 건만 선별 — 전량 최신순 나열 금지",
+      "id": "L041 | 문서작성 | 2026-07-15 | 신청서 실적은 공고 적합 건만 선별 — 전량 최신순 나열 금지",
       "summary": "실적 칸은 공고 주관기관·대상에 적합한 건만 선별한다(적합성 > 최신성).",
       "mechanizable": "no",
       "category": "judgment",
@@ -443,7 +443,7 @@
       "impact": "med"
     },
     {
-      "id": "L042 | 2026-07-15 | 담당업무·분야 값은 공고 대상에 맞춰 재서술 — 원문 복사 금지",
+      "id": "L042 | 문서작성 | 2026-07-15 | 담당업무·분야 값은 공고 대상에 맞춰 재서술 — 원문 복사 금지",
       "summary": "전사 시 담당업무·분야 값을 원문 글자 그대로 복사하지 말고 공고 키워드를 주입해 선택적 각색한다.",
       "mechanizable": "no",
       "category": "judgment",
@@ -452,7 +452,7 @@
       "impact": "med"
     },
     {
-      "id": "L043 | 2026-07-15 | 이력서 학력·경력·자격 = '2. 경력사항' 단일 섹션·단일 표 + 블록별 서브헤더",
+      "id": "L043 | 문서작성 | 2026-07-15 | 이력서 학력·경력·자격 = '2. 경력사항' 단일 섹션·단일 표 + 블록별 서브헤더",
       "summary": "학력·경력·자격을 '2. 경력사항' 단일 섹션·단일 표 안에 블록별 헤더행으로 재선언하고 슬래시 합성 헤더로 뭉개지 않는다.",
       "mechanizable": "partial",
       "category": "gap",
@@ -461,7 +461,7 @@
       "impact": "med"
     },
     {
-      "id": "L044 | 2026-07-15 | 표준 이력서 골격 고정 — 프로필형 섹션 혼합·'기타 이력' 삭제 금지",
+      "id": "L044 | 문서작성 | 2026-07-15 | 표준 이력서 골격 고정 — 프로필형 섹션 혼합·'기타 이력' 삭제 금지",
       "summary": "이력서 골격(1.인적→2.경력→3.강의→4.수행→(5.컨설팅)→논문→(7.기타))을 고정하고 프로필형 섹션 혼입·'기타 이력' 삭제로 이력을 소실시키지 않는다.",
       "mechanizable": "partial",
       "category": "gap",
@@ -470,7 +470,7 @@
       "impact": "med"
     },
     {
-      "id": "L045 | 2026-07-15 | 서명=실이미지, '(인)' 텍스트 추가 금지 — 기준일은 문서 머리",
+      "id": "L045 | 문서작성 | 2026-07-15 | 서명=실이미지, '(인)' 텍스트 추가 금지 — 기준일은 문서 머리",
       "summary": "서명란엔 서명 PNG 실삽입·'(인)' 텍스트 임의추가 금지·기준일은 제목 아래(끝맺음 아님).",
       "mechanizable": "yes",
       "category": "mechanized",
@@ -479,7 +479,7 @@
       "impact": "med"
     },
     {
-      "id": "L046 | 2026-07-15 | '~과정 이수'(교육 수료)는 자격증란 기재 금지",
+      "id": "L046 | 문서작성 | 2026-07-15 | '~과정 이수'(교육 수료)는 자격증란 기재 금지",
       "summary": "'투자심사역 과정 이수' 같은 교육수료 항목을 자격증(자격/면허) 표에 넣지 마라 — 별도 교육섹션 또는 생략.",
       "mechanizable": "yes",
       "category": "mechanized",
@@ -488,7 +488,7 @@
       "impact": "med"
     },
     {
-      "id": "L047 | 2026-07-15 | 신청서 주요경력 2칸 매핑: 왼쪽='기관 직위 (기간)' 합성, 오른쪽=담당업무",
+      "id": "L047 | 문서작성 | 2026-07-15 | 신청서 주요경력 2칸 매핑: 왼쪽='기관 직위 (기간)' 합성, 오른쪽=담당업무",
       "summary": "이력서 5열을 신청서 2칸에 부을 때 왼쪽='기관 직위 (기간)' 합성, 오른쪽=담당업무로 재조합.",
       "mechanizable": "no",
       "category": "judgment",
@@ -497,7 +497,7 @@
       "impact": "med"
     },
     {
-      "id": "L048 | 2026-07-15 | 최종 제출 = 공고 명명 튜플로 개명한 단일 합본 PDF까지",
+      "id": "L048 | 문서작성 | 2026-07-15 | 최종 제출 = 공고 명명 튜플로 개명한 단일 합본 PDF까지",
       "summary": "작업명 hwpx에서 끝내지 말고 공고 지정 튜플로 개명 + 증빙 포함 단일 합본 PDF까지 생성.",
       "mechanizable": "partial",
       "category": "gap",
@@ -506,7 +506,7 @@
       "impact": "med"
     },
     {
-      "id": "L049 | 2026-07-15 | 산출물은 'YYYYMMDD 공고명' 폴더 + '제출/' 하위폴더에 배치",
+      "id": "L049 | 문서작성 | 2026-07-15 | 산출물은 'YYYYMMDD 공고명' 폴더 + '제출/' 하위폴더에 배치",
       "summary": "산출물을 repo/작업 루트에 방치 말고 'YYYYMMDD 공고명/제출/' 체계에 격리 저장.",
       "mechanizable": "partial",
       "category": "gap",
@@ -515,7 +515,7 @@
       "impact": "med"
     },
     {
-      "id": "L050 | 2026-07-15 | 제출 최종본·증빙은 동일 파일명 HWP+PDF 쌍 병행 생성",
+      "id": "L050 | 문서작성 | 2026-07-15 | 제출 최종본·증빙은 동일 파일명 HWP+PDF 쌍 병행 생성",
       "summary": "최종 제출본·증빙 확정 시 동일 파일명 .pdf를 병행 생성(초안은 불필요).",
       "mechanizable": "partial",
       "category": "gap",
@@ -524,7 +524,7 @@
       "impact": "med"
     },
     {
-      "id": "L051 | 2026-07-15 | 제출처 기관이면 정식 명칭으로 격상(조건부)",
+      "id": "L051 | 문서작성 | 2026-07-15 | 제출처 기관이면 정식 명칭으로 격상(조건부)",
       "summary": "제출처 기관명은 정식 명칭(소상공인시장진흥공단)으로 격상 — 단 내부·타기관 제출엔 약칭도 허용(조건부).",
       "mechanizable": "no",
       "category": "judgment",
@@ -533,7 +533,7 @@
       "impact": "low"
     },
     {
-      "id": "L052 | 2026-07-15 | 부문 체크박스를 분야 텍스트에 병합 금지 + 원문 구분자(·) 변조 금지",
+      "id": "L052 | 문서작성 | 2026-07-15 | 부문 체크박스를 분야 텍스트에 병합 금지 + 원문 구분자(·) 변조 금지",
       "summary": "부문(체크박스)과 분야(텍스트)는 별도 행 유지, 원문 구분자(재무·자금)를 '/'로 변조 금지.",
       "mechanizable": "partial",
       "category": "mechanized",
@@ -542,7 +542,7 @@
       "impact": "med"
     },
     {
-      "id": "L053 | 2026-07-15 | 실적 없는 섹션도 삭제 말고 '해당사항 없음' 행으로 유지",
+      "id": "L053 | 문서작성 | 2026-07-15 | 실적 없는 섹션도 삭제 말고 '해당사항 없음' 행으로 유지",
       "summary": "고정 양식 채움 시 실적 없는 섹션도 표를 유지하고 '해당사항 없음' 기입(섹션 통째 생략 금지).",
       "mechanizable": "partial",
       "category": "mechanized",
@@ -551,7 +551,7 @@
       "impact": "med"
     },
     {
-      "id": "L054 | 2026-07-15 | 실적 총괄 요약표는 세로형(라벨-값 행) — 가로 전치 금지",
+      "id": "L054 | 문서작성 | 2026-07-15 | 실적 총괄 요약표는 세로형(라벨-값 행) — 가로 전치 금지",
       "summary": "소스 요약표의 방향·병합 헤더를 보존하고 세로↔가로 임의 전치 금지.",
       "mechanizable": "partial",
       "category": "mechanized",
@@ -560,7 +560,7 @@
       "impact": "med"
     },
     {
-      "id": "L055 | 2026-07-15 | 소속기관 표: 1인기업 대표는 자기 회사로 전부 채움",
+      "id": "L055 | 문서작성 | 2026-07-15 | 소속기관 표: 1인기업 대표는 자기 회사로 전부 채움",
       "summary": "1인기업 대표는 소속기관=자기 회사, 대표자=본인, 전화=휴대폰 재사용, FAX='-'로 유도 채움([확인필요] 남발 금지).",
       "mechanizable": "no",
       "category": "judgment",
@@ -569,7 +569,7 @@
       "impact": "med"
     },
     {
-      "id": "L056 | 2026-07-15 | 신청서 단일 '주소' 칸 = 사업장 주소(거주지 아님)",
+      "id": "L056 | 문서작성 | 2026-07-15 | 신청서 단일 '주소' 칸 = 사업장 주소(거주지 아님)",
       "summary": "단일 '주소' 타깃엔 사업장 주소를 넣고 소속기관 주소와 통일한다(거주지 회피).",
       "mechanizable": "no",
       "category": "judgment",
@@ -578,7 +578,7 @@
       "impact": "med"
     },
     {
-      "id": "L057 | 2026-07-15 | 한글 COM 전체실패는 재시도 말고 RESUME/다른 세션 기록부터 — 즉시 non-COM 우회",
+      "id": "L057 | 문서작성 | 2026-07-15 | 한글 COM 전체실패는 재시도 말고 RESUME/다른 세션 기록부터 — 즉시 non-COM 우회",
       "summary": "COM 2회 연속 전체실패면 앱고장 확정, RESUME 먼저 확인 후 non-COM(hwpx_fill 좌표채움)으로 전환한다.",
       "mechanizable": "no",
       "category": "judgment",
@@ -587,16 +587,7 @@
       "impact": "med"
     },
     {
-      "id": "L057 | 2026-07-15 | 지역·권역 선택은 자동 추론 금지 — 반드시 질문",
-      "summary": "지역/권역 체크박스는 주소로 유도 가능해 보여도 자동선택 금지, needs_confirm 로 질문한다.",
-      "mechanizable": "partial",
-      "category": "gap",
-      "guard_ref": "",
-      "gap_desc": "cross_form_autofill match_checkbox_groups 에 지역/권역 라벨 denylist 추가 — 해당 그룹은 데이터 유도 가능해도 무조건 needs_confirm 강등(자동 ■ 금지)",
-      "impact": "med"
-    },
-    {
-      "id": "L058 | 2026-07-15 | 증빙은 granularity별 '모음/합본_날짜' 번들로 자산화·재사용",
+      "id": "L058 | 문서작성 | 2026-07-15 | 증빙은 granularity별 '모음/합본_날짜' 번들로 자산화·재사용",
       "summary": "공고 요구 증빙을 기존 번들 선택 또는 공고맞춤 합본 생성 단계로 제출 플로우에 포함한다.",
       "mechanizable": "no",
       "category": "judgment",
@@ -605,7 +596,7 @@
       "impact": "low"
     },
     {
-      "id": "L059 | 2026-07-15 | 파일명 접미사=문서 '상태' — 작업 접미사·중간산출물로 제출 폴더 오염 금지",
+      "id": "L059 | 문서작성 | 2026-07-15 | 파일명 접미사=문서 '상태' — 작업 접미사·중간산출물로 제출 폴더 오염 금지",
       "summary": "파일명 접미사는 상태만 표기(_DRAFT 등), 작업서술·_converted 중간산출물로 제출 폴더를 더럽히지 않는다.",
       "mechanizable": "partial",
       "category": "gap",
@@ -614,7 +605,7 @@
       "impact": "med"
     },
     {
-      "id": "L060 | 2026-07-15 | 표준 이력서 강의 표엔 '구분'(민간/기관) 컬럼 유지",
+      "id": "L060 | 문서작성 | 2026-07-15 | 표준 이력서 강의 표엔 '구분'(민간/기관) 컬럼 유지",
       "summary": "표준 이력서 강의 표는 수행기간|주최기관|주제|회차·시간|구분 5컬럼 유지, 구분 값 소실 금지.",
       "mechanizable": "no",
       "category": "judgment",
@@ -623,7 +614,7 @@
       "impact": "med"
     },
     {
-      "id": "L061 | 2026-07-15 | 인적사항 표 사진 병합 칸엔 증명사진 항상 삽입",
+      "id": "L061 | 문서작성 | 2026-07-15 | 인적사항 표 사진 병합 칸엔 증명사진 항상 삽입",
       "summary": "이력서·신청서 생성 시 사진 병합칸에 증명사진 삽입 또는 [사진 삽입 필요]를 명시한다.",
       "mechanizable": "partial",
       "category": "gap",
@@ -632,7 +623,7 @@
       "impact": "med"
     },
     {
-      "id": "L062 | 2026-07-15 | 번호 값의 라벨 접두어는 열 헤더 보고 결정",
+      "id": "L062 | 문서작성 | 2026-07-15 | 번호 값의 라벨 접두어는 열 헤더 보고 결정",
       "summary": "'발급번호' 열엔 번호만, '비고' 열엔 라벨 병기 — 열 이름이 값 서식을 결정한다.",
       "mechanizable": "no",
       "category": "judgment",
@@ -641,7 +632,7 @@
       "impact": "med"
     },
     {
-      "id": "L063 | 2026-07-15 | 자기기술서 골격(L036 보강): 번호 소제목 3단 + 성과 느낌표 헤드라인 + 공고 취지 호응 마무리",
+      "id": "L063 | 문서작성 | 2026-07-15 | 자기기술서 골격(L036 보강): 번호 소제목 3단 + 성과 느낌표 헤드라인 + 공고 취지 호응 마무리",
       "summary": "자기기술서는 1.경력→2.전문성→3.성공사례(성과 헤드라인) 3단 + 공고 사업명 인용 마무리로 쓴다.",
       "mechanizable": "no",
       "category": "judgment",
@@ -650,7 +641,7 @@
       "impact": "low"
     },
     {
-      "id": "L064 | 2026-07-15 | 제목·라벨 자간은 원본 그대로(공백 1칸) — 임의 2칸 금지",
+      "id": "L064 | 문서작성 | 2026-07-15 | 제목·라벨 자간은 원본 그대로(공백 1칸) — 임의 2칸 금지",
       "summary": "제목·라벨 자간은 사용자 원본 코드포인트 그대로(공백 1칸) 복제, 임의 2칸 확대 금지.",
       "mechanizable": "no",
       "category": "judgment",
@@ -659,7 +650,7 @@
       "impact": "low"
     },
     {
-      "id": "L065 | 2026-07-15 | \"비교·학습해라\" 요청 = 전수조사가 기본 — 하이라이트 몇 개로 끝내지 마라",
+      "id": "L065 | 공통 | 2026-07-15 | \"비교·학습해라\" 요청 = 전수조사가 기본 — 하이라이트 몇 개로 끝내지 마라",
       "summary": "비교·학습 요청은 차원 분해 후 병렬 전수조사(+적대검증)로, 상위 N개 요약만 내지 않는다.",
       "mechanizable": "no",
       "category": "judgment",
@@ -677,7 +668,7 @@
       "impact": "high"
     },
     {
-      "id": "L066 | 2026-07-16 | 매 실질턴 전역 마무리 프로토콜 고정(누락 금지)",
+      "id": "L066 | 공통 | 2026-07-16 | 매 실질턴 전역 마무리 프로토콜 고정(누락 금지)",
       "summary": "실질 답변 끝에 4종(상태·해결Y/N·다음프롬프트·🧾방금한일) + RESUME 갱신을 매번 부착한다.",
       "mechanizable": "no",
       "category": "judgment",
@@ -686,16 +677,7 @@
       "impact": "low"
     },
     {
-      "id": "L032 | 2026-07-16 | \"요청 전체 정리\"는 커밋(완료분)만 보면 놓친다 — 보류·거절·계획만도 포함",
-      "summary": "요청 총정리는 커밋 외 plans·open-questions·wiki·RESUME·RECAP까지 훑어 완료/부분/보류/거절을 모두 싣는다.",
-      "mechanizable": "no",
-      "category": "judgment",
-      "guard_ref": "",
-      "gap_desc": "",
-      "impact": "med"
-    },
-    {
-      "id": "L067 | 2026-07-16 | 워크트리 커밋은 git add -A 금지 — 세션 아티팩트(.omc) 쓸림 + squash 복구 경로",
+      "id": "L067 | 개발 | 2026-07-16 | 워크트리 커밋은 git add -A 금지 — 세션 아티팩트(.omc) 쓸림 + squash 복구 경로",
       "summary": "워크트리 커밋은 파일 명시 add(수정분만), .omc 잡파일 배제, 이미 push되면 rm --cached+squash.",
       "mechanizable": "yes",
       "category": "mechanized",
@@ -704,13 +686,166 @@
       "impact": "med"
     },
     {
-      "id": "L068 | 2026-07-20 | 역할 부여·페르소나 요청에 장황하게 응답 금지 — 역할은 행동으로 증명",
-      "summary": "역할·페르소나를 부여받으면 장황한 자기소개·선언 대신 곧바로 그 역할의 행동(작업 수행)으로 증명한다.",
+      "id": "L068 | 공통 | 2026-07-20 | 역할 부여·페르소나 요청에 장황하게 응답 금지 — 역할은 행동으로 증명",
+      "summary": "역할·페르소나 지시는 한 줄 수락 후 즉시 본 업무 착수. 준수는 말이 아니라 행동으로 보인다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "응답 스타일(장황함 억제)은 코드로 강제 불가 — 대화 규율(judgment). 기계화 대상 아님.",
+      "impact": "low"
+    },
+    {
+      "id": "L069 | 개발 | 2026-07-21 | Git Bash 에서 git show/cat-file 의 ref:path 콜론이 MSYS 경로변환으로 깨짐",
+      "summary": "Git Bash 에서 ref:path 의 콜론이 MSYS 경로변환으로 깨짐 — MSYS_NO_PATHCONV=1 또는 ./경로·git -C 우회.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "쉘 명령 사용 습관(환경 함정 회피)이라 코드 가드로 강제 불가 — 대화/워크플로 규율.",
+      "impact": "low"
+    },
+    {
+      "id": "L070 | 문서작성 | 2026-07-23 | 양식 고유 문구는 값 칸이 아니다 — 삭제·치환·색변경 전부 금지",
+      "summary": "손대도 되는 곳은 값 칸 안의 예시값뿐. 안내문구·유의사항·파일명 예시·표 라벨은 색 불문 원형 보존, 재현본 제작 금지.",
+      "mechanizable": "partial",
+      "category": "gap",
+      "guard_ref": "",
+      "gap_desc": "diff_form.py(원본↔작성본 전수 대조) 를 제출 게이트로 승격하고 '양식 고유 영역 변경 0건' 단언 회귀테스트 추가 — 현재는 사람이 수동 실행",
+      "impact": "high"
+    },
+    {
+      "id": "L071 | 개발 | 2026-07-23 | 지표 이름만 보고 의미를 넘겨짚지 마라 — 실제 데이터로 확인",
+      "summary": "필드를 판정 기준으로 쓰기 전 생성 코드를 직접 확인하고 실데이터 분포를 1회 눈으로 본다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med"
+    },
+    {
+      "id": "L072 | 개발 | 2026-07-23 | 휴리스틱 자동보정 도구는 사람이 배선한 설정을 덮어쓴다",
+      "summary": "일괄 자동보정은 백업→옛/새 값 실측 1:1 대조→열등이면 원복을 한 세트로. '값 있으면 건너뛴다' 가드 없는 도구 불신.",
+      "mechanizable": "partial",
+      "category": "gap",
+      "guard_ref": "",
+      "gap_desc": "'기존 값 보존' 가드는 코드로 강제 가능하나 대상 도구가 mail 리포(autofill_selectors.py) — auto_write 범위 밖",
+      "impact": "med"
+    },
+    {
+      "id": "L073 | 공통 | 2026-07-23 | 사전 진단의 예측을 실측 전에 결론처럼 말하지 마라",
+      "summary": "서브에이전트·워크플로 산출은 가설이지 결론이 아니다. 수치 예측은 운영 코드 경로로 실측한 뒤에만 보고.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med"
+    },
+    {
+      "id": "L074 | 문서작성 | 2026-07-23 | linesegarray 전역 제거는 rhwp PDF 렌더를 깨뜨린다 — L002 는 '한글 전용'",
+      "summary": "lineseg 제거는 편집한 문단만. rhwp 로 PDF 낼 파일은 전역 strip 금지(안내박스 다중문단이 겹쳐 그려짐).",
+      "mechanizable": "partial",
+      "category": "gap",
+      "guard_ref": "",
+      "gap_desc": "strip_linesegarray 계열에 '편집 문단 한정' 파라미터를 강제하고 전역 strip 호출을 금지하는 가드+회귀테스트 필요",
+      "impact": "high"
+    },
+    {
+      "id": "L075 | 공통 | 2026-07-23 | 산출 방식을 바꾸면 이전 확정 속성이 조용히 사라진다 — 이월 체크리스트 필수",
+      "summary": "파이프라인 전환 시 직전 확정본과 시각·서식 속성을 항목별 대조해 이월 체크리스트로 실측한다.",
+      "mechanizable": "partial",
+      "category": "gap",
+      "guard_ref": "",
+      "gap_desc": "submission_regression_check.py 를 '직전 확정판 대비' 모드로 확장(볼드·안내삭제·폰트위계 이월 항목 비교)해야 기계화 가능",
+      "impact": "high"
+    },
+    {
+      "id": "L076 | 문서작성 | 2026-07-23 | HWPX charPr 신규 추가는 반드시 목록 맨 끝에 — 중간 삽입 시 스타일 전체가 밀린다",
+      "summary": "header.xml charPr/paraPr 추가는 항상 맨 끝 append(id=최대+1, itemCnt 갱신)해 id==인덱스 정렬 유지.",
+      "mechanizable": "partial",
+      "category": "gap",
+      "guard_ref": "",
+      "gap_desc": "charPr 추가 헬퍼에 append-only 강제 + '중간 삽입 시 id!=인덱스' 검출 가드/회귀테스트 필요",
+      "impact": "high"
+    },
+    {
+      "id": "L077 | 공통 | 2026-07-23 | 산출물 재생성 때마다 '이전 버전엔 됐는데 지금은 안 되는 것' 회귀 전수점검 의무",
+      "summary": "재생성 후 직전 확정판 대비 회귀 전수점검 의무(기계 게이트 + 자동판정 불가 속성은 렌더 눈검증).",
+      "mechanizable": "partial",
+      "category": "gap",
+      "guard_ref": "",
+      "gap_desc": "scripts/submission_regression_check.py 는 존재하나 test_*.py 회귀 잠금이 없어 규칙 삭제·우회를 막지 못함",
+      "impact": "high"
+    },
+    {
+      "id": "L078 | 문서작성 | 2026-07-23 | HWPX 서명(이미지) 삽입 3함정 — 래퍼 표 앵커·inline 행잘림·PAPER 무시 + rhwp 알파는 렌더됨",
+      "summary": "값이 든 tc 를 직접 앵커로, 칸 안 문단 앵커 + 떠 있는 개체(treatAsChar=0·PARA 기준). inline·PAPER 금지.",
+      "mechanizable": "partial",
+      "category": "gap",
+      "guard_ref": "",
+      "gap_desc": "서명 삽입 헬퍼에 앵커 선택(값 칸 tc)·treatAsChar=0·vertRelTo=PARA 강제 + 렌더 좌표 회귀테스트 필요",
+      "impact": "high"
+    },
+    {
+      "id": "L079 | 공통 | 2026-07-23 | 신규버전 작성 시 이전버전은 '구버전' 폴더로 모은다 (작업 폴더에 최신만)",
+      "summary": "vN 생성 시 v1~vN-1 을 같은 위치 '구버전' 폴더로 이동(삭제 금지). 작업 폴더엔 최신만 남긴다.",
       "mechanizable": "no",
       "category": "judgment",
       "guard_ref": "",
       "gap_desc": "",
       "impact": "low"
+    },
+    {
+      "id": "L080 | 문서작성 | 2026-07-23 | 사업계획서 글머리(ㅇ/-) 뒤 괄호 라벨은 괄호 포함 볼드 처리",
+      "summary": "문단 선두 글머리 직후의 괄호 라벨은 여는 괄호부터 닫는 괄호까지 통째 볼드(문장 중간 괄호는 제외).",
+      "mechanizable": "partial",
+      "category": "gap",
+      "guard_ref": "",
+      "gap_desc": "doc_quality_ops 에 '글머리 직후 괄호 라벨 볼드' 정규화 함수 + 문장중간 괄호 비대상 회귀테스트 필요",
+      "impact": "med"
+    },
+    {
+      "id": "L081 | 개발 | 2026-07-23 | 프로세스 검색 후 종료할 때 자기 자신(PID)을 반드시 제외",
+      "summary": "CommandLine 으로 프로세스를 찾을 땐 조회·종료 불문 항상 -and $_.ProcessId -ne $PID 를 붙인다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med"
+    },
+    {
+      "id": "L082 | 공통 | 2026-07-16 | \"요청 전체 정리\"는 커밋(완료분)만 보면 놓친다 — 보류·거절·계획만도 포함",
+      "summary": "요청 원장은 커밋 외에 plans·open-questions·wiki·RESUME·RECAP 까지 훑어 완료/부분/보류/거절을 모두 싣는다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med"
+    },
+    {
+      "id": "L083 | 문서작성 | 2026-07-16 | HWPX 표 셀 채움은 데이터 셀도 검정 charPr 강제 — 템플릿 파랑 상속 주의",
+      "summary": "모든 내용 셀에 검정 charPr 강제. 검증은 특정 파랑 ID 가 아니라 런 단위 유색 텍스트 실제 존재로 확인.",
+      "mechanizable": "partial",
+      "category": "gap",
+      "guard_ref": "",
+      "gap_desc": "set_cell_lines 계열 채움 경로에 데이터 셀 검정 charPr 강제 + '런 단위 유색 0' 단언 회귀테스트 필요(현재 서술 셀만 강제)",
+      "impact": "high"
+    },
+    {
+      "id": "L084 | 문서작성 | 2026-07-15 | 지역·권역 선택은 자동 추론 금지 — 반드시 질문",
+      "summary": "주소 등으로 유도 가능해 보여도 지역·권역 선택은 자동선택 금지, needs_confirm 으로 질문한다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "high"
+    },
+    {
+      "id": "L085 | 개발 | 2026-07-23 | 같은 계산식이 여러 파일에 복제돼 있으면 한 곳만 고치고 끝내지 마라",
+      "summary": "계산식·상수·패턴 수정 시 그 문자열 자체를 전수 grep 해 복제본을 모두 고치고, 재grep 으로 '옛 방식 0건' 확인.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med"
     }
   ]
 }

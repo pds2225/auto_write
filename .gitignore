@@ -1,5 +1,6 @@
 .env
 .env.*
+!.env.example
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -66,6 +67,7 @@ app/tests/test_pure_submittable_filler (1).py
 WORKS/
 _bizplan/
 _workspace/
+/온랩/
 
 # 워크트리 사본 (.claude/worktrees/ 는 위에 이미 등재)
 .worktrees/

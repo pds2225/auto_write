@@ -4,6 +4,7 @@ import json
 import os
 import tempfile
 import unittest
+from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 
@@ -94,6 +95,37 @@ class ProjectServiceSafetyTests(unittest.TestCase):
                 reference_files=[("../evil.txt", b"bad")],
             )
         self.assertIn("경로 구분자", str(ctx.exception))
+
+    def test_template_upload_rejects_path_like_or_reserved_filename(self):
+        for file_name in ("../evil.docx", r"..\evil.docx", r"C:\evil.docx", r"\\server\evil.docx", "CON.docx"):
+            with self.subTest(file_name=file_name), self.assertRaises(ValueError):
+                self.storage.create_template_space(file_name)
+
+    def test_template_upload_stores_safe_filename_in_profile(self):
+        buffer = BytesIO()
+        document = Document()
+        document.add_paragraph("테스트 사업계획서")
+        document.save(buffer)
+
+        profile = self.service.analyze_uploaded_template("정부 지원서 2026.docx", buffer.getvalue())
+
+        source_path = Path(profile.source_docx)
+        self.assertEqual(profile.template_name, "정부 지원서 2026.docx")
+        self.assertEqual(source_path.name, "정부 지원서 2026.docx")
+        self.assertEqual(source_path.parent, self.storage.template_dir(profile.template_id))
+        self.assertTrue(source_path.exists())
+
+    def test_storage_rejects_path_like_internal_ids(self):
+        for invalid_id in ("../outside", r"..\outside", r"C:\outside", r"\\server\share", ".", ""):
+            with self.subTest(kind="template", value=invalid_id), self.assertRaises(ValueError):
+                self.storage.template_dir(invalid_id)
+            with self.subTest(kind="project", value=invalid_id), self.assertRaises(ValueError):
+                self.storage.project_dir(invalid_id)
+            with self.subTest(kind="results", value=invalid_id), self.assertRaises(ValueError):
+                self.storage.results_dir(invalid_id)
+
+        self.assertEqual(self.storage.template_dir("tmpl-1").name, "tmpl-1")
+        self.assertEqual(self.storage.project_dir("prj_safe_1").name, "prj_safe_1")
 
     def test_save_project_form_deduplicates_same_filename(self):
         self._save_template_profile("tpl_dup")

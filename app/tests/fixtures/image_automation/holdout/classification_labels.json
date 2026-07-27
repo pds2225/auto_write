@@ -1,0 +1,284 @@
+{
+  "labels": [
+    {
+      "id": "01_problem-01",
+      "psst": "01_problem",
+      "parent_hint": "1.문제인식",
+      "filename": "시장규모_TAM_1.png",
+      "text_hint": "고객 문제 현황"
+    },
+    {
+      "id": "01_problem-02",
+      "psst": "01_problem",
+      "parent_hint": "1.문제인식",
+      "filename": "시장규모_TAM_2.png",
+      "text_hint": "고객 문제 현황"
+    },
+    {
+      "id": "01_problem-03",
+      "psst": "01_problem",
+      "parent_hint": "1.문제인식",
+      "filename": "시장규모_TAM_3.png",
+      "text_hint": "고객 문제 현황"
+    },
+    {
+      "id": "01_problem-04",
+      "psst": "01_problem",
+      "parent_hint": "1.문제인식",
+      "filename": "시장규모_TAM_4.png",
+      "text_hint": "고객 문제 현황"
+    },
+    {
+      "id": "01_problem-05",
+      "psst": "01_problem",
+      "parent_hint": "1.문제인식",
+      "filename": "시장규모_TAM_5.png",
+      "text_hint": "고객 문제 현황"
+    },
+    {
+      "id": "01_problem-06",
+      "psst": "01_problem",
+      "parent_hint": "1.문제인식",
+      "filename": "시장규모_TAM_6.png",
+      "text_hint": "고객 문제 현황"
+    },
+    {
+      "id": "01_problem-07",
+      "psst": "01_problem",
+      "parent_hint": "1.문제인식",
+      "filename": "시장규모_TAM_7.png",
+      "text_hint": "고객 문제 현황"
+    },
+    {
+      "id": "01_problem-08",
+      "psst": "01_problem",
+      "parent_hint": "1.문제인식",
+      "filename": "시장규모_TAM_8.png",
+      "text_hint": "고객 문제 현황"
+    },
+    {
+      "id": "01_problem-09",
+      "psst": "01_problem",
+      "parent_hint": "1.문제인식",
+      "filename": "시장규모_TAM_9.png",
+      "text_hint": "고객 문제 현황"
+    },
+    {
+      "id": "01_problem-10",
+      "psst": "01_problem",
+      "parent_hint": "1.문제인식",
+      "filename": "시장규모_TAM_10.png",
+      "text_hint": "고객 문제 현황"
+    },
+    {
+      "id": "02_solution-01",
+      "psst": "02_solution",
+      "parent_hint": "2.실현가능성",
+      "filename": "기술_아키텍처_1.png",
+      "text_hint": "솔루션 구현"
+    },
+    {
+      "id": "02_solution-02",
+      "psst": "02_solution",
+      "parent_hint": "2.실현가능성",
+      "filename": "기술_아키텍처_2.png",
+      "text_hint": "솔루션 구현"
+    },
+    {
+      "id": "02_solution-03",
+      "psst": "02_solution",
+      "parent_hint": "2.실현가능성",
+      "filename": "기술_아키텍처_3.png",
+      "text_hint": "솔루션 구현"
+    },
+    {
+      "id": "02_solution-04",
+      "psst": "02_solution",
+      "parent_hint": "2.실현가능성",
+      "filename": "기술_아키텍처_4.png",
+      "text_hint": "솔루션 구현"
+    },
+    {
+      "id": "02_solution-05",
+      "psst": "02_solution",
+      "parent_hint": "2.실현가능성",
+      "filename": "기술_아키텍처_5.png",
+      "text_hint": "솔루션 구현"
+    },
+    {
+      "id": "02_solution-06",
+      "psst": "02_solution",
+      "parent_hint": "2.실현가능성",
+      "filename": "기술_아키텍처_6.png",
+      "text_hint": "솔루션 구현"
+    },
+    {
+      "id": "02_solution-07",
+      "psst": "02_solution",
+      "parent_hint": "2.실현가능성",
+      "filename": "기술_아키텍처_7.png",
+      "text_hint": "솔루션 구현"
+    },
+    {
+      "id": "02_solution-08",
+      "psst": "02_solution",
+      "parent_hint": "2.실현가능성",
+      "filename": "기술_아키텍처_8.png",
+      "text_hint": "솔루션 구현"
+    },
+    {
+      "id": "02_solution-09",
+      "psst": "02_solution",
+      "parent_hint": "2.실현가능성",
+      "filename": "기술_아키텍처_9.png",
+      "text_hint": "솔루션 구현"
+    },
+    {
+      "id": "02_solution-10",
+      "psst": "02_solution",
+      "parent_hint": "2.실현가능성",
+      "filename": "기술_아키텍처_10.png",
+      "text_hint": "솔루션 구현"
+    },
+    {
+      "id": "03_scale_up-01",
+      "psst": "03_scale_up",
+      "parent_hint": "3.성장전략",
+      "filename": "성장_로드맵_1.png",
+      "text_hint": "매출 확장"
+    },
+    {
+      "id": "03_scale_up-02",
+      "psst": "03_scale_up",
+      "parent_hint": "3.성장전략",
+      "filename": "성장_로드맵_2.png",
+      "text_hint": "매출 확장"
+    },
+    {
+      "id": "03_scale_up-03",
+      "psst": "03_scale_up",
+      "parent_hint": "3.성장전략",
+      "filename": "성장_로드맵_3.png",
+      "text_hint": "매출 확장"
+    },
+    {
+      "id": "03_scale_up-04",
+      "psst": "03_scale_up",
+      "parent_hint": "3.성장전략",
+      "filename": "성장_로드맵_4.png",
+      "text_hint": "매출 확장"
+    },
+    {
+      "id": "03_scale_up-05",
+      "psst": "03_scale_up",
+      "parent_hint": "3.성장전략",
+      "filename": "성장_로드맵_5.png",
+      "text_hint": "매출 확장"
+    },
+    {
+      "id": "03_scale_up-06",
+      "psst": "03_scale_up",
+      "parent_hint": "3.성장전략",
+      "filename": "성장_로드맵_6.png",
+      "text_hint": "매출 확장"
+    },
+    {
+      "id": "03_scale_up-07",
+      "psst": "03_scale_up",
+      "parent_hint": "3.성장전략",
+      "filename": "성장_로드맵_7.png",
+      "text_hint": "매출 확장"
+    },
+    {
+      "id": "03_scale_up-08",
+      "psst": "03_scale_up",
+      "parent_hint": "3.성장전략",
+      "filename": "성장_로드맵_8.png",
+      "text_hint": "매출 확장"
+    },
+    {
+      "id": "03_scale_up-09",
+      "psst": "03_scale_up",
+      "parent_hint": "3.성장전략",
+      "filename": "성장_로드맵_9.png",
+      "text_hint": "매출 확장"
+    },
+    {
+      "id": "03_scale_up-10",
+      "psst": "03_scale_up",
+      "parent_hint": "3.성장전략",
+      "filename": "성장_로드맵_10.png",
+      "text_hint": "매출 확장"
+    },
+    {
+      "id": "04_team-01",
+      "psst": "04_team",
+      "parent_hint": "4.기업구성",
+      "filename": "팀구성_조직도_1.png",
+      "text_hint": "조직 인력"
+    },
+    {
+      "id": "04_team-02",
+      "psst": "04_team",
+      "parent_hint": "4.기업구성",
+      "filename": "팀구성_조직도_2.png",
+      "text_hint": "조직 인력"
+    },
+    {
+      "id": "04_team-03",
+      "psst": "04_team",
+      "parent_hint": "4.기업구성",
+      "filename": "팀구성_조직도_3.png",
+      "text_hint": "조직 인력"
+    },
+    {
+      "id": "04_team-04",
+      "psst": "04_team",
+      "parent_hint": "4.기업구성",
+      "filename": "팀구성_조직도_4.png",
+      "text_hint": "조직 인력"
+    },
+    {
+      "id": "04_team-05",
+      "psst": "04_team",
+      "parent_hint": "4.기업구성",
+      "filename": "팀구성_조직도_5.png",
+      "text_hint": "조직 인력"
+    },
+    {
+      "id": "04_team-06",
+      "psst": "04_team",
+      "parent_hint": "4.기업구성",
+      "filename": "팀구성_조직도_6.png",
+      "text_hint": "조직 인력"
+    },
+    {
+      "id": "04_team-07",
+      "psst": "04_team",
+      "parent_hint": "4.기업구성",
+      "filename": "팀구성_조직도_7.png",
+      "text_hint": "조직 인력"
+    },
+    {
+      "id": "04_team-08",
+      "psst": "04_team",
+      "parent_hint": "4.기업구성",
+      "filename": "팀구성_조직도_8.png",
+      "text_hint": "조직 인력"
+    },
+    {
+      "id": "04_team-09",
+      "psst": "04_team",
+      "parent_hint": "4.기업구성",
+      "filename": "팀구성_조직도_9.png",
+      "text_hint": "조직 인력"
+    },
+    {
+      "id": "04_team-10",
+      "psst": "04_team",
+      "parent_hint": "4.기업구성",
+      "filename": "팀구성_조직도_10.png",
+      "text_hint": "조직 인력"
+    }
+  ]
+}
