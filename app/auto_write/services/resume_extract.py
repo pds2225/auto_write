@@ -183,6 +183,7 @@ class ResumeProfile:
     education: list = field(default_factory=list)
     career: list = field(default_factory=list)
     certs: list = field(default_factory=list)
+    trainings: list = field(default_factory=list)
     lectures: list = field(default_factory=list)
     projects: list = field(default_factory=list)
     publications: list = field(default_factory=list)
@@ -199,6 +200,7 @@ class ResumeProfile:
             "education": [e.as_dict() for e in self.education],
             "career": [c.as_dict() for c in self.career],
             "certs": [c.as_dict() for c in self.certs],
+            "trainings": [t.as_dict() for t in self.trainings],
             "lectures": [l.as_dict() for l in self.lectures],
             "projects": [p.as_dict() for p in self.projects],
             "publications": list(self.publications),
@@ -285,6 +287,21 @@ _DATE_LEAD_RE = re.compile(r"^\s*\d{4}[.\-]")
 _PUB_RE = re.compile(r"[『「].+[』」]")
 
 
+def _is_training_completion(name: Optional[str]) -> bool:
+    """자격증명이 교육 '수료/이수'(과정 이수)면 True — 일반 자격은 False.
+
+    '투자심사역 과정 이수' 같은 교육 수료를 certs 에서 trainings 로 분리하기 위한 판정.
+    정규화(공백 제거) 후 '수료'/'이수' 로 끝나거나 '과정이수' 를 포함하면 교육 수료로 본다."""
+    if not name:
+        return False
+    n = _norm_label(name)
+    if n.endswith("수료") or n.endswith("이수"):
+        return True
+    if "과정이수" in n:
+        return True
+    return False
+
+
 # --- 파서(순수 함수) ---------------------------------------------------------
 def parse_profile_text(text: str, source: Optional[str] = None) -> ResumeProfile:
     """평문화된 이력서 텍스트를 구조화 프로필로 파싱한다(날조 없음)."""
@@ -336,9 +353,15 @@ def parse_profile_text(text: str, source: Optional[str] = None) -> ResumeProfile
             body = _section_data_body(cells, "자격")
             if body is not None:
                 if _val(body, 0) or _val(body, 1):
-                    prof.certs.append(Cert(
+                    cert = Cert(
                         date=_val(body, 0), name=_val(body, 1),
-                        number=_val(body, 2), issuer=_val(body, 3)))
+                        number=_val(body, 2), issuer=_val(body, 3))
+                    # 교육 '수료/이수'(과정 이수)는 자격증이 아니라 교육수료 → trainings 로 분리
+                    # (버리지 않고 별도 보존 — 침묵 유실 금지).
+                    if _is_training_completion(cert.name):
+                        prof.trainings.append(cert)
+                    else:
+                        prof.certs.append(cert)
                 continue
         elif section == "lectures":
             if _DATE_LEAD_RE.match(cells[0]):
@@ -478,6 +501,7 @@ def merge_profiles(profiles: list[ResumeProfile]) -> tuple[ResumeProfile, list[s
         _dedup_extend(merged.education, prof.education)
         _dedup_extend(merged.career, prof.career)
         _dedup_extend(merged.certs, prof.certs)
+        _dedup_extend(merged.trainings, prof.trainings)
         _dedup_extend(merged.lectures, prof.lectures)
         _dedup_extend(merged.projects, prof.projects)
         for pub in prof.publications:
@@ -594,9 +618,12 @@ def format_build_korean(result: ProfileBuildResult) -> str:
     lines.append("")
     lines.append(f"성명: {p.identity.get('name') or '(없음)'}"
                  f" · 소속: {p.identity.get('org') or '(없음)'}")
-    lines.append(f"학력 {len(p.education)} · 경력 {len(p.career)} · 자격 {len(p.certs)}"
-                 f" · 강의 {len(p.lectures)} · 수행 {len(p.projects)}"
-                 f" · 저서/논문 {len(p.publications)}")
+    summary = (f"학력 {len(p.education)} · 경력 {len(p.career)} · 자격 {len(p.certs)}")
+    if p.trainings:
+        summary += f" · 교육수료 {len(p.trainings)}"
+    summary += (f" · 강의 {len(p.lectures)} · 수행 {len(p.projects)}"
+                f" · 저서/논문 {len(p.publications)}")
+    lines.append(summary)
     if result.needs_confirm:
         lines.append("")
         lines.append(f"⚠ 확인 필요 {len(result.needs_confirm)}건:")

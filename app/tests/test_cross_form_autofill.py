@@ -1542,3 +1542,181 @@ def test_pick_source_penalizes_consent_and_recommendation(tmp_path: Path) -> Non
     assert top.penalty == 0
     penalized = [s for s in report.scores if s.penalty > 0]
     assert len(penalized) == 2
+
+
+# ============================================================================
+# 교훈 가드: L010(예비창업 기업정보 공란) + L045((인) 텍스트 잠금)
+# ============================================================================
+
+from auto_write.services.cross_form_autofill import (  # noqa: E402
+    _is_company_info_label,
+    _is_preliminary_founder,
+    _is_seal_marker,
+    _key,
+)
+
+
+def _make_prelim_source(path: Path) -> None:
+    """예비창업자 소스: 기업형태='예비창업자' + 기업정보(매출/고용/창업일) 값 존재.
+
+    (예비창업자는 실제로는 이런 실적이 없지만, 소스에 잘못/계획치로 값이 있어도
+    타깃 기업정보 칸엔 전사하면 안 된다 = 강제 공란.)
+    """
+    doc = Document()
+    t = doc.add_table(rows=6, cols=2)
+    rows = [
+        ("기업명", "예비창업팀 밸류업"),
+        ("대표자", "홍길동"),
+        ("기업형태", "예비창업자"),
+        ("매출액", "500,000,000"),
+        ("고용인원", "12"),
+        ("창업일", "2024.03.01"),
+    ]
+    for i, (lab, val) in enumerate(rows):
+        t.rows[i].cells[0].text = lab
+        t.rows[i].cells[1].text = val
+    doc.save(str(path))
+
+
+def _make_company_info_target(path: Path) -> None:
+    """타깃: 기업명 + 기업정보(매출액/고용인원/창업일/사업자등록번호) 빈칸."""
+    doc = Document()
+    t = doc.add_table(rows=5, cols=2)
+    for i, lab in enumerate(
+        ["기업명", "매출액", "고용인원", "창업일", "사업자등록번호"]
+    ):
+        t.rows[i].cells[0].text = lab
+        t.rows[i].cells[1].text = ""
+    doc.save(str(path))
+
+
+# --- 단위: 판별 -------------------------------------------------------------
+
+def test_is_preliminary_founder_signal() -> None:
+    """기업형태 값에 '예비창업'이 있으면 예비창업자, 없으면 아님."""
+    assert _is_preliminary_founder({"기업형태": "예비창업자"}) is True
+    assert _is_preliminary_founder({"기업형태": "예비 창업팀"}) is True
+    assert _is_preliminary_founder({"기업형태": "법인", "매출액": "5억"}) is False
+    # 사업자번호가 그냥 없는 정상 소스는 예비창업으로 오판하지 않는다(회귀 보존).
+    assert _is_preliminary_founder({"개업연월일": "2025.03.17"}) is False
+
+
+def test_preliminary_founder_signal_only_from_type_field() -> None:
+    """예비창업 신호는 '기업형태' 계열 라벨 값에서만 인정 — 기업명·사업명·제품명에
+    '예비창업'이 들어가도 정상 기창업사를 예비창업자로 오판하지 않는다(회귀 방지)."""
+    assert _is_preliminary_founder({_key("기업형태"): "예비창업자"}) is True
+    # 비-기업형태 필드(사업명/기업명/제품명)에 '예비창업' → False
+    assert _is_preliminary_founder(
+        {_key("사업명"): "2026 예비창업패키지 후속지원", _key("기업형태"): "법인기업"}) is False
+    assert _is_preliminary_founder({_key("기업명"): "예비창업컨설팅"}) is False
+    assert _is_preliminary_founder({_key("주요제품"): "예비창업자 매칭 플랫폼"}) is False
+
+
+def test_is_company_info_label_denylist() -> None:
+    """기업정보 클러스터/부분문자열 라벨만 True, 이름·기업명은 False."""
+    for lab in ["매출액", "연매출", "고용인원", "상시근로자수", "창업일",
+                "설립일", "사업자등록번호", "투자유치실적", "보유특허", "산업재산권"]:
+        assert _is_company_info_label(_key(lab)) is True, lab
+    for lab in ["기업명", "대표자", "성명", "주소", "연락처"]:
+        assert _is_company_info_label(_key(lab)) is False, lab
+
+
+# --- E2E: 예비창업 공란 vs 일반 정상 전사 -----------------------------------
+
+def test_preliminary_founder_leaves_company_info_blank(tmp_path: Path) -> None:
+    """L010: 예비창업 소스에 매출·고용·창업일 값이 있어도 타깃 기업정보 칸은 공란 유지.
+
+    단, 기업명(비-기업정보)은 정상 전사되어야 한다.
+    """
+    src = tmp_path / "a.docx"
+    tgt = tmp_path / "b.docx"
+    out = tmp_path / "out.docx"
+    _make_prelim_source(src)
+    _make_company_info_target(tgt)
+
+    report = autofill_from_source(src, tgt, out, use_ai=False)
+    # 기업정보 칸은 공란(소스에 값 있어도 비전사)
+    assert _value_for(out, "매출액") == ""
+    assert _value_for(out, "고용인원") == ""
+    assert _value_for(out, "창업일") == ""
+    # 기업명은 정상 전사(공란 게이트가 무관 칸을 막지 않음)
+    assert _value_for(out, "기업명") == "예비창업팀 밸류업"
+    # needs_confirm 노이즈로 새지 않고 note 로만 알림
+    assert all(
+        n["normalized"] not in {"매출액", "고용인원", "창업일"}
+        for n in report.needs_confirm
+    )
+
+
+def test_general_founder_transcribes_company_info(tmp_path: Path) -> None:
+    """L010 회귀: 일반(예비창업 아님) 소스는 기업정보를 정상 전사한다.
+
+    사업자등록번호 실값이 있는 기창업 소스 → 매출/고용 정상 채움.
+    """
+    src = tmp_path / "a.docx"
+    tgt = tmp_path / "b.docx"
+    out = tmp_path / "out.docx"
+    doc = Document()
+    t = doc.add_table(rows=4, cols=2)
+    rows = [
+        ("기업명", "밸류업(주)"),
+        ("사업자등록번호", "123-45-67890"),
+        ("매출액", "500,000,000"),
+        ("고용인원", "12"),
+    ]
+    for i, (lab, val) in enumerate(rows):
+        t.rows[i].cells[0].text = lab
+        t.rows[i].cells[1].text = val
+    doc.save(str(src))
+    _make_company_info_target(tgt)
+
+    report = autofill_from_source(src, tgt, out, use_ai=False)
+    assert _value_for(out, "매출액") == "500,000,000"
+    assert _value_for(out, "고용인원") == "12"
+    assert _value_for(out, "기업명") == "밸류업(주)"
+    assert _value_for(out, "사업자등록번호") == "123-45-67890"
+
+
+# --- L045: (인) 텍스트 잠금 -------------------------------------------------
+
+def test_is_seal_marker_unit() -> None:
+    """도장/서명 마커만 True, 실값·기업 접미사((주))는 False."""
+    for v in ["(인)", "（인）", "(印)", "( 인 )", "(서명)", "(날인)", "(도장)"]:
+        assert _is_seal_marker(v) is True, v
+    for v in ["홍길동", "밸류업(주)", "(주)", "인천", "서명하세요", ""]:
+        assert _is_seal_marker(v) is False, v
+
+
+def test_seal_marker_never_written_to_signature_field(tmp_path: Path) -> None:
+    """L045: 서명/(인) 타깃에 '(인)'이 값으로 유도돼도 리터럴 '(인)' 기입 0건.
+
+    소스 서명='(인)' + 대표자=홍길동 → 서명 칸엔 '(인)' 안 들어가고(공란),
+    대표자명은 정상 전사. 산출물 전체에 새로 기입된 '(인)' 리터럴 0건.
+    """
+    src = tmp_path / "a.docx"
+    tgt = tmp_path / "b.docx"
+    out = tmp_path / "out.docx"
+    doc = Document()
+    t = doc.add_table(rows=2, cols=2)
+    t.rows[0].cells[0].text = "대표자"
+    t.rows[0].cells[1].text = "홍길동"
+    t.rows[1].cells[0].text = "서명"
+    t.rows[1].cells[1].text = "(인)"
+    doc.save(str(src))
+    doc2 = Document()
+    t2 = doc2.add_table(rows=2, cols=2)
+    t2.rows[0].cells[0].text = "대표자명"   # 동의어 → 정상 전사
+    t2.rows[0].cells[1].text = ""
+    t2.rows[1].cells[0].text = "서명"        # (인) 유도 대상
+    t2.rows[1].cells[1].text = ""
+    doc2.save(str(tgt))
+
+    report = autofill_from_source(src, tgt, out, use_ai=False)
+    assert _value_for(out, "서명") == "", "서명 칸에 '(인)' 등 기입됨"
+    assert _value_for(out, "대표자명") == "홍길동"
+    # 산출물 값칸 어디에도 리터럴 '(인)' 신규 기입 0건
+    doc_out = Document(str(out))
+    for table in doc_out.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                assert "(인)" not in cell.text, f"리터럴 '(인)' 기입: {cell.text!r}"
