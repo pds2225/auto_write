@@ -30,7 +30,7 @@ def reg_get(root, sub, name=None):
         with winreg.OpenKey(root, sub) as k:
             if name:
                 return winreg.QueryValueEx(k, name)[0]
-            return winreg.QueryValue(k)
+            return winreg.QueryValue(k, None)
     except OSError:
         return None
 
