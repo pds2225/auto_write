@@ -263,6 +263,9 @@ class _BlackCharPr:
         self.colors[new_id] = "#000000"
         self._clones[ref] = new_id
         self.changed = True
+        # L076: 클론은 반드시 append — 삽입 후 id/인덱스 불변 검증.
+        from .hwpx_charpr_guard import assert_charpr_append_only
+        assert_charpr_append_only(self.root)
         return new_id
 
     def fix_run(self, run) -> bool:
