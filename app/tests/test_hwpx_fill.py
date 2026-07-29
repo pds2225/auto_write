@@ -431,7 +431,7 @@ def _count_lineseg(path: Path) -> int:
 
 
 def test_strip_linesegarray_when_filled(tmp_path):
-    """채우면 옛 줄위치 캐시(linesegarray)가 전량 제거돼 한글 글씨 겹침을 막는다."""
+    """채우면 편집 칸의 lineseg 만 제거(L074) — 미편집 외곽 문단 캐시는 보존."""
     src = tmp_path / "ls.hwpx"
     _make_hwpx_ls(src)
     assert _count_lineseg(src) == 2  # 채우기 전: 문단1 + 값칸1
@@ -439,7 +439,8 @@ def test_strip_linesegarray_when_filled(tmp_path):
     rep = fill_hwpx(src, out, identity={"상호": "도보내비"})
     assert rep.filled.get("상호") == "도보내비"
     assert _cell_value(out, "상호") == "도보내비"  # 값 채워짐(내용 보존)
-    assert _count_lineseg(out) == 0  # 캐시 전량 제거(겹침 방지)
+    # L074: 값 칸 lineseg 만 제거 → 외곽 표 문단 lineseg 1개 잔존(안내박스 보호 동일)
+    assert _count_lineseg(out) == 1
 
 
 def test_linesegarray_kept_when_no_change(tmp_path):
