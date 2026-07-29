@@ -34,6 +34,7 @@ __all__ = [
     "strip_linesegarray",
     "relax_forced_single_line",
     "merge_trailing_empty_value_cells",
+    "table_width_from_colspan1",
     "force_black_text",
     "normalize_colors_in_hwpx",
     "validate_table_grid",
@@ -162,20 +163,54 @@ def normalize_colors_in_hwpx(path) -> int:
 
 
 # --- 2) 한 줄 강제 해제(여러 줄 재계산) ---------------------------------------
-def strip_linesegarray(section_root) -> int:
-    """줄위치 캐시(hp:linesegarray) 전부 제거 → 한글이 열 때 줄위치·줄바꿈 재계산."""
-    n = 0
-    for ls in list(section_root.iter()):
-        if _ln(ls) == "linesegarray":
-            par = ls.getparent()
-            if par is not None:
-                par.remove(ls)
-                n += 1
-    return n
+def strip_linesegarray(section_root, *, only_under=None) -> int:
+    """줄위치 캐시(hp:linesegarray) 제거 → 한글이 열 때 줄위치·줄바꿈 재계산.
+
+    L074: ``only_under`` 지정 시 그 하위만(안내박스 등 미편집 영역 보존).
+    """
+    from .hwpx_fill import _strip_linesegarray
+    return _strip_linesegarray(section_root, only_under=only_under)
 
 
 # 사용자 표현("여러 줄로 작성") 기준 별칭
 relax_forced_single_line = strip_linesegarray
+
+
+def table_width_from_colspan1(tbl) -> dict:
+    """L091: 표 실제 폭 = colSpan==1 셀들의 열별 폭 합.
+
+    병합 제목 셀(colSpan>1) 폭은 열 폭으로 쓰지 않는다(표 깨짐 방지).
+    반환: {width, col_widths: {colAddr: w}, skipped_merged: n, ok: bool}.
+    """
+    col_widths: dict[int, int] = {}
+    skipped = 0
+    for tc in list(tbl.iter()):
+        if _ln(tc) != "tc":
+            continue
+        # 중첩 표의 셀은 제외 — 직계 행 소속만(가장 가까운 조상 tbl 이 자신).
+        parent_tbl = tc.getparent()
+        while parent_tbl is not None and _ln(parent_tbl) != "tbl":
+            parent_tbl = parent_tbl.getparent()
+        if parent_tbl is not tbl:
+            continue
+        span = _tc_span(tc, "colSpan")
+        if span != 1:
+            skipped += 1
+            continue
+        col = _tc_col(tc)
+        w = _tc_width(tc)
+        if col < 0 or w <= 0:
+            continue
+        # 같은 열의 첫 유효 폭 채택(헤더·데이터 행 혼재 시 안정)
+        if col not in col_widths:
+            col_widths[col] = w
+    total = sum(col_widths[c] for c in sorted(col_widths))
+    return {
+        "width": total,
+        "col_widths": dict(col_widths),
+        "skipped_merged": skipped,
+        "ok": bool(col_widths) and total > 0,
+    }
 
 
 # --- 3) 라벨-값 표 오른쪽 빈 열 병합 ------------------------------------------

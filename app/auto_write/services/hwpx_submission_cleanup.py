@@ -46,16 +46,15 @@ def _text_of(el) -> str:
     return "".join((t.text or "") for t in el.iter() if _ln(t) == "t")
 
 
-def strip_linesegarray(root) -> int:
-    """줄위치 캐시(hp:linesegarray) 전체 제거 → 한글이 열 때 줄위치를 새로 계산."""
-    n = 0
-    for ls in list(root.iter()):
-        if _ln(ls) == "linesegarray":
-            par = ls.getparent()
-            if par is not None:
-                par.remove(ls)
-                n += 1
-    return n
+def strip_linesegarray(root, *, only_under=None) -> int:
+    """줄위치 캐시(hp:linesegarray) 제거 → 한글이 열 때 줄위치를 새로 계산.
+
+    L074: ``only_under`` 가 주어지면 그 하위만 제거(rhwp PDF 안내박스 보호).
+    ``None`` 이면 종전처럼 root 전역(한글 직접 납품 최종 cleanup 용).
+    """
+    # hwpx_fill 과 동일 의미 — 중복 방지로 위임.
+    from .hwpx_fill import _strip_linesegarray
+    return _strip_linesegarray(root, only_under=only_under)
 
 
 def force_black_text(header_root) -> int:

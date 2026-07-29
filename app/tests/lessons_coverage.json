@@ -1,11 +1,11 @@
 {
   "counts": {
-    "mechanized": 36,
-    "gap": 24,
+    "mechanized": 43,
+    "gap": 17,
     "judgment": 32,
     "total": 92
   },
-  "coverage_note": "총 92개 교훈(레지스트리): 기계화 33(36%)·갭 27(29%)·사람판단 32(35%). 2026-07-21 세션: 6건 gap→mechanized 마감(L013 메타문구·L015 ■제목정규화·L010 예비창업 공란·L046 과정이수 분리·L045 '(인)' 미삽입 잠금·L001 이미지 폭클램프). 2026-07-27 세션: 외부 lessons.md 신규 16건(L070~L085) 분류 등록 + 헤딩 형식 변경(분류 컬럼 '| 공통 |' 삽입)으로 어긋난 id 87건을 현재 헤딩에 재동기화해 SSOT drift 해소. 다음 기계화 1순위 = HWPX 렌더 계열 high 갭 5건(L070 양식고유문구 보존·L074 lineseg 편집문단 한정·L076 charPr append-only·L078 서명 앵커·L083 데이터셀 검정). 핵심 서식/게이트(유색→검정 L006/L022, 마스킹 L007, 날조0 L009, 서식보존 L011, DRAFT 세탁방지 L019/L020, 체크박스·이름 오매칭 L023~L025, HWPX 격자·셀검정 L031/L054)는 검출↔교정 거울정합으로 잠금. 기존 갭은 '제출 최종화'(L037 서식분리·L048 PDF합본·L049 폴더배치·L050 HWP/PDF쌍·L059 파일명오염)와 '이력서 렌더러 부재'(L038 정량표·L043 단일표·L044 골격·L061 사진칸·L039 포트폴리오)에 집중. 2026-07-27 울산 신청서 작업에서 HWPX 양식 채움 실패 6건(L086 폼컨트롤 오인·L087 COM 찾기 선택 치환·L088 그림 축소 3함정·L089 secPr 유실 여백복원·L090 pageBreak 부활·L091 병합셀 표폭 오산)을 갭으로 등록 — 전부 '양식 채움형' 경로의 기계화 1순위. 2026-07-29 야간 autopilot: L086·L083 mechanized(폼컨트롤 방어핀·데이터셀 검정 resume 경로), L074 only_under API 도입(전역 strip→편집한정 호출부 전환은 잔여). submit_hwpx 에 finalize_submission_hwpx 배선. 2026-07-29 cycle2: L070·L076·L077 mechanized(form_diff·charPr append-only·submission_regression 라이브러리+테스트). counts={'mechanized': 36, 'gap': 24, 'judgment': 32, 'total': 92}.",
+  "coverage_note": "총 92개 교훈(레지스트리): 기계화 43(46%)·갭 17(18%)·사람판단 32(34%). 2026-07-29 야간 high 잔여 7건 gap→mechanized: L074·L075·L078·L087·L088·L089·L091. L070/L076/L077 guard_ref 에 test_*.py 경로 보강(커버리지 메타테스트 정합).",
   "top_gaps": [
     {
       "id": "L040",
@@ -708,7 +708,7 @@
       "summary": "손대도 되는 곳은 값 칸 안의 예시값뿐. 안내문구·유의사항·파일명 예시·표 라벨은 색 불문 원형 보존, 재현본 제작 금지.",
       "mechanizable": "partial",
       "category": "mechanized",
-      "guard_ref": "hwpx_form_diff.compare_hwpx_forms + test_form_diff_* — submit 게이트 승격은 선택 배선 잔여",
+      "guard_ref": "hwpx_form_diff.compare_hwpx_forms + test_night_autopilot_cycle2.py::test_form_diff_allows_value_fill_only·test_form_diff_flags_phrase_deletion — submit 게이트 승격은 선택 배선 잔여",
       "gap_desc": "",
       "impact": "high"
     },
@@ -743,18 +743,18 @@
       "id": "L074 | 문서작성 | 2026-07-23 | linesegarray 전역 제거는 rhwp PDF 렌더를 깨뜨린다 — L002 는 '한글 전용'",
       "summary": "lineseg 제거는 편집한 문단만. rhwp 로 PDF 낼 파일은 전역 strip 금지(안내박스 다중문단이 겹쳐 그려짐).",
       "mechanizable": "partial",
-      "category": "gap",
-      "guard_ref": "hwpx_fill._strip_linesegarray(only_under=...) API + test_strip_linesegarray_only_under_preserves_siblings — fill/submit 기본은 한글 납품용 전역 strip 유지(L002). rhwp PDF 경로 호출부 전환은 잔여.",
-      "gap_desc": "fill/submit/cleanup 전역 strip 호출을 only_under 기본으로 전환하고 rhwp PDF 경로 회귀 잠금 필요",
+      "category": "mechanized",
+      "guard_ref": "hwpx_fill._strip_linesegarray(only_under=edited) + resume only_under + test_hwpx_fill.py::test_strip_linesegarray_only_under_preserves_siblings·test_strip_linesegarray_when_filled — 한글 cleanup/finalize 전역 strip 은 L002 유지",
+      "gap_desc": "",
       "impact": "high"
     },
     {
       "id": "L075 | 공통 | 2026-07-23 | 산출 방식을 바꾸면 이전 확정 속성이 조용히 사라진다 — 이월 체크리스트 필수",
       "summary": "파이프라인 전환 시 직전 확정본과 시각·서식 속성을 항목별 대조해 이월 체크리스트로 실측한다.",
       "mechanizable": "partial",
-      "category": "gap",
-      "guard_ref": "",
-      "gap_desc": "submission_regression_check.py 를 '직전 확정판 대비' 모드로 확장(볼드·안내삭제·폰트위계 이월 항목 비교)해야 기계화 가능",
+      "category": "mechanized",
+      "guard_ref": "submission_regression_check.compare_to_baseline(--baseline-dir) + test_night_high_gaps_l074_l091.py::test_compare_to_baseline_pages_text_images·test_run_checks_baseline_dir_wired",
+      "gap_desc": "",
       "impact": "high"
     },
     {
@@ -762,7 +762,7 @@
       "summary": "header.xml charPr/paraPr 추가는 항상 맨 끝 append(id=최대+1, itemCnt 갱신)해 id==인덱스 정렬 유지.",
       "mechanizable": "partial",
       "category": "mechanized",
-      "guard_ref": "hwpx_charpr_guard.check_charpr_append_only + BlackCharPr.black_ref assert + test_night_autopilot_cycle2",
+      "guard_ref": "hwpx_charpr_guard.check_charpr_append_only + BlackCharPr + test_night_autopilot_cycle2.py::test_charpr_append_only_ok·test_charpr_mid_insert_detected",
       "gap_desc": "",
       "impact": "high"
     },
@@ -771,7 +771,7 @@
       "summary": "재생성 후 직전 확정판 대비 회귀 전수점검 의무(기계 게이트 + 자동판정 불가 속성은 렌더 눈검증).",
       "mechanizable": "partial",
       "category": "mechanized",
-      "guard_ref": "auto_write.services.submission_regression_check + test_night_autopilot_cycle2::test_run_checks_with_injected_pdf",
+      "guard_ref": "submission_regression_check.run_checks + test_night_autopilot_cycle2.py::test_run_checks_with_injected_pdf",
       "gap_desc": "",
       "impact": "high"
     },
@@ -779,9 +779,9 @@
       "id": "L078 | 문서작성 | 2026-07-23 | HWPX 서명(이미지) 삽입 3함정 — 래퍼 표 앵커·inline 행잘림·PAPER 무시 + rhwp 알파는 렌더됨",
       "summary": "값이 든 tc 를 직접 앵커로, 칸 안 문단 앵커 + 떠 있는 개체(treatAsChar=0·PARA 기준). inline·PAPER 금지.",
       "mechanizable": "partial",
-      "category": "gap",
-      "guard_ref": "",
-      "gap_desc": "서명 삽입 헬퍼에 앵커 선택(값 칸 tc)·treatAsChar=0·vertRelTo=PARA 강제 + 렌더 좌표 회귀테스트 필요",
+      "category": "mechanized",
+      "guard_ref": "hwpx_pic_insert.force_signature_pos·insert_signature_into_tc + test_night_high_gaps_l074_l091.py::test_force_signature_pos_para_not_paper·test_insert_signature_into_value_tc",
+      "gap_desc": "",
       "impact": "high"
     },
     {
@@ -860,27 +860,27 @@
       "id": "L087 | 문서작성 | 2026-07-27 | 한글 COM '찾기' 직후는 선택 상태 — 그대로 삽입하면 찾은 글자가 지워진다",
       "summary": "한글 COM 찾기 직후 선택 상태에서 삽입하면 찾은 글자가 치환된다 — Cancel 후 삽입.",
       "mechanizable": "partial",
-      "category": "gap",
-      "guard_ref": "",
-      "gap_desc": "COM 삽입 헬퍼에 find→Cancel→insert 순서 강제 + 삽입 후 원문 텍스트 잔존 단언 필요",
+      "category": "mechanized",
+      "guard_ref": "hwp_com_fill.find_cancel_insert_text + test_night_high_gaps_l074_l091.py::test_find_cancel_insert_order",
+      "gap_desc": "",
       "impact": "high"
     },
     {
       "id": "L088 | 문서작성 | 2026-07-27 | HWPX 그림 축소는 scaMatrix 로 — hp:sz 만 줄이면 잘리고, imgRect 까지 줄이면 이중축소",
       "summary": "HWPX 그림 축소는 scaMatrix 로. sz 만 줄이면 잘리고 imgRect 까지 줄이면 이중축소. 삽입 전 PNG 리사이즈가 최선.",
       "mechanizable": "partial",
-      "category": "gap",
-      "guard_ref": "",
-      "gap_desc": "그림 리사이즈 헬퍼(sz/curSz + scaMatrix, orgSz/imgRect 보존) 신설 + 렌더 크기 회귀테스트 필요",
+      "category": "mechanized",
+      "guard_ref": "hwpx_pic_insert.resize_hwpx_picture + test_night_high_gaps_l074_l091.py::test_resize_hwpx_picture_preserves_org_and_imgrect",
+      "gap_desc": "",
       "impact": "high"
     },
     {
       "id": "L089 | 문서작성 | 2026-07-27 | 공고 본문을 떼어 제출본을 만들 때 secPr 든 첫 문단은 지우지 마라 — 여백이 기본값으로 돌아가 표가 잘린다",
       "summary": "제출본 분리 시 secPr 든 첫 문단은 지우지 말고 재활용 — 지우면 한글이 기본 여백으로 되돌려 표가 잘린다.",
       "mechanizable": "partial",
-      "category": "gap",
-      "guard_ref": "",
-      "gap_desc": "서식 분리 헬퍼에 '첫 문단 재활용' 강제 + 한글 왕복 후 pagePr/margin 동일 단언 필요",
+      "category": "mechanized",
+      "guard_ref": "hwpx_section_split.recycle_first_secpr_paragraph + test_night_high_gaps_l074_l091.py::test_recycle_first_secpr_paragraph_keeps_pagepr",
+      "gap_desc": "",
       "impact": "high"
     },
     {
@@ -896,9 +896,9 @@
       "id": "L091 | 문서작성 | 2026-07-27 | 표 폭 계산은 colSpan=1 셀만 — 병합된 제목 셀 폭을 열 폭으로 쓰면 표가 깨진다",
       "summary": "표 실제 폭은 colSpan=1 셀들의 열별 폭 합 — 병합 제목 셀 폭을 열 폭으로 쓰면 표가 깨진다.",
       "mechanizable": "partial",
-      "category": "gap",
-      "guard_ref": "",
-      "gap_desc": "표 폭 정규화 유틸에 colSpan=1 기준 계산 + 축소 후 재측정 단언 회귀테스트 필요",
+      "category": "mechanized",
+      "guard_ref": "hwpx_layout_fix.table_width_from_colspan1 + test_night_high_gaps_l074_l091.py::test_table_width_from_colspan1_ignores_merged_title",
+      "gap_desc": "",
       "impact": "high"
     }
   ]

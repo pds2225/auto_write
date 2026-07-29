@@ -115,6 +115,107 @@ def _match_field(field_name: str, wants: list[tuple[str, str, str]],
     return None
 
 
+def find_cancel_insert_text(hwp: Any, find_text: str, insert_text: str) -> dict[str, Any]:
+    """L087: 찾기 → Cancel(선택 해제) → InsertText 순서 강제.
+
+    한글 COM 은 FindText 직후 찾은 글자가 선택 상태다. 그 상태에서 InsertText 하면
+    찾은 글자가 치환(삭제)된다. 반드시 Cancel 로 선택을 푼 뒤 삽입한다.
+
+    Returns:
+        {ok, found, cancelled, inserted, notes}. found=False 면 삽입하지 않음.
+    """
+    notes: list[str] = []
+    if not find_text:
+        return {
+            "ok": False,
+            "found": False,
+            "cancelled": False,
+            "inserted": False,
+            "notes": ["find_text 비어 있음"],
+        }
+    found = False
+    try:
+        # HwpCtrl: FindText(findstr, direction=...) — 구현체마다 시그니처 상이 → 광역 try
+        found = bool(hwp.FindText(str(find_text)))
+    except TypeError:
+        try:
+            found = bool(hwp.FindText(str(find_text), 0))
+        except Exception as exc:
+            notes.append(f"FindText 실패: {type(exc).__name__}")
+            return {
+                "ok": False,
+                "found": False,
+                "cancelled": False,
+                "inserted": False,
+                "notes": notes,
+            }
+    except Exception as exc:
+        notes.append(f"FindText 실패: {type(exc).__name__}")
+        return {
+            "ok": False,
+            "found": False,
+            "cancelled": False,
+            "inserted": False,
+            "notes": notes,
+        }
+    if not found:
+        notes.append(f"찾기 실패(미매칭): {find_text!r}")
+        return {
+            "ok": False,
+            "found": False,
+            "cancelled": False,
+            "inserted": False,
+            "notes": notes,
+        }
+
+    cancelled = False
+    try:
+        # 선택 해제 — Cancel 이 표준. 없으면 Escape/CancelSelection 폴백.
+        if hasattr(hwp, "Cancel"):
+            hwp.Cancel()
+            cancelled = True
+        elif hasattr(hwp, "CancelSelection"):
+            hwp.CancelSelection()
+            cancelled = True
+        else:
+            notes.append("Cancel API 없음 — 선택 해제 불가, 삽입 중단(치환 방지)")
+            return {
+                "ok": False,
+                "found": True,
+                "cancelled": False,
+                "inserted": False,
+                "notes": notes,
+            }
+    except Exception as exc:
+        notes.append(f"Cancel 실패: {type(exc).__name__} — 삽입 중단")
+        return {
+            "ok": False,
+            "found": True,
+            "cancelled": False,
+            "inserted": False,
+            "notes": notes,
+        }
+
+    try:
+        hwp.InsertText(str(insert_text))
+    except Exception as exc:
+        notes.append(f"InsertText 실패: {type(exc).__name__}")
+        return {
+            "ok": False,
+            "found": True,
+            "cancelled": cancelled,
+            "inserted": False,
+            "notes": notes,
+        }
+    return {
+        "ok": True,
+        "found": True,
+        "cancelled": cancelled,
+        "inserted": True,
+        "notes": notes,
+    }
+
+
 def fill_hwp_com(
     in_hwp: str | Path,
     out_hwp: str | Path,

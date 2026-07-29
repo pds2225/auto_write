@@ -218,8 +218,8 @@ def _fill_rows_inplace(
                 touched_tables.append(fs.table)
         if not changed:
             continue
-        # 채운 표의 옛 줄위치 캐시 제거(글씨 겹침 방지) + 격자 검증.
-        _strip_linesegarray(root)
+        # L074: 채운 표만 lineseg 제거(섹션 전역 strip 금지 — 안내박스 PDF 겹침 방지).
+        _strip_linesegarray(root, only_under=touched_tables)
         for tbl in touched_tables:
             v = validate_table_grid(tbl)
             if not v.get("ok"):
