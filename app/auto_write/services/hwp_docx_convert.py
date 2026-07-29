@@ -64,8 +64,16 @@ def hancom_com_available() -> bool:
         return False
 
 
-def _dispatch_hwp():
-    """한글 COM 객체를 띄운다(테스트에서 monkeypatch 하는 분리점)."""
+def _dispatch_hwp(*, skip_com_guard: bool = False):
+    """한글 COM 객체를 띄운다(테스트에서 monkeypatch 하는 분리점).
+
+    기본: ``hancom_com_guard`` 로 HOffice130(2024·로그인) COM 기동을 차단한다.
+  ``skip_com_guard=True`` 또는 ``AUTO_WRITE_ALLOW_HANCOM_2024_COM=1`` 로만 우회.
+    """
+    if not skip_com_guard:
+        from .hancom_com_guard import assert_safe_hwp_com_or_raise
+
+        assert_safe_hwp_com_or_raise()
     import win32com.client as win32
 
     return win32.Dispatch(_COM_PROGID)
