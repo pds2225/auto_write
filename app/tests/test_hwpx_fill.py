@@ -1499,3 +1499,41 @@ def test_no_in_marker_synthesized_on_clean_form(tmp_path):
     fill_hwpx(src, out, identity={"대표자": "김철수"})
     assert _read_cell_by_col(out, 1) == "김철수"
     assert _count_marker(out, "(인)") == 0              # 도장 마커 자동생성 없음
+
+
+def test_set_cell_text_blocks_form_control_direct(tmp_path):
+    """L086 방어핀: _set_cell_text 직접 호출도 checkBtn 칸에 기입하지 않는다."""
+    from lxml import etree
+    from auto_write.services.hwpx_fill import _set_cell_text, _q, _HP
+    xml = (
+        f'<hp:tc xmlns:hp="{_HP}">'
+        f'<hp:subList><hp:p><hp:run charPrIDRef="0">'
+        f'<hp:checkBtn name="CB" value="UNCHECKED"/><hp:t/></hp:run></hp:p></hp:subList>'
+        f'</hp:tc>'
+    )
+    tc = etree.fromstring(xml)
+    assert _set_cell_text(tc, "010-9999-8888") is False
+    texts = [t.text for t in tc.iter(_q("t"))]
+    assert all(not (t or "").strip() for t in texts)
+
+
+def test_strip_linesegarray_only_under_preserves_siblings():
+    """L074: only_under 지정 시 형제 문단 lineseg 는 보존."""
+    from lxml import etree
+    from auto_write.services.hwpx_fill import _strip_linesegarray, _q, _HP
+    root = etree.fromstring(
+        f'<hs:sec xmlns:hp="{_HP}" xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section">'
+        f'<hp:p id="edit"><hp:run><hp:t>채움</hp:t></hp:run>'
+        f'<hp:linesegarray><hp:lineseg/></hp:linesegarray></hp:p>'
+        f'<hp:p id="guide"><hp:run><hp:t>안내</hp:t></hp:run>'
+        f'<hp:linesegarray><hp:lineseg/></hp:linesegarray></hp:p>'
+        f'</hs:sec>'
+    )
+    edited = root.find('.//{http://www.hancom.co.kr/hwpml/2011/paragraph}p')
+    # first p
+    ps = list(root.iter(_q("p")))
+    n = _strip_linesegarray(root, only_under=[ps[0]])
+    assert n == 1
+    remain = list(root.iter(_q("linesegarray")))
+    assert len(remain) == 1
+    assert remain[0].getparent() is ps[1]

@@ -22,6 +22,7 @@ B②(게이트 배선) + B③(제출 파이프라인). 기존 자산만 조립�
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -29,6 +30,7 @@ from typing import Any, Optional
 from .hwpx_acceptance import run_hwpx_acceptance
 from .hwpx_fill import fill_hwpx
 from .hwpx_layout_fix import normalize_colors_in_hwpx
+from .hwpx_submission_cleanup import finalize_submission_hwpx
 from .usage_acceptance import force_draft_name
 
 
@@ -94,6 +96,7 @@ def submit_hwpx(
     replacements: Optional[dict[str, str]] = None,
     acceptance_gate: bool = True,
     normalize_colors: bool = True,
+    submission_cleanup: bool = True,
 ) -> SubmitReport:
     """HWPX 양식을 채우고 수용검사 게이트로 판정해 제출 가능 여부를 확정한다.
 
@@ -105,6 +108,11 @@ def submit_hwpx(
         acceptance_gate: False 면 게이트를 생략한다(이름 유지, notes 에 명시).
         normalize_colors: True(기본)면 채움 직후 잔존 예시 유색체를 검정으로 정규화해
             수용검사 colored 결함을 자동 해소한다(채운 값 검정은 fill_hwpx 가 이미 처리).
+            ``submission_cleanup=True`` 이면 cleanup 의 force_black 이 동일 역할을 하므로
+            별도 normalize 단계는 건너뛴다(중복 방지).
+        submission_cleanup: True(기본)면 ``finalize_submission_hwpx`` 로 안내문구 제거·
+            유색→검정·linesegarray 제거를 적용한다(원본 out 은 temp 경유 후 교체 —
+            out==in 금지 불변 유지). 한글 직접 납품용 전역 lineseg strip 포함.
 
     Returns:
         SubmitReport — final 은 항상 실제 존재하는 최종 경로.
@@ -124,14 +132,39 @@ def submit_hwpx(
     report.notes.extend(fill_rep.notes)
     report.final = str(out)
 
-    # 1.5) 잔존 예시 유색체 검정 정규화(채운 값 검정은 fill_hwpx 검정클론이 이미 처리).
-    #      수용검사 colored 결함을 제출 전에 자동 해소한다(opt-out=normalize_colors=False).
-    if normalize_colors:
+    # 1.5) 제출본 공통 후처리(안내문구·유색·lineseg) — temp 경유 후 원자적 교체.
+    if submission_cleanup:
+        cleaned = out.with_name(f"{out.stem}.__cleanup__.{os.getpid()}{out.suffix}")
+        try:
+            stats = finalize_submission_hwpx(
+                out,
+                cleaned,
+                force_black=normalize_colors,
+                remove_guides=True,
+                strip_lineseg=True,
+            )
+            cleaned.replace(out)
+            report.notes.append(
+                "제출 cleanup: "
+                f"안내 {stats.get('guides_removed', 0)}·"
+                f"검정 {stats.get('charpr_blacked', 0)}·"
+                f"lineseg {stats.get('linesegarray_removed', 0)}"
+            )
+        except Exception as exc:  # noqa: BLE001 — cleanup 실패는 치명 아님(검사에서 잡힘)
+            report.notes.append(f"제출 cleanup 스킵(오류): {type(exc).__name__}")
+        finally:
+            if cleaned.exists():
+                try:
+                    cleaned.unlink()
+                except OSError:
+                    pass
+    elif normalize_colors:
+        # cleanup opt-out 시에만 기존 유색→검정 단독 경로 사용.
         try:
             n_black = normalize_colors_in_hwpx(out)
             if n_black:
                 report.notes.append(f"유색 예시체 검정 정규화 {n_black}건")
-        except Exception as exc:  # noqa: BLE001 — 정규화 실패는 치명 아님(검사에서 잡힘)
+        except Exception as exc:  # noqa: BLE001
             report.notes.append(f"검정 정규화 스킵(오류): {type(exc).__name__}")
 
     # 2) 게이트 생략(opt-out) — 스킵 사실을 정직하게 남긴다.

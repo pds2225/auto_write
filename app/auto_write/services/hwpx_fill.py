@@ -308,7 +308,12 @@ def _set_cell_text(tc, value: str, black: Optional[_BlackCharPr] = None) -> bool
     빈/플레이스홀더 칸에만 호출되므로 잔여 hp:t 를 비워도 실데이터 손실은 없다.
     hp:t/hp:run 이 없으면 단락 서식(charPrIDRef 승계)을 유지하며 최소 생성한다.
     black 이 주어지면 값이 들어간 run 의 유색 charPr 를 검정 클론으로 바꾼다.
+
+    L086: 폼 컨트롤(checkBtn 등)이 든 칸에는 텍스트를 절대 기입하지 않는다 —
+    ``_cell_is_fillable`` 우회·resume 경로에서도 이중 표시를 막기 위한 최종 방어핀.
     """
+    if _has_form_control(tc):
+        return False
     paras = list(tc.iter(_q("p")))
     if not paras:
         return False
@@ -672,20 +677,33 @@ class HwpxFillReport:
         }
 
 
-def _strip_linesegarray(root) -> int:
+def _strip_linesegarray(root, *, only_under=None) -> int:
     """채운 섹션의 옛 줄위치 캐시(hp:linesegarray)를 제거한다.
 
     텍스트를 바꿔도 예시문구 기준의 linesegarray 가 남으면 한글이 새 글씨를 옛
     좌표에 겹쳐 그린다(사용자 실측: STAR·서울 AI 허브 신청서 글씨 겹침 재발). 제거하면
     문서를 열 때 줄위치를 새로 계산한다 — 레이아웃 캐시라 내용 무손실·멱등.
     HWPX 직접 납품(.hwpx→.hwpx) 경로의 글씨 겹침을 엔진 단에서 원천 차단한다.
+
+    L074: ``only_under`` 가 주어지면 그 요소(들) 하위의 lineseg 만 제거한다.
+    rhwp→PDF 경로에서 전역 strip 이 안내박스 다중문단을 깨뜨리는 것을 막기 위한
+    편집-한정 API. ``only_under`` 미지정 시 종전처럼 root 전역(한글 직접 납품용).
     """
     removed = 0
-    for ls in list(root.iter(_q("linesegarray"))):
-        parent = ls.getparent()
-        if parent is not None:
-            parent.remove(ls)
-            removed += 1
+    scopes = list(only_under) if only_under is not None else [root]
+    seen_ids: set[int] = set()
+    for scope in scopes:
+        if scope is None:
+            continue
+        sid = id(scope)
+        if sid in seen_ids:
+            continue
+        seen_ids.add(sid)
+        for ls in list(scope.iter(_q("linesegarray"))):
+            parent = ls.getparent()
+            if parent is not None:
+                parent.remove(ls)
+                removed += 1
     return removed
 
 
