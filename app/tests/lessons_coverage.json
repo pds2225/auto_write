@@ -1,11 +1,11 @@
 {
   "counts": {
-    "mechanized": 31,
-    "gap": 29,
+    "mechanized": 33,
+    "gap": 27,
     "judgment": 32,
     "total": 92
   },
-  "coverage_note": "총 92개 교훈(레지스트리): 기계화 31(36%)·갭 23(27%)·사람판단 32(37%). 2026-07-21 세션: 6건 gap→mechanized 마감(L013 메타문구·L015 ■제목정규화·L010 예비창업 공란·L046 과정이수 분리·L045 '(인)' 미삽입 잠금·L001 이미지 폭클램프). 2026-07-27 세션: 외부 lessons.md 신규 16건(L070~L085) 분류 등록 + 헤딩 형식 변경(분류 컬럼 '| 공통 |' 삽입)으로 어긋난 id 87건을 현재 헤딩에 재동기화해 SSOT drift 해소. 다음 기계화 1순위 = HWPX 렌더 계열 high 갭 5건(L070 양식고유문구 보존·L074 lineseg 편집문단 한정·L076 charPr append-only·L078 서명 앵커·L083 데이터셀 검정). 핵심 서식/게이트(유색→검정 L006/L022, 마스킹 L007, 날조0 L009, 서식보존 L011, DRAFT 세탁방지 L019/L020, 체크박스·이름 오매칭 L023~L025, HWPX 격자·셀검정 L031/L054)는 검출↔교정 거울정합으로 잠금. 기존 갭은 '제출 최종화'(L037 서식분리·L048 PDF합본·L049 폴더배치·L050 HWP/PDF쌍·L059 파일명오염)와 '이력서 렌더러 부재'(L038 정량표·L043 단일표·L044 골격·L061 사진칸·L039 포트폴리오)에 집중. 2026-07-27 울산 신청서 작업에서 HWPX 양식 채움 실패 6건(L086 폼컨트롤 오인·L087 COM 찾기 선택 치환·L088 그림 축소 3함정·L089 secPr 유실 여백복원·L090 pageBreak 부활·L091 병합셀 표폭 오산)을 갭으로 등록 — 전부 '양식 채움형' 경로의 기계화 1순위.",
+  "coverage_note": "총 92개 교훈(레지스트리): 기계화 33(36%)·갭 27(29%)·사람판단 32(35%). 2026-07-21 세션: 6건 gap→mechanized 마감(L013 메타문구·L015 ■제목정규화·L010 예비창업 공란·L046 과정이수 분리·L045 '(인)' 미삽입 잠금·L001 이미지 폭클램프). 2026-07-27 세션: 외부 lessons.md 신규 16건(L070~L085) 분류 등록 + 헤딩 형식 변경(분류 컬럼 '| 공통 |' 삽입)으로 어긋난 id 87건을 현재 헤딩에 재동기화해 SSOT drift 해소. 다음 기계화 1순위 = HWPX 렌더 계열 high 갭 5건(L070 양식고유문구 보존·L074 lineseg 편집문단 한정·L076 charPr append-only·L078 서명 앵커·L083 데이터셀 검정). 핵심 서식/게이트(유색→검정 L006/L022, 마스킹 L007, 날조0 L009, 서식보존 L011, DRAFT 세탁방지 L019/L020, 체크박스·이름 오매칭 L023~L025, HWPX 격자·셀검정 L031/L054)는 검출↔교정 거울정합으로 잠금. 기존 갭은 '제출 최종화'(L037 서식분리·L048 PDF합본·L049 폴더배치·L050 HWP/PDF쌍·L059 파일명오염)와 '이력서 렌더러 부재'(L038 정량표·L043 단일표·L044 골격·L061 사진칸·L039 포트폴리오)에 집중. 2026-07-27 울산 신청서 작업에서 HWPX 양식 채움 실패 6건(L086 폼컨트롤 오인·L087 COM 찾기 선택 치환·L088 그림 축소 3함정·L089 secPr 유실 여백복원·L090 pageBreak 부활·L091 병합셀 표폭 오산)을 갭으로 등록 — 전부 '양식 채움형' 경로의 기계화 1순위. 2026-07-29 야간 autopilot: L086·L083 mechanized(폼컨트롤 방어핀·데이터셀 검정 resume 경로), L074 only_under API 도입(전역 strip→편집한정 호출부 전환은 잔여). submit_hwpx 에 finalize_submission_hwpx 배선.",
   "top_gaps": [
     {
       "id": "L040",
@@ -744,8 +744,8 @@
       "summary": "lineseg 제거는 편집한 문단만. rhwp 로 PDF 낼 파일은 전역 strip 금지(안내박스 다중문단이 겹쳐 그려짐).",
       "mechanizable": "partial",
       "category": "gap",
-      "guard_ref": "",
-      "gap_desc": "strip_linesegarray 계열에 '편집 문단 한정' 파라미터를 강제하고 전역 strip 호출을 금지하는 가드+회귀테스트 필요",
+      "guard_ref": "hwpx_fill._strip_linesegarray(only_under=...) API + test_strip_linesegarray_only_under_preserves_siblings — fill/submit 기본은 한글 납품용 전역 strip 유지(L002). rhwp PDF 경로 호출부 전환은 잔여.",
+      "gap_desc": "fill/submit/cleanup 전역 strip 호출을 only_under 기본으로 전환하고 rhwp PDF 경로 회귀 잠금 필요",
       "impact": "high"
     },
     {
@@ -824,9 +824,9 @@
       "id": "L083 | 문서작성 | 2026-07-16 | HWPX 표 셀 채움은 데이터 셀도 검정 charPr 강제 — 템플릿 파랑 상속 주의",
       "summary": "모든 내용 셀에 검정 charPr 강제. 검증은 특정 파랑 ID 가 아니라 런 단위 유색 텍스트 실제 존재로 확인.",
       "mechanizable": "partial",
-      "category": "gap",
-      "guard_ref": "",
-      "gap_desc": "set_cell_lines 계열 채움 경로에 데이터 셀 검정 charPr 강제 + '런 단위 유색 0' 단언 회귀테스트 필요(현재 서술 셀만 강제)",
+      "category": "mechanized",
+      "guard_ref": "hwpx_fill._set_cell_text+_BlackCharPr (표 라벨→값·grid) + hwpx_resume_supplement._set_tc_text(black) + tests/test_hwpx_fill.py::test_blue_placeholder_fill_becomes_black",
+      "gap_desc": "",
       "impact": "high"
     },
     {
@@ -851,9 +851,9 @@
       "id": "L086 | 문서작성 | 2026-07-27 | 양식의 '빈 칸'이 사실은 체크박스 폼 컨트롤일 수 있다 — 채우기 전 칸의 정체부터 확인",
       "summary": "양식 값 칸을 채우기 전 hp:checkBtn 등 폼 컨트롤 여부를 먼저 확인 — 텍스트 '' 는 빈 칸의 증거가 아니다.",
       "mechanizable": "partial",
-      "category": "gap",
-      "guard_ref": "",
-      "gap_desc": "cross_form/hwpx 채움 경로에 '폼 컨트롤 칸에는 텍스트 기입 금지' 가드 + checkBtn 전수 덤프 회귀테스트 필요",
+      "category": "mechanized",
+      "guard_ref": "hwpx_fill._set_cell_text form-control 가드 + _cell_is_fillable + tests/test_hwpx_fill.py::test_form_control_cell_not_text_filled + test_set_cell_text_blocks_form_control_direct + resume _set_tc_text",
+      "gap_desc": "",
       "impact": "high"
     },
     {

@@ -136,7 +136,10 @@ def test_submit_normalizes_colors_by_default(colored_hwpx, tmp_path):
     assert rep.ok is True                              # 유색 자동 해소 → 제출가능
     assert Path(rep.final).name == "out.hwpx"          # _DRAFT 아님(깨끗한 이름)
     assert rep.acceptance.get("colored", -1) == 0      # 유색 0
-    assert any("검정 정규화" in n for n in rep.notes)   # 정규화 수행 명시
+    assert any(
+        ("검정 정규화" in n) or ("제출 cleanup" in n and "검정" in n)
+        for n in rep.notes
+    )   # 정규화/cleanup 수행 명시
 
 
 # --------------------------------------------------------------------------- #
@@ -231,3 +234,58 @@ def test_cli_exit_codes(clean_hwpx, colored_hwpx, tmp_path, monkeypatch):
     assert rc == 3
     assert not out3.exists()
     assert (tmp_path / "err_DRAFT.hwpx").exists()
+
+
+# --------------------------------------------------------------------------- #
+# 7) 제출 cleanup 배선 — 안내문구 표 제거 + notes 기록
+# --------------------------------------------------------------------------- #
+
+
+def _section_with_guide() -> bytes:
+    guide_tbl = (
+        f'<hp:tbl rowCnt="1" colCnt="1"><hp:tr>'
+        f'<hp:tc><hp:cellAddr colAddr="0" rowAddr="0"/>'
+        f'<hp:cellSpan colSpan="1" rowSpan="1"/>'
+        f'<hp:subList><hp:p><hp:run charPrIDRef="0">'
+        f'<hp:t>작성방법 ※삭제 후 제출</hp:t></hp:run></hp:p></hp:subList></hp:tc>'
+        f'</hp:tr></hp:tbl>'
+    )
+    rows = "".join([_row(0, "상호", ""), _row(1, "대표자", "")])
+    return (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f'<hs:sec xmlns:hp="{_HP}" xmlns:hs="{_HS}">'
+        f'<hp:p><hp:run charPrIDRef="0">{guide_tbl}</hp:run></hp:p>'
+        f'<hp:p><hp:run charPrIDRef="0">'
+        f'<hp:tbl rowCnt="2" colCnt="2">{rows}</hp:tbl>'
+        f'</hp:run></hp:p></hs:sec>'
+    ).encode("utf-8")
+
+
+def test_submit_cleanup_removes_guides(tmp_path):
+    src = tmp_path / "guide_form.hwpx"
+    with zipfile.ZipFile(src, "w") as z:
+        zi = zipfile.ZipInfo("mimetype")
+        zi.compress_type = zipfile.ZIP_STORED
+        z.writestr(zi, _MIMETYPE)
+        z.writestr("Contents/header.xml", _header_xml(colored=False))
+        z.writestr("Contents/section0.xml", _section_with_guide())
+    out = tmp_path / "out.hwpx"
+    rep = submit_hwpx(src, out, identity={"기업명": "도보네비(주)"})
+    assert any("제출 cleanup" in n for n in rep.notes)
+    with zipfile.ZipFile(out) as z:
+        sec = z.read("Contents/section0.xml").decode("utf-8")
+    assert "작성방법" not in sec
+    assert "도보네비" in sec or rep.ok is True  # 채움 또는 게이트 통과
+
+
+def test_submit_cleanup_opt_out_keeps_legacy_normalize(colored_hwpx, tmp_path):
+    """submission_cleanup=False + normalize_colors=True → 기존 검정 경로."""
+    out = tmp_path / "out.hwpx"
+    rep = submit_hwpx(
+        colored_hwpx, out, identity={"기업명": "도보네비(주)"},
+        submission_cleanup=False, normalize_colors=True,
+    )
+    assert rep.ok is True
+    assert not any(n.startswith("제출 cleanup:") for n in rep.notes)
+    assert any("검정 정규화" in n for n in rep.notes)
+    assert rep.acceptance.get("colored", -1) == 0

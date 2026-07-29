@@ -15,7 +15,17 @@ from typing import Any, Optional
 
 from lxml import etree
 
-from .hwpx_fill import _HP, _direct, _direct_form_checkbtns, _q, _same_file, _strip_linesegarray
+from .hwpx_fill import (
+    _HP,
+    _BlackCharPr,
+    _direct,
+    _direct_form_checkbtns,
+    _has_form_control,
+    _q,
+    _same_file,
+    _set_cell_text,
+    _strip_linesegarray,
+)
 
 _STANDALONE_RE = __import__("re").compile(rb"standalone\s*=\s*['\"](yes|no)['\"]")
 
@@ -47,37 +57,25 @@ def _detect_standalone(xml_bytes: bytes) -> Optional[bool]:
     return m.group(1) == b"yes"
 
 
-def _set_tc_text(tc, text: str) -> bool:
-    """값 칸 hp:t 만 설정(라벨 run 보존). 빈칸/공백/플레이스홀더만."""
+def _set_tc_text(tc, text: str, *, black: Optional[_BlackCharPr] = None) -> bool:
+    """값 칸 hp:t 만 설정(라벨 run 보존). 빈칸/공백/플레이스홀더만.
+
+    L086: 폼 컨트롤 칸에는 텍스트 기입 금지.
+    L083: black 이 있으면 데이터 셀 기입 run 을 검정 charPr 로 강제.
+    L002/L074: 기입 성공 시 해당 셀 lineseg 만 제거(편집 한정).
+    """
+    if _has_form_control(tc):
+        return False
+    # 공통 기입 경로(_set_cell_text)로 위임 — 폼가드·검정클론 단일 출처.
+    # 플레이스홀더/빈칸만 허용하는 기존 정책을 먼저 확인한다.
     from .hwpx_fill import _cell_text
 
     cur = _cell_text(tc).strip()
     if cur and cur not in {"~", "(yyyy/mm/dd)", "( )"} and not cur.startswith("(yyyy"):
         return False
-    for t in tc.iter(_q("t")):
-        if t.text is None or not str(t.text).strip() or str(t.text).strip() in {
-            "~", "(yyyy/mm/dd)", "( )", " ",
-        }:
-            t.text = text
-            parent = t.getparent()
-            while parent is not None:
-                if str(parent.tag).endswith("tc"):
-                    _strip_linesegarray(parent)
-                    break
-                parent = parent.getparent()
-            return True
-    run = etree.Element(_q("run"))
-    run.set("charPrIDRef", "0")
-    t = etree.SubElement(run, _q("t"))
-    t.text = text
-    sub = tc.find(".//{%s}subList" % _HP)
-    if sub is None:
+    if not _set_cell_text(tc, text, black=black):
         return False
-    p = sub.find("{%s}p" % _HP)
-    if p is None:
-        p = etree.SubElement(sub, _q("p"))
-    p.append(run)
-    _strip_linesegarray(tc)
+    _strip_linesegarray(tc, only_under=[tc])
     return True
 
 
@@ -151,6 +149,18 @@ def supplement_hwpx_from_resume(
     root = etree.fromstring(data[sec_name])
     changed = False
 
+    # L083: header charPr 기반 검정 클론 — 데이터 셀 기입에 전달.
+    black: Optional[_BlackCharPr] = None
+    header_name = next((n for n in names if n.lower().endswith("header.xml")), None)
+    if header_name and header_name in data:
+        try:
+            black = _BlackCharPr(etree.fromstring(data[header_name]))
+        except Exception:  # noqa: BLE001
+            black = None
+
+    def _write(tc, val: str) -> bool:
+        return _set_tc_text(tc, val, black=black)
+
     tbl_app = _find_tbl_by_snippet(root, "전문상담위원 참여 신청서")
     if tbl_app is not None:
         for col, row, label in check_columns:
@@ -159,7 +169,7 @@ def supplement_hwpx_from_resume(
                 changed = True
         if specialty_text:
             tc = _tc_at(tbl_app, 3, 7)
-            if tc is not None and _set_tc_text(tc, specialty_text):
+            if tc is not None and _write(tc, specialty_text):
                 rep.tables_filled.append("모집분야_세부")
                 changed = True
 
@@ -167,7 +177,6 @@ def supplement_hwpx_from_resume(
     if tbl_edu is None:
         tbl_edu = root.findall(".//{%s}tbl" % _HP)[6] if len(root.findall(".//{%s}tbl" % _HP)) > 6 else None
     if tbl_edu is not None:
-        coords = [(0, 0, 3, 0, 4, 0), (0, 0, 3, 0, 4, 0)]  # fallback
         # row0: period col0, school col3, major col4 — 2 entries use row0 split cols
         edu_coords = [
             (0, 0, 3, 0, 4, 0),
@@ -182,7 +191,7 @@ def supplement_hwpx_from_resume(
                 pc, pr, sc, sr, mc, mr = 1, 2, 3, 2, 4, 2
             for col, row, val in ((pc, pr, period), (sc, sr, school), (mc, mr, major)):
                 tc = _tc_at(tbl_edu, col, row)
-                if tc is not None and _set_tc_text(tc, val):
+                if tc is not None and _write(tc, val):
                     changed = True
             rep.tables_filled.append(f"학력{i+1}")
 
@@ -191,7 +200,7 @@ def supplement_hwpx_from_resume(
         for ri, (name, dt, grade, issuer) in enumerate(licenses[:2], start=1):
             for col, val in enumerate((name, dt, grade, issuer)):
                 tc = _tc_at(tbl_lic, col, ri)
-                if tc is not None and _set_tc_text(tc, val):
+                if tc is not None and _write(tc, val):
                     changed = True
             rep.tables_filled.append(f"자격{ri}")
 
@@ -200,9 +209,16 @@ def supplement_hwpx_from_resume(
         for ri, (org, period, title, duty) in enumerate(careers[:4], start=1):
             for col, val in enumerate((org, period, title, duty)):
                 tc = _tc_at(tbl_car, col, ri)
-                if tc is not None and _set_tc_text(tc, val):
+                if tc is not None and _write(tc, val):
                     changed = True
             rep.tables_filled.append(f"경력{ri}")
+
+    # header 에 검정 클론이 추가됐으면 ZIP 에 반영(L083). standalone 원문 보존.
+    if black is not None and black.changed and header_name and black.root is not None:
+        standalone = _detect_standalone(data[header_name])
+        data[header_name] = etree.tostring(
+            black.root, xml_declaration=True, encoding="UTF-8", standalone=standalone
+        )
 
     if sign_date or sign_name:
         for t in root.iter(_q("t")):
