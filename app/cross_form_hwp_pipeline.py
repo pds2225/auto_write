@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -32,6 +33,7 @@ from auto_write.services.cross_form_output_policy import (
     OutputPolicyError,
     validate_output_plan,
 )
+from auto_write.services.output_naming import resolve_submit_path
 from auto_write.services.cross_form_autofill import extract_source_fields
 from auto_write.services.hwp_docx_convert import hwp_to_docx
 from auto_write.services.hwpx_fill import fill_hwpx
@@ -178,6 +180,10 @@ def run_pipeline(
     facts_json: Path | None = None,
     specialty_confirms: list[str] | None = None,
     run_diagnose: bool = True,
+    submit_name: str | None = None,
+    form_prefix: str = "전문상담위원_참여신청서",
+    submit_version: str | None = None,
+    write_submit_copy: bool = True,
 ) -> dict:
     validate_output_plan(plan)
     work = notice_folder / "_workspace"
@@ -358,6 +364,34 @@ def run_pipeline(
             if rp.is_file():
                 result["fill_report"] = json.loads(rp.read_text(encoding="utf-8"))
 
+    # 제출용 자동 파일명: 전문상담위원_참여신청서_{성명}.hwpx
+    if write_submit_copy:
+        person = (submit_name or "").strip()
+        if not person:
+            try:
+                facts = json.loads((work / "01_source_facts.json").read_text(encoding="utf-8"))
+                person = ((facts.get("identity") or {}).get("성명") or "").strip()
+            except (OSError, json.JSONDecodeError, TypeError):
+                person = ""
+        person = person or "미상"
+        hwpx_src = result.get("outputs", {}).get("hwpx")
+        if hwpx_src and Path(hwpx_src).is_file():
+            submit_dir = notice_folder / "제출"
+            submit_dir.mkdir(parents=True, exist_ok=True)
+            named = resolve_submit_path(
+                submit_dir,
+                form_prefix=form_prefix,
+                name=person,
+                ext=".hwpx",
+                version=submit_version,
+            )
+            shutil.copyfile(hwpx_src, named)
+            result["submit_copy"] = str(named)
+            ws_named = work / named.name
+            shutil.copyfile(hwpx_src, ws_named)
+            result["workspace_named"] = str(ws_named)
+            result["submit_filename"] = named.name
+
     (work / "00_engines.json").write_text(
         json.dumps(
             {
@@ -427,6 +461,26 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="HWPX self_diagnose 생략",
     )
+    parser.add_argument(
+        "--name",
+        default=None,
+        help="제출 파일명용 성명. 없으면 identity 성명 → 전문상담위원_참여신청서_{성명}.hwpx",
+    )
+    parser.add_argument(
+        "--form-prefix",
+        default="전문상담위원_참여신청서",
+        help="제출 파일명 접두",
+    )
+    parser.add_argument(
+        "--version",
+        default=None,
+        help="파일명 버전 접미사 (예: v1 → …_박다솜_v1.hwpx)",
+    )
+    parser.add_argument(
+        "--no-submit-copy",
+        action="store_true",
+        help="제출/ 폴더 자동 파일명 복사 생략",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -447,6 +501,10 @@ def main(argv: list[str] | None = None) -> int:
             facts_json=args.facts_json,
             specialty_confirms=args.confirm_specialty,
             run_diagnose=not args.no_diagnose,
+            submit_name=args.name,
+            form_prefix=args.form_prefix,
+            submit_version=args.version,
+            write_submit_copy=not args.no_submit_copy,
         )
     except (OutputPolicyError, FileNotFoundError, RuntimeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
