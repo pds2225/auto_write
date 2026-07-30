@@ -69,15 +69,17 @@ needs_confirm 후보 중 무엇을 확정할지, 못 채운 칸을 어떻게 분
 | 엔진 | `rhwp-hwpx-fill`(COM 없음, **hwpx 필수**) / `com-hwpx-fill`(한글2022 COM) / `docx-crossform`(DOCX만, **명시적**) |
 
 - **RHWP-only ≠ DOCX-only.** RHWP는 `hwpx_fill`·`unhwp` 등 **엔진 이름**이지 DOCX 출력을 뜻하지 않는다.
+- **본선 산출 = HWPX 서식만.** DOCX는 중간 검수용·명시적 `docx-crossform` 만. 제출본으로 DOCX를 쓰지 않는다.
 - COM 로그인(한컴 2024) 이슈 시: **멈추고** `rhwp-hwpx-fill` + `10_form_base.hwpx` 경로를 제안. 승인 없이 `docx-crossform`으로 바꾸지 않는다.
 - 단일 진입점: `cross_form_hwp_pipeline.py` — **`--confirm-output-plan` 필수**.
 - 구 스크립트 `_finish_minwon_rhwp.py` / 임의 1회성 스크립트 **사용 금지**.
 
 ```powershell
 cd D:\auto_write\app
-# HWPX (COM 없음, 권장)
+# HWPX 서식만 + 표 보강 (COM 없음, 권장)
 py -3.11 cross_form_hwp_pipeline.py --notice-folder "C:\공고폴더" `
-    --engine rhwp-hwpx-fill --output hwpx --confirm-output-plan
+    --engine rhwp-hwpx-fill --output hwpx --confirm-output-plan `
+    --extract-forms --supplement-resume
 ```
 
 ## 표준 실행 (PowerShell)

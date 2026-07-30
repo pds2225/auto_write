@@ -1,13 +1,15 @@
-"""hwpx_resume_supplement — 이력서 사실값으로 HWPX 표·체크·서명 칸 보강(RHWP).
+"""hwpx_resume_supplement — 이력서 사실값으로 HWPX 표·서명 칸 보강(RHWP).
 
-cross_form/hwpx_fill 이 못 채우는 **좌표형 표**(학력·자격·경력)와
-폼 checkBtn(모집분야), 서명일을 **이력서에서 추출한 사실**만 기입한다.
-날조 0 — 호출자가 넘긴 facts 만 사용.
+cross_form/hwpx_fill 이 못 채우는 **좌표형 표**(학력·자격·경력)와 서명일을
+호출자가 넘긴 facts 만으로 기입한다(날조 0). 모집분야 자동 체크는 기본 off
+(L034 — confirm 후에만 check_columns 전달).
 """
 
 from __future__ import annotations
 
+import json
 import os
+import re
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -15,9 +17,30 @@ from typing import Any, Optional
 
 from lxml import etree
 
-from .hwpx_fill import _HP, _direct, _direct_form_checkbtns, _q, _same_file, _strip_linesegarray
+from .hwpx_fill import (
+    _HP,
+    _cell_text,
+    _direct,
+    _direct_form_checkbtns,
+    _q,
+    _same_file,
+    _strip_linesegarray,
+)
 
-_STANDALONE_RE = __import__("re").compile(rb"standalone\s*=\s*['\"](yes|no)['\"]")
+_STANDALONE_RE = re.compile(rb"standalone\s*=\s*['\"](yes|no)['\"]")
+
+# 학력/자격/경력 칸에 흔히 있는 '보이는 빈칸' 플레이스홀더
+_PLACEHOLDER_TEXTS = {
+    "~",
+    "(yyyy/mm/dd)",
+    "( )",
+    " ",
+    "",
+}
+_PLACEHOLDER_RE = re.compile(
+    r"^(년\s*월|졸업/수료|대학교|전공|\(yyyy|/mm/dd\)|\(\s*\)|~)+$",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -47,17 +70,31 @@ def _detect_standalone(xml_bytes: bytes) -> Optional[bool]:
     return m.group(1) == b"yes"
 
 
-def _set_tc_text(tc, text: str) -> bool:
-    """값 칸 hp:t 만 설정(라벨 run 보존). 빈칸/공백/플레이스홀더만."""
-    from .hwpx_fill import _cell_text
+def _is_fillable_cell_text(cur: str) -> bool:
+    s = (cur or "").strip()
+    if s in _PLACEHOLDER_TEXTS:
+        return True
+    if s.startswith("(yyyy"):
+        return True
+    # "년    월  (졸업/수료)" / "대학교     전공"
+    compact = re.sub(r"\s+", "", s)
+    if "년" in compact and "월" in compact and ("졸업" in compact or "수료" in compact):
+        return True
+    if compact.startswith("대학교") and "전공" in compact:
+        return True
+    if _PLACEHOLDER_RE.match(compact):
+        return True
+    return False
 
+
+def _set_tc_text(tc, text: str, *, force_placeholder: bool = False) -> bool:
+    """값 칸 hp:t 설정. 빈칸·플레이스홀더만(실값 보호)."""
     cur = _cell_text(tc).strip()
-    if cur and cur not in {"~", "(yyyy/mm/dd)", "( )"} and not cur.startswith("(yyyy"):
+    if cur and not _is_fillable_cell_text(cur) and not force_placeholder:
         return False
     for t in tc.iter(_q("t")):
-        if t.text is None or not str(t.text).strip() or str(t.text).strip() in {
-            "~", "(yyyy/mm/dd)", "( )", " ",
-        }:
+        raw = str(t.text or "")
+        if t.text is None or not raw.strip() or _is_fillable_cell_text(raw):
             t.text = text
             parent = t.getparent()
             while parent is not None:
@@ -66,16 +103,21 @@ def _set_tc_text(tc, text: str) -> bool:
                     break
                 parent = parent.getparent()
             return True
+    # 셀에 hp:t 가 없으면 run 추가
     run = etree.Element(_q("run"))
     run.set("charPrIDRef", "0")
-    t = etree.SubElement(run, _q("t"))
-    t.text = text
+    t_el = etree.SubElement(run, _q("t"))
+    t_el.text = text
     sub = tc.find(".//{%s}subList" % _HP)
     if sub is None:
         return False
     p = sub.find("{%s}p" % _HP)
     if p is None:
         p = etree.SubElement(sub, _q("p"))
+    # 기존 placeholder run 비우기
+    for old_t in list(p.iter(_q("t"))):
+        if _is_fillable_cell_text(str(old_t.text or "")):
+            old_t.text = ""
     p.append(run)
     _strip_linesegarray(tc)
     return True
@@ -113,19 +155,73 @@ def _check_btn(tbl, col: int, row: int) -> bool:
     return False
 
 
+def _empty_data_rows(tbl, header_row: int = 0) -> list[int]:
+    """헤더 다음부터 채울 수 있는 rowAddr 목록."""
+    rows: set[int] = set()
+    for tr in _direct(tbl, "tr"):
+        for tc in _direct(tr, "tc"):
+            addr = tc.find(_q("cellAddr"))
+            if addr is None:
+                continue
+            ra = int(addr.get("rowAddr", -1))
+            if ra > header_row:
+                rows.add(ra)
+    return sorted(rows)
+
+
+def load_resume_facts(path: str | Path) -> dict[str, Any]:
+    """facts JSON: education/licenses/careers/sign_* / check_columns(optional)."""
+    p = Path(path)
+    data = json.loads(p.read_text(encoding="utf-8"))
+    return data
+
+
+def facts_from_dict(data: dict[str, Any]) -> dict[str, Any]:
+    """정규화: list[list] → tuple lists."""
+    edu = [tuple(x) for x in data.get("education") or []]
+    lic = [tuple(x) for x in data.get("licenses") or []]
+    car = [tuple(x) for x in data.get("careers") or []]
+    checks = [tuple(x) for x in data.get("check_columns") or []]
+    return {
+        "education": edu,
+        "licenses": lic,
+        "careers": car,
+        "specialty_text": str(data.get("specialty_text") or ""),
+        "check_columns": checks,
+        "sign_date": str(data.get("sign_date") or ""),
+        "sign_name": str(data.get("sign_name") or ""),
+    }
+
+
 def supplement_hwpx_from_resume(
     in_hwpx: str | Path,
     out_hwpx: str | Path,
     *,
-    education: list[tuple[str, str, str]],
-    licenses: list[tuple[str, str, str, str]],
-    careers: list[tuple[str, str, str, str]],
+    education: Optional[list[tuple[str, ...]]] = None,
+    licenses: Optional[list[tuple[str, ...]]] = None,
+    careers: Optional[list[tuple[str, ...]]] = None,
     specialty_text: str = "",
     check_columns: Optional[list[tuple[int, int, str]]] = None,
     sign_date: str = "",
     sign_name: str = "",
+    facts_json: Optional[str | Path] = None,
 ) -> ResumeSupplementReport:
     """이력서 표 사실을 HWPX 신청서 표에 좌표 기입."""
+    if facts_json is not None:
+        f = facts_from_dict(load_resume_facts(facts_json))
+        education = education if education is not None else f["education"]
+        licenses = licenses if licenses is not None else f["licenses"]
+        careers = careers if careers is not None else f["careers"]
+        specialty_text = specialty_text or f["specialty_text"]
+        check_columns = check_columns if check_columns is not None else f["check_columns"]
+        sign_date = sign_date or f["sign_date"]
+        sign_name = sign_name or f["sign_name"]
+
+    education = list(education or [])
+    licenses = list(licenses or [])
+    careers = list(careers or [])
+    check_columns = list(check_columns or [])
+
     src, dst = Path(in_hwpx), Path(out_hwpx)
     rep = ResumeSupplementReport(input=str(src), output=str(dst))
     if not src.is_file():
@@ -136,7 +232,6 @@ def supplement_hwpx_from_resume(
         dst = src.with_suffix(src.suffix + ".sup.part")
         rep.output = str(out_hwpx)
 
-    check_columns = check_columns or []
     dst.parent.mkdir(parents=True, exist_ok=True)
 
     with zipfile.ZipFile(src, "r") as zin:
@@ -151,11 +246,14 @@ def supplement_hwpx_from_resume(
     root = etree.fromstring(data[sec_name])
     changed = False
 
+    # 모집분야: confirm 으로 check_columns 가 온 경우만
     tbl_app = _find_tbl_by_snippet(root, "전문상담위원 참여 신청서")
+    if tbl_app is None:
+        tbl_app = _find_tbl_by_snippet(root, "참여 신청서")
     if tbl_app is not None:
         for col, row, label in check_columns:
-            if _check_btn(tbl_app, col, row):
-                rep.checks_set.append(label)
+            if _check_btn(tbl_app, int(col), int(row)):
+                rep.checks_set.append(str(label))
                 changed = True
         if specialty_text:
             tc = _tc_at(tbl_app, 3, 7)
@@ -163,32 +261,43 @@ def supplement_hwpx_from_resume(
                 rep.tables_filled.append("모집분야_세부")
                 changed = True
 
+    # 학력: row1/row2 의 플레이스홀더 치환 (양식: 년월 | 대학교 전공)
     tbl_edu = _find_tbl_by_snippet(root, "학력사항")
     if tbl_edu is None:
-        tbl_edu = root.findall(".//{%s}tbl" % _HP)[6] if len(root.findall(".//{%s}tbl" % _HP)) > 6 else None
-    if tbl_edu is not None:
-        coords = [(0, 0, 3, 0, 4, 0), (0, 0, 3, 0, 4, 0)]  # fallback
-        # row0: period col0, school col3, major col4 — 2 entries use row0 split cols
-        edu_coords = [
-            (0, 0, 3, 0, 4, 0),
-            (5, 0, 3, 0, 4, 0),
-        ]
-        for i, (period, school, major) in enumerate(education[:2]):
-            if i >= len(edu_coords):
-                break
-            pc, pr, sc, sr, mc, mr = edu_coords[i]
-            if i == 1:
-                # second line: use row below labels — col 1 and 3 on row 2 if present
-                pc, pr, sc, sr, mc, mr = 1, 2, 3, 2, 4, 2
-            for col, row, val in ((pc, pr, period), (sc, sr, school), (mc, mr, major)):
-                tc = _tc_at(tbl_edu, col, row)
-                if tc is not None and _set_tc_text(tc, val):
-                    changed = True
-            rep.tables_filled.append(f"학력{i+1}")
+        tbl_edu = _find_tbl_by_snippet(root, "졸업/수료")
+    if tbl_edu is None:
+        tbl_edu = _find_tbl_by_snippet(root, "대학교")
+    if tbl_edu is not None and education:
+        edu_rows = [1, 2]
+        for i, entry in enumerate(education[:2]):
+            period, school, major = (list(entry) + ["", "", ""])[:3]
+            ra = edu_rows[i]
+            period_done = False
+            for col in (0, 1):
+                tc = _tc_at(tbl_edu, col, ra)
+                if tc is not None and _is_fillable_cell_text(_cell_text(tc)):
+                    if _set_tc_text(tc, period):
+                        period_done = True
+                        changed = True
+                        break
+            school_major = f"{school} {major}".strip()
+            school_done = False
+            for col in (2, 3, 4, 5):
+                tc = _tc_at(tbl_edu, col, ra)
+                if tc is not None and _is_fillable_cell_text(_cell_text(tc)):
+                    if _set_tc_text(tc, school_major):
+                        school_done = True
+                        changed = True
+                        break
+            if period_done or school_done:
+                rep.tables_filled.append(f"학력{i+1}")
+            else:
+                rep.notes.append(f"학력{i+1} 칸을 찾지 못함")
 
     tbl_lic = _find_tbl_by_snippet(root, "자격증/면허증")
-    if tbl_lic is not None:
-        for ri, (name, dt, grade, issuer) in enumerate(licenses[:2], start=1):
+    if tbl_lic is not None and licenses:
+        for ri, entry in enumerate(licenses[:2], start=1):
+            name, dt, grade, issuer = (list(entry) + ["", "", "", ""])[:4]
             for col, val in enumerate((name, dt, grade, issuer)):
                 tc = _tc_at(tbl_lic, col, ri)
                 if tc is not None and _set_tc_text(tc, val):
@@ -196,37 +305,45 @@ def supplement_hwpx_from_resume(
             rep.tables_filled.append(f"자격{ri}")
 
     tbl_car = _find_tbl_by_snippet(root, "주요 근무처")
-    if tbl_car is not None:
-        for ri, (org, period, title, duty) in enumerate(careers[:4], start=1):
+    if tbl_car is not None and careers:
+        data_rows = _empty_data_rows(tbl_car, header_row=0)
+        # 마지막 빈 서명행 제외 가능 — 채울 행 수 = min(career, data_rows)
+        for i, entry in enumerate(careers):
+            if i >= len(data_rows):
+                break
+            ri = data_rows[i]
+            org, period, title, duty = (list(entry) + ["", "", "", ""])[:4]
             for col, val in enumerate((org, period, title, duty)):
                 tc = _tc_at(tbl_car, col, ri)
                 if tc is not None and _set_tc_text(tc, val):
                     changed = True
-            rep.tables_filled.append(f"경력{ri}")
+            rep.tables_filled.append(f"경력{i+1}")
 
-    if sign_date or sign_name:
+    if sign_date:
         for t in root.iter(_q("t")):
             txt = t.text or ""
-            if "2026년" in txt and "월" in txt and "일" in txt and sign_date:
+            if re.search(r"\d{4}\s*년", txt) and "월" in txt and "일" in txt:
                 t.text = sign_date
                 changed = True
                 rep.tables_filled.append("서명일")
                 break
-        if sign_name:
-            for t in root.iter(_q("t")):
-                if (t.text or "").strip() == "신청인":
-                    # next sibling run often name — set following empty t
-                    p = t.getparent()
-                    if p is not None:
-                        runs = list(p.iter(_q("t")))
-                        idx = runs.index(t) if t in runs else -1
-                        if idx >= 0 and idx + 1 < len(runs):
-                            nxt = runs[idx + 1]
-                            if not (nxt.text or "").strip():
-                                nxt.text = sign_name
-                                changed = True
-                                rep.tables_filled.append("신청인")
-                                break
+    if sign_name:
+        for t in root.iter(_q("t")):
+            if (t.text or "").strip() == "신청인":
+                p = t.getparent()
+                if p is not None:
+                    runs = list(p.iter(_q("t")))
+                    try:
+                        idx = runs.index(t)
+                    except ValueError:
+                        idx = -1
+                    if idx >= 0 and idx + 1 < len(runs):
+                        nxt = runs[idx + 1]
+                        if not (nxt.text or "").strip():
+                            nxt.text = sign_name
+                            changed = True
+                            rep.tables_filled.append("신청인")
+                            break
 
     if changed:
         standalone = _detect_standalone(data[sec_name])
@@ -236,7 +353,13 @@ def supplement_hwpx_from_resume(
 
     tmp = dst.with_suffix(dst.suffix + ".part")
     with zipfile.ZipFile(tmp, "w") as zout:
+        if "mimetype" in data:
+            zi = zipfile.ZipInfo("mimetype")
+            zi.compress_type = zipfile.ZIP_STORED
+            zout.writestr(zi, data["mimetype"])
         for name in names:
+            if name == "mimetype":
+                continue
             zout.writestr(name, data[name])
     if in_place:
         os.replace(tmp, src)
