@@ -140,10 +140,25 @@ def score_hwpx_coverage(path: str | Path) -> CoverageReport:
 
     # 학력
     sec = SectionCoverage("학력")
-    tbl = _find_tbl(root, "졸업/수료", "학력사항")
+    tbl = _find_tbl(root, "졸업/수료", "학력사항", "대학교", "한양", "강남")
     if tbl is not None:
-        f, e = _count_value_cells(tbl)
-        sec.filled, sec.empty = f, e
+        # 데이터 행: 플레이스홀더가 아닌 텍스트가 있으면 filled
+        for tr in _direct(tbl, "tr"):
+            cells = _direct(tr, "tc")
+            row_txt = " ".join(_cell_text(c) for c in cells)
+            if not row_txt.strip():
+                continue
+            if "졸업/수료" in row_txt and "대학교" in row_txt and len(row_txt) < 40:
+                sec.empty += 1
+                continue
+            has_val = any(
+                (not _is_fillable_cell_text(_cell_text(c))) and _cell_text(c).strip()
+                for c in cells
+            )
+            if has_val:
+                sec.filled += 1
+            else:
+                sec.empty += 1
     rep.sections.append(sec)
 
     # 자격

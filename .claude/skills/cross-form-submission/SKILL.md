@@ -79,9 +79,14 @@ cd D:\auto_write\app
 # HWPX 서식만 + 표 보강 (COM 없음, 권장)
 py -3.11 cross_form_hwp_pipeline.py --notice-folder "C:\공고폴더" `
     --engine rhwp-hwpx-fill --output hwpx --confirm-output-plan `
-    --extract-forms --supplement-resume
+    --extract-forms --supplement-resume `
+    --confirm-specialty "경영활동" --confirm-specialty "특화분야"
+# 모집분야는 --confirm-specialty 없으면 미체크(L034)
+# 진단: py -3.11 hwpx_self_diagnose.py _workspace\02_filled.hwpx
+#       py -3.11 lrule_gate.py _workspace\02_filled.hwpx
 ```
 
+**금지:** 승인 없이 DOCX-only 우회 · 1회성 `_*.py` 신규 스크립트로 본선 대체 · 모집분야 추정 자동체크.
 ## 표준 실행 (PowerShell)
 ```powershell
 cd D:\auto_write\app
