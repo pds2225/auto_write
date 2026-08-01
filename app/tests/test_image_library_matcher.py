@@ -119,13 +119,11 @@ def test_contact_sheet_and_review_list(tmp_path: Path):
 
 
 def test_matching_holdout_top1():
-    fixture = (
-        Path(__file__).resolve().parent
-        / "fixtures"
-        / "image_automation"
-        / "holdout"
-        / "matching_labels.json"
-    )
+    # Acceptance gate uses holdout/ only — never calibration/.
+    # expected_action=review: low-margin/tie scored as correct review (not auto-insert).
+    root = Path(__file__).resolve().parent / "fixtures" / "image_automation"
+    fixture = root / "holdout" / "matching_labels.json"
+    assert "calibration" not in fixture.parts
     data = json.loads(fixture.read_text(encoding="utf-8"))
     cases = data["cases"]
     correct = 0

@@ -1,4 +1,4 @@
-"""사업계획서 이미지 자동화 패키지 (M1 NotebookLM + M2 CLASSIFY/MATCH)."""
+"""사업계획서 이미지 자동화 패키지 (M1+M2+M4 GENERATE_MISSING mock)."""
 
 from auto_write.image_automation.models import (
     CitationStatus,
