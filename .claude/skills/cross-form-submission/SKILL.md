@@ -69,17 +69,36 @@ needs_confirm 후보 중 무엇을 확정할지, 못 채운 칸을 어떻게 분
 | 엔진 | `rhwp-hwpx-fill`(COM 없음, **hwpx 필수**) / `com-hwpx-fill`(한글2022 COM) / `docx-crossform`(DOCX만, **명시적**) |
 
 - **RHWP-only ≠ DOCX-only.** RHWP는 `hwpx_fill`·`unhwp` 등 **엔진 이름**이지 DOCX 출력을 뜻하지 않는다.
+- **본선 산출 = HWPX 서식만.** DOCX는 중간 검수용·명시적 `docx-crossform` 만. 제출본으로 DOCX를 쓰지 않는다.
 - COM 로그인(한컴 2024) 이슈 시: **멈추고** `rhwp-hwpx-fill` + `10_form_base.hwpx` 경로를 제안. 승인 없이 `docx-crossform`으로 바꾸지 않는다.
-- 단일 진입점: `cross_form_hwp_pipeline.py` — **`--confirm-output-plan` 필수**.
+- 단일 진입점(권장): `auto_write_hub.py` — **로컬·원격·다른 PC·모바일(Python) 동일 CLI**.
+  하위 호환: `cross_form_hwp_pipeline.py` — **`--confirm-output-plan` 필수**.
 - 구 스크립트 `_finish_minwon_rhwp.py` / 임의 1회성 스크립트 **사용 금지**.
 
 ```powershell
 cd D:\auto_write\app
-# HWPX (COM 없음, 권장)
-py -3.11 cross_form_hwp_pipeline.py --notice-folder "C:\공고폴더" `
-    --engine rhwp-hwpx-fill --output hwpx --confirm-output-plan
+# 0) 환경 확인 (어디서든 동일 JSON 계약)
+py -3.11 auto_write_hub.py env
+
+# 1) HWPX 서식만 + 표 보강 (COM 없음, 권장) — 제출명 자동: 전문상담위원_참여신청서_{성명}.hwpx
+py -3.11 auto_write_hub.py fill --notice-folder "C:\공고폴더" `
+    --confirm-output-plan --extract-forms --supplement-resume `
+    --confirm-specialty "경영활동"
+# 동등(구 CLI):
+# py -3.11 cross_form_hwp_pipeline.py --notice-folder "C:\공고폴더" `
+#     --engine rhwp-hwpx-fill --output hwpx --confirm-output-plan `
+#     --extract-forms --supplement-resume --confirm-specialty "경영활동"
+
+# 모집분야는 --confirm-specialty 없으면 미체크(L034)
+# 진단(DOCX|HWPX 통합, exit 0/1/2/3):
+py -3.11 auto_write_hub.py diagnose "_workspace\02_filled.hwpx" --require-specialty
+#       py -3.11 self_diagnose.py _workspace\02_filled.hwpx
+#       py -3.11 lrule_gate.py _workspace\02_filled.hwpx
 ```
 
+**휴대성 계약:** 본선=RHWP → **HWPX만** 채움·제출. DOCX로 만들지 않음. 한글 COM은 Windows+한글2022만. 모바일/원격/다른 PC도 `hub env|diagnose|fill` 동일. 승인 없는 DOCX 산출·엔진 축소·우회 금지. (기존 `.docx`가 있을 때만 진단 가능 — 채움 본선 산출 아님.)
+
+**금지:** 승인 없이 DOCX-only 우회 · 1회성 `_*.py` 신규 스크립트로 본선 대체 · 모집분야 추정 자동체크.
 ## 표준 실행 (PowerShell)
 ```powershell
 cd D:\auto_write\app

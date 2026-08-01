@@ -1,18 +1,23 @@
-"""self_diagnose.py — 실사용 기준 자가진단 CLI.
+"""self_diagnose.py — 실사용 기준 자가진단 CLI (DOCX + HWPX 통합 진입).
 
 용도
 ----
-1) 제출 직전 DOCX 가 '실제로 제출 가능한 상태'인지 하드페일 기준으로 판정한다.
+1) 제출 직전 문서가 '실제로 제출 가능한 상태'인지 하드페일 기준으로 판정한다.
+   - ``.docx`` → usage_acceptance
+   - ``.hwpx`` → hwpx_self_diagnose (동일 종료코드 계약)
 2) 요구사항 원장(workspace/requirements_ledger.json)과 대조하여
-   "사용자 요구 중 무엇이 아직 미달성인지"를 함께 보고한다.
+   "사용자 요구 중 무엇이 아직 미달성인지"를 함께 보고한다 (DOCX).
 3) 품질점수(doc_quality_score)가 통과인데 본 진단이 실패라면
    = 채점기 사각지대 → 자동개발 루프(/auto-write-selfdev)의 다음 개선 대상이 된다.
 
 사용 (PowerShell)
 -----------------
-cd D:\auto_write\app
-python self_diagnose.py "C:\경로\제출본.docx"
+cd D:\\auto_write\\app
+python self_diagnose.py "C:\\경로\\제출본.docx"
+python self_diagnose.py 제출본.hwpx --require-specialty
 python self_diagnose.py 제출본.docx --json 진단결과.json
+# 통합 허브(로컬/원격/모바일 동일):
+#   py -3.11 auto_write_hub.py diagnose 제출본.hwpx
 
 종료코드 계약(ENC-2): 0 = 제출가능 / 1 = 입력 오류(파일 없음 등) /
 2 = 제출불가(DRAFT) / 3 = 검사 불능(검사기 예외 — 환경/의존성 문제, 판정 불가 = 제출 금지)
@@ -72,8 +77,8 @@ def main(argv: list[str] | None = None) -> int:
         except Exception:
             pass
 
-    ap = argparse.ArgumentParser(description="실사용 기준 자가진단 (읽기 전용)")
-    ap.add_argument("docx", help="진단할 DOCX 경로")
+    ap = argparse.ArgumentParser(description="실사용 기준 자가진단 (읽기 전용, DOCX|HWPX)")
+    ap.add_argument("docx", help="진단할 문서 경로 (.docx|.hwpx)")
     ap.add_argument("--json", dest="json_out", help="결과 JSON 저장 경로")
     ap.add_argument("--checklist", dest="checklist_out",
                     help="제출 준비 체크리스트(마크다운) 저장 경로 — 결함별 다음 행동을 "
@@ -91,11 +96,34 @@ def main(argv: list[str] | None = None) -> int:
                     metavar="서식명",
                     help="공고 필수 서식명(반복 지정). 누락 시 fail→제출불가. "
                          "예: --required-doc 청렴서약서 --required-doc 개인정보동의서")
+    ap.add_argument("--require-specialty", action="store_true",
+                    help="HWPX 전용: 모집분야 체크 필수(미체크=fail)")
     args = ap.parse_args(argv)
 
     src = Path(args.docx)
     if not src.exists():
         print(f"[오류] 파일 없음: {src}")
+        return 1
+
+    # HWPX → 동일 종료코드 계약의 hwpx_self_diagnose 로 위임 (로컬/원격/모바일 동일)
+    if src.suffix.lower() == ".hwpx":
+        from hwpx_self_diagnose import main as hwpx_main
+
+        fwd: list[str] = [str(src)]
+        if args.json_out:
+            fwd += ["--json", args.json_out]
+        if args.require_specialty:
+            fwd.append("--require-specialty")
+        return hwpx_main(fwd)
+    if src.suffix.lower() == ".hwp":
+        print(
+            "[오류] .hwp 직접 진단은 COM이 필요할 수 있습니다. "
+            ".hwpx 로 저장 후 진단하거나 auto_write_hub.py diagnose 를 사용하세요.",
+            file=sys.stderr,
+        )
+        return 1
+    if src.suffix.lower() != ".docx":
+        print(f"[오류] 지원 확장자: .docx .hwpx (받은 것: {src.suffix})", file=sys.stderr)
         return 1
 
     try:

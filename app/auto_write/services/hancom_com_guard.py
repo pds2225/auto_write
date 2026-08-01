@@ -4,18 +4,15 @@ HWPFrame.HwpObject 가 HOffice130(한컴 2024)을 가리키면 Dispatch 전에 �
 한컴계정 로그인 팝업 재발 방지. RHWP-only 경로로 우회하도록 안내한다.
 
 환경 변수 ``AUTO_WRITE_ALLOW_HANCOM_2024_COM=1`` 로만 2024 COM 허용(명시적 opt-in).
+비-Windows 에서는 빈 스냅샷을 반환한다(ImportError 없음).
 """
 
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass
 from typing import Any
-
-try:
-    import winreg  # Windows only — Linux/CI 에서는 레지스트리 조회를 건너뛴다.
-except ImportError:  # pragma: no cover
-    winreg = None  # type: ignore[assignment]
 
 _COM_CLSID = "{2291CF00-64A1-4877-A9B4-68CFE89612D6}"
 _DOC130_CLSID = "{965829DB-438E-4d31-B4FA-F1F8819A35FD}"
@@ -54,9 +51,11 @@ class HancomComSnapshot:
 
 
 def _reg_read(path: str) -> str | None:
-    if winreg is None:
+    if sys.platform != "win32":
         return None
     try:
+        import winreg
+
         with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, path) as key:
             return winreg.QueryValue(key, None)
     except OSError:
@@ -64,7 +63,6 @@ def _reg_read(path: str) -> str | None:
 
 
 def snapshot_hancom_com() -> HancomComSnapshot:
-    """레지스트리 스냅샷. non-Windows 는 전부 None(COM 자체 불가)."""
     return HancomComSnapshot(
         hwpframe_localserver32=_reg_read(f"WOW6432Node\\CLSID\\{_COM_CLSID}\\LocalServer32"),
         hwp_document_130_localserver32=_reg_read(
@@ -81,6 +79,11 @@ def allow_hancom_2024_com() -> bool:
 
 def assert_safe_hwp_com_or_raise(*, allow_hancom_2024: bool | None = None) -> HancomComSnapshot:
     """Dispatch 직전 호출. 2024 COM이면 예외(기본). allow 시에만 통과."""
+    if sys.platform != "win32":
+        raise HancomComGuardError(
+            "한글 COM은 Windows에서만 사용 가능합니다. "
+            "RHWP 경로(--engine rhwp-hwpx-fill)를 사용하세요."
+        )
     snap = snapshot_hancom_com()
     allowed = allow_hancom_2024 if allow_hancom_2024 is not None else allow_hancom_2024_com()
     if allowed:

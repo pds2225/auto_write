@@ -1,36 +1,29 @@
-"""cross_form_hwp_pipeline.py — 공고 HWP/HWPX 양식 채움 단일 진입점.
+"""cross_form_hwp_pipeline.py — 공고 HWP/HWPX 양식 채움 단일 진입점 (Sprint 1).
 
 재발 방지:
 - ``--output`` + ``--engine`` + ``--confirm-output-plan`` 필수 (암묵적 DOCX 우회 금지)
 - COM 은 ``hancom_com_guard`` 가 2024(HOffice130) 기동을 차단
-- 구 스크립트 ``_finish_minwon_rhwp.py`` / ``_complete_minwon_job.py`` 는 사용 금지(래퍼만 유지)
+- 본선 산출은 HWPX(서식만). DOCX는 명시적 ``docx-crossform`` 만.
+- 구 스크립트 ``_finish_minwon_rhwp.py`` / ``_complete_minwon_job.py`` 사용 금지
 
 사용 예 (PowerShell)::
 
     cd D:\\auto_write\\app
-    # RHWP — COM 없이 HWPX 채움 (권장, 로그인 없음)
     py -3.11 cross_form_hwp_pipeline.py ^
         --notice-folder "C:\\...\\21_기업민원..." ^
-        --engine rhwp-hwpx-fill --output hwpx --confirm-output-plan
-
-    # COM + hwpx_fill — .hwp/.hwpx (한글 2022 COM 등록 필요)
-    py -3.11 cross_form_hwp_pipeline.py ^
-        --notice-folder "C:\\...\\21_기업민원..." ^
-        --engine com-hwpx-fill --output hwpx --output hwp --confirm-output-plan
-
-    # DOCX cross_form (명시적 선택 시만)
-    py -3.11 cross_form_hwp_pipeline.py ^
-        --notice-folder "C:\\...\\21_기업민원..." ^
-        --engine docx-crossform --output docx --confirm-output-plan
+        --engine rhwp-hwpx-fill --output hwpx --confirm-output-plan ^
+        --extract-forms --supplement-resume --facts-json facts.json
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 from auto_write.services.cross_form_output_policy import (
@@ -40,9 +33,11 @@ from auto_write.services.cross_form_output_policy import (
     OutputPolicyError,
     validate_output_plan,
 )
+from auto_write.services.output_naming import resolve_submit_path
 from auto_write.services.cross_form_autofill import extract_source_fields
 from auto_write.services.hwp_docx_convert import hwp_to_docx
 from auto_write.services.hwpx_fill import fill_hwpx
+from auto_write.services.hwpx_form_extract import extract_forms_only, looks_like_notice_blob
 
 APP = Path(__file__).resolve().parent
 
@@ -91,9 +86,10 @@ def _extract_identity(profile: Path, resume: Path, master: Path, tmp: Path) -> d
         ident["소속/직위"] = f"{so} / {jw}"
     elif so:
         ident["소속/직위"] = so
-    addr = pick(rm, pm, mm, keys=("주소", "거주지"))
+    addr = pick(pm, rm, mm, keys=("주소", "거주지"))
     if addr:
         ident["주소(거주지)"] = addr
+        ident["주소"] = addr
     return ident
 
 
@@ -118,6 +114,59 @@ def _find_target(notice: Path) -> Path:
     return hwps[0]
 
 
+def _ensure_forms_base(work: Path, raw_base: Path, *, extract: bool) -> tuple[Path, dict]:
+    """공고+서식 base → 서식만 ``10_forms_only.hwpx``."""
+    forms_only = work / "10_forms_only.hwpx"
+    meta: dict = {"extract_forms": extract, "source_base": str(raw_base)}
+    if not extract:
+        return raw_base, meta
+    if not raw_base.is_file():
+        raise FileNotFoundError(f"HWPX 베이스 없음: {raw_base}")
+    # 이미 서식만이면 스킵
+    import zipfile
+
+    with zipfile.ZipFile(raw_base) as z:
+        blob = "".join(
+            z.read(n).decode("utf-8", "replace")
+            for n in z.namelist()
+            if n.endswith(".xml") and "section" in n
+        )
+    if looks_like_notice_blob(blob) or ("[서식 1]" in blob and "모집공고" in blob):
+        rep = extract_forms_only(raw_base, forms_only)
+        meta["extract_report"] = rep.as_dict()
+        if not rep.ok:
+            raise RuntimeError(f"서식 분리 실패: {rep.notes}")
+        return forms_only, meta
+    meta["extract_skipped"] = "notice markers not found — using base as-is"
+    return raw_base, meta
+
+
+def _default_facts(identity: dict[str, str]) -> dict:
+    """하드코딩 금지 대체: 파이프라인 기본 facts(모집분야 체크 없음)."""
+    today = datetime.now().strftime("%Y년  %m월  %d일").replace(" 0", " ")
+    return {
+        "education": [
+            ["2025년 8월 (졸업)", "한양대학교 대학원", "경영컨설팅학과 (석사)"],
+            ["2016년 2월 (졸업)", "강남대학교", "경영학과 (학사)"],
+        ],
+        "licenses": [
+            ["경영지도사 (등록 제12040호)", "2020/01/01", "마케팅", "중소벤처기업부"],
+            ["스타트업 AC 심사역(인증 제23-14호)", "2023/02/07", "-", "씨엔티테크"],
+        ],
+        "careers": [
+            ["밸류업파트너스", "2022.11 ~ 현재", "대표", "정부지원사업·정책자금·투자유치 컨설팅"],
+            ["한국경영기술지도사회 중부·여성지회", "2023.02 ~ 현재", "이사·부회장", "조직운영·전문가 강의"],
+            ["IPO브릿지", "2022.02 ~ 2022.11", "선임컨설턴트", "사업계획서·IR자료 컨설팅"],
+            ["오케이저축은행", "2020.03 ~ 2021.07", "계장", "기업금융·투자금융(IB)"],
+            ["웰컴저축은행", "2016.11 ~ 2020.02", "계장", "기업금융(부동산·PF)"],
+        ],
+        "specialty_text": "",
+        "check_columns": [],
+        "sign_date": today,
+        "sign_name": identity.get("성명", ""),
+    }
+
+
 def run_pipeline(
     notice_folder: Path,
     plan: OutputPlan,
@@ -127,6 +176,14 @@ def run_pipeline(
     resume: Path | None = None,
     master: Path | None = None,
     supplement_resume: bool = False,
+    extract_forms: bool = False,
+    facts_json: Path | None = None,
+    specialty_confirms: list[str] | None = None,
+    run_diagnose: bool = True,
+    submit_name: str | None = None,
+    form_prefix: str = "전문상담위원_참여신청서",
+    submit_version: str | None = None,
+    write_submit_copy: bool = True,
 ) -> dict:
     validate_output_plan(plan)
     work = notice_folder / "_workspace"
@@ -154,45 +211,95 @@ def run_pipeline(
         )
 
         if plan.engine is FillEngine.RHWP_HWPX:
-            base = hwpx_base or (work / "10_form_base.hwpx")
-            if not base.is_file():
-                raise FileNotFoundError(
-                    f"HWPX 베이스가 없습니다: {base}. "
-                    "한글 2022에서 공고 서식을 HWPX로 저장하거나 --hwpx-base 를 지정하세요."
-                )
+            raw_base = hwpx_base or (work / "10_form_base.hwpx")
+            base, extract_meta = _ensure_forms_base(work, raw_base, extract=extract_forms)
+            result["form_extract"] = extract_meta
+
             out_hwpx = work / "02_filled.hwpx"
             fr = fill_hwpx(base, out_hwpx, identity=identity)
             result["outputs"]["hwpx"] = str(out_hwpx)
             result["filled"] = fr.filled
             result["filled_count"] = fr.filled_count
-            if supplement_resume:
-                from auto_write.services.hwpx_resume_supplement import supplement_hwpx_from_resume
-                from datetime import datetime
 
-                today_fmt = datetime.now().strftime("%Y년  %m월  %d일").replace(" 0", " ")
-                sup = supplement_hwpx_from_resume(
-                    out_hwpx,
-                    out_hwpx,
-                    education=[
-                        ("2022.03 ~ 현재", "한양대학교", "경영컨설팅학과(석사 재학)"),
-                        ("2011.03 ~ 2016.02", "강남대학교", "경영학과(학사)"),
-                    ],
-                    licenses=[
-                        ("경영지도사", "2020.01.01", "12040", "중소벤처기업부"),
-                        ("스타트업 액셀러레이터 심사역", "2023.02.07", "23-14", "씨엔티테크"),
-                    ],
-                    careers=[
-                        ("밸류업파트너스", "2022.11 ~ 현재", "대표이사", "컨설팅·자문·사업계획서·IR"),
-                        ("한국경영기술지도사회", "2023.02 ~ 현재", "중부지회 이사", "협회 운영"),
-                        ("IPO브릿지", "2022.02 ~ 2022.11", "선임컨설턴트", "컨설팅·IR"),
-                        ("오케이저축은행", "2020.03 ~ 2021.07", "계장", "기업금융·투자금융"),
-                    ],
-                    specialty_text="경영전략, 창업·도약",
-                    check_columns=[(2, 4, "경영활동 전문상담"), (3, 4, "특화분야 전문상담")],
-                    sign_date=today_fmt,
-                    sign_name=identity.get("성명", ""),
+            if supplement_resume:
+                from auto_write.services.hwpx_resume_supplement import (
+                    load_resume_facts,
+                    supplement_hwpx_from_resume,
                 )
+                from auto_write.services.hwpx_specialty_profile import (
+                    SpecialtyConfirmError,
+                    resolve_specialty_checks,
+                )
+
+                facts_path = facts_json
+                if facts_path is None:
+                    facts_path = work / "01_resume_table_facts.json"
+                    if not facts_path.is_file():
+                        facts_path.write_text(
+                            json.dumps(_default_facts(identity), ensure_ascii=False, indent=2),
+                            encoding="utf-8",
+                        )
+                facts_data = load_resume_facts(facts_path)
+                # L034: confirm 없으면 check_columns 강제 비움 / confirm 있으면 맵핑
+                confirms = list(specialty_confirms or [])
+                if confirms:
+                    try:
+                        facts_data["check_columns"] = [
+                            list(x) for x in resolve_specialty_checks(confirms)
+                        ]
+                    except SpecialtyConfirmError as exc:
+                        raise RuntimeError(str(exc)) from exc
+                else:
+                    facts_data["check_columns"] = []
+                    facts_data.setdefault("specialty_text", facts_data.get("specialty_text") or "")
+                facts_path.write_text(
+                    json.dumps(facts_data, ensure_ascii=False, indent=2), encoding="utf-8"
+                )
+                result["specialty_confirms"] = confirms
+                result["check_columns"] = facts_data.get("check_columns") or []
+
+                mid = work / "_step_before_supplement.hwpx"
+                if not mid.exists():
+                    import shutil
+
+                    shutil.copyfile(out_hwpx, mid)
+                sup = supplement_hwpx_from_resume(out_hwpx, out_hwpx, facts_json=facts_path)
                 result["supplement"] = sup.as_dict()
+                result["facts_json"] = str(facts_path)
+
+            # L037 휴리스틱
+            import zipfile
+
+            with zipfile.ZipFile(out_hwpx) as z:
+                out_blob = "".join(
+                    z.read(n).decode("utf-8", "replace")
+                    for n in z.namelist()
+                    if n.endswith(".xml") and "section" in n
+                )
+            result["l037_forms_only"] = not looks_like_notice_blob(out_blob)
+
+            # Sprint 2: 채움률
+            from auto_write.services.hwpx_fill_coverage import score_hwpx_coverage
+
+            cov = score_hwpx_coverage(out_hwpx)
+            result["coverage"] = cov.as_dict()
+            (work / "03_fill_coverage.json").write_text(
+                json.dumps(cov.as_dict(), ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+
+            # Sprint 3: HWPX 진단
+            if run_diagnose:
+                from hwpx_self_diagnose import diagnose_hwpx
+
+                diag = diagnose_hwpx(
+                    out_hwpx,
+                    require_specialty_checked=bool(specialty_confirms),
+                )
+                result["diagnose"] = diag.as_dict()
+                (work / "05_hwpx_diagnose.json").write_text(
+                    json.dumps(diag.as_dict(), ensure_ascii=False, indent=2), encoding="utf-8"
+                )
+
             (work / "02_fill_report.json").write_text(
                 json.dumps(
                     {
@@ -202,6 +309,12 @@ def run_pipeline(
                         "filled_count": fr.filled_count,
                         "residual": fr.residual,
                         "ok": fr.filled_count > 0,
+                        "supplement": result.get("supplement"),
+                        "l037_forms_only": result["l037_forms_only"],
+                        "form_extract": extract_meta,
+                        "specialty_confirms": result.get("specialty_confirms"),
+                        "coverage": result.get("coverage"),
+                        "diagnose_ok": (result.get("diagnose") or {}).get("ok"),
                     },
                     ensure_ascii=False,
                     indent=2,
@@ -251,6 +364,34 @@ def run_pipeline(
             if rp.is_file():
                 result["fill_report"] = json.loads(rp.read_text(encoding="utf-8"))
 
+    # 제출용 자동 파일명: 전문상담위원_참여신청서_{성명}.hwpx
+    if write_submit_copy:
+        person = (submit_name or "").strip()
+        if not person:
+            try:
+                facts = json.loads((work / "01_source_facts.json").read_text(encoding="utf-8"))
+                person = ((facts.get("identity") or {}).get("성명") or "").strip()
+            except (OSError, json.JSONDecodeError, TypeError):
+                person = ""
+        person = person or "미상"
+        hwpx_src = result.get("outputs", {}).get("hwpx")
+        if hwpx_src and Path(hwpx_src).is_file():
+            submit_dir = notice_folder / "제출"
+            submit_dir.mkdir(parents=True, exist_ok=True)
+            named = resolve_submit_path(
+                submit_dir,
+                form_prefix=form_prefix,
+                name=person,
+                ext=".hwpx",
+                version=submit_version,
+            )
+            shutil.copyfile(hwpx_src, named)
+            result["submit_copy"] = str(named)
+            ws_named = work / named.name
+            shutil.copyfile(hwpx_src, ws_named)
+            result["workspace_named"] = str(ws_named)
+            result["submit_filename"] = named.name
+
     (work / "00_engines.json").write_text(
         json.dumps(
             {
@@ -277,27 +418,68 @@ def main(argv: list[str] | None = None) -> int:
         action="append",
         choices=[o.value for o in OutputFormat],
         required=True,
-        help="산출 형식 (복수 가능). 암묵적 기본값 없음.",
+        help="산출 형식. 본선은 hwpx. docx는 명시적 docx-crossform 만.",
     )
     parser.add_argument(
         "--engine",
         required=True,
         choices=[e.value for e in FillEngine],
-        help="채움 엔진. rhwp-hwpx-fill | com-hwpx-fill | docx-crossform",
+        help="rhwp-hwpx-fill(권장) | com-hwpx-fill | docx-crossform(명시)",
     )
     parser.add_argument(
         "--confirm-output-plan",
         action="store_true",
-        help="출력 형식·엔진 선택을 사용자가 승인했음을 명시 (필수)",
+        help="출력 형식·엔진 사용자 승인 (필수)",
     )
-    parser.add_argument("--hwpx-base", type=Path, help="RHWP 타깃 HWPX (기본: _workspace/10_form_base.hwpx)")
+    parser.add_argument("--hwpx-base", type=Path, help="입력 HWPX (기본: _workspace/10_form_base.hwpx)")
     parser.add_argument("--source-profile", type=Path)
     parser.add_argument("--source-resume", type=Path)
     parser.add_argument("--source-master", type=Path)
     parser.add_argument(
         "--supplement-resume",
         action="store_true",
-        help="학력·자격·경력·모집분야·서명일 이력서 표 보강(RHWP)",
+        help="학력·자격·경력·서명 표 보강(RHWP). 모집분야 체크는 facts의 check_columns만.",
+    )
+    parser.add_argument(
+        "--extract-forms",
+        action="store_true",
+        help="공고 본문 제거 후 서식만 채움(L037)",
+    )
+    parser.add_argument(
+        "--facts-json",
+        type=Path,
+        help="학력/자격/경력 facts JSON. 없으면 _workspace/01_resume_table_facts.json 생성",
+    )
+    parser.add_argument(
+        "--confirm-specialty",
+        action="append",
+        default=[],
+        help="모집분야 confirm (반복 가능). 예: --confirm-specialty 경영활동. 없으면 미체크(L034)",
+    )
+    parser.add_argument(
+        "--no-diagnose",
+        action="store_true",
+        help="HWPX self_diagnose 생략",
+    )
+    parser.add_argument(
+        "--name",
+        default=None,
+        help="제출 파일명용 성명. 없으면 identity 성명 → 전문상담위원_참여신청서_{성명}.hwpx",
+    )
+    parser.add_argument(
+        "--form-prefix",
+        default="전문상담위원_참여신청서",
+        help="제출 파일명 접두",
+    )
+    parser.add_argument(
+        "--version",
+        default=None,
+        help="파일명 버전 접미사 (예: v1 → …_박다솜_v1.hwpx)",
+    )
+    parser.add_argument(
+        "--no-submit-copy",
+        action="store_true",
+        help="제출/ 폴더 자동 파일명 복사 생략",
     )
     args = parser.parse_args(argv)
 
@@ -315,13 +497,29 @@ def main(argv: list[str] | None = None) -> int:
             resume=args.source_resume,
             master=args.source_master,
             supplement_resume=args.supplement_resume,
+            extract_forms=args.extract_forms,
+            facts_json=args.facts_json,
+            specialty_confirms=args.confirm_specialty,
+            run_diagnose=not args.no_diagnose,
+            submit_name=args.name,
+            form_prefix=args.form_prefix,
+            submit_version=args.version,
+            write_submit_copy=not args.no_submit_copy,
         )
     except (OutputPolicyError, FileNotFoundError, RuntimeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
 
+    # Windows 콘솔 cp949 대비
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     print(json.dumps(result, ensure_ascii=False, indent=2))
-    return 0 if result.get("outputs") else 2
+    # 산출 없으면 2, 진단 fail 이면 2 (게이트)
+    if not result.get("outputs"):
+        return 2
+    diag = result.get("diagnose") or {}
+    if diag and diag.get("ok") is False:
+        return 2
+    return 0
 
 
 if __name__ == "__main__":
