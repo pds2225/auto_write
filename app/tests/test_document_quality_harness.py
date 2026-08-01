@@ -397,3 +397,88 @@ def test_runall_unify_live_default():
     p.add_run("내용").font.size = Pt(15)
     report = dq.run_all(d)
     assert report.paragraphs_unified >= 1
+
+
+# --------------------------------------------------------------------------- L013: 자기지시 메타문구 제거
+def test_meta_note_removal_preserves_real_body():
+    """'※ 날조·과장 없이 정직하게 작성한다' 자기지시 메타문구는 삭제하고 실본문은 보존한다."""
+    d = Document()
+    d.add_paragraph("※ 날조·과장 없이 정직하게 작성한다")  # 자기지시 메타문구 → 삭제
+    d.add_paragraph("매출 3억 달성")                        # 실본문(수치) → 보존
+    removed = dq.remove_guide_paragraphs(d)
+    remaining = [p.text for p in d.paragraphs if p.text.strip()]
+    assert removed == 1
+    assert remaining == ["매출 3억 달성"]
+
+
+def test_meta_note_removed_in_runall():
+    """run_all 경로에서도 '※…작성 태도' 메타문구가 제거된다(배선 확인)."""
+    d = Document()
+    d.add_paragraph("※ 미확정 수치는 과장하지 않는다")   # 메타문구
+    d.add_paragraph("고용 20명 창출로 성과 달성")         # 실본문 보존
+    dq.run_all(d)
+    remaining = [p.text for p in d.paragraphs if p.text.strip()]
+    assert "고용 20명 창출로 성과 달성" in remaining
+    assert not any("과장하지 않는다" in t for t in remaining)
+
+
+# --------------------------------------------------------------------------- L015: ■ 제목 정규화
+def test_square_heading_dash_form():
+    """'■ 라벨 — 설명' → '■ (라벨)' 결정론 변환."""
+    d = Document()
+    d.add_paragraph("■ 핵심역량 — 우리 팀의 강점 설명")
+    n = dq.normalize_square_headings(d)
+    assert n == 1
+    assert d.paragraphs[0].text.strip() == "■ (핵심역량)"
+
+
+def test_square_heading_paren_form():
+    """'■ 라벨(부제)' → '■ (라벨)' 결정론 변환."""
+    d = Document()
+    d.add_paragraph("■ 시장분석(TAM/SAM/SOM)")
+    dq.normalize_square_headings(d)
+    assert d.paragraphs[0].text.strip() == "■ (시장분석)"
+
+
+def test_square_heading_idempotent_and_plain_unchanged():
+    """이미 '■ (라벨)' 은 멱등, '■' 없는 일반 단락·구분자 없는 '■ 라벨' 은 불변."""
+    d = Document()
+    d.add_paragraph("■ (핵심역량)")        # 이미 정규형 → 멱등(변경 0)
+    d.add_paragraph("일반 본문 단락입니다")  # ■ 없음 → 불변
+    d.add_paragraph("■ 단순제목")           # 구분자·부제 없음 → 불변
+    before = [p.text for p in d.paragraphs]
+    n = dq.normalize_square_headings(d)
+    assert n == 0
+    assert [p.text for p in d.paragraphs] == before
+
+
+def test_square_heading_runall_wired_and_idempotent():
+    """run_all 이 ■ 제목을 정규화하고(배선) 2회차엔 0(멱등)."""
+    d = Document()
+    d.add_paragraph("■ 성장전략 — 단계별 로드맵")
+    r1 = dq.run_all(d)
+    r2 = dq.run_all(d)
+    assert r1.square_headings_normalized == 1
+    assert r2.square_headings_normalized == 0
+    assert d.paragraphs[0].text.strip() == "■ (성장전략)"
+
+
+def test_square_heading_preserves_data_after_dash():
+    """'■ 라벨 — 매출 3억, 고용 20명'처럼 대시 뒤에 숫자·쉼표(실데이터)면 삭제하지 않는다."""
+    d = Document()
+    d.add_paragraph("■ 핵심 성과 — 매출 3억, 고용 20명")
+    n = dq.normalize_square_headings(d)
+    assert n == 0
+    assert d.paragraphs[0].text.strip() == "■ 핵심 성과 — 매출 3억, 고용 20명"
+
+
+def test_meta_note_preserves_informational_note():
+    """'※ 담당: … 과장'(직급)·'※ 일정: 미확정'(정보성)은 작성태도 자기지시가 아니라 보존."""
+    d = Document()
+    d.add_paragraph("※ 담당: 홍길동 과장 (매출 3억 계약)")   # 직급 '과장' — 보존
+    d.add_paragraph("※ 일정: 미확정")                        # 정보성 미확정 — 보존
+    d.add_paragraph("실제 사업 내용")                         # 본문 보존
+    removed = dq.remove_guide_paragraphs(d)
+    remaining = [p.text for p in d.paragraphs if p.text.strip()]
+    assert removed == 0
+    assert len(remaining) == 3

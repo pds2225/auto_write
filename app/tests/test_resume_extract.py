@@ -233,3 +233,55 @@ def test_education_consolidates_graduated_over_completed():
     assert ("강남대학교", "학사") in pairs          # 다른 레벨은 보존(과잉병합 금지)
     assert len(merged.education) == 2
     assert any("[대체]" in n and "수료" in n for n in needs)   # 대체 내역 병기
+
+
+# --- L046: 교육 '과정 이수/수료' 를 자격증에서 분리 ------------------------------
+def test_training_completion_split_from_certs():
+    """'투자심사역 과정 이수' 같은 교육 수료는 certs 가 아니라 trainings 로 분리(유실 0)."""
+    text = (
+        "자격 | 발급일자 | 자격증명 | 발급번호 | 발급기관\n"
+        "자격 | 2020.01.01. | 경영지도사 | 12040 | 중소벤처기업부\n"
+        "자격 | 2021.05.05 | 투자심사역 과정 이수 |  | 한국벤처투자\n"
+        "자격 | 2022.03.03 | 리더십 교육 수료 |  | 사내교육원\n"
+    )
+    p = parse_profile_text(text, source="x.hwp")
+    # 일반 자격만 certs
+    assert len(p.certs) == 1
+    assert p.certs[0].name == "경영지도사"
+    assert all("이수" not in (c.name or "") for c in p.certs)
+    assert all("수료" not in (c.name or "") for c in p.certs)
+    # 교육 수료는 trainings 로 보존(버리지 않음)
+    assert len(p.trainings) == 2
+    names = [t.name for t in p.trainings]
+    assert "투자심사역 과정 이수" in names
+    assert "리더십 교육 수료" in names
+
+
+def test_normal_cert_not_misclassified_as_training():
+    """'정보처리기사' 같은 일반 자격은 trainings 로 오분류되지 않고 certs 에 남는다."""
+    text = (
+        "자격 | 발급일자 | 자격증명 | 발급번호 | 발급기관\n"
+        "자격 | 2019.06.06 | 정보처리기사 | 19203 | 한국산업인력공단\n"
+    )
+    p = parse_profile_text(text, source="x.hwp")
+    assert len(p.certs) == 1
+    assert p.certs[0].name == "정보처리기사"
+    assert len(p.trainings) == 0
+
+
+def test_trainings_in_json_and_merge():
+    """trainings 가 as_dict/JSON 에 노출되고 merge_profiles 로 dedup union 된다."""
+    p1 = parse_profile_text(
+        "자격 | 발급일자 | 자격증명 | 발급번호 | 발급기관\n"
+        "자격 | 2021.05.05 | 투자심사역 과정 이수 |  | 한국벤처투자\n",
+        source="a.hwp")
+    p2 = parse_profile_text(
+        "자격 | 발급일자 | 자격증명 | 발급번호 | 발급기관\n"
+        "자격 | 2021.05.05 | 투자심사역 과정 이수 |  | 한국벤처투자\n"   # 중복 → dedup
+        "자격 | 2022.03.03 | 리더십 교육 수료 |  | 사내교육원\n",       # 신규
+        source="b.hwp")
+    merged, _ = merge_profiles([p1, p2])
+    assert len(merged.trainings) == 2                 # dedup + union
+    d = merged.as_dict()
+    assert "trainings" in d
+    assert len(d["trainings"]) == 2

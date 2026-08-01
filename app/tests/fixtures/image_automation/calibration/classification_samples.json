@@ -1,0 +1,38 @@
+{
+  "purpose": "classification_keyword_calibration_only_not_holdout",
+  "notes": [
+    "Small ambiguous samples for keyword/folder hint tuning.",
+    "Never include these IDs in holdout/classification_labels.json gates."
+  ],
+  "samples": [
+    {
+      "id": "cal-cls-folder",
+      "parent_hint": "1.문제인식",
+      "filename": "misc.png",
+      "text_hint": "",
+      "psst": "01_problem"
+    },
+    {
+      "id": "cal-cls-keyword-tie",
+      "parent_hint": "",
+      "filename": "mixed.png",
+      "text_hint": "문제 솔루션 성장 팀",
+      "psst": "99_unclassified",
+      "note": "multi-class keyword tie should stay unclassified"
+    },
+    {
+      "id": "cal-cls-team",
+      "parent_hint": "4.기업구성",
+      "filename": "org.png",
+      "text_hint": "조직도",
+      "psst": "04_team"
+    },
+    {
+      "id": "cal-cls-scale",
+      "parent_hint": "",
+      "filename": "roadmap_매출.png",
+      "text_hint": "성장 로드맵",
+      "psst": "03_scale_up"
+    }
+  ]
+}

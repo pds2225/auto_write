@@ -431,7 +431,7 @@ def _count_lineseg(path: Path) -> int:
 
 
 def test_strip_linesegarray_when_filled(tmp_path):
-    """채우면 옛 줄위치 캐시(linesegarray)가 전량 제거돼 한글 글씨 겹침을 막는다."""
+    """채우면 편집 칸의 lineseg 만 제거(L074) — 미편집 외곽 문단 캐시는 보존."""
     src = tmp_path / "ls.hwpx"
     _make_hwpx_ls(src)
     assert _count_lineseg(src) == 2  # 채우기 전: 문단1 + 값칸1
@@ -439,7 +439,8 @@ def test_strip_linesegarray_when_filled(tmp_path):
     rep = fill_hwpx(src, out, identity={"상호": "도보내비"})
     assert rep.filled.get("상호") == "도보내비"
     assert _cell_value(out, "상호") == "도보내비"  # 값 채워짐(내용 보존)
-    assert _count_lineseg(out) == 0  # 캐시 전량 제거(겹침 방지)
+    # L074: 값 칸 lineseg 만 제거 → 외곽 표 문단 lineseg 1개 잔존(안내박스 보호 동일)
+    assert _count_lineseg(out) == 1
 
 
 def test_linesegarray_kept_when_no_change(tmp_path):
@@ -1461,3 +1462,79 @@ def test_grid_choice_box_options_left_to_checkbox_path(tmp_path):
     fill_hwpx(src, out, identity={"취득방법": "임대"})
     assert _read_cell_at(out, 1, 1) == ""            # 그리드 마크 기입 없음
     assert _read_cell_at(out, 2, 1) == ""
+
+
+# --------------------------------------------------------------------------- #
+# L045: 서명/도장/(인) 라벨 상황 — 리터럴 '(인)' 신규 삽입 금지(기존 동작 잠금)
+# (fill_hwpx 는 값만 기입할 뿐 '(인)' 같은 도장 마커를 스스로 만들어내지 않는다)
+# --------------------------------------------------------------------------- #
+
+
+def _count_marker(path: Path, marker: str) -> int:
+    with zipfile.ZipFile(path) as z:
+        return z.read("Contents/section0.xml").decode("utf-8").count(marker)
+
+
+def test_no_in_marker_inserted_when_filling(tmp_path):
+    """대표자 값 칸을 채워도 리터럴 '(인)' 개수가 늘지 않는다(신규 삽입 없음)."""
+    src = tmp_path / "seal.hwpx"
+    _make_hwpx_cells(src, [
+        _cellx(0, "대표자"),          # 라벨
+        _cellx(1, ""),               # 값 칸(채움 대상)
+        _cellx(2, "서명 (인)"),       # 도장 안내 라벨(보존 대상)
+    ])
+    out = tmp_path / "out.hwpx"
+    rep = fill_hwpx(src, out, identity={"대표자": "홍길동"})
+    assert _read_cell_by_col(out, 1) == "홍길동"        # 값은 정상 기입
+    assert _read_cell_by_col(out, 2) == "서명 (인)"      # 안내 라벨 그대로
+    # 핵심 잠금: '(인)' 마커가 새로 생기지 않음(입력 개수 == 출력 개수)
+    assert _count_marker(out, "(인)") == _count_marker(src, "(인)") == 1
+    assert rep.filled_count == 1
+
+
+def test_no_in_marker_synthesized_on_clean_form(tmp_path):
+    """'(인)' 이 원래 없던 양식은 채운 뒤에도 '(인)' 이 전혀 없다(날조 0)."""
+    src = tmp_path / "clean.hwpx"
+    _make_hwpx_cells(src, [_cellx(0, "대표자"), _cellx(1, "")])
+    out = tmp_path / "out.hwpx"
+    fill_hwpx(src, out, identity={"대표자": "김철수"})
+    assert _read_cell_by_col(out, 1) == "김철수"
+    assert _count_marker(out, "(인)") == 0              # 도장 마커 자동생성 없음
+
+
+def test_set_cell_text_blocks_form_control_direct(tmp_path):
+    """L086 방어핀: _set_cell_text 직접 호출도 checkBtn 칸에 기입하지 않는다."""
+    from lxml import etree
+    from auto_write.services.hwpx_fill import _set_cell_text, _q, _HP
+    xml = (
+        f'<hp:tc xmlns:hp="{_HP}">'
+        f'<hp:subList><hp:p><hp:run charPrIDRef="0">'
+        f'<hp:checkBtn name="CB" value="UNCHECKED"/><hp:t/></hp:run></hp:p></hp:subList>'
+        f'</hp:tc>'
+    )
+    tc = etree.fromstring(xml)
+    assert _set_cell_text(tc, "010-9999-8888") is False
+    texts = [t.text for t in tc.iter(_q("t"))]
+    assert all(not (t or "").strip() for t in texts)
+
+
+def test_strip_linesegarray_only_under_preserves_siblings():
+    """L074: only_under 지정 시 형제 문단 lineseg 는 보존."""
+    from lxml import etree
+    from auto_write.services.hwpx_fill import _strip_linesegarray, _q, _HP
+    root = etree.fromstring(
+        f'<hs:sec xmlns:hp="{_HP}" xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section">'
+        f'<hp:p id="edit"><hp:run><hp:t>채움</hp:t></hp:run>'
+        f'<hp:linesegarray><hp:lineseg/></hp:linesegarray></hp:p>'
+        f'<hp:p id="guide"><hp:run><hp:t>안내</hp:t></hp:run>'
+        f'<hp:linesegarray><hp:lineseg/></hp:linesegarray></hp:p>'
+        f'</hs:sec>'
+    )
+    edited = root.find('.//{http://www.hancom.co.kr/hwpml/2011/paragraph}p')
+    # first p
+    ps = list(root.iter(_q("p")))
+    n = _strip_linesegarray(root, only_under=[ps[0]])
+    assert n == 1
+    remain = list(root.iter(_q("linesegarray")))
+    assert len(remain) == 1
+    assert remain[0].getparent() is ps[1]

@@ -42,13 +42,10 @@ def test_classify_assets_view_keys(tmp_path: Path):
 
 
 def test_holdout_macro_f1_at_least_0_90():
-    fixture = (
-        Path(__file__).resolve().parent
-        / "fixtures"
-        / "image_automation"
-        / "holdout"
-        / "classification_labels.json"
-    )
+    # Acceptance gate uses holdout/ only — never calibration/.
+    root = Path(__file__).resolve().parent / "fixtures" / "image_automation"
+    fixture = root / "holdout" / "classification_labels.json"
+    assert "calibration" not in fixture.parts
     data = json.loads(fixture.read_text(encoding="utf-8"))
     labels = data["labels"]
     y_true = []

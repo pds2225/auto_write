@@ -263,6 +263,9 @@ class _BlackCharPr:
         self.colors[new_id] = "#000000"
         self._clones[ref] = new_id
         self.changed = True
+        # L076: 클론은 반드시 append — 삽입 후 id/인덱스 불변 검증.
+        from .hwpx_charpr_guard import assert_charpr_append_only
+        assert_charpr_append_only(self.root)
         return new_id
 
     def fix_run(self, run) -> bool:
@@ -308,7 +311,12 @@ def _set_cell_text(tc, value: str, black: Optional[_BlackCharPr] = None) -> bool
     빈/플레이스홀더 칸에만 호출되므로 잔여 hp:t 를 비워도 실데이터 손실은 없다.
     hp:t/hp:run 이 없으면 단락 서식(charPrIDRef 승계)을 유지하며 최소 생성한다.
     black 이 주어지면 값이 들어간 run 의 유색 charPr 를 검정 클론으로 바꾼다.
+
+    L086: 폼 컨트롤(checkBtn 등)이 든 칸에는 텍스트를 절대 기입하지 않는다 —
+    ``_cell_is_fillable`` 우회·resume 경로에서도 이중 표시를 막기 위한 최종 방어핀.
     """
+    if _has_form_control(tc):
+        return False
     paras = list(tc.iter(_q("p")))
     if not paras:
         return False
@@ -672,20 +680,33 @@ class HwpxFillReport:
         }
 
 
-def _strip_linesegarray(root) -> int:
+def _strip_linesegarray(root, *, only_under=None) -> int:
     """채운 섹션의 옛 줄위치 캐시(hp:linesegarray)를 제거한다.
 
     텍스트를 바꿔도 예시문구 기준의 linesegarray 가 남으면 한글이 새 글씨를 옛
     좌표에 겹쳐 그린다(사용자 실측: STAR·서울 AI 허브 신청서 글씨 겹침 재발). 제거하면
     문서를 열 때 줄위치를 새로 계산한다 — 레이아웃 캐시라 내용 무손실·멱등.
     HWPX 직접 납품(.hwpx→.hwpx) 경로의 글씨 겹침을 엔진 단에서 원천 차단한다.
+
+    L074: ``only_under`` 가 주어지면 그 요소(들) 하위의 lineseg 만 제거한다.
+    rhwp→PDF 경로에서 전역 strip 이 안내박스 다중문단을 깨뜨리는 것을 막기 위한
+    편집-한정 API. ``only_under`` 미지정 시 종전처럼 root 전역(한글 직접 납품용).
     """
     removed = 0
-    for ls in list(root.iter(_q("linesegarray"))):
-        parent = ls.getparent()
-        if parent is not None:
-            parent.remove(ls)
-            removed += 1
+    scopes = list(only_under) if only_under is not None else [root]
+    seen_ids: set[int] = set()
+    for scope in scopes:
+        if scope is None:
+            continue
+        sid = id(scope)
+        if sid in seen_ids:
+            continue
+        seen_ids.add(sid)
+        for ls in list(scope.iter(_q("linesegarray"))):
+            parent = ls.getparent()
+            if parent is not None:
+                parent.remove(ls)
+                removed += 1
     return removed
 
 
@@ -715,6 +736,7 @@ def _fill_section_xml(
     used_keys: set[str] = set()
     replaced = 0
     changed = False
+    edited: list = []  # L074: lineseg strip 대상(편집된 tc/p)
 
     wants = [
         (_key(lbl), lbl, val)
@@ -746,6 +768,7 @@ def _fill_section_xml(
                         filled[lbl] = str(val)
                         used_keys.add(want_key)
                         changed = True
+                        edited.append(target)
                     break
 
     # 1.5) 셀 '안' 인라인 빈칸(`라벨 : ______`) 채움 — 표 경로 '뒤'에 실행하며
@@ -759,6 +782,7 @@ def _fill_section_xml(
                 for p in _direct(sub, "p"):
                     if _fill_inline_fields_in_p(p, wants, used_keys, filled):
                         changed = True
+                        edited.append(p)
 
     # 1.7) 체크박스(□→■) 자동 체크 — 인라인/왼쪽셀 라벨 그룹을 보수적으로 마킹.
     #      표(1)·인라인(1.5)과 동일한 used_keys 를 공유한다(이중처리 금지).
@@ -799,6 +823,7 @@ def _fill_section_xml(
                             filled[lbl] = str(val)
                             used_keys.add(want_key)
                             changed = True
+                            edited.append(p)
                         break
 
     # 1.75) 그리드 선택칸(□ 기호 없음) — 표의 셀 자체가 선택지이고 아래 빈 셀에
@@ -839,6 +864,7 @@ def _fill_section_xml(
                         filled[lbl] = str(val)
                         used_keys.add(want_key)
                         changed = True
+                        edited.append(hits[0])
                     break
 
     # 1.8) 표 '밖' 본문 단락 인라인 필드(`라벨 : ______`) — hs:sec 직계 hp:p 만 대상.
@@ -850,6 +876,7 @@ def _fill_section_xml(
         for p in _direct(root, "p"):
             if _fill_inline_fields_in_p(p, wants, used_keys, filled):
                 changed = True
+                edited.append(p)
 
     # 2) 직접 텍스트 치환 — 라벨/실값 칸은 보호(채울 수 있는 칸·본문에만 적용).
     #    lxml proxy id 재사용을 피하려 id() 집합 대신 조상(tc) 순회로 판별한다.
@@ -871,6 +898,14 @@ def _fill_section_xml(
                 t.text = new
                 replaced += 1
                 changed = True
+                # L074: 치환된 run 의 조상 p/tc 를 strip 범위에 포함.
+                anc = t.getparent()
+                while anc is not None:
+                    loc = _local(getattr(anc, "tag", ""))
+                    if loc in ("p", "tc"):
+                        edited.append(anc)
+                        break
+                    anc = anc.getparent()
                 if black is not None:
                     run = t.getparent()
                     if run is not None and _local(getattr(run, "tag", "")) == "run":
@@ -882,9 +917,9 @@ def _fill_section_xml(
     if not changed:
         return xml_bytes, filled, replaced, used_keys
 
-    # 채운 셀의 옛 줄위치 캐시(hp:linesegarray) 제거 → 한글이 열 때 줄위치를 새로
-    # 계산해 예시문구 좌표에 새 글씨가 겹치는 것을 막는다(HWPX 직접 납품 겹침 방지).
-    _strip_linesegarray(root)
+    # L074: 편집한 문단/셀의 lineseg 만 제거(안내박스 등 미편집 영역 전역 strip 금지).
+    # HWPX→한글 직접 납품 시 겹침 방지는 '텍스트를 바꾼 곳'에만 필요(L002∩L074).
+    _strip_linesegarray(root, only_under=edited or None)
 
     standalone = _detect_standalone(xml_bytes)
     out = etree.tostring(

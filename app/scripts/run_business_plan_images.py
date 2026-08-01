@@ -95,6 +95,17 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="앵커 추출용 텍스트 파일(줄 단위). 없으면 기본 PSST 앵커 사용",
     )
+    p.add_argument(
+        "--enable-generate-missing",
+        action="store_true",
+        help="M4: 결손 앵커만 gpt-image-1 생성 (기본 OFF, mock 경로)",
+    )
+    p.add_argument(
+        "--max-paid-calls",
+        type=int,
+        default=0,
+        help="M4: 유료/모의 생성 호출 상한",
+    )
     return p
 
 
@@ -126,6 +137,32 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(m2.report, ensure_ascii=False, indent=2))
         print(f"run_dir={m2.run_dir}")
         print(f"draft={m2.draft}")
+        if args.enable_generate_missing:
+            from auto_write.image_automation.generate_missing import generate_missing_assets
+
+            gen = generate_missing_assets(
+                list(m2.manifest.anchors),
+                list(m2.manifest.matches),
+                out_dir=m2.run_dir / "generate_missing",
+                enabled=True,
+                missing_only=True,
+                max_paid_calls=int(args.max_paid_calls),
+                use_mock=True,
+            )
+            print("--- M4 GENERATE_MISSING (mock) ---")
+            print(
+                json.dumps(
+                    {
+                        "openai_calls": gen.openai_calls,
+                        "gemini_calls": gen.gemini_calls,
+                        "generated": len(gen.generated),
+                        "skipped": gen.skipped,
+                        "receipt": str(gen.receipt_path) if gen.receipt_path else "",
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
         return 0
 
     if not args.input:
