@@ -819,6 +819,13 @@ _PH_DUMMY_REG_RE = re.compile(r"(?<!\d)0{2,3}\s*-\s*0{2}\s*-\s*0{4,5}(?!\d)")
 # 구분기호(하이픈·점·가운뎃점)·공백만. '(주)'·'(041-1234)'처럼 글자·숫자가 있으면
 # 매치 안 됨 → 실값 보존. 전각 괄호（）도 포함.
 _PH_EMPTY_PAREN_RE = re.compile(r"^[(（]\s*[-–—.·ㅡ~\s]*[)）]$")
+# 한글 양식 가이드: 'OO기술이 적용된 OO기능의…' (영문 GOOGLE/SOHO 등과 구분 —
+# 'OO'+한글 패턴이 2회 이상일 때만). ○○/ㅇㅇ 동형 포함.
+_PH_KR_OO_GUIDE_RE = re.compile(
+    r"(?:OO|○○|ㅇㅇ)[가-힣A-Za-z].{0,40}(?:OO|○○|ㅇㅇ)[가-힣A-Za-z]"
+)
+# 기입 안내 한 줄: '◈ 창업동기 및 창업목표를 기술'
+_PH_GUIDE_DIAMOND_RE = re.compile(r"^◈\s*.{2,60}$")
 
 
 def _is_obvious_placeholder(value: str) -> bool:
@@ -827,9 +834,10 @@ def _is_obvious_placeholder(value: str) -> bool:
     3종만 인정: ①불가능 날짜(월 또는 일이 00 — 2025.03.17 같은 정상 날짜 보존)
     ②전부-0 수량(000억원/00건 — '100억원'·'2,000명'은 부정후방탐색으로 배제)
     ③더미 등록번호(000-00-00000 — 실번호 327-29-01754 보존).
-    **O마스크(OOO/○○)는 의도적으로 제외** — 영문 실단어(GOOGLE/SOHO/O2O)를 오판해
+    **단독 O마스크(OOO/○○)는 의도적으로 제외** — 영문 실단어(GOOGLE/SOHO/O2O)를 오판해
     실값을 덮어쓰는 경로를 원천 차단(적대검증 치명결함 반영). 0 없는 그럴듯한 실값
     (경기도 성남시 등)은 False → 보존(덮어쓰기 금지).
+    추가(보수): 한글 양식 'OO…OO…' 가이드 문장·'◈ …기술' 기입안내 한 줄.
     """
     v = (value or "").strip()
     if not v:
@@ -845,6 +853,10 @@ def _is_obvious_placeholder(value: str) -> bool:
         return True
     # 빈 괄호 예시 '( - )'·'( )'·'()' (우편번호·전화 자리) → 채울 빈칸으로 승격.
     if _PH_EMPTY_PAREN_RE.match(v):
+        return True
+    if _PH_KR_OO_GUIDE_RE.search(v):
+        return True
+    if _PH_GUIDE_DIAMOND_RE.match(v):
         return True
     return False
 
