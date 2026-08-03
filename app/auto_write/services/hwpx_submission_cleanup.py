@@ -97,7 +97,11 @@ def strip_meta_notes(text: str) -> str:
 
 
 def reformat_bullet_heading(line: str) -> str:
-    """■ 제목 서식 통일(생성 시점용 헬퍼): '■ 라벨 — 설명'/'■ 라벨(부제)' → '■ (라벨)'."""
+    """■ 제목 서식 통일(생성 시점용 헬퍼): '■ 라벨 — 설명'/'■ 라벨(부제)' → '■ (라벨)'.
+
+    멱등이다 — 이미 '■ (라벨)' 인 줄을 다시 넣어도 라벨이 유지된다. (예전에는
+    괄호 앞부분만 남겨 '■ ()' 로 제목 글자를 통째로 날렸다.)
+    """
     s = line.strip()
     if not s.startswith("■"):
         return line
@@ -106,7 +110,9 @@ def reformat_bullet_heading(line: str) -> str:
         if dash in body:
             body = body.split(dash, 1)[0].strip()
             break
-    if "(" in body:
+    if body.startswith("(") and body.endswith(")") and len(body) > 2:
+        body = body[1:-1].strip()   # 이미 정규화된 제목 — 괄호 안 라벨을 살린다
+    elif "(" in body:
         body = body.split("(", 1)[0].strip()
     return "■ (%s)" % body.strip("()").strip()
 

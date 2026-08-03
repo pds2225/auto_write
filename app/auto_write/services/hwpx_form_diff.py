@@ -19,6 +19,12 @@ _NS = {"hp": _HP}
 
 @dataclass
 class FormDiffReport:
+    """원본 양식↔작성본 대조 결과.
+
+    ``value_fills`` 는 빈칸이 값으로 찬 정상 변화, ``form_phrase_edits/drops`` 는
+    양식 고유 문구를 고치거나 지운 결함이다.
+    """
+
     structure_ok: bool = True
     form_phrase_edits: int = 0
     form_phrase_drops: int = 0
@@ -32,6 +38,7 @@ class FormDiffReport:
         return self.structure_ok and self.form_phrase_edits == 0 and self.form_phrase_drops == 0
 
     def as_dict(self) -> dict[str, Any]:
+        """JSON 리포트용 요약(구조 델타 튜플은 리스트로 변환)."""
         return {
             "structure_ok": self.structure_ok,
             "form_intact": self.form_intact,
