@@ -153,9 +153,18 @@ def main(argv: list[str] | None = None) -> int:
         return 3
 
     if args.json_out:
-        Path(args.json_out).write_text(
-            json.dumps(rep.as_dict(), ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        # JSON 저장은 부수효과 — 실패해도 이미 산정된 진단 종료코드(0/1/2/3)를
+        # 오염시키지 않는다(경고만). self_diagnose.py 와 동일한 계약 보호.
+        try:
+            Path(args.json_out).write_text(
+                json.dumps(rep.as_dict(), ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+        except OSError as exc:
+            print(
+                f"[경고] JSON 저장 실패({type(exc).__name__}: {exc}) — "
+                f"진단 결과는 아래 출력을 참조",
+                file=sys.stderr,
+            )
 
     print(f"=== HWPX 진단: {src.name} ===")
     print(f"ok={rep.ok} overall_rate={rep.coverage.get('overall_rate')}")
@@ -166,6 +175,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if any("검사불능" in n for n in rep.notes):
         return 3
+    # 확장자 오류 등 '입력' 게이트 실패는 문서 결함(2)이 아니라 입력오류(1)다.
+    if any(g.rule == "input" and g.status == "fail" for g in rep.gates):
+        return 1
     return 0 if rep.ok else 2
 
 

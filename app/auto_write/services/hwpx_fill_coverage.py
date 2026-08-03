@@ -16,6 +16,8 @@ from .hwpx_resume_supplement import _is_fillable_cell_text
 
 @dataclass
 class SectionCoverage:
+    """신청서 한 섹션(인적·학력·자격·경력·모집분야·서명)의 채움 집계."""
+
     name: str
     filled: int = 0
     empty: int = 0
@@ -23,10 +25,12 @@ class SectionCoverage:
 
     @property
     def total(self) -> int:
+        """이 섹션에서 세어 본 칸 수(채운 칸 + 빈 칸)."""
         return self.filled + self.empty
 
     @property
     def rate(self) -> float:
+        """채움률 0.0~1.0. 셀 칸이 하나도 없으면 0으로 나누지 않고 0.0."""
         return (self.filled / self.total) if self.total else 0.0
 
     def as_dict(self) -> dict[str, Any]:
@@ -42,12 +46,15 @@ class SectionCoverage:
 
 @dataclass
 class CoverageReport:
+    """문서 하나의 섹션별 채움률 묶음. ``ok=False`` 면 집계 자체를 못 한 것."""
+
     path: str
     sections: list[SectionCoverage] = field(default_factory=list)
     ok: bool = True
     notes: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
+        """JSON 리포트용 요약. ``overall_rate`` 는 섹션이 없어도 0.0(분모 0 방지)."""
         return {
             "path": self.path,
             "ok": self.ok,
