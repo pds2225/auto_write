@@ -27,6 +27,9 @@ _FORM_START_MARKERS = (
     "[서식1]",
     "서식 1.",
     "참여 신청서",
+    "붙 임1",
+    "붙임1",
+    "입주신청서",
 )
 
 
@@ -68,25 +71,42 @@ def find_form_start_index(root) -> tuple[int, str]:
     제목형 ``참여 신청서``(접수목록·1부 안내 제외)로 폴백한다.
     """
     kids = list(root)
+    # 자식 텍스트는 단계마다 다시 조립하면 O(단계수 × 노드수) 가 된다(마커가 없는
+    # 문서에서 전 단계를 다 도는 최악이 실제로 흔함). 한 번만 만들어 재사용한다.
+    texts = ["".join(kid.itertext()) for kid in kids]
+    stripped = [t.strip() for t in texts]
+    compacts = [t.replace(" ", "") for t in texts]
+
     # 1) 명시적 [서식 1]
-    for i, kid in enumerate(kids):
-        text = "".join(kid.itertext())
+    for i, text in enumerate(texts):
         if "[서식 1]" in text or "[서식1]" in text:
             return i, "[서식 1]"
     # 2) "서식 1." 목록 헤더(본문 직전)
-    for i, kid in enumerate(kids):
-        text = "".join(kid.itertext()).strip()
+    for i, text in enumerate(stripped):
         if text.startswith("서식 1.") or text.startswith("서식1."):
             return i, "서식 1."
     # 3) 신청서 제목 표/단락 — 접수서류 목록('- … 1부') 제외
-    for i, kid in enumerate(kids):
-        text = "".join(kid.itertext())
+    for i, text in enumerate(texts):
         if "참여 신청서" not in text:
             continue
-        if "1부" in text or "모집공고" in text or text.strip().startswith("-"):
+        if "1부" in text or "모집공고" in text or stripped[i].startswith("-"):
             continue
-        if "전문분야" in text or "성명" in text or text.strip().endswith("신청서"):
+        if "전문분야" in text or "성명" in text or stripped[i].endswith("신청서"):
             return i, "참여 신청서"
+    # 4) 정부양식 붙임 헤더(입주신청서·사업계획서 묶음)
+    for i, compact in enumerate(compacts):
+        if "붙임1" in compact and ("입주신청" in compact or "사업계획" in compact):
+            return i, "붙 임1"
+    # 5) 입주신청서 본문 제목(제출서류 안내·평가표의 '입주신청서' 언급 제외)
+    for i, text in enumerate(texts):
+        if "입주신청서" not in text:
+            continue
+        if "제출" in text and ("서류" in text or "필수" in text):
+            continue
+        if "모집공고" in compacts[i] or stripped[i].startswith("-"):
+            continue
+        if "지원센터" in compacts[i] or stripped[i].endswith("입주신청서"):
+            return i, "입주신청서"
     return -1, ""
 
 
