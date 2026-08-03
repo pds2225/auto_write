@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""사업계획서 이미지 자동화 CLI (M1 NotebookLM + M2 CLASSIFY/MATCH).
+"""사업계획서 이미지 자동화 CLI (M1 NotebookLM + M2 CLASSIFY/MATCH + M4 mock).
 
 예:
   py -3.11 scripts/run_business_plan_images.py --check-env
@@ -15,6 +15,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 # app/ 가 import 루트
 APP_ROOT = Path(__file__).resolve().parents[1]
@@ -67,7 +68,7 @@ def check_env() -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Business plan image automation (M1+M2)")
+    p = argparse.ArgumentParser(description="Business plan image automation (M1+M2+M4 mock)")
     p.add_argument("--input", type=Path, help="입력 PDF/DOCX/HWP/HWPX")
     p.add_argument("--library", type=Path, help="이미지 라이브러리 (M2 CLASSIFY/MATCH)")
     p.add_argument(
@@ -98,15 +99,68 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--enable-generate-missing",
         action="store_true",
-        help="M4: 결손 앵커만 gpt-image-1 생성 (기본 OFF, mock 경로)",
+        help="M4: 결손 앵커용 mock stub만 생성 (실 OpenAI 호출 없음, 기본 OFF)",
     )
     p.add_argument(
         "--max-paid-calls",
         type=int,
         default=0,
-        help="M4: 유료/모의 생성 호출 상한",
+        help="M4: mock/유료 생성 호출 상한 (enable 시 >0 필요, 기본 0=생성 없음)",
     )
     return p
+
+
+def _run_m4_generate_missing(m2: Any, *, max_paid_calls: int) -> int:
+    """Run M4 mock generate_missing after M2. Returns 0 always (fail-safe)."""
+    from auto_write.image_automation.generate_missing import generate_missing_assets
+
+    if max_paid_calls <= 0:
+        print(
+            "경고: --enable-generate-missing 이지만 --max-paid-calls<=0 "
+            "→ 생성 0건 (budget_zero). --max-paid-calls N 을 지정하세요.",
+            file=sys.stderr,
+        )
+
+    gen = generate_missing_assets(
+        list(m2.manifest.anchors),
+        list(m2.manifest.matches),
+        out_dir=m2.run_dir / "generate_missing",
+        enabled=True,
+        missing_only=True,
+        max_paid_calls=int(max_paid_calls),
+        use_mock=True,
+    )
+    reason = gen.extras.get("reason", "")
+    print("--- M4 GENERATE_MISSING (mock stub, no real OpenAI) ---")
+    print(
+        json.dumps(
+            {
+                "use_mock": True,
+                "openai_calls": gen.openai_calls,
+                "openai_calls_real": gen.extras.get("openai_calls_real", 0),
+                "mock_calls": gen.extras.get("mock_calls", gen.openai_calls if not reason else 0),
+                "gemini_calls": gen.gemini_calls,
+                "generated": len(gen.generated),
+                "skipped": gen.skipped,
+                "draft": gen.draft,
+                "reason": reason,
+                "receipt": str(gen.receipt_path) if gen.receipt_path else "",
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0
+
+
+def _load_doc_blocks(doc_text: Path | None) -> list[str] | None:
+    if doc_text and Path(doc_text).is_file():
+        return [
+            line.strip()
+            for line in Path(doc_text).read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+    return None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -114,19 +168,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.check_env:
         return check_env()
 
+    m4_ran = False
+
     # M2 library-only: --library 만으로 실행 가능
     if args.mode == "library" or (args.library and not args.input and args.mode != "notebooklm"):
         if not args.library and not args.slides_dir:
             print("--mode library 에는 --library 또는 --slides-dir 가 필요합니다.", file=sys.stderr)
             return 1
         print(f"mode=library library={args.library} slides_dir={args.slides_dir}")
-        blocks: list[str] | None = None
-        if args.doc_text and Path(args.doc_text).is_file():
-            blocks = [
-                line.strip()
-                for line in Path(args.doc_text).read_text(encoding="utf-8").splitlines()
-                if line.strip()
-            ]
+        blocks = _load_doc_blocks(args.doc_text)
         m2 = run_m2(
             results_root=args.results_root,
             library=args.library,
@@ -138,31 +188,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"run_dir={m2.run_dir}")
         print(f"draft={m2.draft}")
         if args.enable_generate_missing:
-            from auto_write.image_automation.generate_missing import generate_missing_assets
-
-            gen = generate_missing_assets(
-                list(m2.manifest.anchors),
-                list(m2.manifest.matches),
-                out_dir=m2.run_dir / "generate_missing",
-                enabled=True,
-                missing_only=True,
-                max_paid_calls=int(args.max_paid_calls),
-                use_mock=True,
-            )
-            print("--- M4 GENERATE_MISSING (mock) ---")
-            print(
-                json.dumps(
-                    {
-                        "openai_calls": gen.openai_calls,
-                        "gemini_calls": gen.gemini_calls,
-                        "generated": len(gen.generated),
-                        "skipped": gen.skipped,
-                        "receipt": str(gen.receipt_path) if gen.receipt_path else "",
-                    },
-                    ensure_ascii=False,
-                    indent=2,
-                )
-            )
+            _run_m4_generate_missing(m2, max_paid_calls=int(args.max_paid_calls))
+            m4_ran = True
         return 0
 
     if not args.input:
@@ -198,13 +225,7 @@ def main(argv: list[str] | None = None) -> int:
     # hybrid/library 후속: M1 슬라이드 + 라이브러리 분류·매칭
     if args.library and args.mode in {"library", "hybrid", "notebooklm"} and not args.dry_run:
         slides = result.run_dir / "slides"
-        blocks = None
-        if args.doc_text and Path(args.doc_text).is_file():
-            blocks = [
-                line.strip()
-                for line in Path(args.doc_text).read_text(encoding="utf-8").splitlines()
-                if line.strip()
-            ]
+        blocks = _load_doc_blocks(args.doc_text)
         m2 = run_m2(
             results_root=args.results_root,
             library=args.library,
@@ -215,6 +236,16 @@ def main(argv: list[str] | None = None) -> int:
         print("--- M2 CLASSIFY/MATCH ---")
         print(json.dumps(m2.report, ensure_ascii=False, indent=2))
         print(f"m2_run_dir={m2.run_dir}")
+        if args.enable_generate_missing:
+            _run_m4_generate_missing(m2, max_paid_calls=int(args.max_paid_calls))
+            m4_ran = True
+
+    if args.enable_generate_missing and not m4_ran:
+        print(
+            "경고: --enable-generate-missing 이 켜졌지만 M2가 실행되지 않아 M4를 스킵했습니다. "
+            "(--library 필요, dry-run 에서는 M4 미실행)",
+            file=sys.stderr,
+        )
 
     if result.draft and not args.dry_run:
         return 2

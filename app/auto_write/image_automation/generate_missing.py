@@ -89,6 +89,15 @@ def _default_mock_writer(prompt: str, out_path: Path, *, model: str) -> None:
     out_path.write_bytes(png)
 
 
+def _write_receipt(out_dir: Path, receipt: dict[str, Any]) -> Path:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    receipt_path = out_dir / "generate_missing_receipt.json"
+    tmp = receipt_path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(receipt, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(receipt_path)
+    return receipt_path
+
+
 def generate_missing_assets(
     anchors: list[AnchorCandidate],
     decisions: list[MatchDecision],
@@ -110,23 +119,60 @@ def generate_missing_assets(
     call_log: list[GenerateCallLog] = []
     generated: list[VisualAsset] = []
     skipped: list[str] = []
+    is_mock = bool(use_mock and writer is None)
+    gap_ids = [a.anchor_id for a in gaps]
 
     if not enabled:
         return GenerateMissingResult(
             generated=[],
-            skipped=[a.anchor_id for a in gaps],
+            skipped=gap_ids,
             call_log=[],
             gemini_calls=0,
             openai_calls=0,
+            draft=True,
             extras={"reason": "disabled", "stage": PipelineStage.GENERATE_MISSING.value},
         )
 
     budget = max(0, int(max_paid_calls))
+    if budget <= 0:
+        receipt_path = _write_receipt(
+            out_dir,
+            {
+                "stage": PipelineStage.GENERATE_MISSING.value,
+                "model": GPT_IMAGE_MODEL,
+                "gemini_calls": 0,
+                "openai_calls": 0,
+                "openai_calls_real": 0,
+                "mock_calls": 0,
+                "max_paid_calls": budget,
+                "missing_count": len(gaps),
+                "generated": [],
+                "skipped": gap_ids,
+                "calls": [],
+                "use_mock": is_mock,
+                "reason": "budget_zero",
+            },
+        )
+        return GenerateMissingResult(
+            generated=[],
+            skipped=gap_ids,
+            call_log=[],
+            gemini_calls=0,
+            openai_calls=0,
+            receipt_path=receipt_path,
+            draft=True,
+            extras={
+                "reason": "budget_zero",
+                "stage": PipelineStage.GENERATE_MISSING.value,
+                "use_mock": is_mock,
+            },
+        )
+
     write_fn = writer or (_default_mock_writer if use_mock else None)
     if write_fn is None:
         return GenerateMissingResult(
             generated=[],
-            skipped=[a.anchor_id for a in gaps],
+            skipped=gap_ids,
             call_log=[],
             gemini_calls=0,
             openai_calls=0,
@@ -134,6 +180,7 @@ def generate_missing_assets(
             extras={"reason": "no_writer", "stage": PipelineStage.GENERATE_MISSING.value},
         )
 
+    provider = "mock" if is_mock else "openai"
     for i, anchor in enumerate(gaps):
         if i >= budget:
             skipped.append(anchor.anchor_id)
@@ -159,7 +206,7 @@ def generate_missing_assets(
         generated.append(asset)
         call_log.append(
             GenerateCallLog(
-                provider="openai",
+                provider=provider,
                 model=GPT_IMAGE_MODEL,
                 anchor_id=anchor.anchor_id,
                 prompt_hash=ph,
@@ -167,23 +214,24 @@ def generate_missing_assets(
             )
         )
 
+    mock_calls = len(call_log) if is_mock else 0
+    openai_calls_real = 0 if is_mock else len(call_log)
+    # openai_calls = budgeted gpt-image-1 slot count (mock 포함 — 상한 계약용)
     receipt = {
         "stage": PipelineStage.GENERATE_MISSING.value,
         "model": GPT_IMAGE_MODEL,
         "gemini_calls": 0,
         "openai_calls": len(call_log),
+        "openai_calls_real": openai_calls_real,
+        "mock_calls": mock_calls,
         "max_paid_calls": budget,
         "missing_count": len(gaps),
         "generated": [a.model_dump() for a in generated],
         "skipped": skipped,
         "calls": [c.__dict__ for c in call_log],
-        "use_mock": use_mock and writer is None,
+        "use_mock": is_mock,
     }
-    out_dir.mkdir(parents=True, exist_ok=True)
-    receipt_path = out_dir / "generate_missing_receipt.json"
-    tmp = receipt_path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(receipt, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(receipt_path)
+    receipt_path = _write_receipt(out_dir, receipt)
 
     return GenerateMissingResult(
         generated=generated,
@@ -192,6 +240,11 @@ def generate_missing_assets(
         gemini_calls=0,
         openai_calls=len(call_log),
         receipt_path=receipt_path,
-        draft=bool(skipped),
-        extras={"stage": PipelineStage.GENERATE_MISSING.value},
+        draft=True if is_mock else bool(skipped),
+        extras={
+            "stage": PipelineStage.GENERATE_MISSING.value,
+            "use_mock": is_mock,
+            "openai_calls_real": openai_calls_real,
+            "mock_calls": mock_calls,
+        },
     )
