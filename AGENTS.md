@@ -41,7 +41,13 @@ python -m pytest tests/test_document_quality_harness.py -q       # 테스트
 확인한 파일 · 생성/수정한 파일 · 실행한 테스트와 결과 · 품질점수 · 백업 경로 ·
 남은 문제 · 수동 확인 필요사항 · 다음 실행 방법.
 
-## 5. 금지
+## 5. GitHub PR 머지
+
+- 사용자가 PR 머지를 요청하면 **기본은 auto-merge**: `gh pr merge --auto` (필요 시 `--squash`/`--merge`/`--rebase` 병행).
+- 즉시 강제 머지(`gh pr merge` without `--auto`)는 사용자가 명시할 때만. force-push / main 직접 푸시 금지.
+- 저장소 `allow_auto_merge`가 꺼져 있으면 켤 뒤 `--auto` 사용(권한/플랜 막히면 그 경로를 보고).
+
+## 6. 금지
 
 원본 덮어쓰기 · 백업 없는 수정 · Secret/API Key/.env 출력 · 유료 API 무단 호출 ·
 기존 정상 기능 삭제 · results/templates 원본 삭제 · 테스트 없이 커밋 · 실패의 성공 보고 ·
@@ -55,3 +61,4 @@ python -m pytest tests/test_document_quality_harness.py -q       # 테스트
 |------|----------|------|
 | 2026-06-05 | 문서 품질 하네스 에이전트 12종 규약 신규 | 하네스 초기 구축 |
 | 2026-06-07 | §2 에이전트 표 12→6 동기화 | 실제 `.claude/agents/` 슬림화(12→6)와 본 규약 불일치 해소 |
+| 2026-08-04 | §5 GitHub PR 머지: `gh pr merge --auto` 디폴트 | 사용자 의도 auto-merge 기본 |

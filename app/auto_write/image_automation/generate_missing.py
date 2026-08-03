@@ -240,7 +240,7 @@ def generate_missing_assets(
         gemini_calls=0,
         openai_calls=len(call_log),
         receipt_path=receipt_path,
-        draft=True if is_mock else bool(skipped),
+        draft=is_mock or bool(skipped),
         extras={
             "stage": PipelineStage.GENERATE_MISSING.value,
             "use_mock": is_mock,

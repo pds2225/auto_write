@@ -27,6 +27,23 @@ def _load_cli():
     return mod
 
 
+def _m2_stub(tmp_path: Path) -> SimpleNamespace:
+    anchors = [
+        AnchorCandidate(
+            anchor_id="a1",
+            psst=PsstClass.PROBLEM.value,
+            needed_visual_type="막대/도넛 차트",
+            keywords=["시장규모"],
+            text_preview="시장",
+        )
+    ]
+    matches = [MatchDecision(anchor_id="a1", action=MatchAction.SKIP)]
+    return SimpleNamespace(
+        run_dir=tmp_path,
+        manifest=SimpleNamespace(anchors=anchors, matches=matches),
+    )
+
+
 @pytest.fixture(scope="module")
 def cli():
     return _load_cli()
@@ -39,48 +56,22 @@ def test_enable_generate_missing_help_says_mock(cli):
 
 
 def test_run_m4_budget_zero_warns_and_receipt(cli, tmp_path: Path, capsys):
-    anchors = [
-        AnchorCandidate(
-            anchor_id="a1",
-            psst=PsstClass.PROBLEM.value,
-            needed_visual_type="막대/도넛 차트",
-            keywords=["시장규모"],
-            text_preview="시장",
-        )
-    ]
-    matches = [MatchDecision(anchor_id="a1", action=MatchAction.SKIP)]
-    m2 = SimpleNamespace(
-        run_dir=tmp_path,
-        manifest=SimpleNamespace(anchors=anchors, matches=matches),
-    )
-    rc = cli._run_m4_generate_missing(m2, max_paid_calls=0)
+    rc = cli._run_m4_generate_missing(_m2_stub(tmp_path), max_paid_calls=0)
     assert rc == 0
     err = capsys.readouterr().err
     assert "budget_zero" in err or "max-paid-calls" in err
-    receipt = json.loads((tmp_path / "generate_missing" / "generate_missing_receipt.json").read_text(
-        encoding="utf-8"
-    ))
+    receipt = json.loads(
+        (tmp_path / "generate_missing" / "generate_missing_receipt.json").read_text(
+            encoding="utf-8"
+        )
+    )
     assert receipt["reason"] == "budget_zero"
     assert receipt["use_mock"] is True
     assert receipt["openai_calls_real"] == 0
 
 
 def test_run_m4_prints_use_mock_true(cli, tmp_path: Path, capsys):
-    anchors = [
-        AnchorCandidate(
-            anchor_id="a1",
-            psst=PsstClass.PROBLEM.value,
-            needed_visual_type="막대/도넛 차트",
-            keywords=["시장규모"],
-            text_preview="시장",
-        )
-    ]
-    matches = [MatchDecision(anchor_id="a1", action=MatchAction.SKIP)]
-    m2 = SimpleNamespace(
-        run_dir=tmp_path,
-        manifest=SimpleNamespace(anchors=anchors, matches=matches),
-    )
-    cli._run_m4_generate_missing(m2, max_paid_calls=1)
+    cli._run_m4_generate_missing(_m2_stub(tmp_path), max_paid_calls=1)
     out = capsys.readouterr().out
     assert "use_mock" in out
     assert "no real OpenAI" in out or "mock stub" in out

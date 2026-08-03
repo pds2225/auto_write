@@ -138,7 +138,7 @@ def _run_m4_generate_missing(m2: Any, *, max_paid_calls: int) -> int:
                 "use_mock": True,
                 "openai_calls": gen.openai_calls,
                 "openai_calls_real": gen.extras.get("openai_calls_real", 0),
-                "mock_calls": gen.extras.get("mock_calls", gen.openai_calls if not reason else 0),
+                "mock_calls": gen.extras.get("mock_calls", 0),
                 "gemini_calls": gen.gemini_calls,
                 "generated": len(gen.generated),
                 "skipped": gen.skipped,
