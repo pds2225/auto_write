@@ -11,6 +11,10 @@ from auto_write.image_automation.notebooklm_browser import BrowserSessionStub, N
 from auto_write.image_automation.notebooklm_state import EXPECTED_SLIDE_DESCRIPTION
 from auto_write.models import EvidenceSource
 
+# 이 저장소 루트(= git origin 을 읽을 수 있는 경로). 개발자 PC 의 임시 워크트리
+# 절대경로를 테스트에 박아 두면 그 폴더가 정리된 뒤 영구 실패한다(WinError 267).
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 def _pdf(path: Path, pages: int = 2, url: str | None = None) -> Path:
     doc = fitz.open()
@@ -37,7 +41,7 @@ def test_m1_blocks_upload_without_flag(tmp_path: Path):
         results_root=tmp_path / "runs",
         mode="notebooklm",
         allow_external_upload=False,
-        cwd=Path("D:/auto_write-wt-m1-notebooklm"),
+        cwd=REPO_ROOT,
         evidence=[],
     )
     assert result.draft is True
@@ -60,7 +64,7 @@ def test_m1_stub_with_allow_and_citations(tmp_path: Path):
     )
     browser = NotebookLMBrowser(
         allow_external_upload=True,
-        cwd=Path("D:/auto_write-wt-m1-notebooklm"),
+        cwd=REPO_ROOT,
         session=session,
     )
     ev = [
@@ -77,7 +81,7 @@ def test_m1_stub_with_allow_and_citations(tmp_path: Path):
         results_root=tmp_path / "runs",
         mode="notebooklm",
         allow_external_upload=True,
-        cwd=Path("D:/auto_write-wt-m1-notebooklm"),
+        cwd=REPO_ROOT,
         evidence=ev,
         browser=browser,
         slides_input=dl,

@@ -1,9 +1,9 @@
 {
   "counts": {
     "mechanized": 43,
-    "gap": 17,
-    "judgment": 32,
-    "total": 92
+    "gap": 22,
+    "judgment": 48,
+    "total": 113
   },
   "coverage_note": "총 92개 교훈(레지스트리): 기계화 43(46%)·갭 17(18%)·사람판단 32(34%). 2026-07-29 야간 high 잔여 7건 gap→mechanized: L074·L075·L078·L087·L088·L089·L091. L070/L076/L077 guard_ref 에 test_*.py 경로 보강(커버리지 메타테스트 정합).",
   "top_gaps": [
@@ -900,6 +900,195 @@
       "guard_ref": "hwpx_layout_fix.table_width_from_colspan1 + test_night_high_gaps_l074_l091.py::test_table_width_from_colspan1_ignores_merged_title",
       "gap_desc": "",
       "impact": "high"
+    },
+    {
+      "id": "L1 — Windows Python에서 /tmp 백업 경로가 전체 작업을 조용히 중단시킴",
+      "summary": "Windows Python 에서 POSIX 경로(/tmp)를 백업 위치로 쓰면 작업이 조용히 중단된다.",
+      "mechanizable": "yes",
+      "category": "gap",
+      "guard_ref": "",
+      "gap_desc": "백업 경로를 만들 때 플랫폼별 임시 폴더(tempfile.gettempdir)를 쓰는지 검사하는 가드가 없다.",
+      "impact": "high"
+    },
+    {
+      "id": "L092 | 작업방식 | 2026-07-28 | 이전 턴에서 본 폴더·파일이라도 인용 전 실재 재확인 — 다중 세션 환경에선 사라진다",
+      "summary": "이전 턴에서 확인한 폴더·파일도 인용 전 실재를 다시 확인한다(다중 세션에서 사라진다).",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
+    },
+    {
+      "id": "L092 | 개발 | 2026-07-28 | 제외 필터를 제목 앵커 + 링크 도메인 두 축으로 만들면 교차 구멍이 생긴다 — 축마다 우회로를 따로 확인하라",
+      "summary": "제외 필터를 제목·링크 두 축으로 만들면 축마다 우회로가 생긴다 — 축별로 따로 확인한다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
+    },
+    {
+      "id": "L093 | 환경 | 2026-07-28 | git fetch 는 조용히 죽는다 — 긴 세션 시작 때 origin/main 커밋 날짜를 눈으로 확인하라",
+      "summary": "git fetch 는 조용히 실패할 수 있다 — 긴 세션 시작 때 origin 커밋 날짜를 눈으로 확인한다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
+    },
+    {
+      "id": "L094 | 개발 | 2026-07-28 | \"ahead N\" 은 미병합의 증거가 아니다 — squash 병합 repo 에선 내용 해시로 확인하라",
+      "summary": "'ahead N' 은 미병합의 증거가 아니다 — squash 병합 repo 에선 내용 해시로 확인한다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
+    },
+    {
+      "id": "L095 | 문서작성 | 2026-07-30 | 양식 채우기 착수 전에 '원본 페이지 수'를 먼저 재라 — 기준선 없이 고치면 왕복이 3배",
+      "summary": "양식 채우기 착수 전에 원본 페이지 수를 먼저 측정해 기준선을 잡는다.",
+      "mechanizable": "yes",
+      "category": "gap",
+      "guard_ref": "",
+      "gap_desc": "채움 전/후 페이지 수를 자동 비교해 증가를 잡아내는 가드가 없다(현재는 사람이 렌더로 확인).",
+      "impact": "high"
+    },
+    {
+      "id": "L096 | 문서작성 | 2026-07-30 | 서명 이미지는 treatAsChar=0(떠있는 배치)로 넣어라 — 글자처럼 넣으면 줄 높이가 커져 페이지가 밀린다",
+      "summary": "서명 이미지는 treatAsChar=0(떠있는 배치)로 넣는다 — 글자처럼 넣으면 줄 높이가 커져 페이지가 밀린다.",
+      "mechanizable": "yes",
+      "category": "gap",
+      "guard_ref": "",
+      "gap_desc": "HWPX 이미지 삽입 시 treatAsChar 값을 강제·검사하는 가드가 없다.",
+      "impact": "high"
+    },
+    {
+      "id": "L097 | 문서작성 | 2026-07-30 | 한 줄짜리 칸에 긴 값을 넣으면 줄이 넘쳐 문서 전체가 밀린다 — 넣기 전에 폭을 계산하라",
+      "summary": "한 줄짜리 칸에 긴 값을 넣기 전에 셀 폭 대비 글자 폭을 계산한다.",
+      "mechanizable": "partial",
+      "category": "gap",
+      "guard_ref": "",
+      "gap_desc": "표 폭 계산(L091)은 있으나, 넣을 값이 한 줄 칸을 넘치는지 사전 검사하는 가드가 없다.",
+      "impact": "high"
+    },
+    {
+      "id": "L098 | 문서작성 | 2026-07-30 | 한글 COM 은 '작업당 1회'로 설계하라 — 확인하려고 다시 띄우는 순간 비용이 배로 뛴다",
+      "summary": "한글 COM 은 작업당 1회로 설계한다 — 확인하려고 다시 띄우면 비용이 배로 든다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
+    },
+    {
+      "id": "L099 | 개발 | 2026-07-30 | 중간 판정에 페이지 이미지를 쓰지 마라 — 숫자로 판정하고 눈검증은 최종 1회",
+      "summary": "중간 판정에 페이지 이미지를 쓰지 않는다 — 숫자로 판정하고 눈검증은 최종 1회.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
+    },
+    {
+      "id": "L100 | 문서작성 | 2026-07-30 | 사용자 고정 정보(인적사항·계좌)는 첫 사용 때 메모리에 박아라 — 매번 옛 서류를 뒤지는 건 낭비다",
+      "summary": "사용자 고정 정보(인적사항·계좌)는 첫 사용 때 메모리에 저장해 재조회를 없앤다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
+    },
+    {
+      "id": "L101 | 진단 | 2026-07-31 | 프로세스 개수를 창(세션) 개수로 읽지 마라 — 최상위만 세야 한다",
+      "summary": "프로세스 개수를 창(세션) 개수로 읽지 않는다 — 최상위만 센다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "low"
+    },
+    {
+      "id": "L102 | 진단 | 2026-07-31 | WorkingSet 합계로 \"회수 예상 메모리\"를 말하지 마라 — 공유페이지가 중복 계산된다",
+      "summary": "WorkingSet 합계로 회수 예상 메모리를 말하지 않는다 — 공유 페이지가 중복 계산된다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "low"
+    },
+    {
+      "id": "L103 | 개발 | 2026-07-31 | CIM 의 PID 는 UInt32 — 해시테이블 키로 쓸 땐 [int] 로 통일하라 (조용히 실패한다)",
+      "summary": "CIM 의 PID 는 UInt32 — 해시테이블 키로 쓸 땐 int 로 통일한다(조용히 실패).",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "low"
+    },
+    {
+      "id": "L104 | 진단 | 2026-08-04 | PowerShell `-SimpleMatch` 에 `|` 정규식을 넣지 마라 — 0건이 \"미등록\"으로 오판된다",
+      "summary": "PowerShell -SimpleMatch 에 정규식(|)을 넣지 않는다 — 0건이 '미등록'으로 오판된다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
+    },
+    {
+      "id": "L105 | 개발 | 2026-08-04 | SKILL.md frontmatter 의 `description: [한글] …` 은 **깨진 YAML** 이다 — 관대한 로더가 숨겨준다",
+      "summary": "SKILL.md frontmatter 의 'description: [한글] …' 은 깨진 YAML 이다(관대한 로더가 숨긴다).",
+      "mechanizable": "yes",
+      "category": "gap",
+      "guard_ref": "",
+      "gap_desc": "스킬 frontmatter 를 엄격 YAML 로 파싱해 검증하는 가드가 이 repo 에 없다.",
+      "impact": "medium"
+    },
+    {
+      "id": "L106 | 도구사용 | 2026-08-04 | PowerShell 에서 `python - @'…'@` 로 스크립트를 stdin 에 넘기지 마라 — REPL 로 빠져 멈춘다",
+      "summary": "PowerShell 에서 python - @'…'@ 로 스크립트를 stdin 에 넘기지 않는다 — REPL 로 빠져 멈춘다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
+    },
+    {
+      "id": "L107 | 진단 | 2026-08-04 | 훅·설정 설치 여부는 **전역부터** 확인하라 — 폴더별만 보면 \"미설치\"로 오판한다",
+      "summary": "훅·설정 설치 여부는 전역부터 확인한다 — 폴더별만 보면 미설치로 오판한다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
+    },
+    {
+      "id": "L108 | 진단 | 2026-08-04 | 예약작업 추적은 한 단계로 끝내지 마라 — 이 PC 는 숨김 `.vbs` 래퍼를 거친다",
+      "summary": "예약작업 추적은 한 단계로 끝내지 않는다 — 이 PC 는 숨김 .vbs 래퍼를 거친다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "low"
+    },
+    {
+      "id": "L109 | 개발 | 2026-08-04 | 검사 도구를 만들 땐 **이미 알려진 결함 유형**을 반드시 검사 항목에 넣어라",
+      "summary": "검사 도구를 만들 땐 이미 알려진 결함 유형을 반드시 검사 항목에 넣는다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
+    },
+    {
+      "id": "L110 | 도구사용 | 2026-08-04 | 소스에 코드를 끼워 넣을 위치를 `)` 로 찾지 마라 — 함수 호출의 닫는 괄호와 구분되지 않는다",
+      "summary": "코드 삽입 위치를 ')' 휴리스틱으로 찾지 않는다 — 고유 앵커나 ast 를 쓰고 삽입 직후 py_compile 로 확인.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
     }
   ]
 }

@@ -27,6 +27,10 @@ from auto_write.image_automation.notebooklm_state import (
 )
 from auto_write.image_automation.download_verify import pick_download_event_file, sniff_kind, verify_download
 
+# 이 저장소 루트(= git origin 을 읽을 수 있는 경로). 개발자 PC 의 임시 워크트리
+# 절대경로를 테스트에 박아 두면 그 폴더가 정리된 뒤 영구 실패한다(WinError 267).
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 def _pdf(path: Path) -> Path:
     doc = fitz.open()
@@ -57,8 +61,9 @@ def test_external_upload_blocked_file_chooser_zero():
 
 
 def test_browser_gate_without_allow(tmp_path: Path, monkeypatch):
-    # use real repo origin via cwd of worktree
-    browser = NotebookLMBrowser(allow_external_upload=False, cwd=Path("D:/auto_write-wt-m1-notebooklm"))
+    # repo 이름은 origin URL 에서 나온다. 개발자 PC 의 임시 워크트리 경로를 박아 두면
+    # 그 폴더가 정리된 뒤 영구 실패하므로(WinError 267) 항상 이 저장소 루트를 쓴다.
+    browser = NotebookLMBrowser(allow_external_upload=False, cwd=REPO_ROOT)
     result = browser.run_pre_upload_gate()
     assert result.code == "external_upload_blocked"
     assert result.file_chooser_calls == 0
@@ -102,7 +107,7 @@ def test_source_uncheck_then_one_checked(tmp_path: Path):
     )
     browser = NotebookLMBrowser(
         allow_external_upload=True,
-        cwd=Path("D:/auto_write-wt-m1-notebooklm"),
+        cwd=REPO_ROOT,
         session=session,
     )
     result = browser.run_stub_happy_path(pdf, download_to=session.downloaded)
@@ -170,7 +175,7 @@ def test_captcha_manual_action(tmp_path: Path):
     session = BrowserSessionStub(captcha=True, notebooks=["auto_write"])
     browser = NotebookLMBrowser(
         allow_external_upload=True,
-        cwd=Path("D:/auto_write-wt-m1-notebooklm"),
+        cwd=REPO_ROOT,
         session=session,
     )
     result = browser.run_pre_upload_gate()

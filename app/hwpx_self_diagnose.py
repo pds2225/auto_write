@@ -86,17 +86,21 @@ def diagnose_hwpx(path: str | Path, *, require_specialty_checked: bool = False) 
     else:
         rep.gates.append(GateItem("L024", "pass", "학력/날짜 플레이스홀더 없음"))
 
-    # 인적 최소
-    for kw in ("성명", "박다솜"):  # 일반화: 성명 칸에 값이 있는지는 coverage로
-        pass
+    # 인적 최소 — 인적사항 표가 실제로 있는 문서에만 적용한다.
+    # 사업계획서·계획서형 HWPX 처럼 인적사항 표가 아예 없는 문서(칸 0개)를 '채움 부족'
+    # 으로 fail 시키면 정상 문서가 제출불가(exit 2)로 오판된다. 또 기준을 3칸으로
+    # 고정하면 인적 칸이 1~2개뿐인 양식은 다 채워도 영원히 fail 이므로 실제 칸 수를
+    # 넘지 않게 한다.
     cov = score_hwpx_coverage(p)
     rep.coverage = cov.as_dict()
     human = next((s for s in cov.sections if s.name == "인적"), None)
-    if human and human.filled >= 3:
-        rep.gates.append(GateItem("인적", "pass", f"filled={human.filled}"))
+    if human is None or human.total == 0:
+        rep.gates.append(GateItem("인적", "warn", "인적사항 표 없음 — 해당 없음(검사 생략)"))
+    elif human.filled >= min(3, human.total):
+        rep.gates.append(GateItem("인적", "pass", f"filled={human.filled}/{human.total}"))
     else:
         rep.gates.append(
-            GateItem("인적", "fail", f"채움 부족 filled={getattr(human, 'filled', 0)}")
+            GateItem("인적", "fail", f"채움 부족 filled={human.filled}/{human.total}")
         )
 
     specialty = next((s for s in cov.sections if s.name == "모집분야"), None)
