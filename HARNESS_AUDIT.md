@@ -27,7 +27,7 @@
 | `results/`, `outputs/` | 생성 결과물 |
 | `workspace/` | 프로젝트별 작업 공간 (templates, projects) |
 | `data/`, `backup/`, `WORKS/`, `Playground/` | 데이터·백업·작업 산출물 |
-| `autowrite_repo/`, `bizplan-autofill-codex/` | 별도 번들/이전 버전 (의존성 분리) |
+| `autowrite` (archived) | 고유 자산은 `tools/injector/` 로 통합 완료. GitHub 원격 삭제는 owner 수동 |
 
 ## 3. 기존 문서 생성 파이프라인 (추정·확인)
 
