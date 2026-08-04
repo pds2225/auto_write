@@ -273,3 +273,23 @@ def test_table_width_from_colspan1_ignores_merged_title():
 
 # silence unused import lint for re-export smoke
 assert hwp_com_fill.find_cancel_insert_text is find_cancel_insert_text
+
+
+def test_resize_hwpx_picture_keeps_display_aspect_when_orgsz_wrong():
+    """orgSz 비율이 실제 그림과 어긋난 양식에서 그림이 납작해지면 안 된다.
+
+    실측(달구벌 신청서 서명): orgSz 80.4x4.3mm 인데 화면 표시는 5.7x4.5mm.
+    orgSz 비율로 세로를 계산하면 15mm 로 키울 때 0.8mm 로 눌린다.
+    """
+    pic = _make_pic(w=22800, h=1219)          # orgSz 비율 약 18.7:1 (어긋남)
+    for tag in ("sz", "curSz"):               # 실제 표시 크기 1.27:1
+        el = etree.SubElement(pic, _q(tag))
+        el.set("width", "1616")
+        el.set("height", "1276")
+
+    info = resize_hwpx_picture(pic, target_width=4252)   # 15mm 로 확대
+
+    assert info["disp_w"] == 4252
+    assert 3300 < info["disp_h"] < 3400       # 표시 비율 유지(≈3357), 눌림(227) 아님
+    sca = [el for el in pic.iter() if el.tag.endswith("scaMatrix")][0]
+    assert sca.get("e1") != sca.get("e5")     # 가로·세로 배율을 따로 계산
