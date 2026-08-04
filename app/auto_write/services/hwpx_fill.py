@@ -483,7 +483,20 @@ def _parse_line_options(flat: str) -> list[tuple[int, int, str, str]]:
     return out
 
 
-def _apply_line_edits(root, line_edits: list[dict], edited: list) -> tuple[int, list[str]]:
+def _tc_of(el):
+    """el 의 가장 가까운 조상 hp:tc(표 셀). 표 밖이면 None."""
+    cur = el.getparent()
+    while cur is not None:
+        if _local(getattr(cur, "tag", "")) == "tc":
+            return cur
+        cur = cur.getparent()
+    return None
+
+
+def _apply_line_edits(
+    root, line_edits: list[dict], edited: list,
+    black: Optional[_BlackCharPr] = None,
+) -> tuple[int, list[str]]:
     """'앵커 문단'에 한정해 텍스트 체크·직접 치환을 적용한다(사용자 명시 지시 전용).
 
     정부 서식에는 라벨-값 표가 아니라 **안내 문단 안에 선택지가 박힌** 칸이 많다
@@ -493,8 +506,11 @@ def _apply_line_edits(root, line_edits: list[dict], edited: list) -> tuple[int, 
     선택지를 명시**했을 때만 동작하는 좁은 경로를 둔다(추측·자동확대 없음).
 
     line_edits 항목: ``{"anchor": str, "check": [옵션…], "replace": {옛:새},
-    "nth": 1, "all": False}``. ``nth``(1-based)·``all`` 은 같은 문구가 여러 번
-    나오는 반복 행/반복 날짜를 지목할 때만 쓴다(미지정 시 유일할 때만 적용).
+    "cells": {colAddr: 값}, "nth": 1, "all": False}``. ``nth``(1-based)·``all`` 은
+    같은 문구가 여러 번 나오는 반복 행/반복 날짜를 지목할 때만 쓴다(미지정 시 유일할
+    때만 적용). ``cells`` 는 **열머리글이 위에 있는 표**(라벨이 왼쪽이 아니라 위라
+    라벨→값 매칭이 닿지 않는 구조)에서, 앵커가 든 셀과 **같은 행**의 빈 칸을
+    colAddr 로 지목해 채운다(값이 이미 있으면 덮지 않는다).
 
     안전 규칙(오편집 < 미편집):
     - anchor 는 문서 안에서 **정확히 한 문단**에만 있어야 한다(0개·2개+ → 스킵·notes).
@@ -572,6 +588,26 @@ def _apply_line_edits(root, line_edits: list[dict], edited: list) -> tuple[int, 
                     notes.append(
                         f"치환 실패(run 경계 분할): {old[:24]!r} @ {anchor[:24]}"
                     )
+            # (c) 같은 행의 빈 칸 채움 — 열머리글이 위에 있는 표(라벨이 왼쪽이 아님)용.
+            #     앵커가 든 셀의 hp:tr 에서 colAddr 로 형제 칸을 지목한다.
+            for col, val in (spec.get("cells") or {}).items():
+                if not str(val or "").strip():
+                    continue
+                tc = _tc_of(p)
+                tr = tc.getparent() if tc is not None else None
+                if tr is None or _local(getattr(tr, "tag", "")) != "tr":
+                    notes.append(f"행 찾기 실패(표 밖 문단): {anchor[:24]}")
+                    continue
+                hit = [c for c in _direct(tr, "tc") if _cell_addr(c) == int(col)]
+                if len(hit) != 1:
+                    notes.append(f"칸 지목 실패(colAddr={col}, {len(hit)}개): {anchor[:24]}")
+                    continue
+                if not _cell_is_fillable(hit[0]):
+                    notes.append(f"칸에 이미 값 있음(덮어쓰기 금지, colAddr={col}): {anchor[:24]}")
+                    continue
+                if _set_cell_text(hit[0], str(val), black):
+                    applied += 1
+                    edited.append(hit[0])
     return applied, notes
 
 
@@ -1050,7 +1086,7 @@ def _fill_section_xml(
 
     # 3) 앵커 문단 한정 편집(line_edits) — 사용자가 명시한 지시만 수행.
     if line_edits:
-        applied, line_notes = _apply_line_edits(root, line_edits, edited)
+        applied, line_notes = _apply_line_edits(root, line_edits, edited, black=black)
         if line_report is not None:
             line_report["applied"] = line_report.get("applied", 0) + applied
             line_report.setdefault("notes", []).extend(line_notes)
