@@ -1634,3 +1634,19 @@ def test_line_edits_cells_fill_same_row_by_coladdr(src_hwpx: Path, tmp_path: Pat
     assert _cell_value(out, "연락처") == "010-0000-0000"
     assert _cell_value(out, "주소") == "서울특별시 강남구"      # 원래 값 보존
     assert any("이미 값 있음" in n for n in rep.notes)
+
+
+def test_line_edits_set_replaces_whole_paragraph(tmp_path: Path):
+    """set — 같은 양식에 다른 내용을 얹을 때 문단 텍스트를 통째로 갈아끼운다."""
+    src = tmp_path / "form.hwpx"
+    _make_bracket_hwpx(src)
+    out = tmp_path / "out.hwpx"
+
+    rep = fill_hwpx(src, out, line_edits=[
+        {"anchor": "근무지역 1순위", "set": "희망 근무지역 : 서울 마포"},
+    ])
+
+    texts = _paragraph_texts(out)
+    assert rep.line_edits_applied == 1
+    assert texts[1] == "희망 근무지역 : 서울 마포"
+    assert "[ ] 동의" in texts[0]          # 다른 문단은 손대지 않는다
