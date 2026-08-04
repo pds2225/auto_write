@@ -1618,3 +1618,19 @@ def test_line_edits_skips_ambiguous_anchor_unless_nth_given(tmp_path: Path):
     assert rep2.line_edits_applied == 1
     assert texts[2] == "[ ]신입 [ ]경력"      # 첫 행은 그대로
     assert texts[3] == "[√]신입 [ ]경력"      # 지목한 두 번째 행만 체크
+
+
+def test_line_edits_cells_fill_same_row_by_coladdr(src_hwpx: Path, tmp_path: Path):
+    """열머리글 표용 — 앵커가 든 셀과 같은 행의 빈 칸을 colAddr 로 지목해 채운다."""
+    out = tmp_path / "out.hwpx"
+
+    rep = fill_hwpx(src_hwpx, out, line_edits=[
+        {"anchor": "연락처", "cells": {"1": "010-0000-0000"}},
+        # 이미 실값이 든 칸은 덮지 않는다(오편집 금지)
+        {"anchor": "주소", "cells": {"1": "부산광역시"}},
+    ])
+
+    assert rep.line_edits_applied == 1
+    assert _cell_value(out, "연락처") == "010-0000-0000"
+    assert _cell_value(out, "주소") == "서울특별시 강남구"      # 원래 값 보존
+    assert any("이미 값 있음" in n for n in rep.notes)
