@@ -505,8 +505,10 @@ def _apply_line_edits(
     라벨 자동매칭(1.7)도 그룹 라벨을 잡지 못한다. 그래서 **사람이 앵커 문구와
     선택지를 명시**했을 때만 동작하는 좁은 경로를 둔다(추측·자동확대 없음).
 
-    line_edits 항목: ``{"anchor": str, "check": [옵션…], "replace": {옛:새},
-    "cells": {colAddr: 값}, "nth": 1, "all": False}``. ``nth``(1-based)·``all`` 은
+    line_edits 항목: ``{"anchor": str, "set": "문단 전체 새 글", "check": [옵션…],
+    "replace": {옛:새}, "cells": {colAddr: 값}, "nth": 1, "all": False}``.
+    ``set`` 은 앵커 문단의 텍스트를 통째로 갈아끼운다(같은 양식에 다른 아이템 내용을
+    얹을 때). 첫 hp:t 에 넣고 나머지는 비워 **첫 run 의 서식을 그대로 승계**한다. ``nth``(1-based)·``all`` 은
     같은 문구가 여러 번 나오는 반복 행/반복 날짜를 지목할 때만 쓴다(미지정 시 유일할
     때만 적용). ``cells`` 는 **열머리글이 위에 있는 표**(라벨이 왼쪽이 아니라 위라
     라벨→값 매칭이 닿지 않는 구조)에서, 앵커가 든 셀과 **같은 행**의 빈 칸을
@@ -544,6 +546,24 @@ def _apply_line_edits(
             )
             continue
         for p in targets:
+            # (0) 문단 통째 교체 — 같은 양식에 다른 아이템/내용을 얹을 때(내용 갈아끼우기).
+            #     첫 hp:t 에 새 글을 넣고 나머지 hp:t 는 비운다(첫 run 의 서식을 따른다).
+            new_text = spec.get("set")
+            if new_text is not None and str(new_text).strip():
+                ts = _inline_texts(p)
+                if ts:
+                    ts[0].text = str(new_text)
+                    for t in ts[1:]:
+                        t.text = ""
+                    if black is not None:
+                        run = ts[0].getparent()
+                        if run is not None and _local(getattr(run, "tag", "")) == "run":
+                            black.fix_run(run)
+                    applied += 1
+                    edited.append(p)
+                else:
+                    notes.append(f"교체 실패(텍스트 run 없음): {anchor[:24]}")
+
             # (a) 체크 — 뒤에서 앞으로 스플라이스(앞 옵션 offset 보존)
             wants = [str(o) for o in (spec.get("check") or []) if str(o or "").strip()]
             todo: list[tuple[int, int, str]] = []
