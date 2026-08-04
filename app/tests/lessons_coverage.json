@@ -1,9 +1,9 @@
 {
   "counts": {
-    "mechanized": 43,
-    "gap": 22,
-    "judgment": 48,
-    "total": 113
+    "mechanized": 44,
+    "gap": 21,
+    "judgment": 72,
+    "total": 137
   },
   "coverage_note": "총 92개 교훈(레지스트리): 기계화 43(46%)·갭 17(18%)·사람판단 32(34%). 2026-07-29 야간 high 잔여 7건 gap→mechanized: L074·L075·L078·L087·L088·L089·L091. L070/L076/L077 guard_ref 에 test_*.py 경로 보강(커버리지 메타테스트 정합).",
   "top_gaps": [
@@ -887,9 +887,9 @@
       "id": "L090 | 문서작성 | 2026-07-27 | 한글은 문단의 pageBreak 를 되살린다 — 빈 페이지는 속성이 아니라 문단 구조로 없애라",
       "summary": "한글이 되살리는 pageBreak 는 속성 수정이 아니라 문단 구조 변경으로 없앤다. 확인은 재저장 후 페이지 수로.",
       "mechanizable": "partial",
-      "category": "gap",
-      "guard_ref": "",
-      "gap_desc": "분리 산출물에 '빈 페이지 0' 게이트(재저장 후 PDF 페이지 검사) 필요",
+      "category": "mechanized",
+      "guard_ref": "hwpx_section_split.{find_page_break_paragraphs,find_leading_page_break,remove_leading_page_break} + app/tests/test_pure_hwpx_section_split.py::{test_find_leading_page_break_when_only_empty_paragraphs_precede,test_remove_leading_page_break_moves_content_onto_secpr_paragraph,test_remove_leading_page_break_leaves_no_leading_break}(속성이 아니라 문단 구조로 제거·secPr 보존·멱등 잠금)",
+      "gap_desc": "잔여: 재저장 후 실제 PDF 페이지 수로 확인하는 end-to-end 게이트는 한글 COM 필요라 미자동화",
       "impact": "med"
     },
     {
@@ -1089,6 +1089,222 @@
       "guard_ref": "",
       "gap_desc": "",
       "impact": "medium"
+    },
+    {
+      "id": "L106 | 개발 | 2026-08-04 | 격리가 먹는지 확인하기 전에 실데이터에 테스트를 쏘지 마라",
+      "summary": "격리가 먹는지 확인하기 전에 실데이터에 테스트를 쏘지 마라",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
+    },
+    {
+      "id": "L111 | 도구사용 | 2026-08-04 | 살아있는 설정을 잠시 치웠다 되돌리는 대조군 테스트 금지 — 체인이 끊기면 기능이 꺼진 채로 남는다",
+      "summary": "살아있는 설정을 잠시 치웠다 되돌리는 대조군 테스트 금지 — 체인이 끊기면 기능이 꺼진 채로 남는다",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
+    },
+    {
+      "id": "L114 | 개발 | 2026-08-04 | 클라우드 상품코드·요금을 기억이나 추측으로 말하지 마라 — 목록/요금 API로 뽑아라",
+      "summary": "클라우드 상품코드·요금을 기억이나 추측으로 말하지 마라 — 목록/요금 API로 뽑아라",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
+    },
+    {
+      "id": "L115 | 개발 | 2026-08-04 | [⚠️ L117 로 정정됨] 사용자가 계속 써야 하는 서버 — 분리 프로세스(Start-Process)도 죽는다, .cmd 런처로 가라",
+      "summary": "[⚠️ L117 로 정정됨] 사용자가 계속 써야 하는 서버 — 분리 프로세스(Start-Process)도 죽는다, .cmd 런처로 가라",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
+    },
+    {
+      "id": "L116 | 공통 | 2026-08-04 | 작업 착수 전 상위 폴더 README를 먼저 읽어라 — \"무엇에 쓸 건지\"를 모른 채 만들지 마라",
+      "summary": "작업 착수 전 상위 폴더 README를 먼저 읽어라 — \"무엇에 쓸 건지\"를 모른 채 만들지 마라",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
+    },
+    {
+      "id": "L112 | 도구사용 | 2026-08-04 | Bash 히어독 안 Python 에 Windows 경로를 백슬래시로 쓰지 마라 — 조용히 글자가 사라진다",
+      "summary": "Bash 히어독 안 Python 에 Windows 경로를 백슬래시로 쓰지 마라 — 조용히 글자가 사라진다",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
+    },
+    {
+      "id": "L113 — 라이브로 돌아가는 스크립트를 '리팩터 중간 상태'로 두고 세션을 넘기지 마라 (2026-08-04)",
+      "summary": "L113 — 라이브로 돌아가는 스크립트를 '리팩터 중간 상태'로 두고 세션을 넘기지 마라 (2026-08-04)",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
+    },
+    {
+      "id": "L117 | 개발 | 2026-08-04 | \"계속 켜져 있습니다\"라고 단정하지 마라 — Claude 가 띄운 프로세스는 Start-Process 로도 못 살린다 (L115 정정)",
+      "summary": "\"계속 켜져 있습니다\"라고 단정하지 마라 — Claude 가 띄운 프로세스는 Start-Process 로도 못 살린다 (L115 정정)",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
+    },
+    {
+      "id": "L118 | 도구사용 | 2026-08-04 | lessons.md 번호는 \"존재 여부\"가 아니라 **최대 번호+1** 로 붙여라 — 동시 세션이 같은 번호를 쓴다",
+      "summary": "lessons.md 번호는 \"존재 여부\"가 아니라 **최대 번호+1** 로 붙여라 — 동시 세션이 같은 번호를 쓴다",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
+    },
+    {
+      "id": "L119 | 도구사용 | 2026-08-04 | 위키 본문에 링크 문법을 '예시'로 적으면 그게 진짜 링크가 된다 — 백틱도 못 막는다",
+      "summary": "위키 본문에 링크 문법을 '예시'로 적으면 그게 진짜 링크가 된다 — 백틱도 못 막는다",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
+    },
+    {
+      "id": "L095 | 작업방식 | 2026-08-04 | 위키 \"페이지 수\"를 지식량으로 착각하지 마라 — 248개 중 220개가 빈 껍데기였다",
+      "summary": "위키 \"페이지 수\"를 지식량으로 착각하지 마라 — 248개 중 220개가 빈 껍데기였다",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
+    },
+    {
+      "id": "L108 | 진단 | 2026-08-04 | 같은 폴더에 세션이 여럿이면 \"결과가 안 바뀜 = 캐시\"로 단정하지 마라",
+      "summary": "같은 폴더에 세션이 여럿이면 \"결과가 안 바뀜 = 캐시\"로 단정하지 마라",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
+    },
+    {
+      "id": "L120 | 진단 | 2026-08-04 | 검사 도구가 \"고장 N건\"이라 하면 고치기 전에 **도구의 오탐부터** 의심하라",
+      "summary": "검사 도구가 \"고장 N건\"이라 하면 고치기 전에 **도구의 오탐부터** 의심하라",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
+    },
+    {
+      "id": "L121 | 진단 | 2026-08-04 | 로컬에 파일이 없다고 \"새로 만들자\"로 가지 마라 — 다른 세션이 pull 중이면 원격엔 이미 있다",
+      "summary": "로컬에 파일이 없다고 \"새로 만들자\"로 가지 마라 — 다른 세션이 pull 중이면 원격엔 이미 있다",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
+    },
+    {
+      "id": "L122 | 진단 | 2026-08-04 | 사용자가 붙여넣은 가격·수치를 검증 없이 전제로 삼지 마라 — 원본 페이지가 정본이다",
+      "summary": "사용자가 붙여넣은 가격·수치를 검증 없이 전제로 삼지 마라 — 원본 페이지가 정본이다",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
+    },
+    {
+      "id": "L123 | 진단 | 2026-08-04 | 스크립트·스케줄러가 뭘 하는지 추측해서 경고하지 마라 — 열어서 읽고 판단한다",
+      "summary": "스크립트·스케줄러가 뭘 하는지 추측해서 경고하지 마라 — 열어서 읽고 판단한다",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
+    },
+    {
+      "id": "L124 | 도구사용 | 2026-08-04 | 사용자가 직접 실행할 명령은 처음부터 `!` 접두사를 붙여서 줘라",
+      "summary": "사용자가 직접 실행할 명령은 처음부터 `!` 접두사를 붙여서 줘라",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
+    },
+    {
+      "id": "L125 | 진단 | 2026-08-04 | 동시세션 환경에서 \"내 조치 전/후 비교\"는 인과가 아니다 — 지표별로 누가 바꿨는지 갈라라",
+      "summary": "동시세션 환경에서 \"내 조치 전/후 비교\"는 인과가 아니다 — 지표별로 누가 바꿨는지 갈라라",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
+    },
+    {
+      "id": "L125 | 협업 | 2026-08-04 | 여러 세션 동시 작업 중엔 \"정리·삭제 착수 직전\"에 대상 상태를 다시 확인하라",
+      "summary": "여러 세션 동시 작업 중엔 \"정리·삭제 착수 직전\"에 대상 상태를 다시 확인하라",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
+    },
+    {
+      "id": "L126 | 작업방식 | 2026-08-04 | 착수 전 기존 스킬을 안 읽어, 이미 적혀 있던 답을 시행착오로 다시 배웠다",
+      "summary": "착수 전 기존 스킬을 안 읽어, 이미 적혀 있던 답을 시행착오로 다시 배웠다",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
+    },
+    {
+      "id": "L127 | 도구사용 | 2026-08-04 | wiki_ingest·wiki_lint 의 `workingDirectory` 는 **무시된다** — 항상 세션 cwd 위키에 쓴다",
+      "summary": "wiki_ingest·wiki_lint 의 `workingDirectory` 는 **무시된다** — 항상 세션 cwd 위키에 쓴다",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
+    },
+    {
+      "id": "L128 | 도구사용 | 2026-08-04 | 미커밋 변경이 있는 파일에 `git checkout <ref> -- <path>` 를 쓰지 마라 — 경고 없이 덮어쓴다",
+      "summary": "미커밋 변경이 있는 파일에 `git checkout <ref> -- <path>` 를 쓰지 마라 — 경고 없이 덮어쓴다",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "medium"
+    },
+    {
+      "id": "L129 | 도구사용 | 2026-08-04 | Bash 도구에서 PowerShell 히어스트링 `@'...'@` 을 쓰지 마라 — 커밋 메시지에 `@` 가 박힌다",
+      "summary": "Bash 도구에서 PowerShell 히어스트링 `@'...'@` 을 쓰면 커밋 메시지에 `@` 가 박힌다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med"
+    },
+    {
+      "id": "L130 | 작업방식 | 2026-08-04 | 압축·워크트리 삭제 후 재개할 땐 \"내가 하려던 일이 이미 병합됐는지\" 원격에서 먼저 확인하라",
+      "summary": "압축·워크트리 삭제 후 재개할 땐 착수 전 origin/master 에서 그 작업이 이미 병합됐는지 실측한다 — 재구현·중복 PR·충돌을 막는다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "high"
     }
   ]
 }

@@ -35,11 +35,17 @@ class RuntimeCapabilities:
         return self.rhwp_fill and self.rhwp_read and self.diagnose_hwpx and self.diagnose_docx
 
     def recommended_engine(self) -> str:
+        """권장 엔진 — 환경과 무관하게 항상 RHWP(순수 파이썬 HWPX 채움).
+
+        한글 COM 이 멀쩡히 있어도 본선은 RHWP 다(COM 은 .hwp↔.hwpx 변환 보조만).
+        어느 PC·원격·모바일에서 돌리든 산출물이 같아야 하기 때문이다.
+        """
         if self.com_hwp and self.com_safe_2022:
             return "rhwp-hwpx-fill"  # 본선은 여전히 RHWP; COM은 변환 보조만
         return "rhwp-hwpx-fill"
 
     def as_dict(self) -> dict[str, Any]:
+        """UI·CLI 가 공유하는 JSON 스키마(capabilities·recommended_engine·contract)."""
         return {
             "os_name": self.os_name,
             "python": self.python,
@@ -81,6 +87,13 @@ def _mobile_like() -> bool:
 
 
 def detect_capabilities() -> RuntimeCapabilities:
+    """지금 이 환경이 무엇을 할 수 있는지 조사한다(읽기 전용·Dispatch 안 함).
+
+    비-Windows·모바일이면 COM 검사를 건너뛴다. Windows 면 한글 COM ProgID 등록
+    여부와 LocalServer32 버전만 본다 — 한글2024(HOffice130)는 로그인 팝업 때문에
+    정책상 사용 불가로 강등하고 사유를 ``notes`` 에 남긴다. 검사 도중 무슨 예외가
+    나도 삼켜서 notes 로만 알린다(환경 진단이 통째로 죽지 않게).
+    """
     notes: list[str] = []
     is_win = platform.system().lower() == "windows"
     mobile = _mobile_like()
