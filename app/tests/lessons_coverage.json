@@ -2,8 +2,8 @@
   "counts": {
     "mechanized": 44,
     "gap": 21,
-    "judgment": 71,
-    "total": 136
+    "judgment": 72,
+    "total": 137
   },
   "coverage_note": "총 92개 교훈(레지스트리): 기계화 43(46%)·갭 17(18%)·사람판단 32(34%). 2026-07-29 야간 high 잔여 7건 gap→mechanized: L074·L075·L078·L087·L088·L089·L091. L070/L076/L077 guard_ref 에 test_*.py 경로 보강(커버리지 메타테스트 정합).",
   "top_gaps": [
@@ -1296,6 +1296,15 @@
       "guard_ref": "",
       "gap_desc": "",
       "impact": "med"
+    },
+    {
+      "id": "L130 | 작업방식 | 2026-08-04 | 압축·워크트리 삭제 후 재개할 땐 \"내가 하려던 일이 이미 병합됐는지\" 원격에서 먼저 확인하라",
+      "summary": "압축·워크트리 삭제 후 재개할 땐 착수 전 origin/master 에서 그 작업이 이미 병합됐는지 실측한다 — 재구현·중복 PR·충돌을 막는다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "high"
     }
   ]
 }
