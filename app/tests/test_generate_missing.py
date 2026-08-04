@@ -49,6 +49,8 @@ def test_disabled_makes_zero_calls(tmp_path: Path):
     assert result.gemini_calls == 0
     assert result.generated == []
     assert set(result.skipped) == {"a1", "a2"}
+    assert result.draft is True
+    assert result.extras.get("reason") == "disabled"
 
 
 def test_mock_gpt_image_only_and_budget(tmp_path: Path):
@@ -79,12 +81,16 @@ def test_mock_gpt_image_only_and_budget(tmp_path: Path):
     assert result.openai_calls == 1
     assert len(result.generated) == 1
     assert result.skipped == ["a3"]
-    assert all(c.provider == "openai" and c.model == GPT_IMAGE_MODEL for c in result.call_log)
+    assert result.draft is True  # mock path always draft
+    assert all(c.provider == "mock" and c.model == GPT_IMAGE_MODEL for c in result.call_log)
     assert result.receipt_path and result.receipt_path.is_file()
     receipt = json.loads(result.receipt_path.read_text(encoding="utf-8"))
     assert receipt["gemini_calls"] == 0
     assert receipt["model"] == "gpt-image-1"
     assert receipt["openai_calls"] == 1
+    assert receipt["openai_calls_real"] == 0
+    assert receipt["mock_calls"] == 1
+    assert receipt["use_mock"] is True
     assert (tmp_path / "gen" / result.generated[0].path_rel).is_file()
 
 
@@ -103,3 +109,31 @@ def test_calls_capped_by_missing_and_max(tmp_path: Path):
     assert result.openai_calls == 4
     assert result.gemini_calls == 0
     assert len(result.skipped) == 0
+    assert result.draft is True  # mock always draft
+    assert result.extras.get("mock_calls") == 4
+    assert result.extras.get("openai_calls_real") == 0
+
+
+def test_budget_zero_writes_receipt_and_skips(tmp_path: Path):
+    anchors = _anchors(2)
+    decisions = [MatchDecision(anchor_id=a.anchor_id, action=MatchAction.SKIP) for a in anchors]
+    result = generate_missing_assets(
+        anchors,
+        decisions,
+        out_dir=tmp_path / "budget0",
+        enabled=True,
+        missing_only=True,
+        max_paid_calls=0,
+        use_mock=True,
+    )
+    assert result.openai_calls == 0
+    assert result.generated == []
+    assert set(result.skipped) == {"a1", "a2"}
+    assert result.draft is True
+    assert result.extras.get("reason") == "budget_zero"
+    assert result.receipt_path and result.receipt_path.is_file()
+    receipt = json.loads(result.receipt_path.read_text(encoding="utf-8"))
+    assert receipt["reason"] == "budget_zero"
+    assert receipt["use_mock"] is True
+    assert receipt["openai_calls_real"] == 0
+    assert receipt["mock_calls"] == 0

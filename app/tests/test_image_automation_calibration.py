@@ -16,6 +16,7 @@ from auto_write.image_automation.image_library_matcher import (
     REVIEW_THRESHOLD,
 )
 from auto_write.image_automation.models import PsstClass
+from auto_write.image_automation.psst_image_classifier import classify_from_hints
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "image_automation"
 HOLDOUT = FIXTURES / "holdout"
@@ -72,3 +73,16 @@ def test_calibration_sample_ids_do_not_overlap_holdout():
     cal_ids = {row["id"] for row in cal["samples"]}
     assert holdout_ids.isdisjoint(cal_ids)
     assert cal["purpose"].endswith("not_holdout")
+
+
+def test_calibration_classification_samples_match_classifier():
+    """Calibration samples lock classifier *behavior*, not just fixture text."""
+    cal = json.loads((CALIBRATION / "classification_samples.json").read_text(encoding="utf-8"))
+    assert cal["samples"], "calibration samples must not be empty"
+    for row in cal["samples"]:
+        pred = classify_from_hints(
+            parent_hint=row.get("parent_hint", ""),
+            filename=row.get("filename", ""),
+            text_hint=row.get("text_hint", ""),
+        ).value
+        assert pred == row["psst"], f"{row['id']}: pred={pred} expected={row['psst']}"
