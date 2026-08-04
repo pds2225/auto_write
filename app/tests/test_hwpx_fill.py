@@ -1538,3 +1538,83 @@ def test_strip_linesegarray_only_under_preserves_siblings():
     remain = list(root.iter(_q("linesegarray")))
     assert len(remain) == 1
     assert remain[0].getparent() is ps[1]
+
+
+# --------------------------------------------------------------------------- #
+# line_edits — 앵커 문단 한정 체크/치환 (워크넷 `[ ]` 서식 지원)
+# --------------------------------------------------------------------------- #
+
+
+def _make_bracket_hwpx(path: Path) -> None:
+    """대괄호형 체크박스·반복 행이 있는 최소 픽스처(워크넷 별지 제2호서식 축소판)."""
+    body = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f'<hs:sec xmlns:hp="{_HP}" xmlns:hs="{_HS}">'
+        '<hp:p><hp:run charPrIDRef="0">'
+        "<hp:t>1. 개인정보 수집 동의 여부  [ ] 동의  [ ] 동의하지 않음</hp:t>"
+        "</hp:run></hp:p>"
+        '<hp:p><hp:run charPrIDRef="0">'
+        "<hp:t>근무지역 1순위 (     )시ㆍ도</hp:t></hp:run></hp:p>"
+        '<hp:p><hp:run charPrIDRef="0"><hp:t>[ ]신입 [ ]경력</hp:t></hp:run></hp:p>'
+        '<hp:p><hp:run charPrIDRef="0"><hp:t>[ ]신입 [ ]경력</hp:t></hp:run></hp:p>'
+        '<hp:p><hp:run charPrIDRef="0"><hp:t>성별 □ 남 □ 여</hp:t></hp:run></hp:p>'
+        "</hs:sec>"
+    )
+    with zipfile.ZipFile(path, "w") as z:
+        zi = zipfile.ZipInfo("mimetype")
+        zi.compress_type = zipfile.ZIP_STORED
+        z.writestr(zi, _MIMETYPE)
+        z.writestr("Contents/header.xml", _HEADER_XML)
+        z.writestr("Contents/section0.xml", body.encode("utf-8"))
+
+
+def _paragraph_texts(path: Path) -> list[str]:
+    from lxml import etree
+
+    with zipfile.ZipFile(path) as z:
+        root = etree.fromstring(z.read("Contents/section0.xml"))
+    return [
+        "".join(t.text or "" for t in p.iter(f"{{{_HP}}}t"))
+        for p in root.iter(f"{{{_HP}}}p")
+    ]
+
+
+def test_line_edits_checks_bracket_box_and_replaces_inline_blank(tmp_path: Path):
+    """`[ ] 동의` → `[√] 동의`, `□ 여` → `■ 여`, 괄호 빈칸 치환까지 한 번에."""
+    src = tmp_path / "form.hwpx"
+    _make_bracket_hwpx(src)
+    out = tmp_path / "out.hwpx"
+
+    rep = fill_hwpx(src, out, line_edits=[
+        {"anchor": "개인정보 수집 동의 여부", "check": ["동의"]},
+        {"anchor": "근무지역 1순위", "replace": {"(     )": "(서울특별)"}},
+        {"anchor": "성별", "check": ["여"]},
+    ])
+
+    texts = _paragraph_texts(out)
+    assert rep.ok and rep.line_edits_applied == 3
+    assert "[√] 동의  [ ] 동의하지 않음" in texts[0]   # 고른 것만 체크
+    assert "1순위 (서울특별)시ㆍ도" in texts[1]
+    assert "□ 남 ■ 여" in texts[4]
+
+
+def test_line_edits_skips_ambiguous_anchor_unless_nth_given(tmp_path: Path):
+    """같은 문구가 여러 번이면 기본은 스킵(오편집<미편집), nth 로 지목하면 적용."""
+    src = tmp_path / "form.hwpx"
+    _make_bracket_hwpx(src)
+
+    vague = tmp_path / "vague.hwpx"
+    rep = fill_hwpx(src, vague, line_edits=[
+        {"anchor": "[ ]신입 [ ]경력", "check": ["신입"]},
+    ])
+    assert rep.line_edits_applied == 0
+    assert any("앵커 모호" in n for n in rep.notes)
+
+    picked = tmp_path / "picked.hwpx"
+    rep2 = fill_hwpx(src, picked, line_edits=[
+        {"anchor": "[ ]신입 [ ]경력", "nth": 2, "check": ["신입"]},
+    ])
+    texts = _paragraph_texts(picked)
+    assert rep2.line_edits_applied == 1
+    assert texts[2] == "[ ]신입 [ ]경력"      # 첫 행은 그대로
+    assert texts[3] == "[√]신입 [ ]경력"      # 지목한 두 번째 행만 체크

@@ -445,6 +445,136 @@ def _parse_checkbox_options(flat: str) -> tuple[str, list[tuple[int, str]]]:
     return inline_label, options
 
 
+# 대괄호형 빈 체크박스 — 워크넷/고용노동부 별지서식 계열이 `[ ] 동의` 처럼 쓴다.
+# □ 계열(_EMPTY_BOX_RE)과 달리 여러 글자라 (start, end) 구간 단위로 다룬다.
+_BRACKET_BOX_RE = re.compile(r"\[[  　]{0,2}\]")
+_BRACKET_CHECK_MARK = "[√]"
+
+
+def _iter_empty_boxes(flat: str) -> list[tuple[int, int, str]]:
+    """flat 에서 '빈 체크박스' 구간 목록 [(start, end, 체크기호), ...] (문서순).
+
+    두 계열을 함께 본다 — □ 류 1글자(_EMPTY_BOX_RE → ■)와 대괄호형 `[ ]`(→ `[√]`).
+    이미 체크된 박스(■/☑/[√] 등)는 포함하지 않는다(재실행 멱등).
+    """
+    spans: list[tuple[int, int, str]] = [
+        (m.start(), m.end(), _CHECK_MARK) for m in _EMPTY_BOX_RE.finditer(flat)
+    ]
+    spans += [
+        (m.start(), m.end(), _BRACKET_CHECK_MARK)
+        for m in _BRACKET_BOX_RE.finditer(flat)
+    ]
+    spans.sort(key=lambda s: s[0])
+    return spans
+
+
+def _parse_line_options(flat: str) -> list[tuple[int, int, str, str]]:
+    """flat 을 '빈 체크박스 + 뒤따르는 옵션 라벨' 목록으로 판다.
+
+    반환: [(box_start, box_end, 체크기호, 옵션라벨), ...]. 옵션 라벨은 그 박스 뒤부터
+    다음 박스 앞까지의 텍스트(``_option_text`` 로 정리). ``_parse_checkbox_options``
+    의 대괄호 지원 확장판이며, 라벨 자동매칭 대신 **앵커 기반 지시**(line_edits)에서 쓴다.
+    """
+    boxes = _iter_empty_boxes(flat)
+    out: list[tuple[int, int, str, str]] = []
+    for i, (start, end, mark) in enumerate(boxes):
+        stop = boxes[i + 1][0] if i + 1 < len(boxes) else len(flat)
+        out.append((start, end, mark, _option_text(flat[end:stop])))
+    return out
+
+
+def _apply_line_edits(root, line_edits: list[dict], edited: list) -> tuple[int, list[str]]:
+    """'앵커 문단'에 한정해 텍스트 체크·직접 치환을 적용한다(사용자 명시 지시 전용).
+
+    정부 서식에는 라벨-값 표가 아니라 **안내 문단 안에 선택지가 박힌** 칸이 많다
+    (워크넷 별지 제2호 `1. 개인정보 수집ㆍ이용 동의 여부  [ ] 동의  [ ] 동의하지 않음`).
+    이런 칸은 이미 글자가 있어 ``replacements`` 가 보호(_in_protected_cell)하고,
+    라벨 자동매칭(1.7)도 그룹 라벨을 잡지 못한다. 그래서 **사람이 앵커 문구와
+    선택지를 명시**했을 때만 동작하는 좁은 경로를 둔다(추측·자동확대 없음).
+
+    line_edits 항목: ``{"anchor": str, "check": [옵션…], "replace": {옛:새},
+    "nth": 1, "all": False}``. ``nth``(1-based)·``all`` 은 같은 문구가 여러 번
+    나오는 반복 행/반복 날짜를 지목할 때만 쓴다(미지정 시 유일할 때만 적용).
+
+    안전 규칙(오편집 < 미편집):
+    - anchor 는 문서 안에서 **정확히 한 문단**에만 있어야 한다(0개·2개+ → 스킵·notes).
+      단 ``nth``/``all`` 을 명시하면 그 지목대로 적용한다.
+    - check 옵션은 그 문단의 빈 체크박스 옵션 라벨과 **정확일치 1개**여야 한다.
+    - replace 의 옛 문자열은 그 문단에 **정확히 1회**만 나와야 한다.
+    - 한 문단 안 여러 편집은 **뒤에서 앞으로** 적용해 offset 을 보존한다.
+    """
+    if not line_edits:
+        return 0, []
+    paras = [(p, "".join(t.text or "" for t in _inline_texts(p)))
+             for p in root.iter(_q("p"))]
+    applied = 0
+    notes: list[str] = []
+    for spec in line_edits:
+        anchor = str((spec or {}).get("anchor") or "")
+        if not anchor:
+            continue
+        hits = [p for p, flat in paras if anchor in flat]
+        nth = spec.get("nth")
+        if spec.get("all"):
+            targets = hits
+        elif nth:
+            idx = int(nth)
+            targets = [hits[idx - 1]] if 1 <= idx <= len(hits) else []
+        else:
+            targets = hits if len(hits) == 1 else []
+        if not targets:
+            notes.append(
+                f"앵커 {'모호' if hits else '미발견'}({len(hits)}건): {anchor[:40]}"
+            )
+            continue
+        for p in targets:
+            # (a) 체크 — 뒤에서 앞으로 스플라이스(앞 옵션 offset 보존)
+            wants = [str(o) for o in (spec.get("check") or []) if str(o or "").strip()]
+            todo: list[tuple[int, int, str]] = []
+            flat = "".join(t.text or "" for t in _inline_texts(p))
+            options = _parse_line_options(flat)
+            for want in wants:
+                wkey = _opt_key(want)
+                cand = [(s, e, mark) for s, e, mark, lbl in options
+                        if _opt_key(lbl) and _opt_key(lbl) == wkey]
+                if len(cand) != 1:
+                    notes.append(
+                        f"옵션 {'모호' if cand else '미발견'}: {want} @ {anchor[:24]}"
+                    )
+                    continue
+                todo.append(cand[0])
+            for start, end, mark in sorted(todo, key=lambda x: -x[0]):
+                if _splice_run_text(p, start, end, mark):
+                    applied += 1
+                    edited.append(p)
+                else:
+                    notes.append(
+                        f"체크 실패(run 경계 분할): {flat[start:end + 8]!r}"
+                        f" @ {anchor[:24]}"
+                    )
+            # (b) 직접 치환 — 매번 flat 재계산(길이 변화 반영)
+            for old, new in (spec.get("replace") or {}).items():
+                old = str(old or "")
+                if not old:
+                    continue
+                flat = "".join(t.text or "" for t in _inline_texts(p))
+                if flat.count(old) != 1:
+                    notes.append(
+                        f"치환 {'모호' if flat.count(old) else '미발견'}: "
+                        f"{old[:24]} @ {anchor[:24]}"
+                    )
+                    continue
+                pos = flat.index(old)
+                if _splice_run_text(p, pos, pos + len(old), str(new)):
+                    applied += 1
+                    edited.append(p)
+                else:
+                    notes.append(
+                        f"치환 실패(run 경계 분할): {old[:24]!r} @ {anchor[:24]}"
+                    )
+    return applied, notes
+
+
 _OPT_TRAIL_PUNCT = ",.;:·"
 
 
@@ -660,6 +790,7 @@ class HwpxFillReport:
     # 그리드 선택칸(□ 없음) 후보 — 구조·값은 일치하나 마크 지시문이 없어 자동 기입을
     # 보류한 항목(needs_confirm, 오체크<미체크). 사람이 확인 후 직접 기입한다.
     grid_needs_confirm: list[str] = field(default_factory=list)
+    line_edits_applied: int = 0   # 앵커 문단 편집(체크·치환) 성공 건수
     sections_changed: int = 0
     notes: list[str] = field(default_factory=list)
 
@@ -675,6 +806,7 @@ class HwpxFillReport:
             "checked": list(self.checked),
             "check_residual": list(self.check_residual),
             "grid_needs_confirm": list(self.grid_needs_confirm),
+            "line_edits_applied": self.line_edits_applied,
             "sections_changed": self.sections_changed,
             "notes": list(self.notes),
         }
@@ -716,6 +848,8 @@ def _fill_section_xml(
     replacements: dict[str, str],
     black: Optional[_BlackCharPr] = None,
     grid_confirm: Optional[list] = None,
+    line_edits: Optional[list[dict]] = None,
+    line_report: Optional[dict] = None,
 ) -> tuple[bytes, dict[str, str], int, set[str]]:
     """한 섹션 XML 에서 표 라벨-값 칸(1) + 셀 인라인 빈칸(1.5) + 체크박스(1.7) +
     그리드 선택칸(1.75, □ 없음) + 표 밖 본문 단락 인라인 빈칸(1.8) 채움 +
@@ -914,6 +1048,15 @@ def _fill_section_xml(
                         if not others:
                             black.fix_run(run)
 
+    # 3) 앵커 문단 한정 편집(line_edits) — 사용자가 명시한 지시만 수행.
+    if line_edits:
+        applied, line_notes = _apply_line_edits(root, line_edits, edited)
+        if line_report is not None:
+            line_report["applied"] = line_report.get("applied", 0) + applied
+            line_report.setdefault("notes", []).extend(line_notes)
+        if applied:
+            changed = True
+
     if not changed:
         return xml_bytes, filled, replaced, used_keys
 
@@ -953,6 +1096,7 @@ def fill_hwpx(
     identity: Optional[dict[str, str]] = None,
     replacements: Optional[dict[str, str]] = None,
     check_options: Optional[list[str]] = None,
+    line_edits: Optional[list[dict]] = None,
     force_black: bool = True,
 ) -> HwpxFillReport:
     """HWPX 원본 양식의 빈 값 칸을 직접 채운다(변환 왕복 없음, 양식 100% 보존).
@@ -968,6 +1112,14 @@ def fill_hwpx(
                   오른쪽 인접 셀 순으로 찾고 괄호 보존 정확일치만 인정하며,
                   일치 컨트롤이 '문서 전체'에서 1개(셀당 컨트롤 1개)일 때만
                   체크한다(모호하면 잔여 보고 — 오체크<미체크).
+        line_edits: 앵커 문단 한정 편집 지시 목록(사람이 명시한 것만 수행).
+                  ``[{"anchor": "1. 개인정보 수집ㆍ이용 동의 여부",
+                      "check": ["동의"],
+                      "replace": {"(     )시": "(서울특별)시"}}]``
+                  안내 문단 안에 선택지가 박힌 칸(워크넷 별지서식 `[ ] 동의`)처럼
+                  라벨-값 매칭도 replacements 도 닿지 않는 자리를 채운다.
+                  앵커는 문서 내 유일해야 하고, 옵션·치환 문자열도 그 문단에서
+                  정확히 1개여야 적용한다(모호하면 스킵 + notes — 오편집<미편집).
         force_black: True(기본)면 채운 값이 유색 예시체(charPr)를 승계할 때
                   글꼴·크기는 유지하고 색(글자색·밑줄/취소선/그림자색·형광배경)만
                   검정/제거인 클론으로 바꾼다(제출본 검정 원칙). 적용 범위는
@@ -985,6 +1137,7 @@ def fill_hwpx(
     identity = dict(identity or {})
     replacements = dict(replacements or {})
     check_options = [str(o) for o in (check_options or []) if str(o or "").strip()]
+    line_edits = [e for e in (line_edits or []) if isinstance(e, dict)]
 
     # 1) 안전장치
     if not src.exists():
@@ -1020,11 +1173,13 @@ def fill_hwpx(
     all_used: set[str] = set()
     changed_names: set[str] = set()
     grid_confirm: list[str] = []
+    line_report: dict[str, Any] = {"applied": 0, "notes": []}
     for name in section_names:
         try:
             new_bytes, filled, replaced, used = _fill_section_xml(
                 data[name], identity, replacements, black=black,
                 grid_confirm=grid_confirm,
+                line_edits=line_edits, line_report=line_report,
             )
         except etree.XMLSyntaxError as exc:
             report.notes.append(f"{name} 파싱 실패(건너뜀): {exc}")
@@ -1115,6 +1270,9 @@ def fill_hwpx(
         report.notes.append(
             "그리드 선택칸 확인 필요(마크 지시문이 없어 자동 기입하지 않음): "
             + "; ".join(report.grid_needs_confirm))
+    report.line_edits_applied = int(line_report.get("applied", 0))
+    for note in dict.fromkeys(line_report.get("notes", [])):
+        report.notes.append(f"[line_edits] {note}")
 
     # 4) 원자적 쓰기 — 임시파일에 다시 압축 후 os.replace.
     #    mimetype 선두 + STORED, 그 외 원본 압축방식·내용 유지.
