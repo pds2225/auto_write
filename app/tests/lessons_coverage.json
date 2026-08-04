@@ -1,9 +1,9 @@
 {
   "counts": {
-    "mechanized": 43,
-    "gap": 22,
-    "judgment": 70,
-    "total": 135
+    "mechanized": 44,
+    "gap": 21,
+    "judgment": 71,
+    "total": 136
   },
   "coverage_note": "총 92개 교훈(레지스트리): 기계화 43(46%)·갭 17(18%)·사람판단 32(34%). 2026-07-29 야간 high 잔여 7건 gap→mechanized: L074·L075·L078·L087·L088·L089·L091. L070/L076/L077 guard_ref 에 test_*.py 경로 보강(커버리지 메타테스트 정합).",
   "top_gaps": [
@@ -887,9 +887,9 @@
       "id": "L090 | 문서작성 | 2026-07-27 | 한글은 문단의 pageBreak 를 되살린다 — 빈 페이지는 속성이 아니라 문단 구조로 없애라",
       "summary": "한글이 되살리는 pageBreak 는 속성 수정이 아니라 문단 구조 변경으로 없앤다. 확인은 재저장 후 페이지 수로.",
       "mechanizable": "partial",
-      "category": "gap",
-      "guard_ref": "",
-      "gap_desc": "분리 산출물에 '빈 페이지 0' 게이트(재저장 후 PDF 페이지 검사) 필요",
+      "category": "mechanized",
+      "guard_ref": "hwpx_section_split.{find_page_break_paragraphs,find_leading_page_break,remove_leading_page_break} + app/tests/test_pure_hwpx_section_split.py::{test_find_leading_page_break_when_only_empty_paragraphs_precede,test_remove_leading_page_break_moves_content_onto_secpr_paragraph,test_remove_leading_page_break_leaves_no_leading_break}(속성이 아니라 문단 구조로 제거·secPr 보존·멱등 잠금)",
+      "gap_desc": "잔여: 재저장 후 실제 PDF 페이지 수로 확인하는 end-to-end 게이트는 한글 COM 필요라 미자동화",
       "impact": "med"
     },
     {
@@ -1287,6 +1287,15 @@
       "guard_ref": "",
       "gap_desc": "",
       "impact": "medium"
+    },
+    {
+      "id": "L129 | 도구사용 | 2026-08-04 | Bash 도구에서 PowerShell 히어스트링 `@'...'@` 을 쓰지 마라 — 커밋 메시지에 `@` 가 박힌다",
+      "summary": "Bash 도구에서 PowerShell 히어스트링 `@'...'@` 을 쓰면 커밋 메시지에 `@` 가 박힌다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med"
     }
   ]
 }

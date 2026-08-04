@@ -18,7 +18,10 @@ from lxml import etree
 from auto_write.services.hwpx_section_split import (
     assert_pagepr_unchanged,
     find_first_secpr_paragraph,
+    find_leading_page_break,
+    find_page_break_paragraphs,
     recycle_first_secpr_paragraph,
+    remove_leading_page_break,
 )
 
 _HP = "http://www.hancom.co.kr/hwpml/2011/paragraph"
@@ -151,3 +154,95 @@ def test_assert_reports_lost_paragraph():
 def test_assert_with_empty_snapshot_passes():
     # 대조할 기준이 없으면 위반도 없다(스냅샷 없는 경로에서 오탐 방지).
     assert assert_pagepr_unchanged({}, _with_secpr()) == []
+
+
+# --- 선두 쪽나눔 제거(L090) --------------------------------------------------
+# 공고 본문을 떼어내고 나면 남은 '[서식 1]' 문단이 쪽나눔을 달고 있어 빈 첫 페이지가
+# 생긴다. pageBreak 속성을 0 으로 바꾸는 것만으로는 한글이 열 때 되살려 소용이 없으므로
+# (실측 L090), secPr 문단에 내용을 옮겨 담고 원래 문단을 '구조적으로' 없앤다.
+
+def _split_leftover():
+    """본문을 떼어낸 직후 상태 — 첫 문단은 secPr 만 남은 빈 문단, 그 다음이 쪽나눔 서식."""
+    return _sec(
+        f"<p>{_SECPR}</p>"
+        '<p pageBreak="1" paraPrIDRef="7" styleIDRef="3">'
+        "<run><t>[서식 1]</t></run></p>"
+        "<p><run><t>전문상담위원 참여 신청서</t></run></p>"
+    )
+
+
+def test_find_page_break_paragraphs_lists_indices():
+    root = _split_leftover()
+    assert find_page_break_paragraphs(root) == [1]
+
+
+def test_find_leading_page_break_when_only_empty_paragraphs_precede():
+    assert find_leading_page_break(_split_leftover()) == 1
+
+
+def test_find_leading_page_break_ignores_intentional_break_after_content():
+    # 앞에 실제 내용이 있으면 의도된 페이지 구분이다 — 건드리면 안 된다.
+    root = _sec(
+        f"<p>{_SECPR}<run><t>1쪽 본문</t></run></p>"
+        '<p pageBreak="1"><run><t>2쪽 제목</t></run></p>'
+    )
+    assert find_page_break_paragraphs(root) == [1]
+    assert find_leading_page_break(root) == -1
+
+
+def test_remove_leading_page_break_moves_content_onto_secpr_paragraph():
+    root = _split_leftover()
+    head = list(root)[0]
+    out = remove_leading_page_break(root)
+
+    assert out["ok"] is True and out["removed"] is True
+    assert out["donor_index"] == 1 and out["paragraphs_removed"] == 1
+    # 문단이 하나 줄었고(구조적 제거), secPr 문단은 그대로 살아 있다.
+    tops = list(root)
+    assert len(tops) == 2 and tops[0] is head
+    # 서식 문단의 글과 서식 참조가 secPr 문단으로 넘어왔다.
+    assert _text(head) == "[서식 1]"
+    assert head.get("paraPrIDRef") == "7" and head.get("styleIDRef") == "3"
+    # secPr 는 보존 — 여백이 기본값으로 돌아가지 않는다(L089).
+    assert find_first_secpr_paragraph(root) is head
+
+
+def test_remove_leading_page_break_keeps_margins():
+    root = _split_leftover()
+    snap = {"pagePr.width": "59528", "margin.left": "8504"}
+    remove_leading_page_break(root)
+    assert assert_pagepr_unchanged(snap, root) == []
+
+
+def test_remove_leading_page_break_leaves_no_leading_break():
+    root = _split_leftover()
+    remove_leading_page_break(root)
+    # 빈 첫 페이지의 원인이 사라졌다 — 속성이 아니라 문단 구조로.
+    assert find_leading_page_break(root) == -1
+
+
+def test_remove_leading_page_break_is_idempotent():
+    root = _split_leftover()
+    remove_leading_page_break(root)
+    before = etree.tostring(root)
+    out = remove_leading_page_break(root)
+    assert out["removed"] is False and out["paragraphs_removed"] == 0
+    assert etree.tostring(root) == before
+
+
+def test_remove_leading_page_break_noop_without_break():
+    root = _with_secpr()
+    before = etree.tostring(root)
+    out = remove_leading_page_break(root)
+    assert out["removed"] is False and out["donor_index"] == -1
+    assert etree.tostring(root) == before
+
+
+def test_remove_leading_page_break_degrades_honestly_when_secpr_is_the_break():
+    # secPr 문단 자체가 쪽나눔이면 옮겨 담을 그릇이 없다 — 문단을 지우면 여백이 날아간다.
+    # 속성만 끄고, 사람이 재확인하도록 notes 로 알린다(조용한 실패 금지).
+    root = _sec(f'<p pageBreak="1">{_SECPR}</p><p><run><t>본문</t></run></p>')
+    out = remove_leading_page_break(root)
+    assert out["removed"] is True and out["paragraphs_removed"] == 0
+    assert out["notes"] and "L090" in out["notes"][0]
+    assert find_first_secpr_paragraph(root) is list(root)[0]
