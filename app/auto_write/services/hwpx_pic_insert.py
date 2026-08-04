@@ -6,11 +6,195 @@ L088: 기존 pic 축소는 scaMatrix(+curSz/sz) 로 — orgSz/imgRect 는 보존
 """
 from __future__ import annotations
 
+import copy
+import os
+import re
+import shutil
+import tempfile
+import zipfile
+from pathlib import Path
 from typing import Any, Optional
 
 from lxml import etree
 
-from .hwpx_fill import _local, _q, _strip_linesegarray
+from .hwpx_fill import _inline_texts, _local, _q, _strip_linesegarray
+
+
+_HWPUNIT_PER_PX = 7200 / 96      # 96dpi 기준 픽셀 → HWPUNIT
+_HWPUNIT_PER_MM = 7200 / 25.4
+
+
+def _px_size(path: Path) -> tuple[int, int]:
+    """이미지 픽셀 크기 — PNG/JPEG 헤더만 읽는다(외부 라이브러리 불필요)."""
+    data = Path(path).read_bytes()
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
+    if data[:3] == b"\xff\xd8\xff":                      # JPEG: SOFn 세그먼트 탐색
+        i = 2
+        while i < len(data) - 9:
+            if data[i] != 0xFF:
+                i += 1
+                continue
+            marker, seglen = data[i + 1], int.from_bytes(data[i + 2:i + 4], "big")
+            if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):
+                return (int.from_bytes(data[i + 7:i + 9], "big"),
+                        int.from_bytes(data[i + 5:i + 7], "big"))
+            i += 2 + seglen
+    raise ValueError(f"픽셀 크기를 읽을 수 없습니다(PNG/JPEG 만 지원): {path}")
+
+
+def _next_image_id(hpf_text: str) -> int:
+    used = [int(m) for m in re.findall(r'id="image(\d+)"', hpf_text)]
+    return (max(used) + 1) if used else 1
+
+
+def build_picture_element(donor, *, image_id: str, px: tuple[int, int],
+                          width_mm: float, comment: str = ""):
+    """기존 그림(donor)을 복제해 '새 이미지를 가리키는' hp:pic 을 만든다.
+
+    양식이 이미 쓰고 있는 그림 XML을 그대로 베끼기 때문에, 한글이 요구하는 속성
+    (rendering/imgClip/effects 등)을 빠뜨릴 위험이 없다. 바꾸는 것은 참조 이미지·
+    크기·설명뿐이다.
+    """
+    pic = copy.deepcopy(donor)
+    pw, ph = px
+    org_w = int(round(pw * _HWPUNIT_PER_PX))
+    org_h = int(round(ph * _HWPUNIT_PER_PX))
+    disp_w = int(round(width_mm * _HWPUNIT_PER_MM))
+    disp_h = int(round(disp_w * ph / pw))
+    scale = disp_w / org_w if org_w else 1.0
+
+    for name, w, h in (("orgSz", org_w, org_h), ("curSz", disp_w, disp_h),
+                       ("sz", disp_w, disp_h)):
+        el = _find_child(pic, name)
+        if el is None:
+            el = etree.SubElement(pic, _q(name))
+        el.set("width", str(w))
+        el.set("height", str(h))
+
+    rect = _find_child(pic, "imgRect")
+    if rect is not None:
+        for idx, (x, y) in enumerate(((0, 0), (org_w, 0), (org_w, org_h), (0, org_h))):
+            pt = _find_child(rect, f"pt{idx}")
+            if pt is not None:
+                pt.set("x", str(x))
+                pt.set("y", str(y))
+
+    sca = _find_sca_matrix(pic)
+    if sca is not None:
+        for attr, val in zip(("e1", "e2", "e3", "e4", "e5", "e6"),
+                             (f"{scale:.6f}", "0", "0", "0", f"{scale:.6f}", "0")):
+            sca.set(attr, val)
+
+    for el in pic.iter():
+        if _local(getattr(el, "tag", "")) == "img":
+            el.set("binaryItemIDRef", image_id)
+            break
+
+    pos = _ensure_pos(pic)
+    pos.set("treatAsChar", "1")          # 글자처럼 취급 = 표 칸 안에서 안전하게 흐름
+    for key in ("id", "instid"):
+        if pic.get(key) is not None:
+            pic.set(key, str(abs(hash((image_id, key))) % 2_000_000_000))
+    sc = _find_child(pic, "shapeComment")
+    if sc is not None:
+        sc.text = comment or f"그림입니다. ({pw}x{ph} pixel)"
+    return pic
+
+
+def add_pictures_to_hwpx(in_hwpx, out_hwpx, pictures: list[dict]) -> dict[str, Any]:
+    """HWPX 에 새 그림을 넣는다 — 양식·기존 내용은 그대로 두고 그림만 추가.
+
+    pictures 항목: ``{"path": png/jpg, "anchor": "넣을 자리를 찾을 문단 글",
+    "width_mm": 150, "comment": "설명", "into_next": True}``
+    ``into_next`` 가 True 면 앵커 문단의 **다음 빈 문단**에 넣는다(캡션 아래 배치).
+
+    안전 규칙: 앵커는 문서에서 유일해야 하고(아니면 건너뜀), 원본은 읽기만 하며,
+    mimetype 선두·무압축을 유지해 HWPX 유효성을 지킨다.
+    """
+    src, dst = Path(in_hwpx), Path(out_hwpx)
+    if src.resolve() == dst.resolve():
+        raise ValueError("출력이 입력과 같습니다. 원본 덮어쓰기는 금지입니다.")
+    with zipfile.ZipFile(src) as zin:
+        infos = zin.infolist()
+        data = {i.filename: zin.read(i.filename) for i in infos}
+
+    hpf_name = "Contents/content.hpf"
+    hpf = data[hpf_name].decode("utf-8")
+    sec_name = next(n for n in sorted(data) if re.match(r"Contents/section\d+\.xml$", n))
+    root = etree.fromstring(data[sec_name])
+
+    donor = next((p for p in root.iter(_q("pic"))), None)
+    if donor is None:
+        raise ValueError("복제할 기존 그림이 없습니다(도너 부재).")
+
+    report: dict[str, Any] = {"added": [], "skipped": []}
+    next_id = _next_image_id(hpf)
+    added_entries: list[tuple[str, bytes]] = []
+
+    for spec in pictures:
+        path = Path(spec["path"])
+        anchor = str(spec.get("anchor") or "")
+        # 표를 감싸는 바깥 문단은 표 안 글자를 전부 흡수해 앵커가 중복으로 잡힌다.
+        # → hwpx_fill 과 같은 기준(_inline_texts: 표를 품은 run 제외)으로 본다.
+        hits = [p for p in root.iter(_q("p"))
+                if anchor and anchor in "".join(
+                    t.text or "" for t in _inline_texts(p))]
+        if len(hits) != 1:
+            report["skipped"].append(f"앵커 {len(hits)}건: {anchor[:40]}")
+            continue
+
+        image_id = f"image{next_id}"
+        next_id += 1
+        href = f"BinData/{image_id}{path.suffix.lower()}"
+        added_entries.append((href, path.read_bytes()))
+        media = "image/png" if path.suffix.lower() == ".png" else "image/jpeg"
+        hpf = hpf.replace(
+            "</opf:manifest>",
+            f'<opf:item id="{image_id}" href="{href}" '
+            f'media-type="{media}" isEmbeded="1"/></opf:manifest>')
+
+        pic = build_picture_element(
+            donor, image_id=image_id, px=_px_size(path),
+            width_mm=float(spec.get("width_mm", 150)),
+            comment=spec.get("comment", ""))
+
+        target = hits[0]
+        if spec.get("into_next"):
+            nxt = target.getnext()
+            if nxt is not None and _local(getattr(nxt, "tag", "")) == "p":
+                target = nxt
+        run = etree.SubElement(target, _q("run"))
+        run.set("charPrIDRef", "0")
+        run.append(pic)
+        _strip_linesegarray(target, only_under=[target])
+        report["added"].append(f"{path.name} → {anchor[:30]} ({image_id})")
+
+    if not report["added"]:
+        raise ValueError("추가된 그림이 없습니다 — 앵커를 확인하세요.")
+
+    data[sec_name] = etree.tostring(root, xml_declaration=True, encoding="UTF-8",
+                                    standalone=True)
+    data[hpf_name] = hpf.encode("utf-8")
+
+    fd, tmp = tempfile.mkstemp(suffix=".hwpx", dir=str(dst.parent))
+    os.close(fd)
+    try:
+        with zipfile.ZipFile(tmp, "w") as zout:
+            zi = zipfile.ZipInfo("mimetype")
+            zi.compress_type = zipfile.ZIP_STORED
+            zout.writestr(zi, data["mimetype"])
+            for i in infos:
+                if i.filename != "mimetype":
+                    zout.writestr(i, data[i.filename])
+            for href, blob in added_entries:
+                zout.writestr(href, blob)
+        shutil.move(tmp, dst)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+    report["output"] = str(dst)
+    return report
 
 
 def _ensure_pos(pic) -> Any:
@@ -120,8 +304,18 @@ def resize_hwpx_picture(
 
     org_before = {"width": org.get("width"), "height": org.get("height")}
 
+    # 세로는 **지금 화면에 보이는 비율(sz)** 을 유지한다.
+    # orgSz 가 실제 그림 비율과 어긋난 양식이 있어(실측: 서명 orgSz 80.4x4.3mm,
+    # 표시 5.7x4.5mm), orgSz 비율로 계산하면 그림이 납작하게 눌린다.
+    cur = _find_child(pic, "sz")          # `or` 금지 — 자식 없는 요소는 falsy(lxml)
+    if cur is None:
+        cur = _find_child(pic, "curSz")
+    cur_w = int(cur.get("width") or 0) if cur is not None else 0
+    cur_h = int(cur.get("height") or 0) if cur is not None else 0
+
     disp_w = int(round(org_w * scale))
-    disp_h = int(round(org_h * scale))
+    disp_h = (int(round(disp_w * cur_h / cur_w)) if cur_w > 0 and cur_h > 0
+              else int(round(org_h * scale)))
     for tag in ("curSz", "sz"):
         el = _find_child(pic, tag)
         if el is None:
@@ -136,9 +330,11 @@ def resize_hwpx_picture(
         if rend is None:
             rend = etree.SubElement(pic, _q("renderingInfo"))
         sca = etree.SubElement(rend, _q("scaMatrix"))
-    # e1..e6: sx 0 0 0 sy 0
+    # e1..e6: sx 0 0 0 sy 0 — 가로/세로 배율을 각각 계산(표시 비율 보존과 일치).
+    sx = disp_w / org_w if org_w else scale
+    sy = disp_h / org_h if org_h else sx
     attrs = ("e1", "e2", "e3", "e4", "e5", "e6")
-    vals = (f"{scale:.6f}", "0", "0", "0", f"{scale:.6f}", "0")
+    vals = (f"{sx:.6f}", "0", "0", "0", f"{sy:.6f}", "0")
     for a, v in zip(attrs, vals):
         sca.set(a, v)
 
