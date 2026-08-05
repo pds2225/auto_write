@@ -27,6 +27,9 @@ _FORM_START_MARKERS = (
     "[서식1]",
     "서식 1.",
     "참여 신청서",
+    "붙 임1",
+    "붙임1",
+    "입주신청서",
 )
 
 
@@ -87,6 +90,23 @@ def find_form_start_index(root) -> tuple[int, str]:
             continue
         if "전문분야" in text or "성명" in text or text.strip().endswith("신청서"):
             return i, "참여 신청서"
+    # 4) 정부양식 붙임 헤더(입주신청서·사업계획서 묶음)
+    for i, kid in enumerate(kids):
+        text = "".join(kid.itertext())
+        compact = text.replace(" ", "")
+        if "붙임1" in compact and ("입주신청" in compact or "사업계획" in compact):
+            return i, "붙 임1"
+    # 5) 입주신청서 본문 제목(제출서류 안내·평가표의 '입주신청서' 언급 제외)
+    for i, kid in enumerate(kids):
+        text = "".join(kid.itertext())
+        if "입주신청서" not in text:
+            continue
+        if "제출" in text and ("서류" in text or "필수" in text):
+            continue
+        if "모집공고" in text.replace(" ", "") or text.strip().startswith("-"):
+            continue
+        if "지원센터" in text.replace(" ", "") or text.strip().endswith("입주신청서"):
+            return i, "입주신청서"
     return -1, ""
 
 

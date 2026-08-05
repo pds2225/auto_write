@@ -95,3 +95,20 @@ def test_extract_refuses_same_path(tmp_path: Path):
 
     with pytest.raises(ValueError, match="덮어쓰기"):
         extract_forms_only(src, src)
+
+
+def test_find_form_start_attachment1_ipju():
+    """여성 1인 창조기업 등 '붙 임1 + 입주신청서' 헤더를 서식 시작으로 본다."""
+    body = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f'<hs:sec xmlns:hp="{_HP}" xmlns:hs="{_HS}">'
+        f'{_p("신규 입주기업 모집 공고")}'
+        f'{_p("신청기간 및 제출서류")}'
+        f'{_p("붙 임1 입주신청서 및 사업계획서")}'
+        f'{_p("(사) 한국여성벤처협회 여성 1인창조기업 지원센터 입주신청서")}'
+        "</hs:sec>"
+    ).encode("utf-8")
+    root = etree.fromstring(body)
+    idx, marker = find_form_start_index(root)
+    assert idx == 2
+    assert marker == "붙 임1"
