@@ -11,11 +11,14 @@
 |---|---|
 | `inject.py` | 양식 분석 / content.json 스켈레톤 생성 / 자동 주입 CLI |
 | `bizplan_app.py` | 인젝터 GUI/앱 진입점 |
+| `run.bat` / `run.sh` | 샘플 content로 원클릭 주입 |
 | `core/` | 분석기·주입기·AI 작성·검증·서식 모듈 + `prompt_templates/` |
 | `prompts/` | 섹션별(PSST) 프롬프트 모듈 |
 | `examples/` | content/스키마/검증 리포트 샘플 |
 | `references/` | 참고용 사업계획서 마크다운 |
 | `templates/` | 원본 양식 DOCX |
+| `docs/새양식_적용_가이드.md` | 새 양식 적용 절차 |
+| `tests/test_v2.py` | 인젝터 단위 테스트 |
 
 ## 출처
 - 원본 레포: `pds2225/autowrite` (BizPlan Injector, 2026-03 시작)
@@ -28,6 +31,9 @@
 ```bash
 pip install -r tools/injector/requirements.txt
 python tools/injector/inject.py --analyze tools/injector/templates/<양식>.docx
+
+# 단위 테스트
+cd tools/injector && python -m pytest tests/test_v2.py -q
 ```
 
 ## import 경로 정합 (점검 완료)

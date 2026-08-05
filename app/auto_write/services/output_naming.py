@@ -14,6 +14,12 @@ _INVALID = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 
 def sanitize_filename_part(text: str, *, fallback: str = "미상") -> str:
+    """파일명 한 토막을 안전하게 다듬는다.
+
+    윈도우가 금지하는 글자(``< > : " / \\ | ? *``·제어문자)와 공백을 모두 없앤다.
+    지우고 나서 남는 게 없으면 ``fallback`` 을 쓴다 — 이름이 ``_.hwpx`` 처럼
+    깨지는 것을 막기 위해서다.
+    """
     s = (text or "").strip()
     s = _INVALID.sub("", s)
     s = re.sub(r"\s+", "", s)

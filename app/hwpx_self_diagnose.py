@@ -86,17 +86,21 @@ def diagnose_hwpx(path: str | Path, *, require_specialty_checked: bool = False) 
     else:
         rep.gates.append(GateItem("L024", "pass", "학력/날짜 플레이스홀더 없음"))
 
-    # 인적 최소
-    for kw in ("성명", "박다솜"):  # 일반화: 성명 칸에 값이 있는지는 coverage로
-        pass
+    # 인적 최소 — 인적사항 표가 실제로 있는 문서에만 적용한다.
+    # 사업계획서·계획서형 HWPX 처럼 인적사항 표가 아예 없는 문서(칸 0개)를 '채움 부족'
+    # 으로 fail 시키면 정상 문서가 제출불가(exit 2)로 오판된다. 또 기준을 3칸으로
+    # 고정하면 인적 칸이 1~2개뿐인 양식은 다 채워도 영원히 fail 이므로 실제 칸 수를
+    # 넘지 않게 한다.
     cov = score_hwpx_coverage(p)
     rep.coverage = cov.as_dict()
     human = next((s for s in cov.sections if s.name == "인적"), None)
-    if human and human.filled >= 3:
-        rep.gates.append(GateItem("인적", "pass", f"filled={human.filled}"))
+    if human is None or human.total == 0:
+        rep.gates.append(GateItem("인적", "warn", "인적사항 표 없음 — 해당 없음(검사 생략)"))
+    elif human.filled >= min(3, human.total):
+        rep.gates.append(GateItem("인적", "pass", f"filled={human.filled}/{human.total}"))
     else:
         rep.gates.append(
-            GateItem("인적", "fail", f"채움 부족 filled={getattr(human, 'filled', 0)}")
+            GateItem("인적", "fail", f"채움 부족 filled={human.filled}/{human.total}")
         )
 
     specialty = next((s for s in cov.sections if s.name == "모집분야"), None)
@@ -149,9 +153,18 @@ def main(argv: list[str] | None = None) -> int:
         return 3
 
     if args.json_out:
-        Path(args.json_out).write_text(
-            json.dumps(rep.as_dict(), ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        # JSON 저장은 부수효과 — 실패해도 이미 산정된 진단 종료코드(0/1/2/3)를
+        # 오염시키지 않는다(경고만). self_diagnose.py 와 동일한 계약 보호.
+        try:
+            Path(args.json_out).write_text(
+                json.dumps(rep.as_dict(), ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+        except OSError as exc:
+            print(
+                f"[경고] JSON 저장 실패({type(exc).__name__}: {exc}) — "
+                f"진단 결과는 아래 출력을 참조",
+                file=sys.stderr,
+            )
 
     print(f"=== HWPX 진단: {src.name} ===")
     print(f"ok={rep.ok} overall_rate={rep.coverage.get('overall_rate')}")
@@ -162,6 +175,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if any("검사불능" in n for n in rep.notes):
         return 3
+    # 확장자 오류 등 '입력' 게이트 실패는 문서 결함(2)이 아니라 입력오류(1)다.
+    if any(g.rule == "input" and g.status == "fail" for g in rep.gates):
+        return 1
     return 0 if rep.ok else 2
 
 
