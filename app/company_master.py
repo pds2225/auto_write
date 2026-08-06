@@ -47,11 +47,8 @@ def _collect_files(inputs: list[str]) -> list[Path]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
-        sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
-    except Exception:
-        pass
+    from auto_write.utils import force_utf8_console
+    force_utf8_console()
 
     parser = argparse.ArgumentParser(description="P3 — 참고자료(들) → company_master.json")
     parser.add_argument("inputs", nargs="+", help="문서 파일들 또는 폴더(우선순위=먼저 온 것/최신)")

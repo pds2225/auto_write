@@ -34,10 +34,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-ai", action="store_true", help="AI 본문 작성 비활성")
     args = parser.parse_args(argv)
 
-    try:
-        sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
-    except Exception:
-        pass
+    from auto_write.utils import force_utf8_console
+    force_utf8_console()
 
     identity = None
     if args.identity_json:

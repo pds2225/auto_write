@@ -71,11 +71,8 @@ def main(argv: list[str] | None = None) -> int:
     # ENC-1: 기본 콘솔(cp949) 캡처 환경에서 em-dash(—) 등으로 UnicodeEncodeError
     # 크래시가 나면 진단 결과·JSON 이 전부 유실된다 — 출력 인코딩을 utf-8 로 강제
     # (이미 utf-8 이거나 reconfigure 미지원 환경이면 조용히 무시).
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
-            pass
+    from auto_write.utils import force_utf8_console
+    force_utf8_console()
 
     ap = argparse.ArgumentParser(description="실사용 기준 자가진단 (읽기 전용, DOCX|HWPX)")
     ap.add_argument("docx", help="진단할 문서 경로 (.docx|.hwpx)")

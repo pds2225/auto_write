@@ -27,19 +27,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from auto_write.services.hwpx_submit import submit_hwpx  # noqa: E402
 
 
-def _parse_kv(items: list[str]) -> dict[str, str]:
-    """['라벨=값', ...] → {라벨: 값}. '=' 없는 항목은 건너뛴다."""
-    out: dict[str, str] = {}
-    for it in items or []:
-        if "=" not in it:
-            print(f"  (무시) '=' 없는 항목: {it}", file=sys.stderr)
-            continue
-        k, v = it.split("=", 1)
-        if k.strip():
-            out[k.strip()] = v
-    return out
-
-
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description="HWPX 양식을 채우고 수용검사 게이트로 판정해 제출본을 완성한다"
@@ -60,11 +47,8 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     # Windows 콘솔(cp949)에서 한글·기호 출력이 깨지거나 죽지 않도록 UTF-8 강제.
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
-            pass
+    from auto_write.utils import force_utf8_console
+    force_utf8_console()
 
     src = Path(args.input)
     if not src.exists():
@@ -79,8 +63,9 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as exc:
             print(f"[입력오류] identity JSON 읽기 실패: {exc}", file=sys.stderr)
             return 1
-    identity.update(_parse_kv(args.sets))   # --set 이 JSON 보다 우선
-    replacements = _parse_kv(args.replaces)
+    from auto_write.utils import parse_kv
+    identity.update(parse_kv(args.sets))   # --set 이 JSON 보다 우선
+    replacements = parse_kv(args.replaces)
 
     if not identity and not replacements:
         print("[입력오류] 채울 값이 없습니다 — --identity JSON 또는 "

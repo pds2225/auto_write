@@ -222,11 +222,8 @@ def _run_batch(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
-            pass
+    from auto_write.utils import force_utf8_console
+    force_utf8_console()
 
     parser = argparse.ArgumentParser(
         description="소스 A 의 라벨-값을 빈 양식 B 의 유사 칸에 전사(결정론·보수적·날조0)")

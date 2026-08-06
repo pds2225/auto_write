@@ -127,17 +127,9 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _force_utf8_console() -> None:
-    """cp949 콘솔이 ⚠···— 등 비-cp949 문자를 못 찍어 크래시하는 것 방지."""
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
-        except (AttributeError, ValueError):
-            pass
-
-
 def main(argv: list[str] | None = None) -> int:
-    _force_utf8_console()
+    from auto_write.utils import force_utf8_console
+    force_utf8_console()
     parser = build_parser()
     args = parser.parse_args(argv)
     return args.func(args)

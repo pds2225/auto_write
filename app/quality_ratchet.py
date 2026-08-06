@@ -52,15 +52,6 @@ _PYTEST_PASSED_RE = re.compile(r"(\d+) passed")
 _PYTEST_FAILED_RE = re.compile(r"(\d+) failed")
 
 
-def _fix_console() -> None:
-    for stream in (sys.stdout, sys.stderr):
-        if hasattr(stream, "reconfigure"):
-            try:
-                stream.reconfigure(encoding="utf-8", errors="replace")
-            except Exception:  # noqa: BLE001
-                pass
-
-
 def measure_docx(path: Path) -> dict[str, Any]:
     """DOCX 1건을 결정론 경로(AI 미호출)로 채점해 3축 집계까지 반환."""
     from docx import Document
@@ -124,7 +115,8 @@ def run_pytest() -> dict[str, int] | None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    _fix_console()
+    from auto_write.utils import force_utf8_console
+    force_utf8_console()
     ap = argparse.ArgumentParser(description="품질 게이트 기준선/시계열 갱신 (ratchet)")
     ap.add_argument("--golden-dir", default=str(DEFAULT_GOLDEN),
                     help=f"골든 문서 폴더(*.docx). 기본 {DEFAULT_GOLDEN}")

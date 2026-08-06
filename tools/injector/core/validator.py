@@ -292,12 +292,3 @@ def validate_content(
         "checked_at": datetime.datetime.now().isoformat(timespec="seconds"),
     }
 
-
-def validate_profile(profile: dict) -> dict:
-    """
-    profile만 단독으로 검증한다. (content 없이 사용 가능)
-
-    Returns:
-        validation_report 형식 dict
-    """
-    return validate_content({}, profile=profile)

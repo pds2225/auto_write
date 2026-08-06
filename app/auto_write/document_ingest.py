@@ -28,10 +28,6 @@ def is_supported_template_file(file_name: str) -> bool:
     return Path(str(file_name or "")).suffix.lower() in TEMPLATE_SUFFIXES
 
 
-def is_supported_reference_file(file_name: str) -> bool:
-    return Path(str(file_name or "")).suffix.lower() in REFERENCE_SUFFIXES
-
-
 def template_upload_detail() -> str:
     return "DOCX, HWPX, HWP 파일만 업로드할 수 있습니다."
 

@@ -96,15 +96,10 @@ def get_settings() -> Settings:
     results_root = app_root.parent / "results"
     static_root = app_root / "auto_write" / "static"
     template_view_root = app_root / "auto_write" / "templates"
-    default_reference_library = Path(
-        r"C:\Users\ekth3\OneDrive\바탕 화면\다솜\경영지도사 개인\02. 밸류업파트너스\2025년\20250406 희망리턴패키지 서류평가\경영개선 4조 서류평가"
-    )
     reference_dir_env = os.getenv("AUTO_WRITE_REFERENCE_LIBRARY_DIR", "").strip()
     reference_library_dir: Optional[Path]
     if reference_dir_env:
         reference_library_dir = Path(reference_dir_env)
-    elif default_reference_library.exists():
-        reference_library_dir = default_reference_library
     else:
         reference_library_dir = None
 

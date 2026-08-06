@@ -31,11 +31,8 @@ from auto_write.services.learning_store import LEARNING_ROOT
 
 
 def main(argv: list[str] | None = None) -> int:
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
-        sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
-    except Exception:
-        pass
+    from auto_write.utils import force_utf8_console
+    force_utf8_console()
 
     parser = argparse.ArgumentParser(description="SFT 데이터 레이어 P2 — trace+feedback → 학습셋")
     parser.add_argument("--root", default=None, help="learning 데이터 루트(기본 workspace/learning)")

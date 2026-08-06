@@ -23,11 +23,8 @@ from auto_write.services.autopilot_pipeline import run_autopilot
 
 
 def main(argv: list[str] | None = None) -> int:
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
-            pass
+    from auto_write.utils import force_utf8_console
+    force_utf8_console()
 
     parser = argparse.ArgumentParser(
         description="auto_write 문서 품질 수정 오토파일럿 (서식+이미지+PSST 무인 적용)"

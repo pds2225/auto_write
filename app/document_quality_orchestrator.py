@@ -38,11 +38,8 @@ def _make_orchestrator() -> DocumentQualityOrchestrator:
 
 def main(argv: list[str] | None = None) -> int:
     # Windows 콘솔(cp949)에서 한글·기호(— ✅ ❌) 출력 시 UnicodeEncodeError 방지
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
-            pass
+    from auto_write.utils import force_utf8_console
+    force_utf8_console()
 
     parser = argparse.ArgumentParser(
         description="auto_write 문서 품질 개선 하네스 (DOCX 후처리·검수·점수)"

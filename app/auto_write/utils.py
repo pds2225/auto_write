@@ -2,10 +2,32 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 import unicodedata
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
+
+
+def force_utf8_console() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+
+def parse_kv(items: list[str]) -> dict[str, str]:
+    """['라벨=값', ...] → {라벨: 값}. '=' 없는 항목은 건너뛴다."""
+    out: dict[str, str] = {}
+    for it in items or []:
+        if "=" not in it:
+            print(f"  (무시) '=' 없는 항목: {it}", file=sys.stderr)
+            continue
+        k, v = it.split("=", 1)
+        if k.strip():
+            out[k.strip()] = v
+    return out
 
 
 def slugify(value: str, prefix: str = "item") -> str:

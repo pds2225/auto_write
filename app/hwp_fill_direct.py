@@ -33,19 +33,6 @@ from auto_write.services.hwp_com_fill import (  # noqa: E402
 from auto_write.services.hwpx_fill import fill_hwpx  # noqa: E402
 
 
-def _parse_kv(items: list[str]) -> dict[str, str]:
-    """['라벨=값', ...] → {라벨: 값}. '=' 없는 항목은 건너뛴다."""
-    out: dict[str, str] = {}
-    for it in items or []:
-        if "=" not in it:
-            print(f"  (무시) '=' 없는 항목: {it}", file=sys.stderr)
-            continue
-        k, v = it.split("=", 1)
-        if k.strip():
-            out[k.strip()] = v
-    return out
-
-
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description="원본 HWP/HWPX 양식을 변환 왕복 없이 직접 채운다(원본 미수정·날조0).")
@@ -66,11 +53,8 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     # Windows 콘솔(cp949)에서 한글·기호 출력이 깨지거나 죽지 않도록 UTF-8 강제.
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
-            pass
+    from auto_write.utils import force_utf8_console
+    force_utf8_console()
 
     src = Path(args.input)
     if not src.exists():
@@ -88,7 +72,8 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as exc:
             print(f"[오류] identity JSON 읽기 실패: {exc}", file=sys.stderr)
             return 1
-    identity.update(_parse_kv(args.sets))  # --set 이 JSON 보다 우선
+    from auto_write.utils import parse_kv
+    identity.update(parse_kv(args.sets))  # --set 이 JSON 보다 우선
 
     out = Path(args.output) if args.output else src.with_name(f"{src.stem}_채움{ext}")
     if out.resolve() == src.resolve():
@@ -98,7 +83,7 @@ def main(argv: list[str] | None = None) -> int:
     if ext == ".hwpx":
         try:
             rep = fill_hwpx(src, out, identity=identity,
-                            replacements=_parse_kv(args.replaces),
+                            replacements=parse_kv(args.replaces),
                             check_options=args.check)
         except (ValueError, FileNotFoundError, OSError) as exc:
             print(f"[실패] {exc}", file=sys.stderr)
@@ -140,7 +125,7 @@ def main(argv: list[str] | None = None) -> int:
     # .hwp (기본) → 표 양식 자동 파이프라인: .hwp →(한글 COM) hwpx → 채움 →(COM) .hwp
     try:
         rep3 = fill_hwp_via_hwpx(src, out, identity=identity,
-                                 replacements=_parse_kv(args.replaces),
+                                 replacements=parse_kv(args.replaces),
                                  check_options=args.check,
                                  use_com=not args.no_com)
     except (ValueError, FileNotFoundError, OSError) as exc:

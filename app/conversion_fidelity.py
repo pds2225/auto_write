@@ -27,11 +27,8 @@ from auto_write.services.conversion_fidelity import (
 
 
 def main(argv: list[str] | None = None) -> int:
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
-            pass
+    from auto_write.utils import force_utf8_console
+    force_utf8_console()
 
     parser = argparse.ArgumentParser(
         description="DOCX↔HWP 변환 일치도 측정 (구조 일치도만, 읽기 전용)")
@@ -50,7 +47,6 @@ def main(argv: list[str] | None = None) -> int:
         report = compare_docx_structure(args.docx_a, args.docx_b)
     else:
         parser.error("두 번째 DOCX 를 주거나 --roundtrip 을 지정하세요.")
-        return 0  # pragma: no cover (parser.error 가 SystemExit)
 
     print(json.dumps(report.as_dict(), ensure_ascii=False, indent=2))
     return 0

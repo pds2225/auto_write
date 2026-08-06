@@ -57,11 +57,8 @@ def _load_json_report(path_str: str | None) -> dict | None:
 
 def main(argv: list[str] | None = None) -> int:
     # ENC-1 과 동일 함정: cp949 콘솔에서 한글/이모지 출력이 죽지 않게 utf-8 강제.
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
-            pass
+    from auto_write.utils import force_utf8_console
+    force_utf8_console()
 
     ap = argparse.ArgumentParser(description="자가학습 레이어 실행 기록 (읽기 전용 + 학습저장소 신규 기록)")
     ap.add_argument("--final-file", required=True, help="평가할 최종 산출 파일(.docx/.hwpx/.hwp)")

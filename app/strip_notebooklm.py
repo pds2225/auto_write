@@ -32,11 +32,8 @@ from auto_write.services.usage_acceptance import (
 
 
 def main(argv: list[str] | None = None) -> int:
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
-            pass
+    from auto_write.utils import force_utf8_console
+    force_utf8_console()
 
     parser = argparse.ArgumentParser(
         description="NotebookLM 작업용 블록 제거(원본 보존) + 프롬프트 md 보존 + 수용검사 게이팅")
