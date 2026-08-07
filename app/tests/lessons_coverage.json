@@ -2,8 +2,8 @@
   "counts": {
     "mechanized": 44,
     "gap": 21,
-    "judgment": 72,
-    "total": 137
+    "judgment": 86,
+    "total": 151
   },
   "coverage_note": "총 92개 교훈(레지스트리): 기계화 43(46%)·갭 17(18%)·사람판단 32(34%). 2026-07-29 야간 high 잔여 7건 gap→mechanized: L074·L075·L078·L087·L088·L089·L091. L070/L076/L077 guard_ref 에 test_*.py 경로 보강(커버리지 메타테스트 정합).",
   "top_gaps": [
@@ -659,15 +659,6 @@
       "impact": "med"
     },
     {
-      "id": "L54 | 2026-07-16 | HWPX 표 셀 채움은 데이터 셀도 검정 charPr 강제 — 템플릿 파랑 상속 주의",
-      "summary": "HWPX 셀 채움 시 모든 내용 셀에 검정 charPr 클론 강제 + run 단위 유색 검증(특정 ID만 보지 말 것).",
-      "mechanizable": "yes",
-      "category": "mechanized",
-      "guard_ref": "hwpx_fill.py _BlackCharPr/_inherit_charpr/_set_cell_text(black) — 테스트 test_hwpx_fill.py::{test_empty_cell_in_blue_row_gets_black, test_blue_placeholder_fill_becomes_black, test_replacement_value_becomes_black, test_inherit_fallback_zero_blackened}; 검증 hwpx_acceptance.count_colored_charpr + test_hwpx_acceptance.py::test_colored_textcolor_detected",
-      "gap_desc": "",
-      "impact": "high"
-    },
-    {
       "id": "L066 | 공통 | 2026-07-16 | 매 실질턴 전역 마무리 프로토콜 고정(누락 금지)",
       "summary": "실질 답변 끝에 4종(상태·해결Y/N·다음프롬프트·🧾방금한일) + RESUME 갱신을 매번 부착한다.",
       "mechanizable": "no",
@@ -823,9 +814,9 @@
     {
       "id": "L083 | 문서작성 | 2026-07-16 | HWPX 표 셀 채움은 데이터 셀도 검정 charPr 강제 — 템플릿 파랑 상속 주의",
       "summary": "모든 내용 셀에 검정 charPr 강제. 검증은 특정 파랑 ID 가 아니라 런 단위 유색 텍스트 실제 존재로 확인.",
-      "mechanizable": "partial",
+      "mechanizable": "yes",
       "category": "mechanized",
-      "guard_ref": "hwpx_fill._set_cell_text+_BlackCharPr (표 라벨→값·grid) + hwpx_resume_supplement._set_tc_text(black) + tests/test_hwpx_fill.py::test_blue_placeholder_fill_becomes_black",
+      "guard_ref": "hwpx_fill.py _BlackCharPr/_inherit_charpr/_set_cell_text(black) — 테스트 test_hwpx_fill.py::{test_empty_cell_in_blue_row_gets_black, test_blue_placeholder_fill_becomes_black, test_replacement_value_becomes_black, test_inherit_fallback_zero_blackened}; 검증 hwpx_acceptance.count_colored_charpr + test_hwpx_acceptance.py::test_colored_textcolor_detected",
       "gap_desc": "",
       "impact": "high"
     },
@@ -902,7 +893,7 @@
       "impact": "high"
     },
     {
-      "id": "L1 — Windows Python에서 /tmp 백업 경로가 전체 작업을 조용히 중단시킴",
+      "id": "L151 | 문서작성 | 2026-08-04 | Windows Python에서 /tmp 백업 경로가 전체 작업을 조용히 중단시킴",
       "summary": "Windows Python 에서 POSIX 경로(/tmp)를 백업 위치로 쓰면 작업이 조용히 중단된다.",
       "mechanizable": "yes",
       "category": "gap",
@@ -920,7 +911,7 @@
       "impact": "medium"
     },
     {
-      "id": "L092 | 개발 | 2026-07-28 | 제외 필터를 제목 앵커 + 링크 도메인 두 축으로 만들면 교차 구멍이 생긴다 — 축마다 우회로를 따로 확인하라",
+      "id": "L146 | 개발 | 2026-07-28 | 제외 필터를 제목 앵커 + 링크 도메인 두 축으로 만들면 교차 구멍이 생긴다 — 축마다 우회로를 따로 확인하라",
       "summary": "제외 필터를 제목·링크 두 축으로 만들면 축마다 우회로가 생긴다 — 축별로 따로 확인한다.",
       "mechanizable": "no",
       "category": "judgment",
@@ -1091,7 +1082,7 @@
       "impact": "medium"
     },
     {
-      "id": "L106 | 개발 | 2026-08-04 | 격리가 먹는지 확인하기 전에 실데이터에 테스트를 쏘지 마라",
+      "id": "L148 | 개발 | 2026-08-04 | 격리가 먹는지 확인하기 전에 실데이터에 테스트를 쏘지 마라",
       "summary": "격리가 먹는지 확인하기 전에 실데이터에 테스트를 쏘지 마라",
       "mechanizable": "no",
       "category": "judgment",
@@ -1145,7 +1136,7 @@
       "impact": "medium"
     },
     {
-      "id": "L113 — 라이브로 돌아가는 스크립트를 '리팩터 중간 상태'로 두고 세션을 넘기지 마라 (2026-08-04)",
+      "id": "L113 | 작업방식 | 2026-08-04 | 라이브로 돌아가는 스크립트를 '리팩터 중간 상태'로 두고 세션을 넘기지 마라",
       "summary": "L113 — 라이브로 돌아가는 스크립트를 '리팩터 중간 상태'로 두고 세션을 넘기지 마라 (2026-08-04)",
       "mechanizable": "no",
       "category": "judgment",
@@ -1181,7 +1172,7 @@
       "impact": "medium"
     },
     {
-      "id": "L095 | 작업방식 | 2026-08-04 | 위키 \"페이지 수\"를 지식량으로 착각하지 마라 — 248개 중 220개가 빈 껍데기였다",
+      "id": "L147 | 작업방식 | 2026-08-04 | 위키 \"페이지 수\"를 지식량으로 착각하지 마라 — 248개 중 220개가 빈 껍데기였다",
       "summary": "위키 \"페이지 수\"를 지식량으로 착각하지 마라 — 248개 중 220개가 빈 껍데기였다",
       "mechanizable": "no",
       "category": "judgment",
@@ -1190,7 +1181,7 @@
       "impact": "medium"
     },
     {
-      "id": "L108 | 진단 | 2026-08-04 | 같은 폴더에 세션이 여럿이면 \"결과가 안 바뀜 = 캐시\"로 단정하지 마라",
+      "id": "L149 | 진단 | 2026-08-04 | 같은 폴더에 세션이 여럿이면 \"결과가 안 바뀜 = 캐시\"로 단정하지 마라",
       "summary": "같은 폴더에 세션이 여럿이면 \"결과가 안 바뀜 = 캐시\"로 단정하지 마라",
       "mechanizable": "no",
       "category": "judgment",
@@ -1253,7 +1244,7 @@
       "impact": "medium"
     },
     {
-      "id": "L125 | 협업 | 2026-08-04 | 여러 세션 동시 작업 중엔 \"정리·삭제 착수 직전\"에 대상 상태를 다시 확인하라",
+      "id": "L150 | 협업 | 2026-08-04 | 여러 세션 동시 작업 중엔 \"정리·삭제 착수 직전\"에 대상 상태를 다시 확인하라",
       "summary": "여러 세션 동시 작업 중엔 \"정리·삭제 착수 직전\"에 대상 상태를 다시 확인하라",
       "mechanizable": "no",
       "category": "judgment",
@@ -1300,6 +1291,141 @@
     {
       "id": "L130 | 작업방식 | 2026-08-04 | 압축·워크트리 삭제 후 재개할 땐 \"내가 하려던 일이 이미 병합됐는지\" 원격에서 먼저 확인하라",
       "summary": "압축·워크트리 삭제 후 재개할 땐 착수 전 origin/master 에서 그 작업이 이미 병합됐는지 실측한다 — 재구현·중복 PR·충돌을 막는다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "high"
+    },
+    {
+      "id": "L131 | 작업방식 | 2026-08-04 | RESUME.md \"검증된 사실\"에 **실행으로 확인 안 한 것**을 적지 마라 — 다음 세션이 그걸 믿고 헛돈다",
+      "summary": "RESUME.md 검증된 사실 항목엔 그 세션에서 실제로 실행해 결과를 본 것만 적는다 — 환경변수는 이름 존재와 값 존재를 구분해 확인한다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "high"
+    },
+    {
+      "id": "L132 | 작업방식 | 2026-08-04 | 공유 누적 파일의 중복 확인은 \"저장 전 1회\"로 부족 — 저장 직후 재확인까지가 한 세트",
+      "summary": "SESSION_RECAP·RESUME·lessons.md 같은 다중세션 공유 누적파일은 저장 전 확인→저장→저장 직후 재확인 3단계로 다룬다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med"
+    },
+    {
+      "id": "L133 | 도구사용 | 2026-08-04 | Bash `ls 'D:\\경로\\.폴더'` 는 **오류 없이 빈 결과**를 낸다 — 이걸 \"폴더 없음\"으로 사용자에게 보고하지 마라",
+      "summary": "Bash 도구에서 Windows 경로는 항상 슬래시로 쓰고, ls 의 빈 출력을 폴더 없음으로 단정하지 않는다(빈 폴더도 0줄이다) — ls -d 종료코드나 test -e 로 판정한다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med"
+    },
+    {
+      "id": "L134 | 디버깅 | 2026-08-04 | Node 기반 CLI가 특정 repo 에서만 `EEXIST: mkdir '.git/info'` 로 죽으면 — 버그가 아니라 **폴더 ReadOnly 속성**이다",
+      "summary": "Node CLI가 특정 repo에서만 EEXIST mkdir .git/info로 죽으면 도구 버그로 단정하기 전에 디렉터리 ReadOnly 속성(d-r---)을 의심하고 새 폴더에서 재현해 비교한다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med"
+    },
+    {
+      "id": "L135 | 작업방식 | 2026-08-04 | 사용자가 \"이런 게 자꾸 떠\"라고 하면 — 추측으로 단정하지 말고 **내가 방금 띄운 것**부터 의심하고 화면을 직접 확인하라",
+      "summary": "정체불명 화면/팝업 신고를 받으면 추측으로 단정하지 말고 직전 내 도구 호출(COM·Start-Process 등 창을 띄우는 동작)부터 의심하고, 필요하면 클립보드 캡처로 화면을 직접 확인한다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med"
+    },
+    {
+      "id": "L136 | 진단 | 2026-08-04 | 검사 도구가 \"정상\"이라 해도 그건 **검사한 항목만** 정상이다 — 도구 출력 문구를 그대로 사용자에게 단정하지 마라",
+      "summary": "진단 도구의 '정상/통과' 판정은 그 도구가 실제로 검사한 항목에 한정된다 — 사용자에게 결과를 전할 때 검사 범위를 함께 명시한다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "high"
+    },
+    {
+      "id": "L137 | 진단 | 2026-08-04 | \"왜 이 파일만 안 되지\"는 **되는 파일과 나란히 놓고 비교**가 최단경로 — 안 되는 파일만 파헤치지 마라",
+      "summary": "특정 파일만 실패하는 문제는 정상 동작하는 대조군 파일을 먼저 확보해 요소·속성 집합을 diff 하는 것이 단독 정밀검사보다 빠르다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med"
+    },
+    {
+      "id": "L138 | 도구 | 2026-08-04 | `mimo db \"<쿼리>\"` 는 **읽기 전용** — 삭제·VACUUM 은 파이썬 sqlite3 로 직접",
+      "summary": "mimocode 의 db 서브커맨드는 조회 전용 커넥션이라 DELETE 가 항상 실패한다 — DB 수정은 python sqlite3 로 파일을 직접 열어 처리한다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "low"
+    },
+    {
+      "id": "L139 | 도구 | 2026-08-05 | 저장 스크립트는 **cwd 를 믿지 마라** — 앞선 `cd` 가 남아 엉뚱한 폴더에 새 파일을 만든다",
+      "summary": "파일을 생성하는 저장 스크립트는 -Target/절대경로를 명시하고, 실행 직후 출력된 저장 경로가 의도한 경로와 같은지 대조한다(Bash cd 가 같은 세션 PowerShell 에도 이어진다).",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "high"
+    },
+    {
+      "id": "L140 | 작업방식 | 2026-08-05 | Bash 도구는 명령 끝나면 cwd 가 원위치로 되돌아간다 — \"옮겼다\"고 단정하기 전에 이 사실을 먼저 알려라",
+      "summary": "Bash 도구는 호출마다 cwd 가 초기화된다 — 세션 표시상의 위치 개념과 다르다는 점을 먼저 안내하고, 산출물 위치는 ls/git status 로 증거를 보여준 뒤 결론을 말한다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med"
+    },
+    {
+      "id": "L141 | 작업방식 | 2026-08-05 | 스크립트 원문(raw warning list)을 그대로 결론으로 옮기지 말고, 보고 전에 반드시 실측 재확인 1회를 거쳐라",
+      "summary": "자동화 도구가 뽑은 경고/문제 목록을 사람에게 전달하기 전에 판정 로직을 다시 읽고 표본 1~2건을 손으로 재현해 확인한다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med"
+    },
+    {
+      "id": "L142 | 문서작성 | 2026-08-05 | 그림 크기를 바꿨으면 **가로만 보지 말고 세로까지** 확인하고 보고하라 — orgSz 비율은 못 믿는다",
+      "summary": "HWPX 그림 크기 조정은 가로만이 아니라 가로x세로를 함께 검증한다 — orgSz 비율은 신뢰하지 말고 sz(표시) 비율을 유지해 scaMatrix 를 계산한다.",
+      "mechanizable": "yes",
+      "category": "mechanized",
+      "guard_ref": "hwpx_pic_insert.resize_hwpx_picture — test_night_high_gaps_l074_l091.py::test_resize_hwpx_picture_keeps_display_aspect_when_orgsz_wrong",
+      "gap_desc": "",
+      "impact": "high"
+    },
+    {
+      "id": "L143 | 개발 | 2026-08-05 | refresh_token 일회용 블랙리스트 + 미회전 = 세션만료 무한반복",
+      "summary": "refresh_token 을 일회용(사용 즉시 블랙리스트)으로 만들 땐 반드시 새 refresh_token 도 함께 회전 반환해야 한다 — 안 그러면 두 번째 refresh 부터 무한 재로그인 루프가 된다.",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "high"
+    },
+    {
+      "id": "L144 | 도구사용 | 2026-08-06 | Bash 로 만든 파일을 Python 으로 검증할 때 **경로 표기를 바꿔야 한다** — `/d/...` `/tmp/...` 는 Python 이 모른다 (L112 의 반대방향)",
+      "summary": "Git Bash 는 /d/... 를 이해하지만 Windows Python 은 D:/... 만 이해한다 — Bash 로 만든 파일을 같은 명령에서 Python 으로 열 때는 경로 표기를 바꿔야 한다(L112 의 반대방향).",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med"
+    },
+    {
+      "id": "L145 | 문서작성 | 2026-08-07 | hwpx_fill 을 안 쓰고 좌표로 직접 셀을 고치면 linesegarray strip 을 잊는다 — L002 를 알면서도 재발",
+      "summary": "hwpx_fill 의 저수준 함수(_set_cell_text 등)를 직접 호출해 좌표 기반으로 셀을 편집할 때는, 상위 파이프라인이 자동으로 해주는 _strip_linesegarray(L002) 호출을 편집 범위에 한정해 직접 불러야 한다.",
       "mechanizable": "no",
       "category": "judgment",
       "guard_ref": "",
