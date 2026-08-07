@@ -1,0 +1,2 @@
+CheckBox6: 동의함
+CheckBox5: 동의하지 않음
