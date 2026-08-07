@@ -3,6 +3,41 @@
 > AI 에이전트(Claude Code / Codex 등)가 `D:\auto_write` 에서 작업할 때의 규약.
 > 상세 작업 지침은 `CLAUDE.md`, 하네스 설계는 `HARNESS_TEAM_DESIGN.md` 참조.
 
+## 0. 프로젝트 구조 — 저장소 분리 진행 중
+
+이력서(컨설턴트신청서)와 사업계획서 기능을 같은 저장소 내 폴더로 분리하고 있습니다.
+
+### 현재 구조 (분리 진행 중)
+
+```
+app/
+├── core/                    ← 공유 코어 모듈
+│   └── docx/                ← DOCX 관련 코드 집결 (66개 파일)
+│       ├── services/        ← 핵심 서비스 18개 (docx_ops, hwp_docx_convert, fill, quality, render)
+│       ├── cli/             ← CLI 도구 15개 (hwp_docx, cross_form_fill, quality_ratchet 등)
+│       ├── tests/           ← 테스트 26개
+│       ├── document_ingest.py
+│       └── docx_template.py
+├── auto_write/              ← 기존 서비스 모듈 (리팩토링 전)
+├── resume_fill.py           ← 이력서 전용 CLI
+├── bizplan_autopilot.py     ← 사업계획서 전용 CLI
+└── tests/                   ← 기존 테스트
+```
+
+### 분리 목표
+
+| 구분 | 파일 수 | 설명 |
+|------|---------|------|
+| 이력서 전용 | 13 | CLI 1 + 서비스 5 + 테스트 5 + 문서 2 |
+| 사업계획서 전용 | 55+ | CLI 2 + 서비스 2 + injector 40+ + 테스트 3 |
+| 공유 코어 | 69+ | 핵심 모듈 4 + 서비스 60+ + CLI 12 |
+
+### 분리 방식
+
+B안 — 같은 저장소 내 폴더 분리 (`app/core/`, `app/resume/`, `app/bizplan/`)
+
+---
+
 ## 1. 작업 환경
 
 - OS: Windows 11 / PowerShell. 경로는 `D:\auto_write\...` 형식.
