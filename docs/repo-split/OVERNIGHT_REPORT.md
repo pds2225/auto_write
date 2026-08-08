@@ -115,22 +115,28 @@ resume/와 bizplan/의 새 파일들은 아직 `auto_write.services.*`를 절대
 | test_hwp_docx_convert | 13 | 0 | |
 | test_quality_ratchet | 13 | 0 | |
 
-### Final (변경 후)
+### Final — 전체 테스트 (2026-08-08)
 
-| 테스트 | passed | failed | 비고 |
-|--------|--------|--------|------|
-| test_docx_ops | 5 | 0 | 동일 |
-| test_cross_form_autofill | 77 | 5 | 동일 (baseline 실패) |
-| test_resume_form_fill | 11 | 0 | 동일 |
-| test_document_quality_harness | 33 | 0 | 동일 |
-| test_hwpx_fill | 76 | 0 | 동일 |
-| test_document_ingest | 7 | 0 | 동일 |
-| test_hwp_docx_convert | 13 | 0 | 동일 |
-| test_quality_ratchet | 13 | 0 | 동일 |
+```
+전체 실행: python -m pytest app/tests -q --tb=line --timeout=30
+HWP COM hang 테스트 제외: test_notice_pipeline, test_night_autopilot_cycle2
 
-**신규 failures: 0**
-**기존 failures: 5 (test_cross_form_autofill CLI 테스트 — baseline)**
-**environment blockers: Python 3.11 미설치 → Python 3.12 사용**
+결과: 1476 passed, 6 failed, 10 skipped, 23 subtests passed (74.10s)
+```
+
+| 실패 테스트 | 원인 | 유형 |
+|-------------|------|------|
+| test_cross_form_autofill::test_cli_unsupported_input_exit2_json | py -3.11 미설치 (exit 103) | 환경 |
+| test_cross_form_autofill::test_batch_cli_shows_per_form_detail | py -3.11 미설치 | 환경 |
+| test_cross_form_autofill::test_batch_cli_json_includes_per_form_detail | py -3.11 미설치 | 환경 |
+| test_cross_form_autofill::test_batch_cli_korean_stdout_not_json_only | py -3.11 미설치 | 환경 |
+| test_cross_form_autofill::test_batch_cli_hwp_skip_message | py -3.11 미설치 | 환경 |
+| test_doc_analyze::test_analyze_docs_folder_cli | py -3.11 미설치 | 환경 |
+
+**신규 코드 실패: 0**
+**환경 실패: 6 (전부 py -3.11 미설치)**
+**skipped: 10**
+**HWP COM hang: 2 파일 제외 (test_notice_pipeline, test_night_autopilot_cycle2)**
 
 ## 7. Risks
 
