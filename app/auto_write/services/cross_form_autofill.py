@@ -43,6 +43,14 @@ from docx import Document
 from docx.opc.exceptions import PackageNotFoundError
 
 from .docx_ops import set_cell_text
+from .label_utils import (
+    SYNONYMS as _SYNONYMS_CORE,
+    CLUSTER_OF as _CLUSTER_OF_CORE,
+    key as _key_core,
+    cluster_rep as _cluster_rep_core,
+    is_obvious_placeholder as _is_obvious_placeholder_core,
+    strip_label_decoration as _strip_label_decoration_core,
+)
 from .submittable_filler import SubmittableFiller
 
 _HWP_EXTS = {".hwp", ".hwpx"}
@@ -50,53 +58,15 @@ _SUPPORTED_EXTS = {".docx", ".hwp", ".hwpx"}  # H7: 입력 지원 확장자 화�
 
 
 # --- 라벨 정규화 / 병합셀 순회(SubmittableFiller 규칙 재사용) -------------------
-
-# 실제 양식 라벨에 거의 항상 붙는 선행 '장식'(글머리표/순번)을 벗겨 라벨 변형
-# recall 을 높인다. 의미를 바꾸지 않는 접두만 제거하므로 오매칭을 새로 만들지 않는다
-# (장식을 벗긴 뒤에도 '사업명'≠'사업자명'은 그대로 다른 키다).
-_BULLET_PREFIX_RE = re.compile(r"^[○●◯◌▶▷◀◁◆◇■□▪▫▸▹◦‣⦁·∙•*※→⇒]+")
-_NUM_PREFIX_RES = (
-    re.compile(r"^\d{1,2}\s*[.)]\s*"),                       # 1. 1) 12.
-    re.compile(r"^[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳]\s*"),         # 원문자 숫자
-    re.compile(r"^[가나다라마바사아자차카타파하]\s*[.)]\s*"),  # 가. 나)
-    re.compile(r"^[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]\s*[.)]?\s*"),               # 로마자 순번
-)
-_HAS_WORD_RE = re.compile(r"[가-힣A-Za-z0-9]")
-
-
-def _strip_label_decoration(key: str) -> str:
-    """정규화 라벨 키에서 선행 글머리표/순번 접두를 보수적으로 제거한다.
-
-    글머리표 1패스 + 순번 1패스를 최대 2회 반복한다('1. ○ 라벨' 같은 중첩 대응).
-    구분자(. 또는 ))가 없는 정상 라벨('1차년도', '가산점')은 깎지 않는다.
-    제거 결과에 글자(한글/영숫자)가 하나도 없으면 원본을 그대로 둔다
-    (마스킹 라벨 '○○○' 같은 전부-기호 토큰 보호).
-    """
-    s = key
-    for _ in range(2):
-        before = s
-        s = _BULLET_PREFIX_RE.sub("", s, count=1)
-        for rx in _NUM_PREFIX_RES:
-            s2 = rx.sub("", s, count=1)
-            if s2 != s:
-                s = s2
-                break
-        if s == before:
-            break
-    s = s.strip()
-    if not _HAS_WORD_RE.search(s):
-        return key
-    return s
+# CORE label_utils에서 import한 함수들을 기존 이름으로 재export (호환성)
+SYNONYMS = _SYNONYMS_CORE
+_CLUSTER_OF = _CLUSTER_OF_CORE
+_strip_label_decoration = _strip_label_decoration_core
 
 
 def _key(text: str) -> str:
-    """라벨 비교용 핵심 키: 괄호·공백 제거 + 선행 글머리표/순번 장식 제거.
-
-    SubmittableFiller._key(괄호·공백 제거)에 더해, 실제 양식 라벨에 흔한
-    글머리표(○ ▶ ·)·순번(1. ① 가. Ⅰ.) 접두를 벗겨 라벨 변형 recall 을 높인다.
-    의미를 바꾸지 않는 장식만 제거하므로 보수성(오매칭 차단)은 그대로다.
-    """
-    return _strip_label_decoration(SubmittableFiller._key(text))
+    """라벨 비교용 핵심 키: 괄호·공백 제거 + 선행 글머리표/순번 장식 제거."""
+    return _key_core(text)
 
 
 def _logical_cells(row) -> list:
@@ -253,7 +223,7 @@ for _cluster in SYNONYMS:
 
 def _cluster_rep(norm_label: str) -> Optional[str]:
     """정규화 라벨이 속한 동의어 클러스터 대표키. 없으면 None."""
-    return _CLUSTER_OF.get(norm_label)
+    return _cluster_rep_core(norm_label)
 
 
 # 이름(성명)류 동의어 클러스터 대표키 — 이 클러스터 타깃엔 '이름 모양' 값만 high 전사.
