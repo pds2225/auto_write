@@ -1,1 +1,5 @@
-﻿# rules — 도메인 모듈 (구현 예정)
+# rules.py -- resume domain facade
+# Canonical: auto_write.services.quality_rules
+from auto_write.services.quality_rules import BizplanRulesConfig
+
+__all__ = ['BizplanRulesConfig']

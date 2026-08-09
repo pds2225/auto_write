@@ -1,1 +1,5 @@
-﻿# validators — 도메인 모듈 (구현 예정)
+# validators.py -- resume domain facade
+# Canonical: auto_write.services.usage_acceptance
+from auto_write.services.usage_acceptance import run_acceptance, AcceptanceConfig
+
+__all__ = ['run_acceptance', 'AcceptanceConfig']
