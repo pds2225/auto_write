@@ -138,3 +138,32 @@ def ensure_directories(settings: Settings) -> None:
         settings.template_view_root,
     ):
         path.mkdir(parents=True, exist_ok=True)
+
+
+# --- Domain-aware workspace/results routing ---
+
+def get_domain_workspace(domain: str, settings: Settings | None = None) -> Path:
+    """도메인별 workspace 경로를 반환한다. 기존 경로는 fallback으로 유지."""
+    if settings is None:
+        settings = get_settings()
+    domain_dir = settings.workspace_root / domain
+    domain_dir.mkdir(parents=True, exist_ok=True)
+    return domain_dir
+
+
+def get_domain_results(domain: str, settings: Settings | None = None) -> Path:
+    """도메인별 results 경로를 반환한다. 기존 경로는 fallback으로 유지."""
+    if settings is None:
+        settings = get_settings()
+    domain_dir = settings.results_root / domain
+    domain_dir.mkdir(parents=True, exist_ok=True)
+    return domain_dir
+
+
+def get_project_dir(project_id: str, domain: str | None = None, settings: Settings | None = None) -> Path:
+    """프로젝트 디렉토리를 반환한다. domain이 지정되면 도메인 하위에 생성."""
+    if settings is None:
+        settings = get_settings()
+    if domain:
+        return get_domain_workspace(domain, settings) / "projects" / project_id
+    return settings.project_root / project_id
