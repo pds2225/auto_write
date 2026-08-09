@@ -25,7 +25,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from .cross_form_autofill import SYNONYMS, _cluster_rep, _key
+from .label_utils import SYNONYMS, cluster_rep as _cluster_rep, key as _key
 from .doc_text_extract import extract_text
 
 _KST = timezone(timedelta(hours=9))

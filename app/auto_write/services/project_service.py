@@ -40,15 +40,16 @@ from .evaluation_service import EvalLoopReport, EvaluationService
 from .evidence_service import EvidenceService
 from .image_service import ImageService
 from .openai_client import OpenAIService
+from .psst_patterns import PSST_PROBLEM_RE, PSST_SOLUTION_RE, PSST_SCALE_RE, PSST_TEAM_RE
 from .qa_service import QAService
 from .render_service import RenderService
 
 
 class ProjectService:
-    PSST_PROBLEM_RE = re.compile(r"1\.\s*문제\s*인식.*Problem", re.IGNORECASE)
-    PSST_SOLUTION_RE = re.compile(r"2\.\s*실현\s*가능성.*Solution", re.IGNORECASE)
-    PSST_SCALE_RE = re.compile(r"3\.\s*성장전략.*Scale", re.IGNORECASE)
-    PSST_TEAM_RE = re.compile(r"4\.\s*팀\s*구성.*Team", re.IGNORECASE)
+    PSST_PROBLEM_RE = PSST_PROBLEM_RE
+    PSST_SOLUTION_RE = PSST_SOLUTION_RE
+    PSST_SCALE_RE = PSST_SCALE_RE
+    PSST_TEAM_RE = PSST_TEAM_RE
     CORE_TABLE_LABEL_RE = re.compile(
         r"(일반현황|창업\s*아이템\s*개요|채용\s*계획|주요\s*업무|추진\s*일정|목표\s*성과)",
         re.IGNORECASE,
