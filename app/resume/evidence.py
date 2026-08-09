@@ -1,1 +1,5 @@
-﻿# evidence — 도메인 모듈 (구현 예정)
+# evidence.py -- resume domain facade
+# Canonical: auto_write.services.evidence_service
+from auto_write.services.evidence_service import EvidenceService
+
+__all__ = ['EvidenceService']
