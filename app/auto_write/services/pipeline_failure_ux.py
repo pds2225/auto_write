@@ -12,7 +12,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Optional
 
-from .cross_form_autofill import BatchAutofillItem, BatchAutofillReport, list_source_pool
+from .cross_form_autofill import BatchAutofillItem, BatchAutofillReport
+from .source_pool_utils import list_source_pool
 from .folder_analyzer import FolderAnalysisReport
 
 _LOGIN_WALL_DOMAINS = ("sbiz24.kr", "smes.go.kr", "isso.smes.go.kr")
