@@ -109,6 +109,9 @@ python document_quality_orchestrator.py --rollback "D:\auto_write\results\backup
 - `--strict` exit 3(검사불능) → **문서가 아니라 환경 문제**(의존성·파일잠금) — 재시도
   또는 `python self_diagnose.py` 수동 진단. exit 2 는 문서 결함(내용 수정).
 - matplotlib/한글 폰트 경고는 치명적이지 않음(차트 None 이면 자리표시로 폴백).
+- 동일 오류 또는 동일 품질 게이트 실패 재실행 최대 2회. 2회 후 BLOCKED 또는 NEEDS_MANUAL_REVIEW.
+- 동일 문서를 점수 상승만을 목적으로 반복 수정하지 않는다.
+- 동일 pytest 명령을 PASS할 때까지 반복하지 않는다.
 
 ## 보고 형식
 

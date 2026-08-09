@@ -8,7 +8,7 @@ argument-hint: <입력DOCX경로> [--output 결과.docx] [--underline] [--keep-g
 ## 사용 목적
 
 완성된 정부지원사업 문서 DOCX(사업계획서·R&D연구개발계획서·발표평가·컨설팅·정책자금·인증·수출컨설팅·현장클리닉 보고서 등)의 서식·구조·강조·시각화 품질을 자동으로 끌어올리고, 100점 품질점수로 게이팅한다.
-`app/document_quality_orchestrator.py` 를 1회 실행해 다음 파이프라인을 수행한다: 원본 백업 → 문서유형 분류 → 결정론적 후처리(`run_all`) → PSST 구조검사(business_plan·pitch_deck 한정) → 인포그래픽 제안 → 품질점수 산정 → 게이트 판정 → (미달 시 최대 10회 보완 루프, 수렴 시 조기종료) → 결과 DOCX 저장 → 리포트(md+json) 생성.
+`app/document_quality_orchestrator.py` 를 1회 실행해 다음 파이프라인을 수행한다: 원본 백업 → 문서유형 분류 → 결정론적 후처리(`run_all`) → PSST 구조검사(business_plan·pitch_deck 한정) → 인포그래픽 제안 → 품질점수 산정 → 게이트 판정 → (미달 시 최대 2회 보완 루프, 수렴 시 조기종료) → 결과 DOCX 저장 → 리포트(md+json) 생성.
 
 ## 입력값
 
@@ -31,7 +31,7 @@ argument-hint: <입력DOCX경로> [--output 결과.docx] [--underline] [--keep-g
    - 백업: 후처리 전 원본을 `D:\auto_write\results\backup\<YYYYMMDD_HHMMSS>\` 에 복사한다(원본 절대 덮어쓰기 금지).
 4. 게이트 판정 확인: 출력 표에서 `품질 점수`, `게이트 통과/미달`, `반복 N회` 를 확인한다.
    - 90↑ 우수 / 85↑ 통과 / 70↑ 보완필요 / 70미만 실패. `passed = 총점>=85`.
-   - 미달이면 오케스트레이터가 자동으로 최대 10회 보완 루프를 돌고, 수렴 시 조기종료 후 `수동 확인` 항목을 출력한다.
+   - 미달이면 오케스트레이터가 자동으로 최대 2회 보완 루프를 돌고, 수렴 또는 2회 도달 시 조기종료 후 `수동 확인`(NEEDS_MANUAL_REVIEW) 항목을 출력한다.
 5. 산출물 경로 보고: 출력 DOCX, 원본 백업 디렉토리, 리포트(md) 경로를 사용자에게 그대로 전달한다.
 6. (선택) 결과를 눈으로 점검하려면 `python _build_chochang.py inspect "<결과DOCX>"` 로 문단/표를 덤프한다.
 7. (선택) 결과가 만족스럽지 않으면 `--rollback <backup_dir> <target>` 으로 원본을 복구한다.

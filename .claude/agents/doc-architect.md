@@ -27,7 +27,7 @@ model: opus
 1. **doc-safety-guard** — 원본 백업, 출력≠입력 확인 (후처리 착수 전 게이트)
 2. **doc-analyzer** — 유형 분류 → (해당 시) PSST 심사 → 인포그래픽 제안
 3. **doc-postprocessor** — 안내문구 삭제 → 서식 정규화 → 핵심문장 강조
-4. **doc-quality-gate** — 채점·85점 게이트 → 미달 시 doc-postprocessor 재작업 루프(최대 10회) → 회귀·비훼손 검증
+4. **doc-quality-gate** — 채점·85점 게이트 → 미달 시 doc-postprocessor 재작업 루프(최대 2회, 이후 NEEDS_MANUAL_REVIEW) → 회귀·비훼손 검증
 5. **doc-safety-guard** — (게이트 실패/오류 시) 백업본 복구
 6. **doc-writer** — 최종 리포트·HANDOFF 정리
 

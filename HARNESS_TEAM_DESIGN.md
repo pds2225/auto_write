@@ -68,7 +68,7 @@ doc-analyzer.suggest_images(doc)       → InfographicReport
         │
         ▼
 doc-quality-gate.score_document(...)  → QualityScore (passed = 총점>=85)
-        │  미달 시 보완 루프(최대 10회, 수렴 시 조기종료) → 후처리 묶음으로 복귀
+        │  미달 시 보완 루프(최대 2회, 수렴 시 조기종료) → 후처리 묶음으로 복귀
         ▼
 출력 저장(output_docx)                  ← 순차 필수 (입력=출력 경로면 ValueError)
         │
@@ -77,7 +77,7 @@ doc-quality-gate (검수: 구조·재현성·회귀) → doc-safety-guard (보�
 ```
 
 - 게이트 임계: **90↑ 우수 / 85↑ 통과 / 70↑ 보완필요 / 70미만 실패**, `passed = 총점>=85`.
-- 보완 루프: doc-quality-gate 미달 시 doc-postprocessor 후처리 묶음을 재실행. 최대 10회, 점수 수렴(개선 없음) 시 조기종료.
+- 보완 루프: doc-quality-gate 미달 시 doc-postprocessor 후처리 묶음을 재실행. 최대 2회, 점수 수렴(개선 없음) 시 조기종료. 2회 후 미달이면 NEEDS_MANUAL_REVIEW.
 
 ---
 
@@ -91,7 +91,7 @@ doc-quality-gate (검수: 구조·재현성·회귀) → doc-safety-guard (보�
 4. **PSST 점검** (doc-analyzer) — `check_psst(doc)` (business_plan / pitch_deck 한정) → `PSSTReport`
 5. **이미지 제안** (doc-analyzer) — `suggest_images(doc)` → `InfographicReport`
 6. **채점** (doc-quality-gate) — `score_document(...)` → `QualityScore`
-7. **게이트** (doc-quality-gate) — `passed = 총점>=85` 판정, 미달 시 보완 루프(최대 10회, 수렴 시 조기종료)
+7. **게이트** (doc-quality-gate) — `passed = 총점>=85` 판정, 미달 시 보완 루프(최대 2회, 수렴 시 조기종료)
 8. **출력 저장** — `output_docx` 저장 (순차 필수, 입력=출력이면 ValueError)
 9. **리포트** (doc-writer) — md + json 생성(`write_report=True`)
 
@@ -154,7 +154,7 @@ psst_check 재사용 정규식: `project_service.PSST_PROBLEM_RE/PSST_SOLUTION_R
 | 단일 문서 1회 후처리 | 최소(3) | doc-architect + doc-safety-guard + doc-quality-gate |
 | 표준 후처리 | 표준(5) | + doc-analyzer, doc-postprocessor |
 | 전체 파이프라인(보고서 포함) | 전체(6) | + doc-writer |
-| 대량 배치 / 회귀 검증 | 전체(6) + 반복 | doc-quality-gate 보완 루프(최대 10회) + 회귀 테스트 강화 |
+| 대량 배치 / 회귀 검증 | 전체(6) + 반복 | doc-quality-gate 보완 루프(최대 2회) + 회귀 테스트 강화 |
 
 - 게이트·검수(doc-quality-gate)와 보안 게이트(doc-safety-guard)는 어떤 규모에서도 작성 에이전트(doc-postprocessor)와 **분리된 패스**로 둔다.
 - doc-safety-guard의 보안 게이트는 항상 최종 단계로 1회 실행한다(생략 금지).

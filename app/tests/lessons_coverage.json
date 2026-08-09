@@ -16,22 +16,6 @@
       "effort": "M"
     },
     {
-      "id": "L045",
-      "rule": "서명란은 실이미지, '(인)' 텍스트 임의추가 금지",
-      "proposed_guard": "불변식 테스트: cross_form_autofill.autofill_from_source / hwpx_fill.fill / 서명 삽입 경로가 리터럴 '(인)' 을 절대 기입하지 않음을 단언(입력에 서명 라벨 있어도 텍스트 '(인)' 삽입 0건). 기존 동작 잠금이라 코드변경 없이 회귀만 추가",
-      "target_files": "app/tests/test_cross_form_autofill.py, test_hwpx_fill.py",
-      "impact": "med",
-      "effort": "S"
-    },
-    {
-      "id": "L001",
-      "rule": "HWPX 그림 폭은 본문폭 클램프 + sz==orgSz파생==imgRect==curSz 폭 일치",
-      "proposed_guard": "patch_profile_v5_visual 의 pic 삽입 결과를 파싱해 disp_w<=46800(본문폭) & sz/orgSz/imgRect/curSz 폭 4값 일치를 단언하는 회귀테스트 추가(현재 클램프는 스크립트에만 있고 테스트 부재 — 값 검증 잠금)",
-      "target_files": "app/scripts/patch_profile_v5_visual.py:169 / app/tests/test_hwpx_layout_fix.py 또는 신규 test_hwpx_image_clamp.py",
-      "impact": "med",
-      "effort": "S"
-    },
-    {
       "id": "L059",
       "rule": "파일명 접미사는 상태(_DRAFT)만 — 작업접미사·중간산출물로 제출폴더 오염 금지",
       "proposed_guard": "submission_orchestrator/self_diagnose 최종본 확정 단계에 제출대상 파일명이 작업접미사(_converted·_고도화·통합_v2·_노트북LM 등) denylist 패턴을 포함하면 SEV_WARN 경고 추가 + 회귀: 산출물명에 '_converted' 잔존 시 warn 리포트 존재 단언",
@@ -78,7 +62,7 @@
       "summary": "HWPX 그림 폭은 본문폭(약48190HWPUNIT)로 클램프하고 sz/orgSz/imgRect/curSz를 같은 폭으로 세팅해야 한다",
       "mechanizable": "yes",
       "category": "mechanized",
-      "guard_ref": "app/scripts/patch_profile_v5_visual.py:169 (disp_w=min(org_w,46800) 클램프) / app/tests/test_hwpx_image_clamp.py::{test_disp_width_clamped_to_body_width,test_no_clamp_all_four_widths_equal,test_disp_width_follows_min_rule_at_boundaries}(_make_pic_para 순수호출로 폭 클램프·4값 정합 잠금)",
+      "guard_ref": "test_l001_hwpx_image_width_clamp.py",
       "gap_desc": "",
       "impact": "med",
       "domain": "all"
@@ -518,7 +502,7 @@
       "summary": "서명란엔 서명 PNG 실삽입·'(인)' 텍스트 임의추가 금지·기준일은 제목 아래(끝맺음 아님).",
       "mechanizable": "yes",
       "category": "mechanized",
-      "guard_ref": "app/auto_write/services/cross_form_autofill.py:_is_seal_marker(도장/서명 마커값 confident 제외) + hwpx_fill run.text 교체가 리터럴 '(인)' 미삽입 / app/tests/test_cross_form_autofill.py::{test_is_seal_marker_unit,test_seal_marker_never_written_to_signature_field} · app/tests/test_hwpx_fill.py::{test_no_in_marker_inserted_when_filling,test_no_in_marker_synthesized_on_clean_form}",
+      "guard_ref": "test_l045_signature_no_placeholder.py",
       "gap_desc": "'(인)' 텍스트 미삽입은 잠금 완료. 서명란 실이미지 삽입·기준일 위치는 사람 판단(자동 강제 불가) 잔여.",
       "impact": "med",
       "domain": "consultant_application"
