@@ -22,6 +22,8 @@ git show origin/refactor/repo-split-pm:docs/repo-split/OVERNIGHT_AUTODEV.md
 3. `docs/repo-split/OVERNIGHT_AUTODEV.md`의 지시를 그대로 수행한다.
 
 - 중간 승인 질문 없이 가능한 범위까지 계속 진행한다.
+- 단, 동일 실패·동일 테스트·동일 명령은 최대 2회까지만 허용한다.
+  2회 후 BLOCKED 또는 BASELINE_FAIL로 기록하고 다음 독립 작업으로 진행한다.
 - 단계별로 작은 commit을 남긴다.
 - 각 단계마다 테스트를 실행하고 결과를 기록한다.
 - 작업 브랜치는 `refactor/repo-split-pm`만 사용한다.

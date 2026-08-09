@@ -111,7 +111,7 @@ python document_quality_orchestrator.py --rollback "..\results\backup\<YYYYMMDD_
 - 직접 영향 항목: **안내문구 제거(15점)**.
   `doc_quality_score.score_document(...)` 의 안내문구 배점이 이 단계 결과로 채워진다.
 - 안내 단락·placeholder 음영이 남아 있으면 해당 15점에서 감점되어 게이트(85점 통과)에 미달할 수 있다.
-- 미달 시 오케스트레이터 보완 루프(최대 10회, 수렴 시 조기종료)에서 안내삭제를 재적용한다.
+- 미달 시 오케스트레이터 보완 루프(최대 2회, 수렴 시 조기종료)에서 안내삭제를 재적용한다.
 
 ## 연결 코드·CLI (실제 함수/명령)
 
