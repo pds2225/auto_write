@@ -23,8 +23,8 @@ from typing import Any
 
 from docx import Document
 
-# 기존 PSST 섹션 정규식 재사용
-from .project_service import ProjectService
+# PSST 섹션 정규식 (단일 출처: psst_patterns)
+from .psst_patterns import PSST_PROBLEM_RE, PSST_SOLUTION_RE, PSST_SCALE_RE, PSST_TEAM_RE
 
 # 영역별 핵심 하위 요소와 탐지 키워드 (사용자 정의 PSST 체크리스트)
 _PSST_ITEMS: dict[str, list[tuple[str, tuple[str, ...]]]] = {
@@ -137,10 +137,10 @@ def check_psst(doc: Document) -> PSSTReport:
 
     # 섹션 헤더 존재 여부 (기존 정규식 재사용)
     section_flags = {
-        "problem": bool(ProjectService.PSST_PROBLEM_RE.search(text)),
-        "solution": bool(ProjectService.PSST_SOLUTION_RE.search(text)),
-        "scale": bool(ProjectService.PSST_SCALE_RE.search(text)),
-        "team": bool(ProjectService.PSST_TEAM_RE.search(text)),
+        "problem": bool(PSST_PROBLEM_RE.search(text)),
+        "solution": bool(PSST_SOLUTION_RE.search(text)),
+        "scale": bool(PSST_SCALE_RE.search(text)),
+        "team": bool(PSST_TEAM_RE.search(text)),
     }
 
     areas: list[PSSTAreaResult] = []
