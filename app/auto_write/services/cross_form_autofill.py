@@ -50,6 +50,7 @@ from .label_utils import (
     cluster_rep as _cluster_rep_core,
     is_obvious_placeholder as _is_obvious_placeholder_core,
     strip_label_decoration as _strip_label_decoration_core,
+    HAS_WORD_RE as _HAS_WORD_RE,
 )
 from .source_pool_utils import (
     list_source_pool,

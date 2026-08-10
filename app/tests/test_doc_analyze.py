@@ -8,6 +8,8 @@ AI 키에 의존하지 않는 결정론 경로만 검증한다:
 
 from __future__ import annotations
 
+import sys
+
 from pathlib import Path
 
 from docx import Document
@@ -168,7 +170,7 @@ def test_analyze_docs_folder_cli(tmp_path: Path) -> None:
     env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONPATH"] = str(app_dir)
     res = subprocess.run(
-        ["py", "-3.11", str(app_dir / "analyze_docs.py"), "folder", str(tmp_path),
+        [sys.executable, str(app_dir / "analyze_docs.py"), "folder", str(tmp_path),
          "--no-ai", "--no-save-json"],
         capture_output=True, text=True, encoding="utf-8", cwd=str(app_dir), env=env,
     )

@@ -18,6 +18,7 @@ __all__ = [
     "cluster_rep",
     "is_obvious_placeholder",
     "strip_label_decoration",
+    "HAS_WORD_RE",
 ]
 
 
@@ -30,7 +31,8 @@ _NUM_PREFIX_RES = (
     re.compile(r"^[가나다라마바사아자차카타파하]\s*[.)]\s*"),
     re.compile(r"^[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]\s*[.)]?\s*"),
 )
-_HAS_WORD_RE = re.compile(r"[가-힣A-Za-z0-9]")
+HAS_WORD_RE = re.compile(r"[가-힣A-Za-z0-9]")
+_HAS_WORD_RE = HAS_WORD_RE  # backward compat alias
 
 
 def strip_label_decoration(key: str) -> str:
@@ -47,7 +49,7 @@ def strip_label_decoration(key: str) -> str:
         if s == before:
             break
     s = s.strip()
-    if not _HAS_WORD_RE.search(s):
+    if not HAS_WORD_RE.search(s):
         return key
     return s
 
