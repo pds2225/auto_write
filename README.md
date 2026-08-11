@@ -123,3 +123,48 @@ python document_quality_orchestrator.py "C:\제출\사업계획서.docx"
 ```
 
 자세한 내부 구조·규칙은 `CLAUDE.md`, `HANDOFF.md`, `PROJECT_REPORT.md`, `PSST_CHECK_RULES.md`, `DOCUMENT_QUALITY_SCORE_RULES.md` 를 참고하세요.
+
+---
+
+## 9. (개발자용) 프로젝트 구조 — 저장소 분리 진행 중
+
+이력서(컨설턴트신청서)와 사업계획서 기능을 같은 저장소 내 폴더로 분리하고 있습니다.
+
+### 현재 구조 (분리 진행 중)
+
+```
+app/
+├── core/                    ← 공유 코어 모듈
+│   └── docx/                ← DOCX 관련 코드 집결 (65개 파일)
+│       ├── services/        ← 핵심 서비스 18개 (docx_ops, hwp_docx_convert, fill, quality, render)
+│       ├── cli/             ← CLI 도구 16개 (hwp_docx, cross_form_fill, quality_ratchet 등)
+│       ├── tests/           ← 테스트 27개
+│       ├── document_ingest.py
+│       └── docx_template.py
+├── resume/                  ← 이력서 전용 (신규)
+│   ├── services/            ← resume_fill_service, resume_extract, resume_form_map, hwpx_fill_coverage
+│   └── cli/                 ← resume_fill
+├── bizplan/                 ← 사업계획서 전용 (신규)
+│   ├── services/            ← cross_form_autofill, psst_fill, quality_rules, render_service 등
+│   └── cli/                 ← company_master, cross_form_fill, self_diagnose, learn_run, strip_notebooklm
+├── auto_write/              ← 기존 서비스 모듈 (원본 보존, 호환성 유지)
+├── resume_fill.py           ← 이력서 전용 CLI (기존 경로)
+├── bizplan_autopilot.py     ← 사업계획서 전용 CLI (기존 경로)
+└── tests/                   ← 기존 테스트
+```
+
+### 분리 현황 (2026-08-07 기준)
+
+| 구분 | 파일 수 | ownership | 설명 |
+|------|---------|-----------|------|
+| CORE | 22 | KEEP_CORE | document_ingest, docx_ops, doc_quality_ops, hwpx_fill, hwp_docx_convert 등 |
+| RESUME | 7 | MOVE_RESUME | resume_fill_service, resume_extract, hwpx_fill_coverage 등 |
+| BIZPLAN | 28 | MOVE_BIZPLAN | cross_form_autofill, psst_fill, quality_rules, submittable_filler 등 |
+| MIXED | 1 | MIXED_REFACTOR | cross_form_autofill (범용 유틸 추출 필요) |
+| NONE | 7 | KEEP_PACKAGE_META/LEGACY | __init__.py, case scripts |
+
+### 분리 방식
+
+B안 — 같은 저장소 내 폴더 분리 (`app/core/`, `app/resume/`, `app/bizplan/`)
+- 원본 `auto_write/`는 호환성을 위해 보존
+- 새 도메인 패키지에서 `auto_write.services.*` 절대 import 사용

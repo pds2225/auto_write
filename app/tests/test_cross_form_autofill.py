@@ -363,11 +363,12 @@ APP_DIR = Path(__file__).resolve().parents[1]
 def _run_cli(source: str, target: str, out: str) -> "subprocess.CompletedProcess[str]":
     """cross_form_fill.py 를 subprocess 로 실행(CLI 계약 검증용)."""
     import os
+    import sys
     env = dict(os.environ)
     env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONPATH"] = str(APP_DIR)
     return subprocess.run(
-        ["py", "-3.11", str(CLI),
+        [sys.executable, str(CLI),
          "--source", source, "--target", target, "-o", out],
         capture_output=True, text=True, encoding="utf-8", cwd=str(APP_DIR), env=env,
     )
@@ -1003,11 +1004,12 @@ def _run_batch_cli(
     notice: str, pool: str, out_subdir: str = "filled", extra: list[str] | None = None,
 ) -> "subprocess.CompletedProcess[str]":
     import os
+    import sys
     env = dict(os.environ)
     env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONPATH"] = str(APP_DIR)
     cmd = [
-        "py", "-3.11", str(BATCH_CLI), "batch",
+        sys.executable, str(BATCH_CLI), "batch",
         "--notice-folder", notice,
         "--source-pool", pool,
         "-o", out_subdir,

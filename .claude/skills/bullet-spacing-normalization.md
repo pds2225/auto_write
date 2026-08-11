@@ -110,7 +110,7 @@ python document_quality_orchestrator.py --rollback "..\results\backup\<YYYYMMDD_
 
 - 영향 배점: **글머리표 공백(10점)** (`doc_quality_score.score_document` 9항목 중 1개).
 - 글머리표 뒤 과다 공백·내부 다중 공백이 남아 있으면 이 항목 점수가 깎인다.
-- 게이트: 총점 85점 이상이면 통과(`passed`). 미달 시 오케스트레이터가 최대 10회 보완
+- 게이트: 총점 85점 이상이면 통과(`passed`). 미달 시 오케스트레이터가 최대 2회 보완
   루프를 돌며 이 항목을 포함해 재정리한다.
 
 ## 연결 코드·CLI (실제 함수/명령)

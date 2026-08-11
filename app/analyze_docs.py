@@ -80,11 +80,8 @@ def _print_form(r) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
-            pass
+    from auto_write.utils import force_utf8_console
+    force_utf8_console()
 
     parser = argparse.ArgumentParser(description="공고문/양식 분석기")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -154,7 +151,6 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     parser.error("알 수 없는 명령")
-    return 1
 
 
 class _DummyNoAI:
@@ -164,9 +160,6 @@ class _DummyNoAI:
 
     def complete_json(self, *a, **k):
         return None
-
-    def parse_announcement(self, *a, **k):  # pragma: no cover
-        return []
 
 
 if __name__ == "__main__":

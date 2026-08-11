@@ -92,13 +92,29 @@ hwp_docx_convert(HWP↔DOCX 변환, COM 대화형 전용)
 ### 품질 게이트
 
 100점 만점, 9항목(안내문구15/글머리표10/문단공백10/글자크기15/표10/강조10/유형구조15/PSST10/이미지5).
-**90 우수 / 85 통과 / 70 보완 / 미만 실패.** 미달 시 최대 10회 보완 루프, 수렴 시 조기종료 후 수동확인 항목 명시.
+**90 우수 / 85 통과 / 70 보완 / 미만 실패.** 동일 문서 자동 보완은 최대 2회.
+2회 후 목표점수 미달이면 현재 최고 결과를 유지하고 NEEDS_MANUAL_REVIEW로 종료.
+동일 테스트/명령/failure signature 재시도 최대 2회.
 
 **⚠ 이중 게이트:** 점수 게이트는 '서식 품질'만 본다. 제출 가능성은 별도의
 **수용검사 게이트(usage_acceptance, R7/R8/R9)** 가 판정한다 — fail 결함(마커·자기삽입
 블록·자리표시·미체크 선택란·공란 필수칸·유색 텍스트·폰트 혼용 등) 1개라도 있으면
 출력명에 `_DRAFT` 강제(제출 금지). 점수 99 라도 `_DRAFT` 면 제출불가다.
 진단: `python self_diagnose.py` (exit 0=제출가능/1=입력오류/2=제출불가/3=검사불능).
+
+### 동일 실패 재시도 한도 (공통 Retry/Loop Guard)
+
+동일 명령·동일 테스트·동일 failure signature·동일 수정 접근·동일 verifier 결과의 재시도는
+**최대 2회**. 2회 반복되면 같은 방식으로 다시 시도하지 않고 다음 중 하나로 분류한다:
+CODE_BUG(다른 접근 1회 추가 후 그래도 실패면 BLOCKED) · BASELINE_FAILURE(BASELINE_FAIL 기록,
+다음 독립 TASK) · ENVIRONMENT/EXTERNAL(BLOCKED, 다음 독립 TASK) · TEST_BUG(테스트 자체 문제일
+때만 최소 수정, 무한 재실행 금지) · UNKNOWN(제한된 조사 후 BLOCKED).
+
+모든 TASK는 `PASS` / `NEEDS_MANUAL_REVIEW` / `BLOCKED` / `BASELINE_FAIL` /
+`SKIPPED_WITH_REASON` 중 하나로 종료한다. `IN_PROGRESS` 로 무한 유지하지 않는다.
+
+"중간 승인 질문 없이 계속 진행"의 의미: **동일 실패를 성공할 때까지 반복한다는 뜻이 아니다.**
+하나의 TASK가 BLOCKED되면 가능한 다른 독립 TASK를 계속 수행한다(계속 진행 ≠ 무한 retry).
 
 ### 백업·롤백
 

@@ -109,18 +109,3 @@ def _validate_profile(profile: dict) -> None:
                 "재도전성공패키지는 closure_history (폐업이력) 필수입니다"
             )
 
-
-def get_profile_summary(profile: dict) -> str:
-    """
-    기업정보 요약 문자열을 반환한다 (로그 출력용).
-
-    Args:
-        profile: 기업정보 dict
-
-    Returns:
-        한 줄 요약 문자열
-    """
-    name = profile.get("company_name", "?")
-    item = profile.get("item_name", "?")
-    ptype = profile.get("program_type", "?")
-    return f"{name} | {item} | {ptype}"

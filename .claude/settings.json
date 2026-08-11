@@ -1,25 +1,6 @@
 {
   "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "startup|resume|clear|compact",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\omc-auto-router\\scripts\\omc_session_start.py\""
-          }
-        ]
-      },
-      {
-        "matcher": "startup|resume|clear|compact",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\session-guard\\scripts\\guard_session_start.py\""
-          }
-        ]
-      }
-    ],
+    "SessionStart": [],
     "UserPromptSubmit": [
       {
         "matcher": "",

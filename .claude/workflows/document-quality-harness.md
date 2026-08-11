@@ -87,7 +87,7 @@ description: 완성 DOCX 품질 개선 17단계 워크플로우 — 백업·유�
 
 ### 14단계 — 85미만시보완루프 (순차)
 - 담당: executor
-- `passed`가 아니면 후처리를 다시 적용한다. 최대 10회 반복, 점수 수렴 시 조기종료.
+- `passed`가 아니면 후처리를 다시 적용한다. 최대 2회 반복, 점수 수렴 시 조기종료. 2회 후 미달이면 NEEDS_MANUAL_REVIEW.
 
 ### 15단계 — 최종저장 (순차 필수)
 - 담당: executor
@@ -133,7 +133,7 @@ DocumentQualityOrchestrator(results_root, openai_service=None).run(
     normalize_fonts=False, write_report=True,
 ) -> HarnessResult
 ```
-파이프라인: 백업 → 유형분류 → run_all 후처리 → PSST(business_plan/pitch_deck만) → 이미지제안 → 점수 → 게이트 → (미달 시 최대 10회 보완루프, 수렴 시 조기종료) → 출력저장 → 리포트(md+json).
+파이프라인: 백업 → 유형분류 → run_all 후처리 → PSST(business_plan/pitch_deck만) → 이미지제안 → 점수 → 게이트 → (미달 시 최대 2회 보완루프, 수렴 시 조기종료) → 출력저장 → 리포트(md+json).
 롤백: `DocumentQualityOrchestrator.rollback(backup_dir, target) -> bool` (staticmethod).
 
 ## 테스트

@@ -42,11 +42,8 @@ def _read_text(path: str | None) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
-            pass
+    from auto_write.utils import force_utf8_console
+    force_utf8_console()
 
     parser = argparse.ArgumentParser(
         description="제출 가능 사업계획서 생성·완성 오케스트레이터 (AI작성+품질+채점 반복)"

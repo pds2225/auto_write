@@ -24,14 +24,6 @@ from pathlib import Path
 from auto_write.services.hwpx_layout_fix import check_hwpx_semantics, finalize_layout_hwpx
 
 
-def _force_utf8_console() -> None:
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
-        except (AttributeError, ValueError):
-            pass
-
-
 def _print_report(path: Path, rep: dict) -> None:
     print(f"=== hwpx 의미 검증: {path.name} ===")
     print(f"  섹션 수         : {rep['section_count']}")
@@ -106,7 +98,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    _force_utf8_console()
+    from auto_write.utils import force_utf8_console
+    force_utf8_console()
     args = build_parser().parse_args(argv)
     return args.func(args)
 

@@ -535,7 +535,7 @@ def build_profile(
     폴더가 주어지면 pick 스코어(rank_source_pool)로 상위 정렬 후 상위 ``limit`` 개만
     병합한다(``limit=None`` 이면 전체). 어떤 파일을 병합/생략했는지 리포트한다.
     """
-    from .cross_form_autofill import list_source_pool, rank_source_pool
+    from .source_pool_utils import list_source_pool, rank_source_pool
 
     files: list[Path] = []
     for item in inputs:

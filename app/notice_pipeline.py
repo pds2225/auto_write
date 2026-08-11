@@ -22,11 +22,8 @@ from auto_write.services.notice_pipeline import (
 
 
 def main(argv: list[str] | None = None) -> int:
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
-            pass
+    from auto_write.utils import force_utf8_console
+    force_utf8_console()
 
     parser = argparse.ArgumentParser(
         description="공고 URL/폴더 → 분석 → 양식 일괄 채움 (mail+auto_write 통합)")

@@ -96,15 +96,10 @@ def get_settings() -> Settings:
     results_root = app_root.parent / "results"
     static_root = app_root / "auto_write" / "static"
     template_view_root = app_root / "auto_write" / "templates"
-    default_reference_library = Path(
-        r"C:\Users\ekth3\OneDrive\바탕 화면\다솜\경영지도사 개인\02. 밸류업파트너스\2025년\20250406 희망리턴패키지 서류평가\경영개선 4조 서류평가"
-    )
     reference_dir_env = os.getenv("AUTO_WRITE_REFERENCE_LIBRARY_DIR", "").strip()
     reference_library_dir: Optional[Path]
     if reference_dir_env:
         reference_library_dir = Path(reference_dir_env)
-    elif default_reference_library.exists():
-        reference_library_dir = default_reference_library
     else:
         reference_library_dir = None
 
@@ -143,3 +138,32 @@ def ensure_directories(settings: Settings) -> None:
         settings.template_view_root,
     ):
         path.mkdir(parents=True, exist_ok=True)
+
+
+# --- Domain-aware workspace/results routing ---
+
+def get_domain_workspace(domain: str, settings: Settings | None = None) -> Path:
+    """도메인별 workspace 경로를 반환한다. 기존 경로는 fallback으로 유지."""
+    if settings is None:
+        settings = get_settings()
+    domain_dir = settings.workspace_root / domain
+    domain_dir.mkdir(parents=True, exist_ok=True)
+    return domain_dir
+
+
+def get_domain_results(domain: str, settings: Settings | None = None) -> Path:
+    """도메인별 results 경로를 반환한다. 기존 경로는 fallback으로 유지."""
+    if settings is None:
+        settings = get_settings()
+    domain_dir = settings.results_root / domain
+    domain_dir.mkdir(parents=True, exist_ok=True)
+    return domain_dir
+
+
+def get_project_dir(project_id: str, domain: str | None = None, settings: Settings | None = None) -> Path:
+    """프로젝트 디렉토리를 반환한다. domain이 지정되면 도메인 하위에 생성."""
+    if settings is None:
+        settings = get_settings()
+    if domain:
+        return get_domain_workspace(domain, settings) / "projects" / project_id
+    return settings.project_root / project_id
