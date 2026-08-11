@@ -24,7 +24,7 @@ import json
 import sys
 from pathlib import Path
 
-from auto_write.services.resume_extract import (
+from resume.services.resume_extract import (
     build_profile,
     format_build_korean,
     profile_to_json,
@@ -60,7 +60,7 @@ def _cmd_extract(args: argparse.Namespace) -> int:
 
 
 def _cmd_fill(args: argparse.Namespace) -> int:
-    from auto_write.services.resume_fill_service import (
+    from resume.services.resume_fill_service import (
         fill_resume_form,
         format_fill_korean,
     )

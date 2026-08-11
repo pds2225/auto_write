@@ -22,7 +22,7 @@ import shutil
 from docx import Document
 from docx.shared import Pt, RGBColor
 
-from auto_write.services.psst_check import check_psst
+from bizplan.services.psst_check import check_psst
 # 검출기(usage_acceptance._SELF_BLOCK_RE)와 같은 곳에서 정의된 표준 문구 —
 # 문구를 바꾸면 검출 패턴과 함께 바뀌어 '넣었는데 게이트가 못 보는' 재발을 막는다.
 from auto_write.services.usage_acceptance import SCAFFOLD_DELETE_NOTICE, SCAFFOLD_HEADING, SCAFFOLD_ITEM_SUFFIX
