@@ -247,3 +247,42 @@ def test_git_failed_feature_push_rolls_back_worktree(tmp_path, monkeypatch):
     assert _git(web, "rev-parse", "--abbrev-ref", "HEAD") == "master"
     assert _git(web, "status", "--porcelain") == ""
     assert (web / "rules.json").read_text(encoding="utf-8").strip() == '{"v":1}'
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
+def test_git_precommit_remote_change_restores_managed_registry(tmp_path, monkeypatch):
+    _, web, peer = _setup_git_remote(tmp_path)
+    service = GitSyncService(web)
+    service.write_mode = "branch-pr"
+    original_which = shutil.which
+    monkeypatch.setattr(shutil, "which", lambda name: None if name == "gh" else original_which(name))
+
+    base = service.base_remote_sha()
+    service.assert_write_base(base)
+    (web / "rules.json").write_text('{"v":2}\n', encoding="utf-8")
+    first = service.commit_and_push(
+        ["rules.json"],
+        message="first branch edit",
+        expected_base_remote_sha=base,
+    )
+    assert service.current_branch() == first["branch"]
+
+    stale_base = service.base_remote_sha()
+    service.assert_write_base(stale_base)
+    (web / "rules.json").write_text('{"v":3,"pending":true}\n', encoding="utf-8")
+
+    (peer / "master_change.txt").write_text("remote advanced\n", encoding="utf-8")
+    _git(peer, "add", "master_change.txt")
+    _git(peer, "commit", "-m", "advance master")
+    _git(peer, "push", "origin", "master")
+
+    with pytest.raises(GitSyncError, match="REMOTE_CHANGED"):
+        service.commit_and_push(
+            ["rules.json"],
+            message="must abort",
+            expected_base_remote_sha=stale_base,
+        )
+
+    assert service.current_branch() == first["branch"]
+    assert _git(web, "status", "--porcelain") == ""
+    assert (web / "rules.json").read_text(encoding="utf-8").strip() == '{"v":2}'
