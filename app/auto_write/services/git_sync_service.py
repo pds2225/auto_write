@@ -195,8 +195,6 @@ class GitSyncService:
         if self.dirty_paths():
             raise GitSyncError("로컬 변경사항이 있어 자동 동기화를 중단했습니다.")
 
-        # A merged rule-review branch can safely return to base; until merge, keep
-        # the branch checked out so the web UI reflects the same content as remote.
         self._switch_to_base_if_feature_merged()
 
         snap = self.snapshot(fetch=False)
@@ -330,29 +328,33 @@ class GitSyncService:
         if not path_args:
             raise GitSyncError("커밋할 파일이 없습니다.")
 
-        self.fetch()
-        current = self.snapshot(fetch=False)
-        if expected_base_remote_sha and current.base_remote_sha != expected_base_remote_sha:
-            raise GitSyncError("REMOTE_CHANGED: 저장 직전 원격 기준 브랜치가 변경되었습니다.")
+        try:
+            self.fetch()
+            current = self.snapshot(fetch=False)
+            if expected_base_remote_sha and current.base_remote_sha != expected_base_remote_sha:
+                raise GitSyncError("REMOTE_CHANGED: 저장 직전 원격 기준 브랜치가 변경되었습니다.")
 
-        allowed_paths = {str(Path(p).as_posix()) for p in path_args}
-        changed_names = set(self._run("diff", "--name-only", check=False).splitlines())
-        changed_names.update(self._run("diff", "--cached", "--name-only", check=False).splitlines())
-        changed_names.update(self._run("ls-files", "--others", "--exclude-standard", check=False).splitlines())
-        for dirty_name in sorted(name.replace("\\", "/") for name in changed_names if name.strip()):
-            if dirty_name not in allowed_paths:
-                raise GitSyncError(f"규칙 파일 외 로컬 변경이 감지되어 commit을 중단했습니다: {dirty_name}")
+            allowed_paths = {str(Path(p).as_posix()) for p in path_args}
+            changed_names = set(self._run("diff", "--name-only", check=False).splitlines())
+            changed_names.update(self._run("diff", "--cached", "--name-only", check=False).splitlines())
+            changed_names.update(self._run("ls-files", "--others", "--exclude-standard", check=False).splitlines())
+            for dirty_name in sorted(name.replace("\\", "/") for name in changed_names if name.strip()):
+                if dirty_name not in allowed_paths:
+                    raise GitSyncError(f"규칙 파일 외 로컬 변경이 감지되어 commit을 중단했습니다: {dirty_name}")
 
-        if current.branch == self.base_branch:
-            if not current.remote_sha or current.local_sha != current.remote_sha:
-                raise GitSyncError("저장 직전 로컬 master와 원격 master가 달라졌습니다.")
-        elif self.write_mode != "direct" and current.branch.startswith(self.WEB_RULE_PREFIX):
-            if not current.remote_sha or current.local_sha != current.remote_sha:
-                raise GitSyncError("저장 직전 활성 L 규칙 브랜치와 원격 브랜치가 달라졌습니다.")
-            if self._merge_base(current.local_sha, current.base_remote_sha) != current.base_remote_sha:
-                raise GitSyncError("REMOTE_CHANGED: 활성 L 규칙 브랜치의 기준 master가 최신 원격 master와 다릅니다.")
-        else:
-            raise GitSyncError(f"현재 브랜치에서는 규칙 commit을 만들 수 없습니다: {current.branch}")
+            if current.branch == self.base_branch:
+                if not current.remote_sha or current.local_sha != current.remote_sha:
+                    raise GitSyncError("저장 직전 로컬 master와 원격 master가 달라졌습니다.")
+            elif self.write_mode != "direct" and current.branch.startswith(self.WEB_RULE_PREFIX):
+                if not current.remote_sha or current.local_sha != current.remote_sha:
+                    raise GitSyncError("저장 직전 활성 L 규칙 브랜치와 원격 브랜치가 달라졌습니다.")
+                if self._merge_base(current.local_sha, current.base_remote_sha) != current.base_remote_sha:
+                    raise GitSyncError("REMOTE_CHANGED: 활성 L 규칙 브랜치의 기준 master가 최신 원격 master와 다릅니다.")
+            else:
+                raise GitSyncError(f"현재 브랜치에서는 규칙 commit을 만들 수 없습니다: {current.branch}")
+        except Exception:
+            self._run("restore", "--source=HEAD", "--staged", "--worktree", "--", *path_args, check=False)
+            raise
 
         original_branch = current.branch
         original_sha = current.local_sha
@@ -380,8 +382,6 @@ class GitSyncService:
             if pushed_remote_sha != commit_sha:
                 raise GitSyncError("PUSH_VERIFY_FAILED: 원격 브랜치 SHA가 방금 만든 commit과 일치하지 않습니다.")
         except Exception:
-            # If the remote really has the commit, do not destroy the local matching
-            # branch; otherwise return the working tree to the previous clean commit.
             remote_has_commit = False
             if commit_sha:
                 try:
