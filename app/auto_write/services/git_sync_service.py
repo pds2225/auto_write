@@ -264,13 +264,23 @@ class GitSyncService:
             else:
                 pr_error = (proc.stderr or proc.stdout or "").strip()[:800]
 
+        pushed_snapshot = self.snapshot(fetch=True).as_dict()
+        local_return_error = ""
+        final_snapshot = pushed_snapshot
+        if self.write_mode != "direct":
+            try:
+                final_snapshot = self.return_to_base().as_dict()
+            except Exception as exc:
+                local_return_error = str(exc)[:800]
+
         return {
             "branch": branch,
             "commit_sha": commit_sha,
             "pr_url": pr_url,
             "pr_error": pr_error,
+            "local_return_error": local_return_error,
             "diff": diff,
-            "snapshot": self.snapshot(fetch=True).as_dict(),
+            "snapshot": final_snapshot,
         }
 
     def rule_history(self, rule_code: str, registry_path: str, limit: int = 12) -> list[dict]:
