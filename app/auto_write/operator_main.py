@@ -568,6 +568,76 @@ async def operator_lrule_detail(request: Request, code: str):
     )
 
 
+@app.post("/console/lrules/{code}/preview", response_class=HTMLResponse)
+async def operator_lrule_preview(
+    request: Request,
+    code: str,
+    base_remote_sha: str = Form(...),
+    summary: str = Form(...),
+    mechanizable: str = Form(default=""),
+    category: str = Form(default=""),
+    guard_ref: str = Form(default=""),
+    gap_desc: str = Form(default=""),
+    change_reason: str = Form(default=""),
+    impact: str = Form(default=""),
+    domain: str = Form(default=""),
+):
+    before_text = ""
+    updates = {
+        "summary": summary,
+        "mechanizable": mechanizable,
+        "category": category,
+        "guard_ref": guard_ref,
+        "gap_desc": gap_desc,
+        "impact": impact,
+        "domain": domain,
+    }
+    preview = {**updates, "change_reason": change_reason.strip()}
+    try:
+        git_sync.assert_write_base(base_remote_sha)
+        _, before_text = lrule_console.update_rule(code, updates)
+        test = lrule_console.run_registry_tests()
+        diff = git_sync._run(
+            "diff",
+            "--",
+            str(lrule_console.REGISTRY_RELATIVE).replace("\\", "/"),
+            check=False,
+        )
+        if not diff.strip():
+            raise GitSyncError("실제 파일 변경사항이 없습니다.")
+    except Exception as exc:
+        if before_text:
+            try:
+                lrule_console.restore_text(before_text)
+            except Exception:
+                pass
+        return RedirectResponse(
+            url=f"/console/lrules/{code.upper()}?error={quote(str(exc)[:1800], safe='')}",
+            status_code=303,
+        )
+
+    try:
+        lrule_console.restore_text(before_text)
+    except Exception as exc:
+        return RedirectResponse(
+            url=f"/console/lrules/{code.upper()}?error={quote(str(exc)[:1800], safe='')}",
+            status_code=303,
+        )
+
+    return templates.TemplateResponse(
+        request,
+        "operator_rule_preview.html",
+        _ctx(
+            request,
+            code=code.upper(),
+            base_remote_sha=base_remote_sha,
+            preview=preview,
+            test=test.as_dict(),
+            diff=diff,
+        ),
+    )
+
+
 @app.post("/console/lrules/{code}")
 async def operator_lrule_update(
     code: str,

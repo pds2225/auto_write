@@ -9,10 +9,11 @@ import pytest
 from docx import Document
 from fastapi.testclient import TestClient
 
+import auto_write.operator_main as operator_main
 from auto_write.operator_main import app
 from auto_write.services.docx_edit_service import DocxEditService
 from auto_write.services.git_sync_service import GitSyncError, GitSyncService
-from auto_write.services.lrule_console_service import LRuleConsoleService
+from auto_write.services.lrule_console_service import LRuleConsoleService, RuleTestResult
 from auto_write.services.system_map_service import SystemMapService
 from auto_write.services.workflow_monitor import WorkflowMonitor
 
@@ -28,6 +29,77 @@ def test_operator_console_smoke():
     assert "문서 작업" in response.text
     assert "L 규칙" in response.text
     assert "GitHub" in response.text
+
+
+def test_lrule_preview_route_renders_failed_validation_without_confirm(monkeypatch):
+    class FakeSnapshot:
+        def as_dict(self):
+            return {
+                "repository": "test/repo",
+                "branch": "master",
+                "base_branch": "master",
+                "local_sha": "abc123",
+                "remote_sha": "abc123",
+                "base_remote_sha": "abc123",
+                "ahead": 0,
+                "behind": 0,
+                "dirty_count": 0,
+                "status": "SYNCED",
+                "last_error": "",
+            }
+
+    class FakeGitSync:
+        def snapshot(self, *, fetch=False):
+            return FakeSnapshot()
+
+        def assert_write_base(self, expected):
+            assert expected == "abc123"
+
+        def _run(self, *args, check=True):
+            assert args == ("diff", "--", "app/tests/lessons_coverage.json")
+            return "diff --git a/app/tests/lessons_coverage.json b/app/tests/lessons_coverage.json\n"
+
+    class FakeLRuleConsole:
+        REGISTRY_RELATIVE = RULE_REL
+
+        def __init__(self):
+            self.restored = ""
+
+        def update_rule(self, code, updates):
+            assert code == "L001"
+            assert updates["summary"] == "preview change"
+            return {}, '{"lessons": []}\n'
+
+        def run_registry_tests(self):
+            return RuleTestResult(False, "pytest fake", "failed output", 1)
+
+        def restore_text(self, text):
+            self.restored = text
+
+    fake_lrules = FakeLRuleConsole()
+    monkeypatch.setattr(operator_main, "git_sync", FakeGitSync())
+    monkeypatch.setattr(operator_main, "lrule_console", fake_lrules)
+
+    response = TestClient(app).post(
+        "/console/lrules/L001/preview",
+        data={
+            "base_remote_sha": "abc123",
+            "summary": "preview change",
+            "mechanizable": "yes",
+            "category": "mechanized",
+            "guard_ref": "app/example.py",
+            "gap_desc": "",
+            "change_reason": "test",
+            "impact": "high",
+            "domain": "all",
+        },
+    )
+
+    assert response.status_code == 200
+    assert fake_lrules.restored == '{"lessons": []}\n'
+    assert "VALIDATION FAILED" in response.text
+    assert "failed output" in response.text
+    assert "확정 · GitHub PR에 반영" not in response.text
 
 
 def test_operator_lrules_exposes_entire_canonical_registry():
