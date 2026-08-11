@@ -237,7 +237,6 @@ def test_git_web_rule_edit_uses_feature_branch_and_returns_after_merge(tmp_path,
     assert service.remote_sha(result["branch"]) == service.local_sha()
     assert service.base_remote_sha() != service.local_sha()
 
-    # Simulate a normal merge of the review branch into master.
     _git(web, "push", "origin", f"{result['branch']}:master")
     synced = service.sync_from_remote()
     assert service.current_branch() == "master"
@@ -288,7 +287,35 @@ def test_git_feature_branch_reuses_branch_and_syncs_new_master(tmp_path, monkeyp
 
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
-def test_git_squash_equivalent_rule_content_returns_to_master(tmp_path, monkeypatch):
+def test_equal_registry_content_does_not_false_detect_merge_without_pr_state(tmp_path, monkeypatch):
+    _, web, peer = _setup_git_remote(tmp_path)
+    _disable_gh(monkeypatch)
+    service = GitSyncService(web)
+
+    base = service.base_remote_sha()
+    service.assert_write_base(base)
+    _write_rule(web, "same-value")
+    feature = service.commit_and_push(
+        [str(RULE_REL).replace("\\", "/")],
+        message="feature rule",
+        expected_base_remote_sha=base,
+    )
+
+    # Independent master commit happens to produce identical registry content.
+    # This is not proof that the still-open feature PR was merged.
+    _write_rule(peer, "same-value")
+    _git(peer, "add", str(RULE_REL).replace("\\", "/"))
+    _git(peer, "commit", "-m", "independent same rule value")
+    _git(peer, "push", "origin", "master")
+
+    synced = service.sync_from_remote()
+    assert service.current_branch() == feature["branch"]
+    assert synced.status == "SYNCED"
+    assert service.remote_sha(feature["branch"]) == service.local_sha()
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
+def test_reported_merged_pr_allows_squash_return_to_master(tmp_path, monkeypatch):
     _, web, peer = _setup_git_remote(tmp_path)
     _disable_gh(monkeypatch)
     service = GitSyncService(web)
@@ -301,25 +328,19 @@ def test_git_squash_equivalent_rule_content_returns_to_master(tmp_path, monkeypa
         message="feature rule",
         expected_base_remote_sha=base,
     )
-    feature_sha = service.local_sha()
 
-    # Create an independent master commit with the same canonical registry value,
-    # equivalent to a squash merge where the feature tip is not an ancestor.
+    # Simulate a squash merge: master gets an independent commit carrying the
+    # same final rule value, while GitHub PR state is authoritative for merge.
     _write_rule(peer, "squash-value")
     _git(peer, "add", str(RULE_REL).replace("\\", "/"))
     _git(peer, "commit", "-m", "squash merged rule")
     _git(peer, "push", "origin", "master")
-    _git(web, "fetch", "origin")
-    assert subprocess.run(
-        ["git", "merge-base", "--is-ancestor", feature_sha, "origin/master"],
-        cwd=web,
-        capture_output=True,
-    ).returncode != 0
+    monkeypatch.setattr(service, "_feature_pr_merged", lambda branch: branch == feature["branch"])
 
     synced = service.sync_from_remote()
     assert service.current_branch() == "master"
     assert synced.status == "SYNCED"
-    assert feature["branch"].startswith("web/lrule-")
+    assert json.loads((web / RULE_REL).read_text(encoding="utf-8"))["lessons"][0]["summary"] == "squash-value"
 
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
