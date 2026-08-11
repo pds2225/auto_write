@@ -184,20 +184,6 @@ class GitSyncService:
                 last_error=str(exc)[:1200],
             )
 
-    def _managed_content_matches_base(self, feature_sha: str, base_sha: str) -> bool:
-        if not feature_sha or not base_sha:
-            return False
-        for path in sorted(self.managed_paths):
-            proc = subprocess.run(
-                ["git", "diff", "--quiet", feature_sha, base_sha, "--", path],
-                cwd=self.repo_root,
-                capture_output=True,
-                timeout=20,
-            )
-            if proc.returncode != 0:
-                return False
-        return True
-
     def _feature_pr_merged(self, branch: str) -> bool:
         if not shutil.which("gh"):
             return False
@@ -222,11 +208,10 @@ class GitSyncService:
             return False
         local = self.local_sha()
         base_remote = self.base_remote_sha()
-        return (
-            self._is_ancestor(local, base_remote)
-            or self._feature_pr_merged(branch)
-            or self._managed_content_matches_base(local, base_remote)
-        )
+        # Content equality is not proof of merge: an open PR may happen to match
+        # master after an independent change. For squash merges, require actual
+        # PR merged state from GitHub CLI; normal/merge commits use ancestry.
+        return self._is_ancestor(local, base_remote) or self._feature_pr_merged(branch)
 
     def _switch_to_base_after_merge(self) -> bool:
         branch = self.current_branch()
