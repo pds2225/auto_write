@@ -45,9 +45,14 @@ document-architect, template-cleanup-agent, formatting-normalizer, content-empha
 
 document-quality-harness (17단계, 병렬가능[안내문구·글머리표·표공백·이미지·PSST] / 순차필수[백업·저장·점수·테스트])
 
-## 생성한 Command (6)
+## 생성한 Command
 
-/improve-doc-quality, /auto-write-quality, /auto-write-inspect, /auto-write-psst, /auto-write-images, /auto-write-finalize
+입구: `/bizdoc` · 맵: `docs/BIZDOC_HUB_MAP.md`
+
+`/improve-doc-quality`, `/auto-write-inspect`, `/auto-write-psst`, `/auto-write-images`,
+`/auto-write-autopilot`, `/auto-write-bizplan`, `/auto-write-analyze`, `/auto-write-selfdev`
+
+> 구 `/auto-write-quality`·`/auto-write-finalize` 는 2026-07-16 아카이브.
 
 ## 구현한 오케스트레이터 기능
 
