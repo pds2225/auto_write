@@ -23,9 +23,18 @@ class DocxEditService:
                 rows.append({"id": f"p:{index}", "kind": "본문", "location": f"문단 {index + 1}", "text": paragraph.text})
                 if len(rows) >= limit:
                     return rows
+
+        # python-docx exposes the same underlying XML cell at multiple grid
+        # coordinates when cells are merged. Render one editor per logical cell
+        # so a later untouched alias cannot overwrite the user's edit.
+        seen_cell_xml: set[int] = set()
         for table_index, table in enumerate(doc.tables):
             for row_index, row in enumerate(table.rows):
                 for cell_index, cell in enumerate(row.cells):
+                    xml_identity = id(cell._tc)
+                    if xml_identity in seen_cell_xml:
+                        continue
+                    seen_cell_xml.add(xml_identity)
                     text = cell.text.strip()
                     if not text:
                         continue
