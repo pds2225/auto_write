@@ -38,7 +38,7 @@ from typing import Any, Optional
 
 from lxml import etree
 
-from .cross_form_autofill import _cluster_rep, _key
+from .label_utils import cluster_rep as _cluster_rep, key as _key
 from .hwp_docx_convert import (
     _SAVE_FORMATS,
     _convert_via_com,
