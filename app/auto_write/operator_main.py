@@ -52,10 +52,15 @@ def _project_output_dir(project_id: str) -> Path:
 
 def _result_docx(project_id: str) -> Path | None:
     output_dir = _project_output_dir(project_id)
-    preferred = [
-        output_dir / "output_user_edited.docx",
-        output_dir / "output.docx",
-    ]
+    edited = sorted(
+        output_dir.glob("output_user_edited*.docx"),
+        key=lambda path: path.stat().st_mtime if path.exists() else 0,
+        reverse=True,
+    )
+    for path in edited:
+        if path.is_file():
+            return path
+    preferred = [output_dir / "output.docx"]
     for path in preferred:
         if path.is_file():
             return path
@@ -361,8 +366,13 @@ async def operator_edit_result(request: Request, project_id: str):
     for key, value in form.items():
         if str(key).startswith("block__"):
             edits[str(key)[7:]] = str(value)
-    output = _project_output_dir(project_id) / "output_user_edited.docx"
-    lock_path = _project_output_dir(project_id) / "user_locks.json"
+    output_dir = _project_output_dir(project_id)
+    version = 1
+    output = output_dir / "output_user_edited.docx"
+    while output.exists() and source.resolve() == output.resolve():
+        version += 1
+        output = output_dir / f"output_user_edited_v{version}.docx"
+    lock_path = output_dir / "user_locks.json"
     report = docx_editor.apply_edits(source, edits, output, lock_path)
     message = quote(f"사용자 수정 {report['applied_count']}건 저장 및 USER_LOCKED 처리", safe="")
     return RedirectResponse(url=f"/console/results/{project_id}?message={message}", status_code=303)
