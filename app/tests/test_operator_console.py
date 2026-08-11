@@ -73,6 +73,16 @@ def test_docx_browser_edit_never_overwrites_source_and_locks(tmp_path):
     assert Document(output).paragraphs[0].text == "사용자 수정"
     assert json.loads(locks.read_text(encoding="utf-8"))["locks"]["p:0"] == "사용자 수정"
 
+    second = service.apply_edits(
+        Path(report["output"]),
+        {"p:0": "사용자 2차 수정"},
+        output,
+        locks,
+    )
+    assert Path(second["output"]).name == "output_user_edited_v2.docx"
+    assert Document(output).paragraphs[0].text == "사용자 수정"
+    assert Document(second["output"]).paragraphs[0].text == "사용자 2차 수정"
+
 
 def test_workflow_monitor_records_actual_wrapped_step(tmp_path):
     monitor = WorkflowMonitor(tmp_path / "runs.json")
@@ -142,7 +152,6 @@ def test_git_sync_bidirectional_and_stale_remote_guard(tmp_path):
 
     assert service.snapshot(fetch=True).status == "SYNCED"
 
-    # GitHub/remote -> Web: remote change must fast-forward into the web clone.
     (peer / "rules.json").write_text('{"v":2,"from":"remote"}\n', encoding="utf-8")
     _git(peer, "add", "rules.json")
     _git(peer, "commit", "-m", "remote update")
@@ -151,7 +160,6 @@ def test_git_sync_bidirectional_and_stale_remote_guard(tmp_path):
     assert synced.status == "SYNCED"
     assert '"from":"remote"' in (web / "rules.json").read_text(encoding="utf-8")
 
-    # Web -> GitHub/remote: a validated local edit must be committed and pushed.
     expected = service.base_remote_sha()
     service.assert_write_base(expected)
     (web / "rules.json").write_text('{"v":3,"from":"web"}\n', encoding="utf-8")
@@ -164,7 +172,6 @@ def test_git_sync_bidirectional_and_stale_remote_guard(tmp_path):
     _git(peer, "pull", "--ff-only")
     assert '"from":"web"' in (peer / "rules.json").read_text(encoding="utf-8")
 
-    # Race: another remote update after edit-base capture must block the write path.
     stale_base = service.base_remote_sha()
     (peer / "rules.json").write_text('{"v":4,"from":"remote-race"}\n', encoding="utf-8")
     _git(peer, "add", "rules.json")
@@ -175,26 +182,68 @@ def test_git_sync_bidirectional_and_stale_remote_guard(tmp_path):
 
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
-def test_git_branch_pr_mode_pushes_branch_then_returns_to_master(tmp_path, monkeypatch):
+def test_git_branch_pr_mode_reuses_branch_until_merge_then_returns_to_master(tmp_path, monkeypatch):
     _, web, _ = _setup_git_remote(tmp_path)
     service = GitSyncService(web)
     service.write_mode = "branch-pr"
-    # Do not let this unit test call GitHub CLI even when it is installed.
     original_which = shutil.which
     monkeypatch.setattr(shutil, "which", lambda name: None if name == "gh" else original_which(name))
 
     expected = service.base_remote_sha()
     service.assert_write_base(expected)
     (web / "rules.json").write_text('{"v":2,"from":"web-branch"}\n', encoding="utf-8")
-    result = service.commit_and_push(
+    first = service.commit_and_push(
         ["rules.json"],
-        message="branch update",
+        message="branch update 1",
         expected_base_remote_sha=expected,
     )
 
-    assert result["branch"].startswith("web/lrule-")
-    assert result["local_return_error"] == ""
+    assert first["branch"].startswith("web/lrule-")
+    assert _git(web, "rev-parse", "--abbrev-ref", "HEAD") == first["branch"]
+    assert service.remote_sha(first["branch"]) == service.local_sha()
+    assert '"from":"web-branch"' in (web / "rules.json").read_text(encoding="utf-8")
+
+    expected2 = service.base_remote_sha()
+    service.assert_write_base(expected2)
+    (web / "rules.json").write_text('{"v":3,"from":"web-branch-2"}\n', encoding="utf-8")
+    second = service.commit_and_push(
+        ["rules.json"],
+        message="branch update 2",
+        expected_base_remote_sha=expected2,
+    )
+    assert second["branch"] == first["branch"]
+    assert service.remote_sha(first["branch"]) == service.local_sha()
+
+    _git(web, "push", "origin", f"{first['branch']}:master")
+    synced = service.sync_from_remote()
     assert _git(web, "rev-parse", "--abbrev-ref", "HEAD") == "master"
-    assert _git(web, "ls-remote", "--heads", "origin", result["branch"])
-    # master working tree remains the source-of-truth base until the PR is merged.
+    assert synced.status == "SYNCED"
+    assert '"from":"web-branch-2"' in (web / "rules.json").read_text(encoding="utf-8")
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
+def test_git_failed_feature_push_rolls_back_worktree(tmp_path, monkeypatch):
+    remote, web, _ = _setup_git_remote(tmp_path)
+    service = GitSyncService(web)
+    service.write_mode = "branch-pr"
+    original_which = shutil.which
+    monkeypatch.setattr(shutil, "which", lambda name: None if name == "gh" else original_which(name))
+
+    hook = remote / "hooks" / "pre-receive"
+    hook.write_text("#!/bin/sh\necho rejected >&2\nexit 1\n", encoding="utf-8")
+    hook.chmod(0o755)
+
+    expected = service.base_remote_sha()
+    service.assert_write_base(expected)
+    (web / "rules.json").write_text('{"v":9,"should":"rollback"}\n', encoding="utf-8")
+
+    with pytest.raises(GitSyncError):
+        service.commit_and_push(
+            ["rules.json"],
+            message="rejected update",
+            expected_base_remote_sha=expected,
+        )
+
+    assert _git(web, "rev-parse", "--abbrev-ref", "HEAD") == "master"
+    assert _git(web, "status", "--porcelain") == ""
     assert (web / "rules.json").read_text(encoding="utf-8").strip() == '{"v":1}'
