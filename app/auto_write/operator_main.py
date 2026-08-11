@@ -8,12 +8,14 @@ from urllib.parse import quote
 from fastapi import File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
+from core.docx.services.cross_form_autofill import autofill_from_source
+from core.docx.services.hwp_docx_convert import docx_to_hwp, hwp_to_docx
+
 from .document_ingest import is_supported_template_file, template_upload_detail
 from .domains.domain_router import DomainRouter
 from .main import app, openai_service, project_service, settings, storage, templates
 from .services.docx_edit_service import DocxEditService
 from .services.git_sync_service import GitSyncError, GitSyncService
-from .services.hwp_docx_convert import docx_to_hwp, hwp_to_docx
 from .services.lrule_console_service import LRuleConsoleService
 from .services.system_map_service import SystemMapService
 from .services.workflow_monitor import WorkflowMonitor
@@ -21,6 +23,7 @@ from .utils import read_json, sanitize_user_filename
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+_CROSS_FORM_SOURCE_EXTS = {".docx", ".hwp", ".hwpx"}
 git_sync = GitSyncService(REPO_ROOT)
 lrule_console = LRuleConsoleService(REPO_ROOT)
 system_map = SystemMapService(REPO_ROOT, lrule_console)
@@ -124,6 +127,87 @@ def _applicable_rule_codes(domain_value: str) -> list[str]:
     return codes
 
 
+def _reference_priority(name: str) -> tuple[int, str]:
+    """Prefer completed-plan-looking files before generic document references."""
+    lowered = name.lower()
+    score = 0
+    for token in ("사업계획서", "계획서", "제출본", "완성", "기존", "previous", "plan"):
+        if token in lowered:
+            score += 3
+    for token in ("공고", "양식", "서식", "신청서", "notice", "form"):
+        if token in lowered:
+            score -= 2
+    return (-score, lowered)
+
+
+def _prefill_template_from_references(
+    template_name: str,
+    template_bytes: bytes,
+    refs: list[tuple[str, bytes]],
+) -> tuple[str, bytes, dict]:
+    """Use the deterministic cross-form engine before AI generation when safe.
+
+    The target must currently be DOCX. Source references may be DOCX/HWP/HWPX;
+    HWP-family source conversion is delegated to the existing cross-form engine.
+    We try candidate source documents in a deterministic priority order and only
+    promote a produced target when the engine reports real transcriptions.
+    """
+    stats = {
+        "attempted": 0,
+        "applied_sources": [],
+        "transcribed": 0,
+        "needs_confirm": 0,
+        "errors": [],
+        "mode": "bizplan",
+        "reason": "",
+    }
+    if Path(template_name).suffix.lower() != ".docx":
+        stats["reason"] = "cross-form 자동전사는 현재 DOCX 타깃에서만 선행 실행"
+        return template_name, template_bytes, stats
+
+    candidates = [
+        (name, content)
+        for name, content in refs
+        if Path(name).suffix.lower() in _CROSS_FORM_SOURCE_EXTS and content
+    ]
+    if not candidates:
+        stats["reason"] = "기존 문서형 참고자료 없음"
+        return template_name, template_bytes, stats
+
+    candidates.sort(key=lambda item: _reference_priority(item[0]))
+    work_dir = Path(tempfile.mkdtemp(prefix="auto_write_cross_form_"))
+    current_target = work_dir / "target_0.docx"
+    current_target.write_bytes(template_bytes)
+
+    for index, (source_name, source_bytes) in enumerate(candidates, start=1):
+        source_suffix = Path(source_name).suffix.lower()
+        source_path = work_dir / f"source_{index}{source_suffix}"
+        source_path.write_bytes(source_bytes)
+        output_path = work_dir / f"target_{index}.docx"
+        stats["attempted"] += 1
+        try:
+            report = autofill_from_source(source_path, current_target, output_path, use_ai=False)
+        except Exception as exc:
+            stats["errors"].append(f"{source_name}: {type(exc).__name__}: {exc}"[:500])
+            continue
+
+        transcribed = int(getattr(report, "transcribed", 0) or 0)
+        needs_confirm = len(getattr(report, "needs_confirm", []) or [])
+        stats["needs_confirm"] += needs_confirm
+        if bool(getattr(report, "ok", False)) and transcribed > 0 and output_path.is_file():
+            current_target = output_path
+            stats["transcribed"] += transcribed
+            stats["applied_sources"].append(source_name)
+
+    if stats["transcribed"] > 0:
+        stats["mode"] = "cross_form_then_bizplan"
+        stats["reason"] = "기존 자료의 확정 사실을 새 DOCX 양식에 먼저 전사한 뒤 나머지 작성 실행"
+        return template_name, current_target.read_bytes(), stats
+
+    stats["reason"] = "보수적 cross-form 매칭에서 자동전사 가능한 확정 항목 없음"
+    return template_name, template_bytes, stats
+
+
 async def _read_upload(upload: UploadFile) -> tuple[str, bytes]:
     name = sanitize_user_filename(upload.filename or "upload.bin")
     return name, await upload.read()
@@ -151,6 +235,34 @@ async def _run_document_generation(
                     if ref_bytes:
                         refs.append((ref_name, ref_bytes))
 
+        cross_form_stats = {
+            "mode": "bizplan",
+            "attempted": 0,
+            "transcribed": 0,
+            "applied_sources": [],
+            "needs_confirm": 0,
+            "errors": [],
+            "reason": "수정·보완 경로는 기존 문서를 직접 재작성 입력으로 사용",
+        }
+        if run_kind == "write":
+            workflow_monitor.start_step(
+                run_id,
+                "cross_form",
+                "기존 자료 자동전사 검사",
+                "core.docx cross_form_autofill",
+            )
+            try:
+                template_name, template_bytes, cross_form_stats = _prefill_template_from_references(
+                    template_name,
+                    template_bytes,
+                    refs,
+                )
+            except Exception as exc:
+                workflow_monitor.fail_step(run_id, "cross_form", f"{type(exc).__name__}: {exc}")
+                cross_form_stats["errors"] = [f"{type(exc).__name__}: {exc}"[:500]]
+            else:
+                workflow_monitor.finish_step(run_id, "cross_form", cross_form_stats)
+
         with workflow_monitor.step(run_id, "analyze", "양식 분석", "ProjectService"):
             profile = project_service.analyze_uploaded_template(template_name, template_bytes)
 
@@ -168,7 +280,11 @@ async def _run_document_generation(
             "rules",
             "L 규칙 참조",
             "LRule Registry",
-            {"domain": domain_value, "rule_count": len(_applicable_rule_codes(domain_value))},
+            {
+                "domain": domain_value,
+                "workflow_route": cross_form_stats.get("mode", "bizplan"),
+                "rule_count": len(_applicable_rule_codes(domain_value)),
+            },
         ):
             rule_codes = _applicable_rule_codes(domain_value)
 
@@ -195,7 +311,12 @@ async def _run_document_generation(
             "generate",
             "기존 엔진으로 문서 생성",
             "ProjectService.generate",
-            {"rule_codes": rule_codes[:40], "rule_total": len(rule_codes)},
+            {
+                "workflow_route": cross_form_stats.get("mode", "bizplan"),
+                "cross_form_transcribed": cross_form_stats.get("transcribed", 0),
+                "rule_codes": rule_codes[:40],
+                "rule_total": len(rule_codes),
+            },
         ):
             project_service.generate(project_id)
 
@@ -205,7 +326,13 @@ async def _run_document_generation(
 
         workflow_monitor.finish_run(
             run_id,
-            {"project_id": project_id, "result": str(result), "result_size": result.stat().st_size},
+            {
+                "project_id": project_id,
+                "result": str(result),
+                "result_size": result.stat().st_size,
+                "workflow_route": cross_form_stats.get("mode", "bizplan"),
+                "cross_form": cross_form_stats,
+            },
         )
         return project_id, run_id
     except Exception as exc:
@@ -299,7 +426,7 @@ async def operator_convert_document(
             source.write_bytes(content)
             output = work_dir / f"{source.stem}.{target}"
 
-        with workflow_monitor.step(run_id, "convert", "기존 변환 서비스 실행", "hwp_docx_convert"):
+        with workflow_monitor.step(run_id, "convert", "기존 변환 서비스 실행", "core.docx hwp_docx_convert"):
             if suffix in {".hwp", ".hwpx"} and target == "docx":
                 report = hwp_to_docx(source, output)
             elif suffix == ".docx" and target in {"hwp", "hwpx"}:
