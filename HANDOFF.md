@@ -47,10 +47,15 @@ backup-and-rollback · document-quality-inspection
 
 document-quality-harness.md (17단계 순서 + 병렬/순차 구분)
 
-## 6. Command 목록 (`.claude/commands/`, 10 — autopilot·bizplan·analyze·selfdev 추가됨)
+## 6. Command 목록 (`.claude/commands/`)
 
-`/improve-doc-quality` · `/auto-write-quality` · `/auto-write-inspect` ·
-`/auto-write-psst` · `/auto-write-images` · `/auto-write-finalize`
+**입구:** `/bizdoc` (에이전트 허브) · CLI `auto_write_hub.py` · 맵 `docs/BIZDOC_HUB_MAP.md` · 체크포인트 `RESUME.md`
+
+`/improve-doc-quality` · `/auto-write-inspect` · `/auto-write-psst` ·
+`/auto-write-images` · `/auto-write-autopilot` · `/auto-write-bizplan` ·
+`/auto-write-analyze` · `/auto-write-selfdev`
+
+> 구 `/auto-write-quality`·`/auto-write-finalize` 는 아카이브(다시 만들지 말 것).
 
 ## 7. 실행 방법
 

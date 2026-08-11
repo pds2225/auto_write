@@ -7,10 +7,9 @@
 > 작업을 잠시 멈추거나 컨텍스트가 무거워지면 "체크포인트 저장"으로 RESUME.md 를 갱신하고,
 > 새 세션에서 "이어서"로 복원한다(session-resume 스킬).
 >
-> **현재 상태(2026-06-12):** 실사용 39건 수정 트랙(US-0~US-8) 완료 — 수용검사 게이트
-> (R8/R9)·블라인드 마스킹(`--blind-review`)·제출 정리(`--submit-clean`)·HWP 형식 게이트
-> (`--required-format`)·`--strict` 종료코드(0/1/2/3) 배선. 변경이력 표가 잘려 보여도
-> 이 줄이 최신이다. 테스트는 반드시 `py -3.11 -m pytest` (기본 3.14 는 matplotlib 부재).
+> **현재 상태(2026-08-11):** RESUME.md 신설 + 허브 맵(`docs/BIZDOC_HUB_MAP.md`)·
+> `bizplan-orchestrator` 스킬·`/bizdoc` 커맨드로 입구 정리. autowrite 흡수는 PR #100 완료
+> (원격 삭제는 owner 수동). 테스트는 반드시 `py -3.11 -m pytest` (기본 3.14 는 matplotlib 부재).
 
 ## 프로젝트 개요
 
@@ -72,11 +71,14 @@ backup-and-rollback · document-quality-inspection ·
 
 ### 커맨드 (`.claude/commands/`)
 
+**에이전트 입구:** `/bizdoc` (= `bizdoc-hub`). **CLI 입구:** `app/auto_write_hub.py`.
+맵: `docs/BIZDOC_HUB_MAP.md` · 체크포인트: `RESUME.md`.
+
 `/improve-doc-quality` · `/auto-write-inspect` · `/auto-write-psst` ·
 `/auto-write-images` · `/auto-write-autopilot` · `/auto-write-bizplan` ·
 `/auto-write-analyze` · `/auto-write-selfdev`
 > ※ `/auto-write-quality`(→`/improve-doc-quality` 와 완전중복)·`/auto-write-finalize`(→`/auto-write-autopilot` 로 흡수)는
-> 2026-07-16 통폐합으로 아카이브(`~/.claude/skills_archive/20260716-autowrite-consolidation/`). CLI(.py)는 보존. 단일 진입점은 `bizdoc-hub`.
+> 2026-07-16 통폐합으로 아카이브(`~/.claude/skills_archive/20260716-autowrite-consolidation/`). CLI(.py)는 보존.
 
 ### 핵심 코드 (`app/auto_write/services/`)
 
@@ -159,13 +161,13 @@ submission_orchestrator·image_apply). 신규 에이전트는 `cross-form-filler
 기존 스킬을 대체하지 않는다(직접 지목 호출도 계속 가능).
 
 **트리거:** "지원사업 문서 도와줘", "문서 도와줘", "사업계획서 도와줘", "공고부터 제출까지",
-"이 문서 뭘로 처리해", "어떤 스킬 써야 해", "문서허브", "bizdoc" — 또는 공고/양식/사업계획서
+"이 문서 뭘로 처리해", "어떤 스킬 써야 해", "문서허브", "bizdoc", `/bizdoc` — 또는 공고/양식/사업계획서
 요청인데 어느 단계인지 불분명할 때 `bizdoc-hub` 스킬 사용.
 
 **연계 흐름:** 분석(announcement-form-analysis) → 본문 작성(bizplan-orchestrator) →
-값 채움(cross-form-submission | HWPX 직접: hwp_fill_direct/hwpx_submit) →
-품질·검수(document-quality-orchestrator | hwpx_submit 게이트) → 제출본. HWPX 파리티는
-PR #60(2026-07-05) 기준 — 채움 4경로·제출 파이프라인(exit 0/1/2/3·fail 시 _DRAFT) 완성.
+값 채움(cross-form-submission | HWPX 직접: hwp_fill_direct/hwpx_submit | `auto_write_hub.py fill`) →
+품질·검수(document-quality-orchestrator | hwpx_submit 게이트) → 제출본.
+상세 맵: `docs/BIZDOC_HUB_MAP.md`. HWPX 파리티는 PR #60(2026-07-05) 기준.
 
 ---
 
@@ -173,12 +175,11 @@ PR #60(2026-07-05) 기준 — 채움 4경로·제출 파이프라인(exit 0/1/2/
 
 | 날짜 | 변경 내용 | 대상 | 사유 |
 |------|----------|------|------|
-| 2026-06-28 | HWP/HWPX 원본 양식 '변환 왕복 없는' 직접 채우기 (PR #48 병합) | 신규 app/auto_write/services/{hwpx_fill,hwp_com_fill}.py·app/hwp_fill_direct.py·app/tests/{test_hwpx_fill,test_hwp_com_fill}.py | 사용자 요구 '원본 양식 훼손 없이 값만 입력'. HWPX(=ZIP/OWPML)의 section*.xml 값 칸 hp:t 텍스트만 수정하고 header.xml(서식)·BinData(이미지)·mimetype 바이트 보존→**양식 100% 유지**(한글 불필요·샌드박스 검증). 바이너리 .hwp 는 한글 COM 누름틀 PutFieldText(정직 degradation). 매칭은 cross_form_autofill 재사용(동의어·플레이스홀더·라벨가드)·날조0·실값/라벨 덮어쓰기금지·원본미수정(하드링크 samefile 차단)·원자적 쓰기. 적대검증 5렌즈→실결함 9건 수정(하드링크 out==in critical·cellAddr/colSpan 병합셀 값칸선택 high·replacements 보호·lxml proxy id 회피). py-3.11 395 passed(신규 34, 회귀 0) |
-| 2026-06-28 | 표 양식 .hwp 원-커맨드 자동 파이프라인 (.hwp→hwpx→채움→.hwp) | 수정 app/auto_write/services/hwp_com_fill.py(fill_hwp_via_hwpx)·app/hwp_fill_direct.py(.hwp 기본 자동·--field 옵션)·app/tests/test_hwp_com_fill.py(신규 6) | selfdev: 실측—STAR·도보네비게이션 양식이 누름틀 0개 '표 양식'이라 .hwp 직접 필드채움은 0칸. 한글 COM 이 자기 네이티브 HWPX 로 저장/되돌리는 **무손실 변환**을 이용해 .hwp 하나만 넣으면 자동 변환→표칸 채움(hwpx_fill)→.hwp 복원. 원본미수정·원자적쓰기·구조보존 측정(표/행/셀 동일 확인). 실제 STAR.hwp E2E: 4칸 채움·표16/행40/칸121 동일·비어있지않은칸 67→71(정확히 +4)·출력 .hwp 에 값 4개 전부 보존·원본 미수정. py-3.11 신규 6(회귀 0) |
 | 2026-07-02 | cross-form 자동채움: 표 셀 '안' 인라인 빈칸(`라벨 : ______`) 전사 (recall 확대, 야간 격리본) | 수정 app/auto_write/services/cross_form_autofill.py / 테스트 app/tests/test_cross_form_autofill.py(신규 5) | 실측 갭: python-docx `doc.paragraphs` 가 표 셀 단락을 포함하지 않아, 정부양식 표지/개요 박스에 흔한 한 셀 안 인라인 필드(`신청기업명 : ____  대표자 : ___`)가 **전혀 탐지·전사되지 않던** recall 갭. 해결: `find_target_fields` 에 각 논리셀 단락 스캔 추가(kind="cell_paragraph") → `match_fields`(cell_para_index 전파) → `autofill_from_source` 셀 단락 기입 루프(`_fill_paragraph_fields` 재사용). 셀 인라인은 **'보이는 빈칸'(밑줄/점/대시)만**(`_is_visible_blank`) — 콜론 뒤 공백/빈값은 옆 값칸 패턴과 모호해 제외(오기입 방지). 안전 불변: 실값·마스킹(○○○) 보존·날조0·원본 미수정. `_key` 가 콜론을 보존해 표-라벨 경로가 인라인 셀을 무매칭 → 이중 기입 없음 실측 확인. 한 셀 4칸(신청기업명·대표자·연락처·이메일) 동시 채움 E2E, 동의어(성명←대표자) 포함. py-3.11 **568 passed**(신규 5, 회귀 0). 중첩 표 인라인은 최상위 표 한계로 차기 |
 | 2026-07-13 | SFT 데이터 레이어 P0~P2 + 기업 Master JSON P3(슬1) 구축 (PR #74~#77) | 신규 app/auto_write/services/{generation_store,sft_export,company_extract}.py·app/{sft_export,company_master}.py·app/auto_write/services/learning_store.py(feedback/generation_traces 추가)·project_service.py·openai_client.py / 테스트 3종(test_generation_store·test_sft_human_approved·test_sft_export·test_company_extract) | 사용자 요구 '현행 자동작성 유지 + AI 입력/생성답안/사람 수정본을 자동 저장해 LoRA SFT 데이터 축적 + 기업정보 자산화'. 계획 wiki `.omc/wiki/auto-write-sft-master-json-2026-07-13.md`(정찰 4에이전트+적대검증 2에이전트). **P0**(#74) 생성 계측: `_complete_text` fail-safe 훅(로깅 실패가 AI 호출 안 깸·재시도 attempt=2)→generation_traces.jsonl(큰 본문 gen_blobs/<sha1> 해시참조)·generate 초입 입력스냅샷·ai_draft_snapshot(AI원문↔반영본)·answers_provenance(user/docx_seed/psst/ai/fallback/needs_confirm). **P1**(#75) 사람수정 캡처: feedback.jsonl·_capture_human_edits(save_project_form에서 P0 ai_draft_snapshot.reflected와 대조, **첫 divergence 게이트**로 사람 v1→v2 오라벨 방지, edited/draft_rejected). **P2**(#76) 학습셋 변환기+소비자: sft_export→sft_dataset.jsonl(chat, **사람승인본 우선**·rejected제외·dedup·--mask)+learned_snippets.json→`_suggest_learned_snippets`가 항목 라벨정확일치로 **AI 컨텍스트에만** few-shot 주입(폴백/문서 직접삽입 제외). **P3 슬1**(#77) 기업 Master JSON: company_extract(라벨정규화=cross_form_autofill 동의어 재사용·**숫자 사실값 보존**[extract_source_fields는 숫자 폐기라 미사용]·항목단위 provenance{file,raw_label}·confidence high/medium/conflict·불일치=conflict candidates·없으면 missing·전부 confirmed=false·하이픈무시 거짓충돌방지)+company_master.py CLI. **날조0·부수효과 fail-safe·기존흐름 무변경(계측만 추가)** 불변. 저장 workspace/learning·<project>/sft·workspace/companies(gitignore). py-3.11 810→**845 passed**(신규 29, 회귀 0). 각 단계 CLI/무키 E2E exit 0. 남음: P3 후속(페이지마커·양식커버리지·검수루프·생성 2단분리)·P4(비전·시각자료)·미결 5건 |
 | 2026-07-13 | hwpx-doctor: 안 열리는 한글 파일 진단·자동수정(표 격자 결함) + 엔진 예방 배선 + 스킬 | 신규 app/hwpx_doctor.py·.claude/skills/hwpx-doctor / 수정 app/auto_write/services/hwpx_layout_fix.py(repair_table_grid·repair_all_table_grids·check_hwpx_semantics·finalize repair_grid 배선) / 테스트 test_hwpx_layout_fix.py(신규 5) | 실측: 박다솜 프로필 v3~v7 hwpx가 한글에서 안 열림(불러오기도 실패). 지난번 zip/XML 구문검증만으론 '정상' 오판(오답노트 L033) → 심층 의미검증(itemCnt·ID참조·표격자)으로 **표 격자 결함 확정**: 수행 프로젝트 표(4×3) 마지막 행 rowAddr가 2로 중복 지정(정상=3)→row2 6칸 겹침·row3 텅 빔→한글 열기 거부. 원인=채움 스크립트가 행 추가 시 rowAddr 미증가(v3부터). 수정본 생성→한글에서 열림 확인(원인 확정). **재발방지**: P0 validate_table_grid(검출)에 repair(교정) 추가 + `finalize_layout_hwpx(repair_grid=True 기본)`에 배선 → hwpx_submit 등 제출·마감 경로가 저장 직전 깨진 격자 자동교정(병합표 rowSpan/colSpan>1은 보호·멱등·원본미수정). on-demand CLI `hwpx_doctor.py diagnose|repair`(exit 0/2) + 전역 스킬 hwpx-doctor(안 열림 자동발동). py-3.11 신규 5·회귀 0 |
 | 2026-08-02 | autowrite 잔여 고유자산 흡수 완료(run/docs/tests) + 통합 문서 정리; 원격 삭제는 owner 수동 | tools/injector/{run.bat,run.sh,docs/,tests/} · REPO_DUPLICATION_CHECK · ONBOARDING · run_auto_loop_15.bat | 사용자 요청: autowrite에만 있던 기능 가져오고 autowrite 삭제. 코어는 상위호환·인젝터 잔여 7파일 이전·원격 admin권한 없어 삭제 절차 문서화 |
+| 2026-08-11 | RESUME.md 신설 + 허브·중복 정리(A): BIZDOC_HUB_MAP·bizplan-orchestrator 스킬·/bizdoc·죽은 커맨드 참조 정리·입구 가드 테스트 | RESUME.md · docs/BIZDOC_HUB_MAP.md · .claude/skills/bizplan-orchestrator · .claude/commands/bizdoc.md · test_hub_entrypoints.py · HANDOFF/PROJECT_REPORT/CLAUDE/AGENTS | 사용자 요청 3·4순위. 입구 이중(에이전트 bizdoc-hub vs CLI auto_write_hub) 역할 분리 문서화. 문서가 가리키던 bizplan-orchestrator 스킬 부재 해소. 아카이브 커맨드(/auto-write-quality·finalize) 잔존 참조 제거 |
 
 > **이전 이력 35건은 [docs/CHANGELOG.md](docs/CHANGELOG.md) 로 옮겼다**(2026-07-20).
 > 이 표가 파일의 80%(42KB)를 차지했고, `CLAUDE.md` 는 매 세션 통째로 로드되기 때문이다.

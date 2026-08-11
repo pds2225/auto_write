@@ -105,6 +105,17 @@ AI가 더 좋은 문안을 쓰게 하려면 API 키를 넣어주면 됩니다. (
 
 ---
 
+## 6.5. 문서 작업 입구 (헷갈릴 때)
+
+| 상황 | 쓸 것 |
+|------|--------|
+| AI에게 "문서 도와줘" (의도 불명) | `/bizdoc` 또는 스킬 `bizdoc-hub` |
+| 어디서든 채움·진단 CLI | `py -3.11 app\auto_write_hub.py env\|diagnose\|fill …` |
+| 상세 라우팅표 | [`docs/BIZDOC_HUB_MAP.md`](docs/BIZDOC_HUB_MAP.md) |
+| 세션 이어하기 | [`RESUME.md`](RESUME.md) |
+
+---
+
 ## 7. 안전 규칙
 
 - 🗂️ 기존 파일은 함부로 삭제하지 않고, 수정 전 **백업본**을 만듭니다.

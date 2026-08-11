@@ -82,9 +82,11 @@ python hwp_docx.py 결과.docx -o 제출.hwp      # 완성 DOCX → 제출용 HW
 | 강조 | (자동) | doc-postprocessor | `emphasize_key_sentences` |
 | PSST | `/auto-write-psst` | doc-analyzer | `check_psst` |
 | 이미지 제안 | `/auto-write-images` | doc-analyzer | `suggest_images` |
-| 점수·게이트 | `/auto-write-quality` | doc-quality-gate | `score_document` |
+| 점수·게이트 | `/improve-doc-quality` | doc-quality-gate | `score_document` |
 | 검수 | `/auto-write-inspect` | doc-quality-gate | `_build_chochang inspect` + `qa_service.build_report` |
-| 최종 | `/auto-write-finalize` | doc-writer | finalize + 검수 |
+| 무인 최종 | `/auto-write-autopilot` | doc-writer | autopilot + 수용검사 게이트 |
+
+> 구 `/auto-write-quality`·`/auto-write-finalize` 는 2026-07-16 아카이브. 입구 맵: `docs/BIZDOC_HUB_MAP.md`.
 
 ## 품질 게이트
 
