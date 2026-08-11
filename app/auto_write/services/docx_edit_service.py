@@ -69,9 +69,27 @@ class DocxEditService:
     ) -> dict[str, Any]:
         source = Path(source_docx)
         output = Path(output_docx)
+        output.parent.mkdir(parents=True, exist_ok=True)
+
+        # Never reuse an existing browser-edit target. The route may pass the
+        # unversioned name even when a later version is the active source, so
+        # choose the next available version here as a final safety boundary.
+        if source.resolve() == output.resolve() or output.exists():
+            siblings = list(output.parent.glob("output_user_edited*.docx"))
+            max_version = 1
+            for path in siblings:
+                stem = path.stem
+                if stem == "output_user_edited":
+                    max_version = max(max_version, 1)
+                elif "_v" in stem:
+                    try:
+                        max_version = max(max_version, int(stem.rsplit("_v", 1)[1]))
+                    except ValueError:
+                        continue
+            output = output.parent / f"output_user_edited_v{max_version + 1}.docx"
+
         if source.resolve() == output.resolve():
             raise ValueError("원본 덮어쓰기는 금지입니다.")
-        output.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, output)
         doc = Document(str(output))
         applied: dict[str, str] = {}
