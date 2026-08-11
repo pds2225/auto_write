@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import os
+import re
 import shutil
 import subprocess
 from dataclasses import asdict, dataclass
@@ -32,25 +34,28 @@ class GitSyncSnapshot:
 
 
 class GitSyncService:
-    """Safe local-git bridge used by the web operator console.
+    """Safe Git bridge for the local operator console.
 
-    GitHub remains the source of truth. The service never force-pushes and never
-    discards an unrelated dirty working tree.
-
-    In ``branch-pr`` mode the console stays on the active ``web/lrule-*`` branch
-    until that branch is merged into the configured base branch. This keeps the
-    web UI and the pushed remote branch on the same L-rule version and also lets
-    multiple rule edits accumulate in one review branch without manual checkout.
+    Rules enforced here:
+    - GitHub is the source of truth.
+    - Web rule edits never push directly to the base branch.
+    - No force push.
+    - A single ``web/lrule-*`` review branch is reused until its PR is merged.
+    - Remote base movement is merged into the active review branch with a normal
+      merge commit; conflicts are surfaced instead of overwritten.
+    - Only the canonical L-rule registry can be committed by this service.
     """
 
     WEB_RULE_PREFIX = "web/lrule-"
+    MANAGED_RULE_PATH = "app/tests/lessons_coverage.json"
+    _RULE_CODE_RE = re.compile(r"\bL\d{3}\b", re.IGNORECASE)
 
     def __init__(self, repo_root: str | Path | None = None):
         self.repo_root = Path(repo_root or Path(__file__).resolve().parents[3])
         self.remote = os.getenv("AUTO_WRITE_GIT_REMOTE", "origin")
         self.base_branch = os.getenv("AUTO_WRITE_GIT_BASE_BRANCH", "master")
         self.repository = os.getenv("AUTO_WRITE_GITHUB_REPOSITORY", "pds2225/auto_write")
-        self.write_mode = os.getenv("AUTO_WRITE_GIT_WRITE_MODE", "branch-pr").strip().lower()
+        self.managed_paths = {self.MANAGED_RULE_PATH}
 
     def _run(self, *args: str, check: bool = True, timeout: int = 60) -> str:
         proc = subprocess.run(
@@ -85,10 +90,16 @@ class GitSyncService:
             timeout=15,
         ).returncode == 0
 
-    def _merge_base(self, left: str, right: str) -> str:
-        if not left or not right:
-            return ""
-        return self._run("merge-base", left, right, check=False)
+    def _changed_names(self) -> set[str]:
+        names = set(self._run("diff", "--name-only", check=False).splitlines())
+        names.update(self._run("diff", "--cached", "--name-only", check=False).splitlines())
+        names.update(self._run("ls-files", "--others", "--exclude-standard", check=False).splitlines())
+        return {name.replace("\\", "/").strip() for name in names if name.strip()}
+
+    def _restore_managed_paths(self, paths: Iterable[str]) -> None:
+        safe = [path for path in paths if path in self.managed_paths]
+        if safe:
+            self._run("restore", "--source=HEAD", "--staged", "--worktree", "--", *safe, check=False)
 
     def fetch(self) -> None:
         self._run("fetch", "--prune", self.remote, timeout=120)
@@ -173,14 +184,53 @@ class GitSyncService:
                 last_error=str(exc)[:1200],
             )
 
-    def _switch_to_base_if_feature_merged(self) -> bool:
-        """Return to base only after the active web branch is contained in remote base."""
-        branch = self.current_branch()
+    def _managed_content_matches_base(self, feature_sha: str, base_sha: str) -> bool:
+        if not feature_sha or not base_sha:
+            return False
+        for path in sorted(self.managed_paths):
+            proc = subprocess.run(
+                ["git", "diff", "--quiet", feature_sha, base_sha, "--", path],
+                cwd=self.repo_root,
+                capture_output=True,
+                timeout=20,
+            )
+            if proc.returncode != 0:
+                return False
+        return True
+
+    def _feature_pr_merged(self, branch: str) -> bool:
+        if not shutil.which("gh"):
+            return False
+        proc = subprocess.run(
+            [
+                "gh", "pr", "view", branch,
+                "--repo", self.repository,
+                "--json", "state,mergedAt",
+                "--jq", '(.state == "MERGED") or (.mergedAt != null)',
+            ],
+            cwd=self.repo_root,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=45,
+        )
+        return proc.returncode == 0 and (proc.stdout or "").strip().lower() == "true"
+
+    def _feature_is_merged(self, branch: str) -> bool:
         if branch == self.base_branch or not branch.startswith(self.WEB_RULE_PREFIX):
             return False
         local = self.local_sha()
         base_remote = self.base_remote_sha()
-        if not self._is_ancestor(local, base_remote):
+        return (
+            self._is_ancestor(local, base_remote)
+            or self._feature_pr_merged(branch)
+            or self._managed_content_matches_base(local, base_remote)
+        )
+
+    def _switch_to_base_after_merge(self) -> bool:
+        branch = self.current_branch()
+        if not self._feature_is_merged(branch):
             return False
         self._run("switch", self.base_branch)
         snap = self.snapshot(fetch=False)
@@ -190,31 +240,69 @@ class GitSyncService:
             raise GitSyncError("기준 브랜치가 원격과 안전하게 fast-forward 할 수 없는 상태입니다.")
         return True
 
+    def _merge_latest_base_into_feature(self, branch: str) -> None:
+        if self._is_ancestor(self.base_remote_sha(), self.local_sha()):
+            return
+        base_ref = f"{self.remote}/{self.base_branch}"
+        proc = subprocess.run(
+            ["git", "merge", "--no-edit", base_ref],
+            cwd=self.repo_root,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=120,
+        )
+        if proc.returncode != 0:
+            self._run("merge", "--abort", check=False)
+            message = (proc.stderr or proc.stdout or "merge conflict").strip()
+            raise GitSyncError(f"REMOTE_CONFLICT: 최신 master를 L 규칙 브랜치에 병합하지 못했습니다. {message[:900]}")
+        new_sha = self.local_sha()
+        self._run("push", self.remote, branch, timeout=180)
+        self.fetch()
+        if self.remote_sha(branch) != new_sha:
+            raise GitSyncError("PUSH_VERIFY_FAILED: master 동기화 merge commit이 원격 feature branch와 일치하지 않습니다.")
+
     def sync_from_remote(self) -> GitSyncSnapshot:
         self.fetch()
-        if self.dirty_paths():
-            raise GitSyncError("로컬 변경사항이 있어 자동 동기화를 중단했습니다.")
+        if self._changed_names():
+            raise GitSyncError("로컬 변경사항이 있어 자동 동기화를 중단했습니다. 먼저 저장 또는 복구하세요.")
 
-        self._switch_to_base_if_feature_merged()
+        if self._switch_to_base_after_merge():
+            return self.snapshot(fetch=False)
 
         snap = self.snapshot(fetch=False)
+        if snap.branch == self.base_branch:
+            if snap.status == "CONFLICT":
+                raise GitSyncError("로컬과 원격 master가 서로 갈라져 있어 fast-forward 할 수 없습니다.")
+            if snap.status == "REMOTE_AHEAD":
+                self._run("merge", "--ff-only", f"{self.remote}/{self.base_branch}", timeout=120)
+            elif snap.status == "LOCAL_AHEAD":
+                raise GitSyncError("로컬 master가 원격보다 앞서 있습니다. base 직접 push는 금지입니다.")
+            return self.snapshot(fetch=False)
+
+        if not snap.branch.startswith(self.WEB_RULE_PREFIX):
+            raise GitSyncError(f"관리 대상이 아닌 브랜치에서는 자동 동기화하지 않습니다: {snap.branch}")
         if snap.status == "CONFLICT":
-            raise GitSyncError("로컬과 원격이 서로 갈라져 있어 fast-forward 할 수 없습니다.")
+            raise GitSyncError("활성 L 규칙 브랜치와 원격 feature branch가 diverged 상태입니다.")
         if snap.status == "REMOTE_AHEAD":
             self._run("merge", "--ff-only", f"{self.remote}/{snap.branch}", timeout=120)
+        elif snap.status == "LOCAL_AHEAD":
+            raise GitSyncError("활성 L 규칙 브랜치에 미전송 commit이 있습니다. 자동으로 덮어쓰지 않습니다.")
+
+        self._merge_latest_base_into_feature(snap.branch)
         return self.snapshot(fetch=False)
 
     def return_to_base(self) -> GitSyncSnapshot:
-        """Explicitly return to base only when the active feature is already merged."""
         self.fetch()
-        if self.dirty_paths():
+        if self._changed_names():
             raise GitSyncError("로컬 변경사항이 있어 기준 브랜치로 전환할 수 없습니다.")
         branch = self.current_branch()
         if branch != self.base_branch:
             if not branch.startswith(self.WEB_RULE_PREFIX):
                 raise GitSyncError(f"관리 대상이 아닌 브랜치에서는 자동 전환하지 않습니다: {branch}")
-            if not self._is_ancestor(self.local_sha(), self.base_remote_sha()):
-                raise GitSyncError("현재 L 규칙 브랜치가 아직 원격 기준 브랜치에 병합되지 않았습니다.")
+            if not self._feature_is_merged(branch):
+                raise GitSyncError("현재 L 규칙 PR이 아직 원격 기준 브랜치에 병합되지 않았습니다.")
             self._run("switch", self.base_branch)
         snap = self.snapshot(fetch=False)
         if snap.status == "REMOTE_AHEAD":
@@ -225,22 +313,25 @@ class GitSyncService:
 
     def assert_write_base(self, expected_base_remote_sha: str) -> GitSyncSnapshot:
         self.fetch()
+        changed = self._changed_names()
+        unrelated = sorted(changed - self.managed_paths)
+        if unrelated:
+            raise GitSyncError(f"규칙 외 로컬 변경이 있어 편집을 시작할 수 없습니다: {unrelated[0]}")
+
         snap = self.snapshot(fetch=False)
-        if snap.dirty_count:
-            raise GitSyncError("작업 트리가 깨끗하지 않습니다. 기존 로컬 변경을 먼저 정리하세요.")
         if expected_base_remote_sha and snap.base_remote_sha != expected_base_remote_sha:
             raise GitSyncError("REMOTE_CHANGED: 편집을 시작한 뒤 원격 기준 브랜치가 변경되었습니다.")
 
         if snap.branch == self.base_branch:
             if not snap.remote_sha or snap.local_sha != snap.remote_sha:
-                raise GitSyncError("로컬 기준 브랜치와 원격 HEAD가 일치하지 않습니다. 먼저 GitHub 최신상태를 가져오세요.")
+                raise GitSyncError("로컬 master와 원격 master가 일치하지 않습니다. 먼저 GitHub 최신상태를 가져오세요.")
             return snap
 
-        if self.write_mode != "direct" and snap.branch.startswith(self.WEB_RULE_PREFIX):
+        if snap.branch.startswith(self.WEB_RULE_PREFIX):
             if not snap.remote_sha or snap.local_sha != snap.remote_sha:
-                raise GitSyncError("활성 L 규칙 브랜치와 원격 브랜치가 일치하지 않습니다. 먼저 GitHub 최신상태를 가져오세요.")
-            if self._merge_base(snap.local_sha, snap.base_remote_sha) != snap.base_remote_sha:
-                raise GitSyncError("REMOTE_CHANGED: 활성 L 규칙 브랜치의 기준 master가 최신 원격 master와 다릅니다.")
+                raise GitSyncError("활성 L 규칙 브랜치와 원격 feature branch가 일치하지 않습니다. 먼저 GitHub 최신상태를 가져오세요.")
+            if not self._is_ancestor(snap.base_remote_sha, snap.local_sha):
+                raise GitSyncError("BASE_OUTDATED: 원격 master가 진행되었습니다. GitHub 최신상태 가져오기로 feature branch를 갱신하세요.")
             return snap
 
         raise GitSyncError(
@@ -248,7 +339,7 @@ class GitSyncService:
         )
 
     def _new_rule_branch(self) -> str:
-        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
         return f"{self.WEB_RULE_PREFIX}{stamp}"
 
     def _rollback_failed_local_commit(
@@ -259,7 +350,6 @@ class GitSyncService:
         branch: str,
         created_branch: bool,
     ) -> None:
-        """Restore the tracked registry if commit/push did not reach remote."""
         try:
             if self.current_branch() != branch:
                 self._run("switch", branch, check=False)
@@ -271,11 +361,8 @@ class GitSyncService:
             pass
 
     def _pr_info(self, branch: str, *, create: bool) -> tuple[str, str]:
-        if self.write_mode == "direct":
-            return "", ""
         if not shutil.which("gh"):
             return "", "GitHub CLI(gh) 미설치 — 브랜치 push는 완료됐지만 PR 자동 생성은 생략했습니다."
-
         if create:
             cmd = [
                 "gh", "pr", "create",
@@ -286,7 +373,7 @@ class GitSyncService:
                 "--body",
                 (
                     "auto_write 운영 콘솔에서 생성된 L 규칙 변경입니다.\n\n"
-                    "- 강제 push 없음\n"
+                    "- base 직접 push/force push 없음\n"
                     "- 원격 기준 SHA 충돌 검사 완료\n"
                     "- 관련 registry 테스트 통과 후 생성"
                 ),
@@ -319,68 +406,70 @@ class GitSyncService:
         message: str,
         expected_base_remote_sha: str,
     ) -> dict:
-        """Commit already-written files and verify the remote ref after push.
-
-        ``branch-pr`` mode creates one web-managed branch from base and keeps
-        reusing it for later rule edits until the PR is merged. No force push.
-        """
-        path_args = [str(Path(p).as_posix()) for p in paths]
+        path_args = [str(Path(path).as_posix()) for path in paths]
         if not path_args:
             raise GitSyncError("커밋할 파일이 없습니다.")
+        if not set(path_args).issubset(self.managed_paths):
+            raise GitSyncError("웹 Git 쓰기는 canonical L 규칙 registry에만 허용됩니다.")
 
-        try:
-            self.fetch()
-            current = self.snapshot(fetch=False)
-            if expected_base_remote_sha and current.base_remote_sha != expected_base_remote_sha:
-                raise GitSyncError("REMOTE_CHANGED: 저장 직전 원격 기준 브랜치가 변경되었습니다.")
+        # Fetch failures are retryable. Preserve the validated on-disk edit so a
+        # later retry can continue without re-entering the form.
+        self.fetch()
+        current = self.snapshot(fetch=False)
+        if expected_base_remote_sha and current.base_remote_sha != expected_base_remote_sha:
+            self._restore_managed_paths(path_args)
+            raise GitSyncError("REMOTE_CHANGED: 저장 직전 원격 master가 변경되어 registry를 현재 branch 값으로 복구했습니다.")
 
-            allowed_paths = {str(Path(p).as_posix()) for p in path_args}
-            changed_names = set(self._run("diff", "--name-only", check=False).splitlines())
-            changed_names.update(self._run("diff", "--cached", "--name-only", check=False).splitlines())
-            changed_names.update(self._run("ls-files", "--others", "--exclude-standard", check=False).splitlines())
-            for dirty_name in sorted(name.replace("\\", "/") for name in changed_names if name.strip()):
-                if dirty_name not in allowed_paths:
-                    raise GitSyncError(f"규칙 파일 외 로컬 변경이 감지되어 commit을 중단했습니다: {dirty_name}")
+        changed = self._changed_names()
+        unrelated = sorted(changed - set(path_args))
+        if unrelated:
+            raise GitSyncError(f"규칙 파일 외 로컬 변경이 감지되어 commit을 중단했습니다: {unrelated[0]}")
 
-            if current.branch == self.base_branch:
-                if not current.remote_sha or current.local_sha != current.remote_sha:
-                    raise GitSyncError("저장 직전 로컬 master와 원격 master가 달라졌습니다.")
-            elif self.write_mode != "direct" and current.branch.startswith(self.WEB_RULE_PREFIX):
-                if not current.remote_sha or current.local_sha != current.remote_sha:
-                    raise GitSyncError("저장 직전 활성 L 규칙 브랜치와 원격 브랜치가 달라졌습니다.")
-                if self._merge_base(current.local_sha, current.base_remote_sha) != current.base_remote_sha:
-                    raise GitSyncError("REMOTE_CHANGED: 활성 L 규칙 브랜치의 기준 master가 최신 원격 master와 다릅니다.")
-            else:
-                raise GitSyncError(f"현재 브랜치에서는 규칙 commit을 만들 수 없습니다: {current.branch}")
-        except Exception:
-            self._run("restore", "--source=HEAD", "--staged", "--worktree", "--", *path_args, check=False)
-            raise
+        if current.branch == self.base_branch:
+            if not current.remote_sha or current.local_sha != current.remote_sha:
+                self._restore_managed_paths(path_args)
+                raise GitSyncError("REMOTE_CHANGED: 저장 직전 로컬 master와 원격 master가 달라져 registry를 복구했습니다.")
+        elif current.branch.startswith(self.WEB_RULE_PREFIX):
+            if not current.remote_sha or current.local_sha != current.remote_sha:
+                self._restore_managed_paths(path_args)
+                raise GitSyncError("REMOTE_CHANGED: 활성 L 규칙 브랜치와 원격 feature branch가 달라져 registry를 복구했습니다.")
+            if not self._is_ancestor(current.base_remote_sha, current.local_sha):
+                self._restore_managed_paths(path_args)
+                raise GitSyncError("BASE_OUTDATED: 최신 master를 먼저 동기화해야 합니다. registry는 현재 feature branch 값으로 복구했습니다.")
+        else:
+            self._restore_managed_paths(path_args)
+            raise GitSyncError(f"현재 브랜치에서는 규칙 commit을 만들 수 없습니다: {current.branch}")
 
-        original_branch = current.branch
-        original_sha = current.local_sha
         diff = self._run("diff", "--", *path_args, check=False)
         if not diff.strip():
             raise GitSyncError("실제 파일 변경사항이 없습니다.")
 
+        original_branch = current.branch
+        original_sha = current.local_sha
         branch = original_branch
         created_branch = False
-        commit_sha = ""
-        if self.write_mode != "direct" and original_branch == self.base_branch:
+        if original_branch == self.base_branch:
             branch = self._new_rule_branch()
             self._run("switch", "-c", branch)
             created_branch = True
-        elif self.write_mode == "direct" and original_branch != self.base_branch:
-            raise GitSyncError("direct 모드는 기준 브랜치에서만 사용할 수 있습니다.")
 
+        commit_sha = ""
         try:
             self._run("add", "--", *path_args)
             self._run("commit", "-m", message)
             commit_sha = self.local_sha()
-            self._run("push", "-u", self.remote, branch, timeout=180)
+            try:
+                self._run("push", "-u", self.remote, branch, timeout=180)
+            except Exception as push_exc:
+                try:
+                    self.fetch()
+                except Exception:
+                    pass
+                if self.remote_sha(branch) != commit_sha:
+                    raise push_exc
             self.fetch()
-            pushed_remote_sha = self.remote_sha(branch)
-            if pushed_remote_sha != commit_sha:
-                raise GitSyncError("PUSH_VERIFY_FAILED: 원격 브랜치 SHA가 방금 만든 commit과 일치하지 않습니다.")
+            if self.remote_sha(branch) != commit_sha:
+                raise GitSyncError("PUSH_VERIFY_FAILED: 원격 feature branch SHA가 방금 만든 commit과 일치하지 않습니다.")
         except Exception:
             remote_has_commit = False
             if commit_sha:
@@ -408,26 +497,47 @@ class GitSyncService:
             "snapshot": self.snapshot(fetch=False).as_dict(),
         }
 
+    @classmethod
+    def _rule_from_registry_text(cls, text: str, rule_code: str) -> dict | None:
+        try:
+            data = json.loads(text)
+        except Exception:
+            return None
+        target = rule_code.upper().strip()
+        for rule in data.get("lessons", []):
+            match = cls._RULE_CODE_RE.search(str(rule.get("id", "")))
+            if match and match.group(0).upper() == target:
+                return rule
+        return None
+
     def rule_history(self, rule_code: str, registry_path: str, limit: int = 12) -> list[dict]:
+        """Return commits that actually changed this rule's value."""
         fmt = "%H%x1f%ad%x1f%s"
         raw = self._run(
-            "log",
-            "--all",
-            f"-{max(1, min(limit, 50))}",
-            "--date=iso-strict",
-            f"--format={fmt}",
-            "-S",
-            rule_code,
-            "--",
-            registry_path,
+            "log", "-200", "--date=iso-strict", f"--format={fmt}", "--", registry_path,
             check=False,
         )
-        rows = []
+        commits: list[tuple[str, str, str]] = []
         for line in raw.splitlines():
             parts = line.split("\x1f")
             if len(parts) == 3:
-                rows.append({"sha": parts[0], "date": parts[1], "subject": parts[2]})
-        return rows
+                commits.append((parts[0], parts[1], parts[2]))
+
+        changed: list[dict] = []
+        previous_signature: str | None = None
+        for sha, date, subject in reversed(commits):
+            text = self._run("show", f"{sha}:{registry_path}", check=False, timeout=30)
+            rule = self._rule_from_registry_text(text, rule_code)
+            signature = (
+                "<missing>"
+                if rule is None
+                else json.dumps(rule, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            )
+            if signature != previous_signature:
+                if rule is not None:
+                    changed.append({"sha": sha, "date": date, "subject": subject})
+                previous_signature = signature
+        return list(reversed(changed[-max(1, min(limit, 50)) :]))
 
     def show_file(self, commitish: str, path: str) -> str:
         if not commitish or any(ch not in "0123456789abcdefABCDEF^~" for ch in commitish):
