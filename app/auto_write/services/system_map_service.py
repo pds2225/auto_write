@@ -58,7 +58,7 @@ class SystemMapService:
             "기존자료 활용",
             "기존 자료의 사실을 새 양식에 보수적으로 전사하는 엔진입니다.",
             "app/core/docx/services/cross_form_autofill.py",
-            "SYNONYMS",
+            "def autofill_from_source",
             "app/auto_write/services/cross_form_autofill.py",
         ),
         (
@@ -154,13 +154,14 @@ class SystemMapService:
             {
                 "key": "write",
                 "label": "문서 작성",
-                "description": "공고·양식·기존자료를 한 화면에서 받아 기존 작성 엔진으로 연결합니다.",
+                "description": "신규작성과 기존자료 활용을 한 화면에서 받고, 실제 매칭 결과에 따라 cross-form 선행 여부를 자동 결정합니다.",
                 "steps": [
                     {"key": "upload", "label": "자료 입력", "service": "Web", "node": "web"},
+                    {"key": "cross_form", "label": "기존자료 자동전사 검사", "service": "core.docx cross_form_autofill", "node": "cross_form"},
                     {"key": "analyze", "label": "양식/자료 분석", "service": "ProjectService", "node": "project"},
-                    {"key": "route", "label": "업무 분류", "service": "DomainRouter", "node": "router"},
+                    {"key": "route", "label": "문서 도메인 분류", "service": "DomainRouter", "node": "router"},
                     {"key": "rules", "label": "L 규칙 참조", "service": "LRuleEnforcer", "node": "lrule"},
-                    {"key": "generate", "label": "문서 작성", "service": "ProjectService", "node": "project"},
+                    {"key": "generate", "label": "부족내용 작성", "service": "ProjectService", "node": "project"},
                     {"key": "render", "label": "DOCX 반영", "service": "core.docx RenderService", "node": "render"},
                 ],
             },
