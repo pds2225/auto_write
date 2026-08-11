@@ -52,7 +52,7 @@ finalize(pid): SubmittableFiller — 잔존 placeholder/가이드 채움·정리
 - `D:\auto_write\CLAUDE.md` : **없음** (신규 생성 대상)
 - `D:\auto_write\AGENTS.md` : **없음** (신규 생성 대상)
 - `D:\auto_write\RULES.md` : **없음**
-- 참고 문서: `실행방법.md`, `ONBOARDING.md` (실행 안내), `app/requirements.txt`
+- 참고 문서: `docs/실행방법.md`, `docs/ONBOARDING.md` (실행 안내), `app/requirements.txt`
 
 ## 5. 글로벌 `D:\.claude` 참고 가능 자산
 
@@ -71,7 +71,7 @@ finalize(pid): SubmittableFiller — 잔존 placeholder/가이드 채움·정리
 - **진입점**: `app/document_quality_orchestrator.py`, `scripts/run_document_quality_harness.py`
 - **테스트**: `app/tests/test_document_quality_harness.py`
 - **.claude/**: `agents/`(12), `skills/`(11+오케스트레이터 허브), `commands/`(6), `workflows/`(1)
-- **문서**: `CLAUDE.md`, `AGENTS.md`, `HANDOFF.md`, 규칙/설계 문서 5종, `PROJECT_REPORT.md`
+- **문서**: `CLAUDE.md`, `AGENTS.md`, `HANDOFF.md`, 규칙/설계 문서 5종, `docs/PROJECT_REPORT.md`
 
 ## 7. 중복 가능성 (기존 기능과의 관계 — 재사용 우선)
 

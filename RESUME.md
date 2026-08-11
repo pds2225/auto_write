@@ -51,9 +51,9 @@ py -3.11 auto_write_hub.py env
 ## 관련 문서
 
 - 허브 맵: `docs/BIZDOC_HUB_MAP.md`
-- autowrite 통합: `REPO_DUPLICATION_CHECK.md`
-- HWPX 파리티(B 완결): `RESUME_hwpx_parity.md`
-- 실사용 원장: `REQUEST_LEDGER.md`
+- autowrite 통합: `docs/REPO_DUPLICATION_CHECK.md`
+- HWPX 파리티(B 완결): `docs/RESUME_hwpx_parity.md`
+- 실사용 원장: `docs/REQUEST_LEDGER.md`
 - 작업 규약: `CLAUDE.md` · `AGENTS.md`
 
 ## 안전 불변

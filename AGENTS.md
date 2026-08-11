@@ -2,7 +2,7 @@
 
 > AI 에이전트(Claude Code / Codex 등)가 `D:\auto_write` 에서 작업할 때의 규약.
 > 세션 재개: `RESUME.md` 먼저. 입구 맵: `docs/BIZDOC_HUB_MAP.md`.
-> 상세 작업 지침은 `CLAUDE.md`, 하네스 설계는 `HARNESS_TEAM_DESIGN.md` 참조.
+> 상세 작업 지침은 `CLAUDE.md`, 하네스 설계는 `docs/HARNESS_TEAM_DESIGN.md` 참조.
 
 ## 0. 프로젝트 구조 — 저장소 분리 진행 중
 
@@ -59,7 +59,7 @@ B안 — 같은 저장소 내 폴더 분리 (`app/core/`, `app/resume/`, `app/bi
 
 ## 2. 문서 품질 하네스 에이전트 (6)
 
-> 2026-06-07 슬림화: 기존 12종을 책임·코드모듈 기준으로 6종에 병합. 상세 설계는 `HARNESS_TEAM_DESIGN.md`, 트리거·목록은 `CLAUDE.md` 참조.
+> 2026-06-07 슬림화: 기존 12종을 책임·코드모듈 기준으로 6종에 병합. 상세 설계는 `docs/HARNESS_TEAM_DESIGN.md`, 트리거·목록은 `CLAUDE.md` 참조.
 
 | 에이전트 | 역할 | 주요 코드 | 구 에이전트 |
 |----------|------|-----------|-------------|
