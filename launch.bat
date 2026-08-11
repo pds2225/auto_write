@@ -22,6 +22,19 @@ if "%OPENAI_API_KEY%"=="" if "%ANTHROPIC_API_KEY%"=="" (
 if "%AUTO_WRITE_HOST%"=="" set "AUTO_WRITE_HOST=127.0.0.1"
 if "%AUTO_WRITE_PORT%"=="" set "AUTO_WRITE_PORT=8765"
 
+rem The operator console can commit/push canonical L-rule changes. Keep it local
+rem by default; remote binding is an explicit advanced override only.
+if /I not "%AUTO_WRITE_HOST%"=="127.0.0.1" if /I not "%AUTO_WRITE_HOST%"=="localhost" (
+  if not "%AUTO_WRITE_ALLOW_REMOTE%"=="1" (
+    echo [ERROR] Remote bind blocked: AUTO_WRITE_HOST=%AUTO_WRITE_HOST%
+    echo [INFO] The operator console can write L rules and Git commits, so launch.bat is local-only by default.
+    echo [INFO] If you intentionally publish it behind trusted authentication, set AUTO_WRITE_ALLOW_REMOTE=1.
+    pause
+    exit /b 1
+  )
+  echo [WARN] Remote console binding explicitly enabled. Protect this endpoint with authentication and network access controls.
+)
+
 set "PYTHON_EXE="
 for %%P in (
   "%LocalAppData%\Programs\Python\Python311\python.exe"
