@@ -41,7 +41,8 @@
 - 사용: `py -3.11 hwpx_submit.py 양식.hwpx -o 결과.hwpx --identity identity.json`
 
 ## 다음 액션
-1. 보류된 **A(허브 오케 통합·중복 정리)** — 사용자 승인 후.
+1. ~~보류된 **A(허브 오케 통합·중복 정리)**~~ → **2026-08-11 진행**: `docs/BIZDOC_HUB_MAP.md`·
+   `bizplan-orchestrator`·`/bizdoc`·죽은 커맨드 참조 정리·`RESUME.md`. (세부 스킬 삭제는 안 함 — 입구만 통일)
 2. (c) 세로 라벨 — 코퍼스가 요구하면(현재 수요 4칸, AC6 보류).
 3. 이 워크트리는 병합 완료로 정리 가능: `git worktree remove ../auto_write-wt-hwpxparity`.
 

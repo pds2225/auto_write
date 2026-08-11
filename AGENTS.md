@@ -1,6 +1,7 @@
 # AGENTS.md — auto_write 에이전트 협업 규약
 
 > AI 에이전트(Claude Code / Codex 등)가 `D:\auto_write` 에서 작업할 때의 규약.
+> 세션 재개: `RESUME.md` 먼저. 입구 맵: `docs/BIZDOC_HUB_MAP.md`.
 > 상세 작업 지침은 `CLAUDE.md`, 하네스 설계는 `HARNESS_TEAM_DESIGN.md` 참조.
 
 ## 0. 프로젝트 구조 — 저장소 분리 진행 중

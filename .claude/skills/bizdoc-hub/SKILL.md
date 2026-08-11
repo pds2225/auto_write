@@ -16,6 +16,11 @@ description: >-
 
 > 스킬이 많아 헷갈리는 문제의 해법(2026-07-05 사용자 확정): **입구 1개 + 자동 라우팅**.
 > 기존 스킬은 그대로 두고(직접 호출도 가능), 허브는 "골라주고 이어주는" 역할만 한다.
+> 슬래시 커맨드: `/bizdoc`. 전체 맵(에이전트 vs CLI): `docs/BIZDOC_HUB_MAP.md`.
+>
+> **CLI 허브와 혼동 금지:** `app/auto_write_hub.py` 는 사람이 치는 실행 CLI
+> (`env`/`diagnose`/`fill`)다. 이 스킬은 의도→스킬 라우터이고, 채움·진단 실행이
+> 필요하면 그 CLI(또는 `hwpx_submit` 등)로 **이어준다**.
 
 ## 라우팅 절차
 
@@ -37,11 +42,11 @@ description: >-
 |---|---|:--:|:--:|
 | **공고·양식 파일 확보(다운로드)** — "공고 받아줘", 메일로 온 공고 첨부 | `공고첨부_받기.cmd`(바탕화면) = `cd /d D:\mail && py scripts\fetch_notice_attachments.py --interactive --open --quiet` → 저장: `바탕 화면\지원사업_공고첨부_문서전용_20260625\번호_사업명\` | ✅ | ✅ |
 | 공고·양식 분석, 자격·마감·평가기준, "어디 지원?" (+📞고객사 확인 항목) | 스킬 `announcement-form-analysis` | ✅ | ✅(텍스트 추출) |
-| 처음부터 사업계획서 **내용(본문) 작성** (PSST 서술) | 스킬 `bizplan-orchestrator` | ✅(md→이식) | md→이식 |
+| 처음부터 사업계획서 **내용(본문) 작성** (PSST 서술) | 스킬 `bizplan-orchestrator` · `/auto-write-bizplan` | ✅(md→이식) | md→이식 |
 | 완성본 A → 빈 양식 B **사실 전사**(글 새로 안 씀) | 스킬 `cross-form-submission` | ✅ | ⚠ DOCX 경유 |
 | 원본 양식에 **기업정보 직접 채움**(변환 없이) | CLI `py -3.11 app\hwp_fill_direct.py` | — | ✅ |
-| **채움+검수+제출 판정 한 번에** (fail 시 _DRAFT 강제) | CLI `py -3.11 app\hwpx_submit.py 양식.hwpx -o 결과.hwpx --identity identity.json` (exit 0/1/2/3) | — | ✅ |
-| 완성 DOCX **다듬기·품질점수**(서식·안내문구·강조) | 스킬 `document-quality-orchestrator` (별칭 커맨드: /improve-doc-quality = /auto-write-quality) | ✅ | 게이트만(hwpx_submit) |
+| **채움+검수+제출 판정 한 번에** (fail 시 _DRAFT 강제) | CLI `py -3.11 app\hwpx_submit.py …` 또는 `auto_write_hub.py fill …` (exit 0/1/2/3) | — | ✅ |
+| 완성 DOCX **다듬기·품질점수**(서식·안내문구·강조) | 스킬 `document-quality-orchestrator` · `/improve-doc-quality` (구 `/auto-write-quality` 는 아카이브) | ✅ | 게이트만(hwpx_submit) |
 | HWP/HWPX ↔ DOCX **변환** | 스킬 `docx-hwp-conversion` | ✅ | ✅ |
 | 제출 가능성 **진단만**(읽기전용) | CLI `py -3.11 app\self_diagnose.py`(DOCX) / `hwpx_submit.py`(HWPX) | ✅ | ✅ |
 
