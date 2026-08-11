@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 from pathlib import Path
 
+import pytest
 from docx import Document
 from fastapi.testclient import TestClient
 
 from auto_write.operator_main import app
 from auto_write.services.docx_edit_service import DocxEditService
+from auto_write.services.git_sync_service import GitSyncError, GitSyncService
 from auto_write.services.lrule_console_service import LRuleConsoleService
 from auto_write.services.system_map_service import SystemMapService
 from auto_write.services.workflow_monitor import WorkflowMonitor
@@ -90,3 +94,107 @@ def test_git_sync_source_has_no_force_push_default():
     assert '"push", "-u"' in source
     assert '"--force"' not in source
     assert '"--force-with-lease"' not in source
+
+
+def _git(cwd: Path, *args: str) -> str:
+    proc = subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if proc.returncode != 0:
+        raise AssertionError((proc.stderr or proc.stdout).strip())
+    return (proc.stdout or "").strip()
+
+
+def _setup_git_remote(tmp_path: Path) -> tuple[Path, Path, Path]:
+    remote = tmp_path / "remote.git"
+    seed = tmp_path / "seed"
+    web = tmp_path / "web"
+    peer = tmp_path / "peer"
+
+    subprocess.run(["git", "init", "--bare", str(remote)], check=True, capture_output=True)
+    subprocess.run(["git", "clone", str(remote), str(seed)], check=True, capture_output=True)
+    _git(seed, "config", "user.email", "test@example.com")
+    _git(seed, "config", "user.name", "Auto Write Test")
+    (seed / "rules.json").write_text('{"v":1}\n', encoding="utf-8")
+    _git(seed, "add", "rules.json")
+    _git(seed, "commit", "-m", "seed")
+    _git(seed, "branch", "-M", "master")
+    _git(seed, "push", "-u", "origin", "master")
+
+    subprocess.run(["git", "clone", "-b", "master", str(remote), str(web)], check=True, capture_output=True)
+    subprocess.run(["git", "clone", "-b", "master", str(remote), str(peer)], check=True, capture_output=True)
+    for repo in (web, peer):
+        _git(repo, "config", "user.email", "test@example.com")
+        _git(repo, "config", "user.name", "Auto Write Test")
+    return remote, web, peer
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
+def test_git_sync_bidirectional_and_stale_remote_guard(tmp_path):
+    _, web, peer = _setup_git_remote(tmp_path)
+    service = GitSyncService(web)
+    service.write_mode = "direct"
+
+    assert service.snapshot(fetch=True).status == "SYNCED"
+
+    # GitHub/remote -> Web: remote change must fast-forward into the web clone.
+    (peer / "rules.json").write_text('{"v":2,"from":"remote"}\n', encoding="utf-8")
+    _git(peer, "add", "rules.json")
+    _git(peer, "commit", "-m", "remote update")
+    _git(peer, "push", "origin", "master")
+    synced = service.sync_from_remote()
+    assert synced.status == "SYNCED"
+    assert '"from":"remote"' in (web / "rules.json").read_text(encoding="utf-8")
+
+    # Web -> GitHub/remote: a validated local edit must be committed and pushed.
+    expected = service.base_remote_sha()
+    service.assert_write_base(expected)
+    (web / "rules.json").write_text('{"v":3,"from":"web"}\n', encoding="utf-8")
+    result = service.commit_and_push(
+        ["rules.json"],
+        message="web update",
+        expected_base_remote_sha=expected,
+    )
+    assert result["branch"] == "master"
+    _git(peer, "pull", "--ff-only")
+    assert '"from":"web"' in (peer / "rules.json").read_text(encoding="utf-8")
+
+    # Race: another remote update after edit-base capture must block the write path.
+    stale_base = service.base_remote_sha()
+    (peer / "rules.json").write_text('{"v":4,"from":"remote-race"}\n', encoding="utf-8")
+    _git(peer, "add", "rules.json")
+    _git(peer, "commit", "-m", "remote race")
+    _git(peer, "push", "origin", "master")
+    with pytest.raises(GitSyncError):
+        service.assert_write_base(stale_base)
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
+def test_git_branch_pr_mode_pushes_branch_then_returns_to_master(tmp_path, monkeypatch):
+    _, web, _ = _setup_git_remote(tmp_path)
+    service = GitSyncService(web)
+    service.write_mode = "branch-pr"
+    # Do not let this unit test call GitHub CLI even when it is installed.
+    original_which = shutil.which
+    monkeypatch.setattr(shutil, "which", lambda name: None if name == "gh" else original_which(name))
+
+    expected = service.base_remote_sha()
+    service.assert_write_base(expected)
+    (web / "rules.json").write_text('{"v":2,"from":"web-branch"}\n', encoding="utf-8")
+    result = service.commit_and_push(
+        ["rules.json"],
+        message="branch update",
+        expected_base_remote_sha=expected,
+    )
+
+    assert result["branch"].startswith("web/lrule-")
+    assert result["local_return_error"] == ""
+    assert _git(web, "rev-parse", "--abbrev-ref", "HEAD") == "master"
+    assert _git(web, "ls-remote", "--heads", "origin", result["branch"])
+    # master working tree remains the source-of-truth base until the PR is merged.
+    assert (web / "rules.json").read_text(encoding="utf-8").strip() == '{"v":1}'
