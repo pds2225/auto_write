@@ -162,6 +162,22 @@ class GitSyncService:
             self._run("merge", "--ff-only", f"{self.remote}/{snap.branch}", timeout=120)
         return self.snapshot(fetch=False)
 
+    def return_to_base(self) -> GitSyncSnapshot:
+        """Return from a web change branch to the configured base branch safely."""
+        if self.dirty_paths():
+            raise GitSyncError("로컬 변경사항이 있어 기준 브랜치로 전환할 수 없습니다.")
+        self.fetch()
+        if self.current_branch() != self.base_branch:
+            self._run("switch", self.base_branch)
+        snap = self.snapshot(fetch=False)
+        if snap.dirty_count:
+            raise GitSyncError("기준 브랜치 전환 후 작업 트리가 깨끗하지 않습니다.")
+        if snap.status == "CONFLICT":
+            raise GitSyncError("기준 브랜치가 원격과 diverged 상태입니다.")
+        if snap.status == "REMOTE_AHEAD":
+            self._run("merge", "--ff-only", f"{self.remote}/{self.base_branch}", timeout=120)
+        return self.snapshot(fetch=False)
+
     def assert_write_base(self, expected_base_remote_sha: str) -> GitSyncSnapshot:
         self.fetch()
         snap = self.snapshot(fetch=False)
