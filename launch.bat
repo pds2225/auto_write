@@ -24,12 +24,12 @@ if "%AUTO_WRITE_PORT%"=="" set "AUTO_WRITE_PORT=8765"
 
 set "PYTHON_EXE="
 for %%P in (
-  "%LocalAppData%\Programs\Python\Python313\python.exe"
-  "%LocalAppData%\Programs\Python\Python312\python.exe"
   "%LocalAppData%\Programs\Python\Python311\python.exe"
-  "%ProgramFiles%\Python313\python.exe"
-  "%ProgramFiles%\Python312\python.exe"
   "%ProgramFiles%\Python311\python.exe"
+  "%LocalAppData%\Programs\Python\Python312\python.exe"
+  "%ProgramFiles%\Python312\python.exe"
+  "%LocalAppData%\Programs\Python\Python313\python.exe"
+  "%ProgramFiles%\Python313\python.exe"
 ) do (
   if exist "%%~fP" (
     set "PYTHON_EXE=%%~fP"
@@ -59,14 +59,14 @@ if not defined PYTHON_EXE (
     goto :python_found
   )
   echo [INFO] Python: python PATH alias
-  start "Auto Write Server" /D "%APP_DIR%" cmd /k "python -m uvicorn auto_write.main:app --host %AUTO_WRITE_HOST% --port %AUTO_WRITE_PORT%"
+  start "Auto Write Server" /D "%APP_DIR%" cmd /k "python -m uvicorn auto_write.operator_main:app --host %AUTO_WRITE_HOST% --port %AUTO_WRITE_PORT%"
   timeout /t 2 >nul
-  start "" http://%AUTO_WRITE_HOST%:%AUTO_WRITE_PORT%
+  start "" http://%AUTO_WRITE_HOST%:%AUTO_WRITE_PORT%/console
   exit /b 0
 )
 
 :python_found
 echo [INFO] Python: %PYTHON_EXE%
-start "Auto Write Server" /D "%APP_DIR%" "%PYTHON_EXE%" -m uvicorn auto_write.main:app --host %AUTO_WRITE_HOST% --port %AUTO_WRITE_PORT%
+start "Auto Write Server" /D "%APP_DIR%" "%PYTHON_EXE%" -m uvicorn auto_write.operator_main:app --host %AUTO_WRITE_HOST% --port %AUTO_WRITE_PORT%
 timeout /t 2 >nul
-start "" http://%AUTO_WRITE_HOST%:%AUTO_WRITE_PORT%
+start "" http://%AUTO_WRITE_HOST%:%AUTO_WRITE_PORT%/console
