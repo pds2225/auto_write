@@ -101,6 +101,49 @@ class TestE2EBusinessPlan:
         finally:
             Path(tmppath).unlink()
 
+    def test_lrule_sha256_consistency(self):
+        """같은 문서의 SHA256은 재계산 시 동일해야 한다."""
+        with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
+            _create_bp_docx(Path(f.name))
+            tmppath = f.name
+
+        try:
+            r1 = enforce_lrules(domain=Domain.BUSINESS_PLAN, artifact_path=tmppath)
+            r2 = enforce_lrules(domain=Domain.BUSINESS_PLAN, artifact_path=tmppath)
+            assert r1.artifact_sha256 == r2.artifact_sha256
+            assert len(r1.artifact_sha256) == 64
+        finally:
+            Path(tmppath).unlink()
+
+    def test_empty_doc_still_classifies(self):
+        """빈 문서도 domain classification은 동작해야 한다."""
+        with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
+            doc = Document()
+            doc.save(f.name)
+            tmppath = f.name
+
+        try:
+            report = enforce_lrules(domain=Domain.BUSINESS_PLAN, artifact_path=tmppath)
+            assert report.summary["total"] > 0
+        finally:
+            Path(tmppath).unlink()
+
+    def test_force_draft_flag(self):
+        """force_draft=True이면 무조건 DRAFT여야 한다."""
+        with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
+            _create_bp_docx(Path(f.name))
+            tmppath = f.name
+
+        try:
+            report = enforce_lrules(domain=Domain.BUSINESS_PLAN, artifact_path=tmppath)
+            result = finalize_artifact(
+                artifact_path=tmppath, lrule_report=report, force_draft=True
+            )
+            assert result.is_draft
+            assert not result.submittable
+        finally:
+            Path(tmppath).unlink()
+
 
 class TestE2EConsultantApplication:
     def test_domain_classification(self):
@@ -141,8 +184,61 @@ class TestE2EConsultantApplication:
 
     def test_no_fabrication(self):
         """consultant_application에서 임의 사실 생성이 없어야 한다."""
-        # This tests that the pipeline doesn't generate fake data
         result = classify_domain(text="이력서 경력 자격 컨설턴트")
         assert result.domain == Domain.CONSULTANT_APPLICATION
-        # The classification itself should not fabricate data
-        assert result.reason  # reason should be non-empty
+        assert result.reason
+
+    def test_ca_lrule_sha256_consistency(self):
+        """신청서의 SHA256은 재계산 시 동일해야 한다."""
+        with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
+            _create_ca_docx(Path(f.name))
+            tmppath = f.name
+
+        try:
+            r1 = enforce_lrules(domain=Domain.CONSULTANT_APPLICATION, artifact_path=tmppath)
+            r2 = enforce_lrules(domain=Domain.CONSULTANT_APPLICATION, artifact_path=tmppath)
+            assert r1.artifact_sha256 == r2.artifact_sha256
+            assert len(r1.artifact_sha256) == 64
+        finally:
+            Path(tmppath).unlink()
+
+    def test_ca_finalizer_produces_draft(self):
+        """신청서도 FAIL/REVIEW가 있으면 DRAFT여야 한다."""
+        with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
+            _create_ca_docx(Path(f.name))
+            tmppath = f.name
+
+        try:
+            report = enforce_lrules(domain=Domain.CONSULTANT_APPLICATION, artifact_path=tmppath)
+            result = finalize_artifact(artifact_path=tmppath, lrule_report=report)
+            assert result.is_draft
+            assert "_DRAFT" in result.final_path
+        finally:
+            Path(tmppath).unlink()
+
+    def test_ca_empty_doc_classification(self):
+        """빈 신청서도 domain classification은 consultant_application이어야 한다."""
+        with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
+            doc = Document()
+            doc.save(f.name)
+            tmppath = f.name
+
+        try:
+            result = classify_domain(text="신청서 이력서 경력")
+            assert result.domain == Domain.CONSULTANT_APPLICATION
+        finally:
+            Path(tmppath).unlink()
+
+    def test_cross_domain_na(self):
+        """BP 도메인에서 CA 규칙은 N/A여야 한다."""
+        with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
+            _create_bp_docx(Path(f.name))
+            tmppath = f.name
+
+        try:
+            report = enforce_lrules(domain=Domain.BUSINESS_PLAN, artifact_path=tmppath)
+            ca_rules = [r for r in report.rules if r["domain"] == "consultant_application"]
+            assert len(ca_rules) > 0
+            assert all(r["status"] == "N/A" for r in ca_rules)
+        finally:
+            Path(tmppath).unlink()
