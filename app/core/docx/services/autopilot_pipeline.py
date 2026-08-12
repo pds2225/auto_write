@@ -42,6 +42,9 @@ from .psst_fill import PSSTFillReport, apply_psst_scaffold
 from .usage_acceptance import (
     AcceptanceConfig, SEV_FAIL, backup_existing_output, force_draft_name, run_acceptance,
 )
+from .lrule_enforcer import LRuleEnforcer, enforce_lrules
+from .finalizer import Finalizer, finalize_artifact
+from auto_write.domains.domain_classifier import classify_domain, Domain
 
 # 잔존 빈칸(placeholder) 보수적 탐지 패턴 — [확인필요], [산출근거] 포함
 _RESIDUAL_RE = re.compile(
@@ -82,6 +85,15 @@ class AutopilotReport:
     overwrite_backup: str = ""  # 재실행 보호(PIPE-2) — 기존 산출물 백업 경로
     prompt_md: str = ""        # 제출 정리(US-6) — 보존된 슬라이드 프롬프트 md 경로
     strip_removed: int = 0     # 제출 정리(US-6) — 제거한 작업용 블록 단락 수
+    # 4.5단계(LRule + Finalizer — production wiring)
+    lrule_total: int = 0
+    lrule_fail: int = 0
+    lrule_review: int = 0
+    lrule_unverifiable: int = 0
+    lrule_can_finalize: bool = False
+    finalizer_submittable: bool = False
+    finalizer_blocked_reason: str = ""
+    finalizer_sha256: str = ""
     # 5단계(잔존·최종 재채점)
     residual_placeholders: list[str] = field(default_factory=list)
     residual_total: int = 0  # 잔존 빈칸/[확인필요] 총 건수(샘플 limit=20 과 별개)
@@ -118,6 +130,14 @@ class AutopilotReport:
             "overwrite_backup": self.overwrite_backup,
             "prompt_md": self.prompt_md,
             "strip_removed": self.strip_removed,
+            "lrule_total": self.lrule_total,
+            "lrule_fail": self.lrule_fail,
+            "lrule_review": self.lrule_review,
+            "lrule_unverifiable": self.lrule_unverifiable,
+            "lrule_can_finalize": self.lrule_can_finalize,
+            "finalizer_submittable": self.finalizer_submittable,
+            "finalizer_blocked_reason": self.finalizer_blocked_reason,
+            "finalizer_sha256": self.finalizer_sha256,
             "residual_placeholders": self.residual_placeholders,
             "residual_total": self.residual_total,
             "manual_todo": self.manual_todo,
@@ -153,6 +173,20 @@ def _scan_residual(docx_path: str, *, limit: int = 20) -> tuple[list[str], int]:
                     if len(found) < limit:
                         found.append(t[:60])
     return found, total
+
+
+def _extract_text_preview(docx_path: str, limit: int = 2000) -> str:
+    """DOCX에서 텍스트 미리보기를 추출한다 (domain classification용)."""
+    try:
+        doc = Document(docx_path)
+        parts = []
+        for p in doc.paragraphs[:50]:
+            t = p.text.strip()
+            if t:
+                parts.append(t)
+        return " ".join(parts)[:limit]
+    except Exception:
+        return ""
 
 
 def _make_openai_service() -> Optional[Any]:
@@ -353,6 +387,43 @@ def run_autopilot(
                 final_path = new_path
                 report.output_docx = str(final_path)
                 report.draft_marked = True
+
+    # --- 4.6단계: LRule Enforcement + Finalizer (production wiring) ---
+    #     DomainRouter → LRuleEnforcer → Finalizer 체인을 실제 production에서 호출한다.
+    #     기존 usage_acceptance 게이트와 독립적으로 동작하며, LRule report의 can_finalize가
+    #     False이면 Finalizer가 _DRAFT를 유지한다.
+    try:
+        domain_result = classify_domain(text=_extract_text_preview(str(final_path)))
+        domain = domain_result.domain
+        lrule_report = enforce_lrules(
+            domain=domain,
+            artifact_path=str(final_path),
+        )
+        report.lrule_total = lrule_report.summary.get("total", 0)
+        report.lrule_fail = lrule_report.summary.get("fail", 0)
+        report.lrule_review = lrule_report.summary.get("review_required", 0)
+        report.lrule_unverifiable = lrule_report.summary.get("unverifiable", 0)
+        report.lrule_can_finalize = lrule_report.can_finalize
+
+        finalizer_result = finalize_artifact(
+            artifact_path=str(final_path),
+            lrule_report=lrule_report,
+        )
+        report.finalizer_submittable = finalizer_result.submittable
+        report.finalizer_blocked_reason = finalizer_result.blocked_reason
+        report.finalizer_sha256 = finalizer_result.artifact_sha256
+
+        # Finalizer가 차단하면 _DRAFT 마킹 (기존 acceptance 게이트와 독립)
+        if not finalizer_result.submittable and not report.draft_marked:
+            new_path, mark_error = force_draft_name(final_path, avoid=in_path)
+            if mark_error:
+                report.draft_mark_error = report.draft_mark_error or mark_error
+            else:
+                final_path = new_path
+                report.output_docx = str(final_path)
+                report.draft_marked = True
+    except Exception:
+        pass  # LRule/Finalizer 실패는 파이프라인을 차단하지 않음 (기존 게이트가 이미 처리)
 
     # --- 5단계: 최종본 재채점(참고용) + 잔존 빈칸 스캔 + To-Do ---
     # 재채점은 로컬 룰만 사용(AI 호출 금지). 게이트 판정은 1단계 품질점수·
