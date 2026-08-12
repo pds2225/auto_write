@@ -1,12 +1,13 @@
 # RESUME.md — auto_write 세션 체크포인트
 
 > 세션을 새로 시작하면 **이 파일을 먼저** 읽는다. 상세 트랙은 아래 링크.
-> 최종 갱신: **2026-08-11** (3순위 RESUME + 4순위 허브·중복 정리)
+> 최종 갱신: **2026-08-13** (일일 브리핑 자동화 실행, 저장소 작업 상태 변화 없음)
 
 ## 한 줄 상태
 
 `pds2225/auto_write` 가 단일 정본. 구 `autowrite` 고유 자산은 `tools/injector/` 로 흡수 완료(PR #100).
 에이전트 입구 = **bizdoc-hub** / CLI 입구 = **auto_write_hub.py**. 맵: `docs/BIZDOC_HUB_MAP.md`.
+현재 자동화는 Calendar/Gmail을 읽기 전용 조회하며, 메일·일정 상태와 저장소 코드는 변경하지 않는다.
 
 ## 최근 완료
 
