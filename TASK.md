@@ -20,6 +20,9 @@ REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 [ ] AW-003 | L 규칙을 한 화면에서 보고 고칠 수 있게 한다
 [ ] AW-004 | 문서 작성 진행 상태를 한 화면에서 보게 한다
 [ ] AW-005 | 새 작성과 기존 자료 작성을 한 흐름으로 단순화한다
+[ ] AW-006 | 루트 파일을 역할별로 정리한다
+[ ] AW-007 | 중복·미사용 코드를 찾아 정리한다
+[ ] AW-008 | 남은 L 규칙 빈칸을 실제 검사로 채운다
 
 
 ---
@@ -35,8 +38,9 @@ REMOTE: https://github.com/pds2225/auto_write
 실행 기준은 이 파일 하나뿐이다.
 
 - `TASK.md`만 작업지시 파일로 사용한다.
-- 별도의 CURRENT_TASK.md / NEW_TASK.md를 만들지 않는다.
-- NEXT_TASK.md, 다른 레포 TASK, Google Tasks, 과거 채팅 내용을 임의 실행하지 않는다.
+- `NEXT_TASK.md`는 없다. 실행 기준은 TASK.md만.
+- 별도의 CURRENT_TASK.md / NEW_TASK.md / NEXT_TASK.md를 만들지 않는다.
+- 다른 레포 TASK, Google Tasks, 과거 채팅 내용을 임의 실행하지 않는다.
 - 사용자의 새 요청은 이 TASK.md에 새로운 TASK 항목으로 등록한다.
 
 ---
@@ -266,6 +270,7 @@ TASK-A
 TASK LIST 한 줄 요약과 아래 상세 TASK는 TASK_ID로 연결한다.
 새 사용자 요청을 TASK로 만들 때 반드시 MUST / KEEP / REMOVE / FORBIDDEN / VERIFY / DONE 관점으로 변환한다.
 독립 TRACK은 파일군이 겹치지 않으면 병렬 가능. 동일 entrypoint/registry는 한 owner만 수정.
+NEXT_TASK.md 이관(2026-08-13): A/B/C/D/E→AW-001, H→§12 테스트. F→AW-006, G→AW-007, I→AW-008. ACTIVE(AW-001)에 내용 합치지 않음. 파일 삭제.
 -->
 
 ## AW-001
@@ -896,6 +901,361 @@ DEPENDS_ON:
 - 문서 파싱/변환 실패
 - 출처 검증 실패
 - 잘못된 요청 / 재시도 가능 상태
+
+---
+
+## AW-006
+
+### 8-1. 사용자 원문 요청
+
+> 루트 모든 파일/1단계 디렉터리를 역할별로 분류하고, 안전성이 증명된 문서·스크립트·archive만 기존 구조에 맞게 정리한다.
+
+원문 보존 (NEXT_TASK.md F. Root cleanup):
+
+- KEEP_ROOT / DOC / SCRIPT / DATA / GENERATED / ARCHIVE / DUPLICATE / UNKNOWN 등으로 분류
+- 이동 전 저장소 전체 경로 참조를 확인
+- business_plan/consultant_application/LRule 구조 자체를 다시 설계하지 않음
+- 삭제보다 이동/보존을 우선
+
+원문의 의미를 축약 과정에서 변경하지 않는다.
+
+### 8-2. 비개발자용 1줄 요약
+
+루트 파일을 역할별로 정리한다
+
+이 문장이 상단 TASK LIST에 그대로 표시된다.
+
+### 8-3. 사용자가 원하는 최종 결과
+
+사용자가 실제로 사용했을 때:
+
+- 루트에 역할 불명 파일이 쌓여 있지 않음
+- 문서 작성 경로(사업계획서/신청서/L규칙)는 그대로 동작
+- 삭제가 아니라 이동·보존이 우선됨
+
+이 결과가 달성되지 않으면 DONE이 아니다.
+
+### 8-4. 현재상태
+
+- 현재 구현: 루트에 문서·스크립트·생성물이 혼재할 수 있음
+- 현재 문제: 분류·참조 확인 없이 옮기면 깨질 수 있음
+- 이미 구현된 부분: 기존 폴더 구조
+- 확인 필요한 부분: 전체 경로 참조, KEEP_ROOT 범위
+
+문서의 DONE 표시만 믿지 말고 실제 코드/runtime을 확인한다.
+
+### 8-5. MUST — 반드시 구현
+
+- [ ] 루트 모든 파일/1단계 디렉터리를 KEEP_ROOT / DOC / SCRIPT / DATA / GENERATED / ARCHIVE / DUPLICATE / UNKNOWN 등으로 분류
+- [ ] 이동 전 저장소 전체 경로 참조를 확인
+- [ ] 안전성이 증명된 문서·스크립트·archive만 기존 구조에 맞게 정리
+- [ ] 삭제보다 이동/보존을 우선
+
+### 8-6. KEEP — 유지
+
+- [ ] business_plan / consultant_application / LRule 구조
+- [ ] 기존 사용자 산출물/데이터
+- [ ] 사용자가 변경 요청하지 않은 기존 동작
+
+### 8-7. REMOVE — 제거
+
+없음 (삭제가 아니라 이동/보존. UNKNOWN은 옮기지 않음)
+
+### 8-8. FORBIDDEN — 금지
+
+- 사용자 요청에 없는 기능 임의 추가 금지
+- 불필요한 대규모 리팩터링 금지
+- 관련 없는 DB/API/UI 변경 금지
+- 테스트를 통과시키기 위한 기능 삭제 금지
+- 기존 실패 테스트 skip 금지
+- 근거 없는 값/데이터 생성 금지
+
+TASK별 추가 금지사항:
+
+- business_plan/consultant_application/LRule 구조 재설계
+- 참조 미확인 파일 삭제
+- `git reset --hard` / `git clean -fd`
+
+### 8-9. 선행조건·의존성
+
+DEPENDS_ON:
+
+- NONE
+
+파일군이 겹치지 않으면 병렬 가능. 동일 entrypoint/registry는 한 owner만 수정.
+
+### 8-10. 구현범위
+
+수정 가능 범위:
+
+- 루트 문서·스크립트·archive 배치
+- 참조 경로 갱신
+- 분류 기록
+
+기존 구조를 최대한 유지하고 최소 변경한다.
+
+### 8-11. 입력검증
+
+반드시 확인:
+
+- 이동 대상 경로가 저장소 다른 곳에서 참조되는지
+- 정상 입력 / 필수값 없음 / 잘못된 경로
+
+해당되지 않는 항목은 N/A 근거를 남긴다.
+
+### 8-12. 빈상태
+
+검증:
+
+- UNKNOWN 분류는 그대로 두고 다음 행동을 명시
+- 데이터 0건 / 결과 없음
+
+### 8-13. 로딩상태
+
+정적 정리 작업이면 N/A 가능. 대량 이동 시 진행 상태를 남긴다.
+
+### 8-14. 오류상태
+
+필요한 경우:
+
+- 참조가 깨진 이동
+- 저장 권한/파일 잠금 오류
+
+성공으로 위장하지 않는다.
+
+---
+
+## AW-007
+
+### 8-1. 사용자 원문 요청
+
+> 도메인 사이 잘못된 의존, 이중 정본, caller 없는 placeholder를 찾고, 중복이 명확하면 정본 구현으로 모은다.
+
+원문 보존 (NEXT_TASK.md G. Architecture / duplicate / placeholder cleanup):
+
+- cross-domain import, core→domains 역의존, dual source of truth를 검사
+- 기존 facade/wrapper 중 production caller가 없는 placeholder-only 코드를 식별
+- 동일 구현의 중복이 명확한 경우 canonical implementation으로 수렴
+- unrelated 대규모 리팩터링은 하지 않음
+
+원문의 의미를 축약 과정에서 변경하지 않는다.
+
+### 8-2. 비개발자용 1줄 요약
+
+중복·미사용 코드를 찾아 정리한다
+
+이 문장이 상단 TASK LIST에 그대로 표시된다.
+
+### 8-3. 사용자가 원하는 최종 결과
+
+사용자가 실제로 사용했을 때:
+
+- 문서 작성은 기존과 같이 동작
+- 실제 호출되지 않는 껍데기 코드가 정본처럼 남아 있지 않음
+- 같은 기능이 두 곳에 있으면 한곳으로 모음
+
+이 결과가 달성되지 않으면 DONE이 아니다.
+
+### 8-4. 현재상태
+
+- 현재 구현: facade/wrapper와 도메인 코드가 함께 있을 수 있음
+- 현재 문제: caller 없는 placeholder, dual source of truth 가능
+- 이미 구현된 부분: 기존 architecture 테스트가 있을 수 있음
+- 확인 필요한 부분: production caller, 역의존
+
+문서의 DONE 표시만 믿지 말고 실제 코드/runtime을 확인한다.
+
+### 8-5. MUST — 반드시 구현
+
+- [ ] cross-domain import, core→domains 역의존, dual source of truth 검사
+- [ ] production caller가 없는 placeholder-only facade/wrapper 식별
+- [ ] 동일 구현 중복이 명확하면 canonical implementation으로 수렴
+- [ ] 관련 architecture 테스트로 회귀 확인
+
+### 8-6. KEEP — 유지
+
+- [ ] 실제 production caller가 있는 기존 경로
+- [ ] 기존 CLI/API 호환
+- [ ] 사용자가 변경 요청하지 않은 기존 동작
+
+### 8-7. REMOVE — 제거
+
+- [ ] caller 없는 placeholder-only 코드 (식별·근거 후)
+
+### 8-8. FORBIDDEN — 금지
+
+- 사용자 요청에 없는 기능 임의 추가 금지
+- 불필요한 대규모 리팩터링 금지
+- 관련 없는 DB/API/UI 변경 금지
+- 테스트를 통과시키기 위한 기능 삭제 금지
+- 기존 실패 테스트 skip 금지
+- 근거 없는 값/데이터 생성 금지
+
+TASK별 추가 금지사항:
+
+- unrelated 대규모 리팩터링
+- business_plan ↔ consultant_application 내부 직접 의존 확대
+- 실제 사용 경로 삭제
+
+### 8-9. 선행조건·의존성
+
+DEPENDS_ON:
+
+- NONE
+
+파일군이 겹치지 않으면 병렬 가능. 동일 entrypoint는 AW-001 owner만 수정.
+
+### 8-10. 구현범위
+
+수정 가능 범위:
+
+- 의존/중복/placeholder 식별과 최소 정리
+- architecture 테스트
+- 정본 수렴이 명확한 중복 구현
+
+기존 구조를 최대한 유지하고 최소 변경한다.
+
+### 8-11. 입력검증
+
+해당되지 않는 항목은 N/A 근거를 남긴다. 코드 정리 작업.
+
+### 8-12. 빈상태
+
+검증:
+
+- placeholder만 있고 caller 없음: 식별 목록에 명시
+- 결과 없음 / 일부 필드 없음
+
+### 8-13. 로딩상태
+
+정적 정리면 N/A 가능.
+
+### 8-14. 오류상태
+
+필요한 경우:
+
+- import 순환/역의존 발견 시 성공으로 위장하지 않음
+- 관련 테스트 실패
+
+---
+
+## AW-008
+
+### 8-1. 사용자 원문 요청
+
+> P0가 안정된 뒤에 HIGH impact·LOW/MEDIUM effort L 규칙 빈칸을, guard+test+coverage+runtime wiring이 모두 있을 때만 실제 검사로 전환한다.
+
+원문 보존 (NEXT_TASK.md I. LRule gap mechanization — 여유가 있을 때):
+
+- P0 작업이 안정된 브랜치에서만 수행
+- HIGH impact + LOW/MEDIUM effort gap을 우선
+- `guard + test + coverage + runtime wiring` 4개가 모두 있을 때만 mechanized로 전환
+
+원문의 의미를 축약 과정에서 변경하지 않는다.
+
+### 8-2. 비개발자용 1줄 요약
+
+남은 L 규칙 빈칸을 실제 검사로 채운다
+
+이 문장이 상단 TASK LIST에 그대로 표시된다.
+
+### 8-3. 사용자가 원하는 최종 결과
+
+사용자가 실제로 사용했을 때:
+
+- 우선순위 높은 L 규칙 빈칸이 실제 검사로 동작
+- 검사 없이 이름만 있는 규칙은 mechanized로 표시되지 않음
+- P0 문서작성 경로가 깨지지 않음
+
+이 결과가 달성되지 않으면 DONE이 아니다.
+
+### 8-4. 현재상태
+
+- 현재 구현: canonical LRule과 enforcer가 존재
+- 현재 문제: gap 중 일부는 guard/test/coverage/runtime이 빠졌을 수 있음
+- 이미 구현된 부분: AW-001/AW-003 범위의 규칙 골격
+- 확인 필요한 부분: HIGH impact gap 목록
+
+문서의 DONE 표시만 믿지 말고 실제 코드/runtime을 확인한다.
+
+### 8-5. MUST — 반드시 구현
+
+- [ ] P0(AW-001)이 안정된 브랜치에서만 수행
+- [ ] HIGH impact + LOW/MEDIUM effort gap을 우선
+- [ ] guard + test + coverage + runtime wiring 4개가 모두 있을 때만 mechanized로 전환
+- [ ] 4개 중 하나라도 없으면 mechanized 표시 금지
+
+### 8-6. KEEP — 유지
+
+- [ ] 기존 canonical LRule source of truth
+- [ ] runtime enforcement
+- [ ] 사용자가 변경 요청하지 않은 기존 동작
+
+### 8-7. REMOVE — 제거
+
+없음 (미완성 gap을 mechanized로 위장하지 않음)
+
+### 8-8. FORBIDDEN — 금지
+
+- 사용자 요청에 없는 기능 임의 추가 금지
+- 불필요한 대규모 리팩터링 금지
+- 관련 없는 DB/API/UI 변경 금지
+- 테스트를 통과시키기 위한 기능 삭제 금지
+- 기존 실패 테스트 skip 금지
+- 근거 없는 값/데이터 생성 금지
+
+TASK별 추가 금지사항:
+
+- LRule 우회 FINAL
+- 4개 조건 미충족 규칙을 mechanized로 표시
+- 실제 사용자 개인정보를 테스트 fixture로 사용
+
+### 8-9. 선행조건·의존성
+
+DEPENDS_ON:
+
+- AW-001
+
+P0가 안정되기 전에는 착수하지 않는다. 완료 처리는 AW-001 이후.
+
+### 8-10. 구현범위
+
+수정 가능 범위:
+
+- HIGH impact LRule gap의 guard/test/coverage/runtime wiring
+- 관련 LRule 테스트
+
+기존 구조를 최대한 유지하고 최소 변경한다.
+
+### 8-11. 입력검증
+
+반드시 확인:
+
+- mechanized 전환은 4개 조건 충족 여부 검증
+- 정상 입력 / 필수값 없음 / 잘못된 형식
+
+해당되지 않는 항목은 N/A 근거를 남긴다.
+
+### 8-12. 빈상태
+
+검증:
+
+- gap이 남아 있으면 목록에 명시하고 mechanized로 위장하지 않음
+- LRule 없음/누락: FINAL 차단 (AW-001 계약)
+
+### 8-13. 로딩상태
+
+정적 규칙 전환이면 N/A 가능.
+
+### 8-14. 오류상태
+
+필요한 경우:
+
+- guard 미연결
+- coverage 부족
+- runtime wiring 누락
+
+성공으로 위장하지 않는다.
 
 ---
 
