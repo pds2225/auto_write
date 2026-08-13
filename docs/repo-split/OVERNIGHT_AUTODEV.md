@@ -65,7 +65,7 @@ git rebase origin/refactor/repo-split-pm
 
 # PHASE A — Gate 1 감사 완료
 
-기존 `docs/repo-split/PM_GATE1_REVIEW.md`와 현재 `JUNIOR_NEXT_TASK.md`의 Gate 1 재작업 요구사항을 먼저 수행한다.
+기존 `docs/repo-split/PM_GATE1_REVIEW.md`와 현재 `docs/repo-split/JUNIOR_NEXT_TASK.md`의 Gate 1 재작업 요구사항을 먼저 수행한다.
 
 필수 산출물:
 - `docs/repo-split/docx-duplicate-map.md`

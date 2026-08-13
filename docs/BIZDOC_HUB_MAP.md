@@ -74,4 +74,4 @@
 ## 6. 구 레포
 
 `pds2225/autowrite` → 자산은 `tools/injector/`. 원격은 archived · 삭제는 owner 수동.
-상세: `REPO_DUPLICATION_CHECK.md`.
+상세: `docs/REPO_DUPLICATION_CHECK.md`.

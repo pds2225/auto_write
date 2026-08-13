@@ -133,7 +133,7 @@ python document_quality_orchestrator.py "C:\제출\사업계획서.docx"
 # 결과: results\ 폴더에 개선된 DOCX + 리포트(md/json), results\backup\ 에 원본 백업
 ```
 
-자세한 내부 구조·규칙은 `CLAUDE.md`, `HANDOFF.md`, `PROJECT_REPORT.md`, `PSST_CHECK_RULES.md`, `DOCUMENT_QUALITY_SCORE_RULES.md` 를 참고하세요.
+자세한 내부 구조·규칙은 `CLAUDE.md`, `docs/PROJECT_REPORT.md`, `docs/PSST_CHECK_RULES.md`, `docs/DOCUMENT_QUALITY_SCORE_RULES.md` 를 참고하세요.
 
 ---
 

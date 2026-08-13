@@ -7,7 +7,7 @@
 - 정부지원사업 문서 자동생성 엔진(`app/auto_write/`, FastAPI + python-docx + OpenAI).
 - 생성 흐름: 양식분석 → AI작성 → DOCX렌더 → 검수(`qa_service`) → finalize(`submittable_filler`).
 - 실행: 시스템 Python 3.11~3.13(venv 없음), `app/` 이 import 기준. AI 키 없어도 동작.
-- 상세: `AUTO_WRITE_DOMAIN_MAP.md`, `HARNESS_AUDIT.md`.
+- 상세: `docs/AUTO_WRITE_DOMAIN_MAP.md`, `docs/HARNESS_AUDIT.md`.
 
 ## 2. 생성한 하네스 구조
 
@@ -29,7 +29,7 @@ app/tests/test_document_quality_harness.py  # 회귀 테스트(11)
 
 ## 3. Agent 목록 (`.claude/agents/`, 6)
 
-> 2026-06-07 슬림화: 12종 → 6종 병합(책임·코드모듈 기준). 상세는 `HARNESS_TEAM_DESIGN.md`·`CLAUDE.md`.
+> 2026-06-07 슬림화: 12종 → 6종 병합(책임·코드모듈 기준). 상세는 `docs/HARNESS_TEAM_DESIGN.md`·`CLAUDE.md`.
 
 doc-architect(설계·조율) · doc-safety-guard(백업·롤백+보안게이트) ·
 doc-analyzer(유형분류+PSST+인포그래픽, 읽기전용) · doc-postprocessor(안내문구삭제+서식정규화+강조) ·
@@ -85,14 +85,14 @@ py -3.11 -m pytest D:\auto_write\app\tests -q      # 2026-06-12 기준 202 passe
 
 100점 9항목: 안내문구15 / 글머리표10 / 문단공백10 / 글자크기15 / 표10 / 강조10 / 유형구조15 / PSST10 / 이미지5.
 게이트: **90 우수 / 85 통과 / 70 보완 / 미만 실패**, passed=총점≥85. 미달 시 최대 2회 보완루프(수렴 시 조기종료, 2회 후 NEEDS_MANUAL_REVIEW).
-상세: `DOCUMENT_QUALITY_SCORE_RULES.md`.
+상세: `docs/DOCUMENT_QUALITY_SCORE_RULES.md`.
 
 ## 10. 백업·롤백 방법
 
 - 후처리 전 원본을 `results/backup/<YYYYMMDD_HHMMSS>/` 에 자동 백업.
 - 원본 절대 덮어쓰기 금지(출력=입력이면 ValueError).
 - 복구: `python document_quality_orchestrator.py --rollback "<backup_dir>" "<target>"`.
-- 상세: `BACKUP_ROLLBACK_RULES.md`.
+- 상세: `docs/BACKUP_ROLLBACK_RULES.md`.
 
 ## 11. 남은 문제 / 한계
 
@@ -107,7 +107,7 @@ py -3.11 -m pytest D:\auto_write\app\tests -q      # 2026-06-12 기준 202 passe
 
 ```
 D:\auto_write 의 문서 품질 하네스를 사용/확장한다.
-- 구조: HANDOFF.md, AUTO_WRITE_DOMAIN_MAP.md, HARNESS_TEAM_DESIGN.md 참조.
+- 구조: HANDOFF.md, docs/AUTO_WRITE_DOMAIN_MAP.md, docs/HARNESS_TEAM_DESIGN.md 참조.
 - 실제 사업계획서 DOCX 1건으로 `cd app; python document_quality_orchestrator.py "<경로>"` 를 실행하고,
   생성된 results/*_quality_report_*.md 를 검토해 오탐(안내문구 오삭제, 과잉 강조)을 확인하라.
 - 새 문서유형/시그니처는 document_type_classifier.py 의 _SIGNATURES 에, PSST 항목은 psst_check.py 의 _PSST_ITEMS 에 추가하고
