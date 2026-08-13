@@ -115,6 +115,57 @@ class GitSyncService:
         ref = f"{self.remote}/{branch}"
         return self._run("rev-parse", ref, check=False) if self._ref_exists(ref) else ""
 
+    def _remote_sha_direct(self, branch: str) -> str:
+        raw = self._run("ls-remote", self.remote, f"refs/heads/{branch}", timeout=60)
+        parts = raw.replace("\t", " ").split()
+        return parts[0] if parts else ""
+
+    def _remember_remote_sha(self, branch: str, sha: str) -> None:
+        if branch and sha:
+            self._run("update-ref", f"refs/remotes/{self.remote}/{branch}", sha, check=False)
+
+    def _remote_branch_matches(self, branch: str, sha: str) -> bool:
+        if not branch or not sha:
+            return False
+        if self.remote_sha(branch) == sha:
+            return True
+        try:
+            if self._remote_sha_direct(branch) == sha:
+                self._remember_remote_sha(branch, sha)
+                return True
+        except Exception:
+            pass
+        return False
+
+    def _push_branch_verified(
+        self,
+        branch: str,
+        sha: str,
+        *,
+        set_upstream: bool,
+        verify_message: str,
+    ) -> None:
+        push_args = ["push"]
+        if set_upstream:
+            push_args.append("-u")
+        push_args.extend([self.remote, branch])
+        push_succeeded = False
+        try:
+            self._run(*push_args, timeout=180)
+            push_succeeded = True
+            self._remember_remote_sha(branch, sha)
+        except Exception as push_exc:
+            if not self._remote_branch_matches(branch, sha):
+                raise push_exc
+        try:
+            self.fetch()
+        except Exception as fetch_exc:
+            if push_succeeded or self.remote_sha(branch) == sha:
+                return
+            raise fetch_exc
+        if self.remote_sha(branch) != sha and not self._remote_branch_matches(branch, sha):
+            raise GitSyncError(verify_message)
+
     def base_remote_sha(self) -> str:
         ref = f"{self.remote}/{self.base_branch}"
         return self._run("rev-parse", ref, check=False) if self._ref_exists(ref) else ""
@@ -228,6 +279,7 @@ class GitSyncService:
     def _merge_latest_base_into_feature(self, branch: str) -> None:
         if self._is_ancestor(self.base_remote_sha(), self.local_sha()):
             return
+        original_sha = self.local_sha()
         base_ref = f"{self.remote}/{self.base_branch}"
         proc = subprocess.run(
             ["git", "merge", "--no-edit", base_ref],
@@ -243,10 +295,17 @@ class GitSyncService:
             message = (proc.stderr or proc.stdout or "merge conflict").strip()
             raise GitSyncError(f"REMOTE_CONFLICT: 최신 master를 L 규칙 브랜치에 병합하지 못했습니다. {message[:900]}")
         new_sha = self.local_sha()
-        self._run("push", self.remote, branch, timeout=180)
-        self.fetch()
-        if self.remote_sha(branch) != new_sha:
-            raise GitSyncError("PUSH_VERIFY_FAILED: master 동기화 merge commit이 원격 feature branch와 일치하지 않습니다.")
+        try:
+            self._push_branch_verified(
+                branch,
+                new_sha,
+                set_upstream=False,
+                verify_message="PUSH_VERIFY_FAILED: master 동기화 merge commit이 원격 feature branch와 일치하지 않습니다.",
+            )
+        except Exception:
+            if not self._remote_branch_matches(branch, new_sha):
+                self._run("reset", "--hard", original_sha, check=False)
+            raise
 
     def sync_from_remote(self) -> GitSyncSnapshot:
         self.fetch()
@@ -443,24 +502,17 @@ class GitSyncService:
             self._run("add", "--", *path_args)
             self._run("commit", "-m", message)
             commit_sha = self.local_sha()
-            try:
-                self._run("push", "-u", self.remote, branch, timeout=180)
-            except Exception as push_exc:
-                try:
-                    self.fetch()
-                except Exception:
-                    pass
-                if self.remote_sha(branch) != commit_sha:
-                    raise push_exc
-            self.fetch()
-            if self.remote_sha(branch) != commit_sha:
-                raise GitSyncError("PUSH_VERIFY_FAILED: 원격 feature branch SHA가 방금 만든 commit과 일치하지 않습니다.")
+            self._push_branch_verified(
+                branch,
+                commit_sha,
+                set_upstream=True,
+                verify_message="PUSH_VERIFY_FAILED: 원격 feature branch SHA가 방금 만든 commit과 일치하지 않습니다.",
+            )
         except Exception:
             remote_has_commit = False
             if commit_sha:
                 try:
-                    self.fetch()
-                    remote_has_commit = self.remote_sha(branch) == commit_sha
+                    remote_has_commit = self._remote_branch_matches(branch, commit_sha)
                 except Exception:
                     remote_has_commit = False
             if not remote_has_commit:
