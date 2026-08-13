@@ -1126,6 +1126,8 @@ WORK_BRANCH_PUSHED: YES | NO
 
 머지는 GitHub Checks가 초록일 때만 한다. 문서만(`TASK.md`, `*.md`, `docs/**`) 바뀌면 무거운 테스트 대신 `docs-gate`가 초록이면 된다. `gh pr merge --admin` 및 실패 체크를 무시하는 머지는 금지한다.
 
+브랜치 보호(required checks)는 권한/플랜 부족으로 설정하지 못했다. BLOCKED_WITH_EVIDENCE: branch protection classic HTTP 403 Upgrade to GitHub Pro or make this repository public to enable this feature.; ruleset HTTP 403 Upgrade to GitHub Pro or make this repository public to enable this feature.
+
 
 merge 후:
 
