@@ -1,198 +1,57 @@
-<!-- BEGIN OPS HEADER: 실행 게이트. 본문보다 우선. -->
-
 # TASK.md — 이 레포 실행 단일 기준
 
 ```text
-REPO:   pds2225/auto_write
-REMOTE: https://github.com/pds2225/auto_write.git
-BASE:   master
+REPO: pds2225/auto_write
+BASE: master
 ```
 
-## 0. STOP 게이트 (하나라도 실패 → 코드 수정 금지, 즉시 중단)
+## 0. Git 동기화·STOP 게이트
+1. `git fetch --all --prune`.
+2. `git remote get-url origin`, `git branch --show-current`, `git status --short` 확인.
+3. `git rev-list --left-right --count HEAD...origin/master`로 ahead/behind/diverged 확인.
+4. 현재 `master`가 clean이고 `ahead=0, behind>0`일 때만 `git merge --ff-only origin/master`로 최신화.
+5. dirty/ahead/diverged/다른 브랜치 로컬 전용 변경은 반드시 보존. 삭제·덮어쓰기·자동 reset 금지.
+6. `git reset --hard`, force push, `git clean -fd`, 임의 stash/drop 금지.
+7. 로컬 변경이 있으면 최신 `origin/master` 기준 별도 branch/worktree에서 작업. 안전 분리 불가 시 `BLOCKED`.
+8. 이 `TASK.md`만 실행. 다른 레포 TASK/NEXT_TASK/옛 채팅 과업 금지.
+9. secret 값 수정/커밋 금지. 기존 안전한 secret sync 정책이 있으면 그 정책만 사용.
+10. 구현 → 테스트 → commit → push → PR까지 가능. 이 TASK는 master 자동병합을 허용하지 않는다.
 
-아래를 **맨 처음** 실행한다. 실패하면 구현하지 않는다.
-
-1. `git fetch --all --prune`  
-   - 실패 → **STOP**. 로컬에 있는 옛 TASK로 진행 금지.
-2. `git remote get-url origin`  
-   - 위 `REMOTE`와 **문자 완전 일치**가 아니면 **STOP**. (다른 레포/worktree 오실행 방지)
-3. 실행 파일은 **이 `TASK.md`만**.  
-   - `NEXT_TASK.md` / 다른 레포 TASK / 옛 채팅 / AGENTS 외 지시서로 구현 시작 → **STOP** 로그 남기고 중단.  
-   - `NEXT_TASK.md`는 큐·참고다. TASK가 “읽어라”고 쓰지 않으면 열지 마라.
-4. 허용 범위: 이 파일 + 이 파일이 지명한 코드/테스트/문서.  
-   - 지명되지 않은 레포·폴더를 고치기 시작하면 **STOP**.
-5. Must 순서: 아래 TRACK에 `depends_on`이 있으면 **선행 TRACK이 DONE일 때만** 후속 TRACK 착수.  
-   - 선행 미완료인데 후속 파일을 열면 **STOP**.
-6. DONE 금지 (하나라도 해당하면 FAIL, 머지 금지):  
-   - 구현 코드 diff 없이 **테스트/픽스처만** 변경  
-   - 지정 **smoke 산출물 파일** 없음  
-   - 보고에 **커밋 SHA + 실행한 명령 + 테스트 요약 원문(10줄 이내)** 없음
-7. `AGENTS.md`와 이 TASK가 충돌:  
-   - 코드 수정 중단. `BLOCKED_WITH_EVIDENCE`만 남긴다.  
-   - 사용자에게 선택지 3개만: `예외 승인` / `우회(다른 파일)` / `보류`. 선택 전 코드 금지.
-8. 머지: 이 TASK 본문이 머지를 **명시**한 경우에만. 그래도 아래 아니면 merge 명령 실행 금지.  
-   - GitHub Checks **초록**  
-   - 필수 테스트 job 통과  
-   - 6번 DONE 금지 항목 없음  
-   - 충돌 미해결이면 머지 금지
-9. 로컬 dirty / 다른 브랜치: 기본 브랜치(`BASE`)에서 직접 수정 금지. **새 브랜치**에서만 작업.
-10. 시크릿: 값은 `D:\_secure\.env.shared`만. TASK에는 키 이름만.  
-    시작 시 `D:\_secure\sync.ps1 check` (원격이 앞설 때만 pull). 키를 바꿨으면 `push`.
-
-## 우선순위
-
-1. 사용자 요청  
-2. 그중 **가장 최신** 요청  
-3. 데드라인 / 막힘 / 버그  
-
-Must = 지금 안 하면 막히거나, 데드라인이거나, 버그이거나, **사용자 요청**인 것.
-
-## 하다 만 작업
-
-브랜치 유지 + 이 파일에 체크포인트 한 줄 (`어디까지 했는지`). 기본 브랜치에 미완성 커밋 금지.
-
-## 최종 보고 최소 항목
-
-```text
-REPO: (origin URL)
-SHA: (구현 커밋)
-CMD: (테스트/smoke 명령)
-SMOKE: (산출물 경로 또는 N/A 이유)
-TEST: (요약 원문 10줄 이내 붙여넣기)
-DIFF: (구현 파일 목록 — 테스트만이면 FAIL)
-STATUS: DONE | BLOCKED_WITH_EVIDENCE | FAIL
-```
-
-<!-- END OPS HEADER -->
-
-
----
-
-# TRACK 순서 (auto_write)
-
-| TRACK | 상태 | 내용 | 착수 조건 |
-|-------|------|------|-----------|
-| A | Must | 아래 본문(병렬 무인개발) | 즉시 |
-| — | 참고 | `NEXT_TASK.md` | **실행 금지.** 큐/참고만. TASK 본문과 충돌하면 TASK 본문 우선. |
-
-현재 TASK 본문이 master 직접 merge를 금하면 게이트 8번도 **PR/push까지만**. 본문이 머지를 켜기 전에는 merge 하지 마라.
-다른 레포(marketgate 등) 브랜치·과업을 이 저장소에 가져오면 STOP.
-
----
-
-# TASK — AutoWrite 병렬 무인개발
-
-대상: `pds2225/auto_write`
-기준 브랜치: `master`
+# CURRENT TASK — AutoWrite 실사용 MVP 정리
 
 ## 목표
+AutoWrite를 비개발자가 실제 사용할 수 있는 하나의 작업 흐름으로 정리한다.
 
-오늘 밤 사용자 승인 없이 가능한 작업을 **병렬로 최대한 진행**한다.
+최우선 결과:
+1. 원격 GitHub 레포와 작업상태를 안전하게 **쌍방향 sync**할 수 있음.
+2. 전체 L 규칙을 한 화면에서 조회·관리·수정 가능.
+3. 비개발자가 이해할 수 있는 아키텍처·업무흐름 모니터링 화면 제공.
+4. 실제 문서 생성 경로가 DomainRouter → DomainPipeline → LRuleEnforcer → Hash 검증 → Finalizer로 수렴.
+5. business_plan / consultant_application 실제 E2E 검증.
 
-이번 TASK는 "작업 1개만 하고 멈추는" 방식이 아니다.
-서로 독립적인 작업은 동시에 진행하고, 같은 파일/같은 실행경로를 건드려 충돌 가능성이 있는 작업만 순차 처리한다.
+불필요한 제품 기능은 만들지 않는다.
 
-사용자는 다음 날 한 번에 결과를 검수한다.
+## 현재상태
+기존 코드에는 DomainRouter, 도메인 Pipeline, LRule, Finalizer, workspace/results 구조가 존재하지만 일부는 production caller 배선/FINAL 우회 차단/실제 E2E 검증이 미완료일 수 있다.
 
-핵심 목표는 다음이다.
+최근 사용자 제품 요구:
+- 원격 repo와 쌍방향 sync가 가장 중요.
+- L로 시작하는 규칙 전체 관리 + 수정 가능 화면 필요.
+- 비개발자용 아키텍처와 업무플로우 모니터링 필요.
+- 대시보드/프로젝트관리 자체는 불필요.
+- 품질점수/제출가능성 점수 기능 불필요.
+- 출처 표시는 `파일명 + 페이지` 기준.
+- 새 사업계획서 작성과 기존 자료→새 양식 작성은 별도 복잡한 제품으로 쪼개지 말고 하나의 문서작성 흐름에서 source 존재 여부로 처리하는 방향 우선.
 
-1. AutoWrite 실제 production 경로에 DomainRouter → DomainPipeline → LRuleEnforcer → Hash 검증 → Finalizer를 강제 배선
-2. business_plan / consultant_application 양 도메인의 실제 E2E 검증
-3. LRule runtime enforcement와 FINAL 우회 차단 강화
-4. workspace/results domain routing 실제 사용 확인 및 보완
-5. 루트 폴더와 문서/스크립트 구조 정리
-6. 중복/placeholder/MIXED 코드 정리
-7. 테스트·architecture guard·negative regression 확대
-8. 현재 코드에서 독립적으로 발견되는 명확한 P0/P1 결함까지 수정
-
-단, 새로운 제품기능을 임의로 발명하지 않는다.
-
----
-
-## 0. 시작 전 안전 점검
-
-반드시 먼저 실행한다.
-
-```bash
-git fetch --all --prune
-git status
-git branch --show-current
-git rev-parse HEAD
-git rev-parse origin/master
-git log --oneline -15
-git worktree list
-git diff
-git diff --cached
-```
-
-원칙:
-
-- 현재 `master`가 이 TASK 작성 이후 변경됐으면 최신 코드를 기준으로 다시 판단한다.
-- 기존 미커밋 사용자 변경을 덮어쓰지 않는다.
-- 다른 세션/worktree가 같은 파일을 수정 중이면 동일 파일 병렬수정 금지.
-- `git reset --hard`, `git clean -fd`, force push 금지.
-- `git add -A` 금지. 이번 작업 파일만 명시적으로 stage.
-- 사용자 데이터/실사용 산출물/secret 삭제·변경 금지.
-- 운영 배포 및 외부 유료 API 실제 호출 금지.
-
-이미 구현된 작업은 다시 만들지 않는다.
-"DONE" 문서보다 실제 runtime caller와 테스트를 우선한다.
-
----
-
-## 1. 병렬 실행 원칙
-
-작업 시작 후 전체 backlog를 아래 트랙으로 나눈다.
-
-가능하면 각 트랙을 별도 sub-agent / worktree / branch로 수행한다.
-도구가 병렬 agent를 지원하지 않으면 한 세션 안에서 독립 파일군별로 번갈아 진행하되, 한 트랙이 막혀도 다른 트랙을 계속한다.
-
-### 병렬 가능 조건
-
-- 수정 파일군이 겹치지 않음
-- 동일 public API를 동시에 변경하지 않음
-- 동일 migration/entrypoint를 동시에 수정하지 않음
-- 서로 선행 결과를 기다릴 필요가 없음
-
-### 직렬 처리 조건
-
-- 같은 파일 수정
-- 같은 runtime entrypoint 수정
-- schema/API contract 선행 필요
-- 한 작업의 결과가 다른 작업의 입력임
-
-병렬 작업을 이유로 동일 기능을 중복 구현하지 않는다.
-
----
-
-# TRACK A — Production Runtime Wiring (최우선 P0)
-
-실제 production entrypoint를 전수 검색한다.
-
-검색 대상:
-
-- DomainRouter / resolve_domain
-- BusinessPlanPipeline
-- ConsultantApplicationPipeline
-- LRuleEnforcer
-- Finalizer / finalize_artifact
-- submission_orchestrator
-- hwpx_submit
-- autopilot_pipeline / bizplan_autopilot
-- project_service
-- resume_fill
-- cross_form 관련 실행경로
-- hwp/hwpx fill 및 submit CLI
-- `_DRAFT`, `FINAL`, `submittable=True`, `force_draft_name`, rename/copy 경로
-
-목표 실제 흐름:
-
+## 구현범위
+### TRACK A — Production runtime correctness (P0)
+실제 production entrypoint를 확인해 아래 흐름으로 수렴:
 ```text
 INPUT
 → DomainRouter
 → DomainPipeline
-→ 기존 안정 CORE/shared services
-→ format-specific acceptance
+→ 기존 CORE/shared services
+→ format acceptance
 → LRuleEnforcer
 → artifact SHA256
 → registry SHA256
@@ -200,529 +59,216 @@ INPUT
 → FINAL 또는 _DRAFT
 ```
 
-정의 파일/테스트에만 존재하고 production caller가 없으면 미완료다.
+필수:
+- business_plan 주요 entrypoint 실제 배선.
+- consultant_application 주요 entrypoint 실제 배선.
+- ambiguous domain 자동 FINAL 금지.
+- LRule report 누락/duplicate/FAIL/REVIEW_REQUIRED/UNVERIFIABLE이면 FINAL 금지.
+- artifact/registry hash가 검사 이후 변경되면 FINAL 금지.
+- legacy direct FINAL 우회경로 차단.
 
-### 완료조건
+### TRACK B — 안전한 원격↔로컬 Sync MVP (P0)
+사용자가 비개발자로도 현재 상태를 알 수 있게 한다.
 
-- business_plan 주요 production entrypoint 실제 배선
-- consultant_application 주요 production entrypoint 실제 배선
-- ambiguous domain은 자동 FINAL 금지
-- 기존 CLI/API compatibility 유지
+최소 기능:
+- 현재 repo, base branch, local branch 표시.
+- local dirty 여부.
+- origin 대비 ahead / behind / diverged 표시.
+- 원격 변경 가져오기: **clean + behind only**일 때 fast-forward만 허용.
+- 로컬 작업 보내기: 현재 작업 branch push 또는 PR 생성 흐름.
+- force push/reset-hard 자동 실행 금지.
+- dirty/ahead/diverged 상태에서는 원본 보존 + 안전한 새 branch/worktree 안내 또는 자동 생성 가능한 범위에서 안전 분리.
+- sync 전/후 SHA와 결과 로그 표시.
 
----
+`master를 원격에 강제로 맞추기` 버튼이나 동작은 만들지 않는다.
 
-# TRACK B — LRule Runtime Enforcement / Finalizer (P0)
+### TRACK C — L 규칙 전수관리·수정 화면 (P0)
+- canonical LRule 전체를 누락 없이 목록화.
+- rule id/name/domain/category/status/설명/evidence/guard 여부 표시.
+- 검색/필터.
+- 수정 가능한 정책 필드는 기존 canonical source of truth를 통해 저장.
+- 중복 source of truth 금지.
+- 규칙 삭제/비활성화 등 FINAL 안전성에 영향을 주는 변경은 경고/검증/감사로그.
+- 런타임 report에서 각 규칙이 PASS/FAIL/N/A/REVIEW_REQUIRED/UNVERIFIABLE/USER_OVERRIDE 중 하나로 정확히 1회 판정되는지 표시.
+- UI 수정이 runtime enforcement를 우회하지 못하게 한다.
 
-현재 canonical LRule 전체를 실제 runtime report에서 정확히 1회 판정한다.
+### TRACK D — 비개발자용 아키텍처·업무플로우 모니터링 (P1)
+별도 복잡한 개발자 대시보드가 아니라 한 화면에서 다음만 보여준다:
+```text
+입력자료
+→ 도메인 판정
+→ 문서 생성/채움
+→ LRule 검사
+→ Hash 검증
+→ Finalizer
+→ FINAL / DRAFT
+```
 
-허용 상태:
+각 단계:
+- 현재 상태: 대기/진행/완료/실패/검토필요
+- 마지막 실행시각
+- 핵심 오류 한 줄
+- 결과 산출물 경로
+- 관련 규칙/검증 링크
 
-- PASS
-- FAIL
-- N/A
-- REVIEW_REQUIRED
-- UNVERIFIABLE
-- USER_OVERRIDE
+개발자용 내부 class graph를 그대로 노출하지 않는다.
 
-불변조건:
+### TRACK E — 문서 작성 흐름 단순화 (P1)
+사용자 관점의 문서작성 진입점을 불필요하게 2개 제품으로 분리하지 않는다.
 
-- PASS → evidence 필수
-- N/A → reason 필수
-- missing rule > 0 → FINAL 금지
-- duplicate rule > 0 → FINAL 금지
-- FAIL > 0 → FINAL 금지
-- REVIEW_REQUIRED > 0 → FINAL 금지
-- UNVERIFIABLE > 0 → FINAL 금지
-- USER_OVERRIDE는 실제 사용자 승인 evidence 없이는 생성 금지
+권장 UX:
+```text
+새 문서 작성
+→ 양식 선택
+→ 기존 자료 추가(선택)
+→ 자동 작성/채움
+→ 출처 확인
+→ LRule 검증
+→ FINAL/DRAFT
+```
 
-### mechanized
+기존 자료가 있으면 재사용하고 없으면 사용자 입력을 사용.
 
-`guard_ref` 문자열이나 테스트 존재만으로 PASS 금지.
-실제 production callable을 실행하고 evidence를 남긴다.
+출처 표기 기준:
+```text
+파일명 + 페이지 번호
+```
+근거 없는 출처/내용 생성 금지.
 
-- 구현된 guard가 있으면 runtime wiring
-- 테스트 안에만 있는 deterministic 검사면 reusable guard 추출 검토
-- 실제 자동검사 불가면 UNVERIFIABLE/REVIEW_REQUIRED 유지
+## 금지사항
+- 품질점수 UI 신규 개발.
+- 제출가능성/선정가능성 점수 신규 개발.
+- 불필요한 프로젝트 관리 대시보드.
+- generic KPI dashboard.
+- 사용자가 요청하지 않은 CRM/결제/팀협업 확장.
+- LRule 우회 FINAL.
+- business_plan ↔ consultant_application 내부 직접 의존 확대.
+- 중복 LRule registry/source of truth 생성.
+- 실제 사용자 개인정보를 테스트 fixture로 사용.
+- destructive Git sync.
 
-### Hash
+## 입력검증
+- 업로드/입력 파일 존재·형식·크기 기존 정책 검증.
+- domain 판단 실패/모호함을 명시적으로 처리.
+- source citation은 실제 파일/페이지 존재 여부 검증.
+- Git sync는 repo/origin/base/branch/ahead/behind/dirty를 먼저 검증.
+- LRule edit는 schema/allowed value/required evidence 검증.
 
-- 검사 시 artifact SHA256 저장
-- Finalizer 직전 artifact 재해시
-- mismatch → FINAL 금지
-- registry SHA256도 Finalizer 직전 현재값과 재비교
-- mismatch → FINAL 금지
+## 빈상태
+- 입력자료 없음: 빈 화면이 아니라 필요한 다음 입력 안내.
+- 기존 자료 없음: 새 작성 흐름으로 정상 진행.
+- 출처 없음: 출처를 날조하지 않고 `출처 확인 필요`.
+- LRule 없음/누락: FINAL 차단.
+- sync 변경 없음: `최신 상태` 명시.
 
-현재 TODO/pass가 남아 있으면 제거한다.
+## 로딩상태
+- 문서 생성/변환/LRule 검사/Git fetch·sync 각각 진행 상태 표시.
+- 중복 실행 방지.
+- 장시간 작업은 현재 단계가 보이게 한다.
 
-### Report
+## 오류상태
+- 문서 파싱/변환 실패.
+- LRule report 저장 실패.
+- hash mismatch.
+- Git fetch/push 실패.
+- diverged/merge conflict.
+- 저장 권한/파일 잠금 오류.
+각 오류는 사용자에게 원인 한 줄 + 다음 행동을 제공하고 성공으로 위장하지 않는다.
 
-실제 실행마다 `lrule_report.json` 저장.
-저장 실패도 fail-closed.
-
----
-
-# TRACK C — FINAL 우회경로 감사 및 차단 (P0)
-
-저장소 전체 검색:
-
-- `force_draft_name`
-- `_DRAFT`
-- `FINAL`
-- `submittable=True`
-- `final_path`
-- rename/replace
-- shutil.copy/copy2/copyfile
-- 제출가능/제출용 상태 반환
-
-기존 format-specific acceptance는 유지하되, 최종 제출 가능 판정은 전역 Finalizer로 수렴한다.
-
-특히 우선 확인:
-
-- submission_orchestrator.py
-- hwpx_submit.py
-- resume/application 결과 생성 경로
-- business plan output 경로
-
-### Negative tests
-
+## 테스트
 최소:
+### Runtime
+- business_plan E2E
+- consultant_application E2E
+- ambiguous domain negative
+- artifact hash 변경 후 FINAL 차단
+- registry hash 변경 후 FINAL 차단
+- missing/duplicate LRule FINAL 차단
+- direct FINAL bypass 차단
 
-1. LRule 검사 후 artifact 수정 → FINAL 차단
-2. report 이후 registry 변경 → FINAL 차단
-3. mechanized guard missing → UNVERIFIABLE → FINAL 차단
-4. judgment evidence missing → REVIEW_REQUIRED → FINAL 차단
-5. rule missing/duplicate → FINAL 차단
-6. report save 실패 → FINAL 차단
-7. ambiguous domain → 자동 FINAL 금지
-8. legacy direct final path → 차단
+### Git Sync
+- clean/current
+- clean/behind → ff-only 성공
+- ahead → 보존
+- dirty → 보존
+- diverged → reset 없이 차단/분리
+- push branch
+- fetch 실패
 
----
+### LRule UI/API
+- 전체 rule count/누락/중복
+- edit validation
+- invalid edit
+- persistence
+- runtime report와 rule id 연결
 
-# TRACK D — Domain / Workspace / Results Wiring (P0/P1)
+### Workflow UI
+- empty/loading/error/success/review-required
+- mobile/Windows browser 기본 smoke
 
-현재 domain 개념과 document_type을 분리 유지한다.
+가능하면 전체 기존 regression 실행.
 
-최소 domain:
+## 회귀검증
+- 기존 CLI/API 호환.
+- 기존 business_plan 결과 생성.
+- 기존 consultant_application 결과 생성.
+- workspace/results legacy read.
+- 기존 HWP/HWPX/DOCX 경로.
+- 기존 LRule/Finalizer negative tests.
+- 기존 사용자 산출물/데이터 비변경.
 
-- business_plan
-- consultant_application
-- other
+## 문서동기화
+실제 구현과 맞게 필요한 범위에서만:
+- README
+- AGENTS/CLAUDE 등 실행 규칙 문서
+- architecture 문서
+- LRule registry/coverage 문서
+- TASK/TASKS
+를 동기화.
 
-신규 실행은 실제로 다음 경로를 사용해야 한다.
+문서가 코드보다 앞서 DONE을 선언하면 안 된다.
 
+## Git 규칙
+- 최신 `origin/master`를 기준으로 작업 branch/worktree 생성.
+- 독립 TRACK은 파일 owner를 분리해 병렬 가능.
+- 동일 entrypoint/registry를 동시에 수정 금지.
+- 각 TRACK: 구현 → targeted test → regression → commit → push.
+- PR 생성 가능.
+- master 자동병합 금지.
+
+## DONE/BLOCKED
+DONE 조건:
+- production runtime이 DomainRouter→Pipeline→LRule→Hash→Finalizer로 실제 연결.
+- BP/CA E2E 통과.
+- 안전 Git sync 상태/ff-only/push 흐름 검증.
+- LRule 전수관리·수정 화면 동작 및 runtime enforcement 유지.
+- 비개발자 workflow monitor 동작.
+- 빈/로딩/오류 상태 검증.
+- 불필요한 score/dashboard 기능 미추가.
+
+BLOCKED:
+- AGENTS.md 보호규칙과 필수 구현 충돌.
+- repo diverged/dirty 상태를 안전하게 분리할 수 없음.
+- 필수 Python/Windows/HWP 환경이 없어 실제 E2E 검증 불가.
+- canonical LRule source가 둘 이상이라 사용자 결정 없이는 통합 불가.
+
+## 최종보고
 ```text
-workspace/business_plan/
-workspace/consultant_application/
-results/business_plan/
-results/consultant_application/
+REPO: pds2225/auto_write
+BASE_SYNC: CLEAN_CURRENT | FAST_FORWARDED | LOCAL_CHANGES_PRESERVED | DIVERGED | BLOCKED
+TRACK_A_RUNTIME: DONE | BLOCKED
+TRACK_B_SYNC: DONE | BLOCKED
+TRACK_C_LRULE_UI: DONE | BLOCKED
+TRACK_D_WORKFLOW: DONE | BLOCKED
+TRACK_E_AUTHORING: DONE | BLOCKED
+BRANCHES:
+COMMITS:
+PUSH:
+PRS:
+TEST:
+REGRESSION:
+STATUS: DONE | BLOCKED | FAIL
 ```
 
-기존 프로젝트는 legacy fallback으로 읽을 수 있어야 한다.
-
-함수만 있고 caller가 없으면 실제 runtime wiring 한다.
-
-테스트:
-
-- 신규 BP project path
-- 신규 CA project path
-- legacy BP read
-- legacy CA read
-
----
-
-# TRACK E — Business Plan E2E (P0)
-
-실사용 개인정보 없이 fixture/synthetic data 사용.
-
-production과 동일한 orchestrator를 최대한 사용한다.
-
-검증 흐름:
-
-```text
-input
-→ DomainRouter
-→ business_plan
-→ BusinessPlanPipeline
-→ generation/quality path
-→ LRuleEnforcer
-→ report
-→ artifact hash
-→ registry hash
-→ Finalizer
-```
-
-검증:
-
-- consultant_application 전용 규칙 N/A + reason
-- applicable mechanized silent PASS 0
-- blockers 존재 시 _DRAFT
-- controlled pass fixture면 FINAL
-- report 실제 존재
-- report hash와 artifact 일치
-
-mock-only E2E 금지.
-
----
-
-# TRACK F — Consultant Application E2E (P0)
-
-synthetic applicant/profile fixture 사용.
-
-검증 흐름:
-
-```text
-input
-→ DomainRouter
-→ consultant_application
-→ ConsultantApplicationPipeline
-→ autofill/resume/cross-form
-→ acceptance
-→ LRuleEnforcer
-→ report/hash
-→ Finalizer
-```
-
-검증:
-
-- business_plan 전용 규칙 N/A + reason
-- 사실 날조 없음
-- 미확정 체크박스 임의 선택 없음
-- cross-form consistency
-- blocker 시 DRAFT
-- controlled pass fixture면 FINAL
-
----
-
-# TRACK G — 루트 폴더 정리 (P1, 다른 트랙과 파일 충돌 없을 때 병렬)
-
-루트의 모든 파일/1단계 디렉터리를 분류한다.
-
-- KEEP_ROOT
-- SOURCE
-- DOC
-- SCRIPT
-- TEST
-- CONFIG
-- DATA
-- GENERATED
-- ARCHIVE
-- DUPLICATE
-- UNKNOWN
-
-파일명만 보고 이동하지 않는다.
-이동 직전 repo 전체 참조 검색.
-
-우선 LOW RISK만 실제 이동:
-
-- 참조 없는 일반 문서
-- 명확한 historical/archive 자료
-- 명확한 개발용 스크립트
-- 추적 부적절한 generated/temp
-
-문서/스크립트 이동 시 README/CLAUDE/AGENTS/.claude/workflow/test path 모두 갱신.
-
-루트가 계약인 파일은 유지.
-
-루트정리 때문에 business_plan/consultant_application/CORE/LRule를 다시 설계하지 않는다.
-
----
-
-# TRACK H — MIXED / 중복 / Placeholder 정리 (P1)
-
-전수 검색:
-
-- `구현 예정`
-- TODO-only
-- pass-only
-- 빈 facade
-- 1줄 placeholder
-- duplicate implementation
-- legacy wrapper 내부 복제
-- *_old / *_v2 / copy / backup / 날짜 접미사
-
-각 항목:
-
-A. 실제 필요 → canonical implementation에 연결
-B. 불필요 → 안전하게 제거
-C. compatibility 목적 → 명확한 wrapper/re-export 유지
-D. 판단 불가 → UNKNOWN/보류
-
-dual source of truth 금지.
-
-특히 cross_form/autofill/source-pool 관련 MIXED 책임을 재확인하되 억지 이동 금지.
-
----
-
-# TRACK I — Architecture / Regression Guard 강화 (P1)
-
-최소 불변조건:
-
-1. business_plan → consultant_application 내부 직접 import 금지
-2. consultant_application → business_plan 내부 직접 import 금지
-3. core/shared → domains 직접 import 금지
-4. domains → core/shared 허용
-5. wrapper 내부 구현 복제 금지
-6. runtime entrypoint의 DomainRouter 우회 방지
-7. FINAL 우회 방지
-8. placeholder-only domain module 방지
-9. legacy workspace compatibility
-
-가능하면 AST 기반 import 검사 사용.
-
----
-
-# TRACK J — Test / CI / 환경 실패 정리 (P1)
-
-기존 Python 3.11 관련 실패가 남아 있으면 다시 실측.
-
-```bash
-py -0p
-py --list
-python --version
-where python
-```
-
-정확한 실패 테스트와 원인 분리:
-
-A. 신규 regression → 수정
-B. 기존 baseline → 기록
-C. 환경 문제 → 증거 기록
-D. 잘못된 hardcoded interpreter → repo 지원범위 안에서 portability 수정 검토
-
-skip으로 숨기지 않는다.
-
-가능한 전체 `app/tests/` regression 실행.
-
----
-
-# TRACK K — LRule Gap 추가 기계화 (P2, P0 완료 후 남는 자원으로 병렬)
-
-HIGH impact + LOW/MEDIUM effort만 선택.
-
-한 규칙은 반드시 아래 4개가 한 세트로 완료될 때만 mechanized 처리:
-
-1. guard
-2. regression test
-3. coverage update
-4. runtime wiring
-
-category만 변경 금지.
-
-P0 미완료인데 gap 기계화에 과도한 시간 사용 금지.
-
----
-
-## 2. 병렬 작업 충돌 관리
-
-병렬 branch/worktree를 쓸 경우:
-
-- 트랙별 branch 분리
-- 같은 파일을 두 트랙에서 동시에 수정 금지
-- 공통 파일 수정이 필요한 경우 한 트랙을 owner로 지정
-- integration branch에서 하나씩 검증 후 병합
-- merge conflict를 `ours/theirs`로 기계적으로 해결 금지
-- 양쪽 의도를 실제 코드로 합친 뒤 테스트
-
-추천 ownership 예:
-
-- runtime entrypoint: TRACK A owner
-- LRule/Finalizer: TRACK B owner
-- bypass tests: TRACK C owner
-- config/workspace: TRACK D owner
-- BP tests: TRACK E owner
-- CA tests: TRACK F owner
-- docs/root: TRACK G owner
-
----
-
-## 3. 사용자에게 중간 질문 금지
-
-다음 질문 금지:
-
-- 계속할까요?
-- 이걸 옮길까요?
-- PR 만들까요?
-- 병합할까요?
-- 어느 걸 먼저 할까요?
-- 이 구조가 맞나요?
-
-기존 요구사항과 코드 근거로 판단 가능하면 스스로 진행.
-
-한 트랙이 BLOCKED면 그 트랙만 기록하고 다른 독립 트랙을 계속한다.
-
-단 다음은 임의 처리 금지:
-
-- 개인정보
-- 실제 서명
-- 실제 체크박스 선택
-- 유료 API 호출
-- secret
-- 운영 배포
-- destructive migration
-
----
-
-## 4. 테스트 전략
-
-각 트랙 작은 변경마다 관련 테스트.
-
-최종 최소:
-
-- test_lessons_coverage
-- test_lesson_registry_integrity
-- test_lrule_domain_gate
-- test_lrule_enforcer
-- test_finalizer
-- test_architecture_boundaries
-- submission_orchestrator
-- hwpx_submit / hwpx_fill / hwpx_acceptance
-- cross_form
-- resume/application
-- business plan
-- workspace routing
-- BP E2E
-- CA E2E
-- negative finalization tests
-- 가능한 `app/tests/` 전체
-
-fake pass 금지:
-
-- assert True
-- mock이 production 핵심 전체 우회
-- exception swallow
-- subprocess return code 무시
-- skip 남발
-
----
-
-## 5. Git / PR 운영
-
-병렬 작업은 트랙별 작은 commit 또는 branch로 관리.
-
-의미 단위 commit 예:
-
-- `fix(runtime): wire production entrypoints through domain router`
-- `feat(lrules): enforce runtime guards and persist reports`
-- `fix(finalizer): verify artifact and registry freshness`
-- `test(e2e): cover business-plan runtime path`
-- `test(e2e): cover consultant-application runtime path`
-- `chore(root): organize repository root`
-- `test(architecture): block finalization bypasses`
-
-각 commit 전 관련 테스트.
-
-PR은 독립 작업별로 여러 개 생성 가능하다.
-사용자 승인 기다리지 않는다.
-
-자동 병합은 다음 조건을 모두 만족할 때만:
-
-- conflict 없음
-- unrelated diff 없음
-- 신규 regression 0
-- 해당 트랙 필수 테스트 PASS
-- destructive change 없음
-- 사용자 데이터 영향 없음
-
-조건 미충족 PR은 OPEN으로 남기고 다음 독립 작업 진행.
-
----
-
-## 6. 내일 검수하기 쉽게 결과 남기기
-
-최종 보고는 한눈에 볼 수 있어야 한다.
-
-```text
-[RESULT]
-PASS / PARTIAL / BLOCKED
-
-[MASTER]
-start HEAD:
-end HEAD:
-
-[PARALLEL TRACKS]
-A Runtime wiring: PASS/PARTIAL/BLOCKED
-B LRule/Finalizer: ...
-C Final bypass: ...
-D Domain/workspace: ...
-E BP E2E: ...
-F CA E2E: ...
-G Root cleanup: ...
-H Mixed/duplicate: ...
-I Architecture: ...
-J Test/CI: ...
-K Gap mechanization: ...
-
-[PRODUCTION WIRING]
-실제 연결한 entrypoint 목록
-
-[LRULE]
-canonical total:
-runtime evaluated:
-mechanized actually executed:
-gap remaining:
-judgment remaining:
-
-[FINAL BYPASS]
-found:
-fixed:
-remaining:
-
-[E2E]
-business_plan:
-consultant_application:
-
-[ROOT CLEANUP]
-moved:
-kept:
-archived:
-unknown:
-
-[TEST]
-passed:
-failed:
-skipped:
-environment-only:
-new regressions:
-
-[COMMITS]
-sha + message
-
-[PRS]
-# / title / status / merged 여부
-
-[BLOCKED]
-트랙 + 정확한 이유
-
-[REMAINING P0]
-없으면 NONE
-
-[REMAINING P1]
-목록
-
-[NEXT]
-내일 사람이 먼저 확인할 최대 5개
-```
-
----
-
-## 7. 최종 원칙
-
-이번 TASK는 순차적으로 한 항목씩 완료하고 멈추는 작업이 아니다.
-
-**서로 독립적인 것은 가능한 한 병렬로 최대한 많이 구현한다.**
-
-단 같은 파일/같은 contract를 동시에 수정해 충돌을 만들지 않는다.
-
-목표는 내일 사용자가 돌아왔을 때:
-
-- 구현 가능한 것은 최대한 구현되어 있고
-- 각 트랙의 테스트 결과가 남아 있고
-- 안전한 PR은 병합돼 있으며
-- 불확실한 것은 OPEN/BLOCKED로 명확히 분리되어 있고
-- 추가 질문 없이 한 번에 검수 가능한 상태
-
-를 만드는 것이다.
-
-"작업 1개만 수행 후 멈춤" 금지.
-
-안전하게 할 수 있는 독립 작업이 남아 있는 동안 계속 진행한다.
+## 실행지시
+원격 상태를 안전하게 확인·동기화한 뒤 이 `TASK.md`만 처음부터 끝까지 읽고 실행한다. 독립 TRACK은 병렬로 진행하되 동일 파일/entrypoint는 한 owner만 수정한다. 사용자에게 중간 결정을 요구하지 말고 안전하게 결정 가능한 범위는 진행하며, 위험하거나 정책 결정이 필요한 항목만 `BLOCKED`로 남긴다.
