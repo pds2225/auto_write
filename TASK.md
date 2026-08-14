@@ -1303,7 +1303,7 @@ P0가 안정되기 전에는 착수하지 않는다. 완료 처리는 AW-001 이
 REPO: pds2225/auto_write
 BASE: main
 TASK_ID: T-20260814-02
-WORK_BRANCH: docs/task-T-20260814-02
+WORK_BRANCH: docs/task-T-20260814-02-on-main
 STATUS_THIS_TURN: 명세만 등록 (`[ ]`). 구현 시작 아님. 제품 코드 0줄.
 
 관계: AW-001~AW-008과 **합치지 않는다**. 본 TASK는 사업계획서 **작성 품질 파이프라인** Epic이다. 구현 시 AW-001의 DomainRouter → LRuleEnforcer → Finalizer 경로를 **KEEP**로 통과해야 한다. AW-001이 `[~]`여도 본 LIST는 `[ ]`로 둔다(이번 턴은 구현 시작이 아님).
