@@ -25,6 +25,7 @@ REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 [ ] AW-008 | 남은 L 규칙 빈칸을 실제 검사로 채운다
 [~] T-20260814-01 | 기본 브랜치 보호를 걸고 문서 머지 규칙을 맞춘다
 [ ] T-20260814-02 | AIMY급 사업계획서를 공고·양식·기업사실에 맞춰 자동 작성하는 통합 과업을 명세한다
+[~] T-20260814-03 | GitHub에서 auto_write를 git clone으로 받을 수 있게 한다
 
 
 ---
@@ -311,6 +312,46 @@ auto_write 기본 브랜치에 브랜치 보호가 걸려 있고, 문서 PR은 d
 
 ### DONE
 - REQUEST_SOLVED=YES: 공개 레포 기본 브랜치 보호가 실제로 걸려 있다
+
+## T-20260814-03
+
+TASK_ID: T-20260814-03
+TASK_START_SHA: bfa68f7d4983c798a5e2e0580a9b6bd20eee1833
+WORK_BRANCH: cursor/git-clone-helper-e9e0
+
+### 8-1. 사용자 원문
+git clone
+
+### 최종 결과
+비개발자가 GitHub `pds2225/auto_write` 를 기존 폴더를 덮어쓰지 않고 받을 수 있다.
+
+### MUST
+- clone URL: `https://github.com/pds2225/auto_write.git`
+- Windows 기본 대상: `D:\auto_write`
+- 대상이 이미 같은 저장소면 재clone하지 않고 안내
+- 대상이 비어 있지 않거나 다른 저장소면 중단. 삭제·덮어쓰기 금지
+- README에 처음 받는 명령이 있다
+
+### KEEP
+- 기존 Git sync / force-push 금지 규칙
+- AW-001~AW-008 내용 합치지 않음
+
+### REMOVE
+- 없음
+
+### FORBIDDEN
+- `git reset --hard` / force push / `git clean -fd`
+- 기존 `D:\auto_write` 삭제
+- secret / .env 출력
+
+### VERIFY
+- 로컬 bare remote clone 테스트
+- 같은 저장소 재실행 = already_present + 로컬 파일 보존
+- 비어 있지 않은 폴더 / 다른 저장소 = CloneError
+- 실제 GitHub `git clone` 1회
+
+### DONE
+- REQUEST_SOLVED=YES: clone 명령·도구가 동작하고 기존 폴더를 덮어쓰지 않는다
 
 ## AW-001
 

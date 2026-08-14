@@ -33,6 +33,7 @@
 | 제출 가능성 진단만 | — | `py -3.11 app/self_diagnose.py …` 또는 `auto_write_hub.py diagnose …` |
 | JSON→DOCX 주입(구 autowrite) | — | `tools/injector/inject.py` / `run.sh` |
 | 이력서 L규칙 | `resume-l-rules` | `py -3.11 app/lrule_gate.py …` |
+| GitHub에서 저장소 받기 | — | `git clone https://github.com/pds2225/auto_write.git D:\auto_write` / `clone.bat` / `py -3.11 app/clone_repo.py --dest …` |
 
 ---
 

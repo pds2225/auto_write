@@ -4,6 +4,7 @@
 
 - Windows 폴더 위치: `D:\auto_write`
 - 원격 저장소: https://github.com/pds2225/auto_write
+- 처음 받기: `git clone https://github.com/pds2225/auto_write.git D:\auto_write`
 
 ---
 
@@ -22,6 +23,20 @@
 ---
 
 ## 2. 처음 실행하는 법 (제일 쉬운 방법)
+
+### 2-0. GitHub에서 프로그램 받기 (처음 한 번)
+
+PC에 아직 `D:\auto_write` 폴더가 없으면, PowerShell 또는 명령 프롬프트에서 아래를 실행합니다.
+
+```powershell
+git clone https://github.com/pds2225/auto_write.git D:\auto_write
+```
+
+- Git이 없으면 https://git-scm.com/download/win 에서 설치합니다.
+- **이미 `D:\auto_write`가 있으면 다시 clone하지 마세요.** 기존 파일을 덮어쓰지 않습니다.
+- 다른 폴더에 깨끗한 복사본이 필요하면 `clone.bat D:\auto_write_copy` 또는 `py -3.11 app\clone_repo.py --dest D:\auto_write_copy` 를 씁니다.
+
+### 2-1. 설치·실행
 
 Windows 파일 탐색기에서 아래 파일을 **순서대로 더블클릭**하면 됩니다.
 
@@ -95,6 +110,7 @@ AI가 더 좋은 문안을 쓰게 하려면 API 키를 넣어주면 됩니다. (
 | 증상 | 해결 방법 |
 |------|-----------|
 | "Python을 찾을 수 없음" | Python 3.11 이상 설치 후 다시 실행 |
+| `git clone` 실패 / Git 없음 | Git for Windows 설치 후 다시 실행. 기존 `D:\auto_write`는 덮어쓰지 않음 |
 | 설치/패키지 오류 | `setup.bat` 다시 실행 |
 | 웹페이지 접속 안 됨 | `launch.bat` 창에 뜬 오류 메시지 확인 |
 | `http://127.0.0.1:8765` 안 열림 | 다른 프로그램이 같은 포트를 쓰는지 확인 |
