@@ -15,7 +15,7 @@ TASK 1개 = 반드시 1줄. LIST의 TASK_ID와 DETAILS의 TASK_ID는 반드시 1
 REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 -->
 
-[~] AW-001 | 문서 작성이 정해진 검사 경로를 거쳐 끝나게 한다
+[ ] AW-001 | 문서 작성이 정해진 검사 경로를 거쳐 끝나게 한다
 [ ] AW-002 | GitHub와 작업 상태를 안전하게 주고받게 한다
 [ ] AW-003 | L 규칙을 한 화면에서 보고 고칠 수 있게 한다
 [ ] AW-004 | 문서 작성 진행 상태를 한 화면에서 보게 한다
@@ -23,6 +23,7 @@ REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 [ ] AW-006 | 루트 파일을 역할별로 정리한다
 [ ] AW-007 | 중복·미사용 코드를 찾아 정리한다
 [ ] AW-008 | 남은 L 규칙 빈칸을 실제 검사로 채운다
+[~] T-20260814-01 | 기본 브랜치 보호를 걸고 문서 머지 규칙을 맞춘다
 
 
 ---
@@ -30,7 +31,7 @@ REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 # 1. REPOSITORY
 
 REPO: pds2225/auto_write
-BASE: master
+BASE: main
 REMOTE: https://github.com/pds2225/auto_write
 
 ## 작업지시 파일
@@ -73,7 +74,7 @@ Google Tasks는 이 개발 TASK 시스템과 무관하다.
 4. `git status --short`
 5. ahead / behind / diverged 확인:
 
-`git rev-list --left-right --count HEAD...origin/master`
+`git rev-list --left-right --count HEAD...origin/main`
 
 왼쪽 숫자 = 로컬이 앞선 커밋(ahead). 오른쪽 = 로컬이 뒤처진 커밋(behind).
 둘 다 0보다 크면 diverged(갈라짐). 둘 다 0이면 동기화됨.
@@ -96,7 +97,7 @@ Google Tasks는 이 개발 TASK 시스템과 무관하다.
 
 조건: 현재 브랜치가 BASE, working tree clean, ahead=0, behind>0.
 
-실행: `git merge --ff-only origin/master`
+실행: `git merge --ff-only origin/main`
 
 실패하면 `BLOCKED`. `reset --hard`로 맞추지 않는다.
 
@@ -131,7 +132,7 @@ force push 금지.
 선택:
 
 - 이번 작업 파일이면 커밋한 뒤 **2. ahead only** 경로로 간다.
-- 이번 작업이 아니거나 BASE를 더럽히면, 별도 worktree에서 `origin/master` 최신으로 작업한다.
+- 이번 작업이 아니거나 BASE를 더럽히면, 별도 worktree에서 `origin/main` 최신으로 작업한다.
 
 안전하게 분리하지 못하면 `BLOCKED`.
 
@@ -272,6 +273,43 @@ TASK LIST 한 줄 요약과 아래 상세 TASK는 TASK_ID로 연결한다.
 독립 TRACK은 파일군이 겹치지 않으면 병렬 가능. 동일 entrypoint/registry는 한 owner만 수정.
 NEXT_TASK.md 이관(2026-08-13): A/B/C/D/E→AW-001, H→§12 테스트. F→AW-006, G→AW-007, I→AW-008. ACTIVE(AW-001)에 내용 합치지 않음. 파일 삭제.
 -->
+
+## T-20260814-01
+
+### 8-1. 사용자 원문
+auto_write 공개 전환 후 진행. pds2225/auto_write가 public인지 확인. public이면 기본 브랜치 보호: required docs-gate + 실제 test job, enforce_admins, force push 금지. private면 STOP. mail 건드리지 마. MAIL-002 금지. --admin 금지.
+
+### 최종 결과
+auto_write 기본 브랜치에 브랜치 보호가 걸려 있고, 문서 PR은 docs-gate가 초록일 때만 머지된다.
+
+### MUST
+- 공개 여부를 확인한 뒤에만 보호를 건다
+- required에 있는 job 이름만 넣는다
+- enforce_admins
+- force push 금지
+- TASK.md의 GitHub Pro 403 BLOCKED 문구를 보호 성공 후 갱신한다
+
+### KEEP
+- 기존 AW-001~AW-008 과업 내용은 합치지 않는다
+- mail은 건드리지 않는다
+
+### REMOVE
+- 권한 부족으로 보호를 못 걸었다는 BLOCKED_WITH_EVIDENCE 문구
+
+### FORBIDDEN
+- .env / 비밀값
+- 요청에 없는 기능 추가
+- 존재하지 않는 test job 이름을 required에 넣기
+- `gh pr merge --admin`
+- mail / MAIL-002
+
+### VERIFY
+- `gh repo view` visibility=public
+- 기본 브랜치 protection contexts에 docs-gate가 있다
+- allow_force_pushes=false, enforce_admins=true
+
+### DONE
+- REQUEST_SOLVED=YES: 공개 레포 기본 브랜치 보호가 실제로 걸려 있다
 
 ## AW-001
 
@@ -1431,7 +1469,7 @@ USER_E2E: PASS | FAIL | BLOCKED
 작업 완료 직전 다시:
 
 1. `git fetch --all --prune`
-2. 현재 `origin/master` 확인
+2. 현재 `origin/main` 확인
 3. `TASK_START_SHA`와 최신 base 비교
 
 ## base가 작업 중 변경된 경우
@@ -1486,14 +1524,14 @@ WORK_BRANCH_PUSHED: YES | NO
 
 머지는 GitHub Checks가 초록일 때만 한다. 문서만(`TASK.md`, `*.md`, `docs/**`) 바뀌면 무거운 테스트 대신 `docs-gate`가 초록이면 된다. `gh pr merge --admin` 및 실패 체크를 무시하는 머지는 금지한다.
 
-브랜치 보호(required checks)는 권한/플랜 부족으로 설정하지 못했다. BLOCKED_WITH_EVIDENCE: branch protection classic HTTP 403 Upgrade to GitHub Pro or make this repository public to enable this feature.; ruleset HTTP 403 Upgrade to GitHub Pro or make this repository public to enable this feature.
+브랜치 보호: 기본 브랜치 `main`(구 master 이름 변경). required checks=`docs-gate`(제품 test workflow 없음). enforce_admins=true, allow_force_pushes=false.
 
 
 merge 후:
 
 1. `git fetch`
 2. local base clean 확인
-3. `git merge --ff-only origin/master`
+3. `git merge --ff-only origin/main`
 4. local base와 remote base 일치 확인
 
 절대 reset --hard로 맞추지 않는다.
