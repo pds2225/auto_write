@@ -72,9 +72,35 @@ def _run_git(*args: str, cwd: Path | None = None, timeout: int = 60) -> str:
     return (proc.stdout or "").strip()
 
 
-def _is_git_repo(path: Path) -> bool:
+def is_git_repo(path: Path) -> bool:
     git_dir = path / ".git"
     return git_dir.is_dir() or git_dir.is_file()
+
+
+def require_existing_checkout(
+    dest: Path | str,
+    url: str = DEFAULT_CLONE_URL,
+) -> CloneResult:
+    """Return checkout info if ``dest`` is already this repo. Never clones."""
+    target = Path(dest).expanduser()
+    try:
+        target = target.resolve()
+    except OSError as exc:
+        raise CloneError(f"대상 경로를 확인할 수 없습니다: {target}") from exc
+    source = (url or DEFAULT_CLONE_URL).strip() or DEFAULT_CLONE_URL
+    if not target.exists():
+        raise CloneError(
+            f"저장소 폴더가 없습니다: {target}. 먼저 "
+            f"git clone {source} {target} 를 실행하세요."
+        )
+    if not target.is_dir():
+        raise CloneError(f"대상이 폴더가 아닙니다: {target}")
+    if not is_git_repo(target):
+        raise CloneError(f"git 저장소가 아닙니다: {target}. 덮어쓰지 않습니다.")
+    existing = _origin_url(target)
+    if not same_repository(existing, source):
+        raise CloneError(f"다른 저장소가 이미 있습니다: {existing}. 덮어쓰지 않습니다.")
+    return _inspect_repo(target, source)
 
 
 def _origin_url(path: Path) -> str:
@@ -120,7 +146,7 @@ def clone_repository(
     if target.exists():
         if not target.is_dir():
             raise CloneError(f"대상이 폴더가 아닙니다: {target}")
-        if _is_git_repo(target):
+        if is_git_repo(target):
             existing = _origin_url(target)
             if not same_repository(existing, source):
                 raise CloneError(

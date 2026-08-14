@@ -26,6 +26,7 @@ REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 [~] T-20260814-01 | 기본 브랜치 보호를 걸고 문서 머지 규칙을 맞춘다
 [ ] T-20260814-02 | AIMY급 사업계획서를 공고·양식·기업사실에 맞춰 자동 작성하는 통합 과업을 명세한다
 [x] T-20260814-03 | GitHub에서 auto_write를 git clone으로 받을 수 있게 한다
+[~] T-20260814-04 | clone 후 로컬 PC 리모트 컨트롤을 켤 수 있게 한다
 
 
 ---
@@ -352,6 +353,48 @@ git clone
 
 ### DONE
 - REQUEST_SOLVED=YES: clone 명령·도구가 동작하고 기존 폴더를 덮어쓰지 않는다
+
+## T-20260814-04
+
+TASK_ID: T-20260814-04
+TASK_START_SHA: bfa68f7d4983c798a5e2e0580a9b6bd20eee1833
+WORK_BRANCH: cursor/git-clone-helper-e9e0
+
+### 8-1. 사용자 원문
+다되면 로컬-pc리모트컨트롤
+
+### 최종 결과
+git clone이 끝난 뒤 Windows 로컬 PC에서 더블클릭 한 번으로 Cursor My Machines 또는 Claude Code Remote Control이 켜진다.
+
+### MUST
+- clone이 끝난 `D:\auto_write` 에서만 시작
+- 기존 폴더 덮어쓰기·삭제 금지
+- Cursor `agent worker start --name auto-write-pc` 우선, 없으면 `claude remote-control`
+- 클라우드 VM에서 D:\ 에 붙지 못하면 정직하게 안내
+- operator console 을 외부에 열지 않음 (`AUTO_WRITE_ALLOW_REMOTE` 켜지 않음)
+
+### KEEP
+- T-20260814-03 clone 도구
+- Git force-push 금지
+
+### REMOVE
+- 없음
+
+### FORBIDDEN
+- 로컬 PC에 무단 원격 접속 도구 설치
+- API key / .env 출력
+- `git reset --hard` / force push
+- operator console 원격 바인딩
+
+### VERIFY
+- checkout 없으면 시작 거부
+- agent 있으면 cursor_worker 계획
+- claude만 있으면 claude_remote_control 계획
+- 비Windows에서 --start 기본 거부
+- mock runner로 실제 워커 미기동
+
+### DONE
+- REQUEST_SOLVED=YES: PC에서 remote_control.bat 로 워커가 실제로 켜졌을 때. 클라우드만으로는 YES 금지.
 
 ## AW-001
 

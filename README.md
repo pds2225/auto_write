@@ -53,6 +53,21 @@ Windows 파일 탐색기에서 아래 파일을 **순서대로 더블클릭**하
 http://127.0.0.1:8765
 ```
 
+### 2-2. 로컬 PC 리모트 컨트롤
+
+clone이 끝난 뒤, **그 Windows PC에서** `D:\auto_write\remote_control.bat` 을 더블클릭합니다.
+
+- Cursor: `agent worker start --name auto-write-pc` (My Machines). 창을 닫지 마세요.
+- Claude Code가 있으면: `claude remote-control --name auto_write`
+- 이 클라우드 에이전트는 `D:\auto_write`에 직접 붙지 않습니다. PC가 켜져 있고 워커 창이 열려 있어야 원격 제어가 됩니다.
+
+설치가 필요하면 PowerShell에서:
+
+```powershell
+irm 'https://cursor.com/install?win32=true' | iex
+agent login
+```
+
 ---
 
 ## 3. 화면에서 사업계획서 만드는 순서
