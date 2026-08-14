@@ -42,9 +42,9 @@ from .psst_fill import PSSTFillReport, apply_psst_scaffold
 from .usage_acceptance import (
     AcceptanceConfig, SEV_FAIL, backup_existing_output, force_draft_name, run_acceptance,
 )
-from .lrule_enforcer import LRuleEnforcer, enforce_lrules
-from .finalizer import Finalizer, finalize_artifact
-from auto_write.domains.domain_classifier import classify_domain, Domain
+from auto_write.services.lrule_enforcer import enforce_lrules
+from auto_write.services.finalizer import finalize_artifact
+from auto_write.domains.domain_classifier import classify_domain
 
 # 잔존 빈칸(placeholder) 보수적 탐지 패턴 — [확인필요], [산출근거] 포함
 _RESIDUAL_RE = re.compile(
@@ -422,8 +422,10 @@ def run_autopilot(
                 final_path = new_path
                 report.output_docx = str(final_path)
                 report.draft_marked = True
-    except Exception:
-        pass  # LRule/Finalizer 실패는 파이프라인을 차단하지 않음 (기존 게이트가 이미 처리)
+    except Exception as exc:
+        # 기존 품질/수용검사 게이트는 유지하되, 배선 실패를 침묵 성공으로 위장하지 않는다.
+        report.finalizer_submittable = False
+        report.finalizer_blocked_reason = f"lrule_finalizer_error:{type(exc).__name__}: {exc}"
 
     # --- 5단계: 최종본 재채점(참고용) + 잔존 빈칸 스캔 + To-Do ---
     # 재채점은 로컬 룰만 사용(AI 호출 금지). 게이트 판정은 1단계 품질점수·
@@ -482,6 +484,8 @@ def _build_todo(report: AutopilotReport) -> list[str]:
         )
     if report.format_mismatch:
         todo.append(f"산출 형식 불일치 — {report.format_mismatch}")
+    if report.finalizer_blocked_reason and not report.finalizer_submittable:
+        todo.append(f"LRule/Finalizer 차단 — {report.finalizer_blocked_reason}")
     if report.prompts_inserted:
         todo.append(
             f"NotebookLM 슬라이드 프롬프트 {report.prompts_inserted}곳 — "

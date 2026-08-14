@@ -25,6 +25,7 @@ REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 [ ] AW-008 | 남은 L 규칙 빈칸을 실제 검사로 채운다
 [~] T-20260814-01 | 기본 브랜치 보호를 걸고 문서 머지 규칙을 맞춘다
 [ ] T-20260814-02 | AIMY급 사업계획서를 공고·양식·기업사실에 맞춰 자동 작성하는 통합 과업을 명세한다
+[~] T-20260814-03 | 야간 A~H 미머지 브랜치를 최신 main에 체리픽 이식 준비한다
 
 
 ---
@@ -2042,6 +2043,46 @@ AIMY에서 **절대 승격 금지**: 97.9/97.5, 1.1만, 400억, 특허 건수, 5
 ## 이번 턴 범위
 
 구현하지 않음. 테스트 추가하지 않음. 사업계획서 생성하지 않음. architecture 문서 수정하지 않음. 다음 실행 한 줄은 채팅 보고 NEXT에만.
+
+---
+
+## T-20260814-03
+
+TASK_ID: T-20260814-03
+WORK_BRANCH: cursor/cherry-pick-overnight-lanes-2036
+BASE: origin/main
+STATUS_THIS_TURN: 이식 준비. main 머지 금지.
+
+### 8-1. 사용자 원문
+체리픽 이식 준비만해. 최신 origin/main 기준으로 다시 이식 준비만.
+
+### MUST
+- [x] 최신 origin/main에서 작업 브랜치 생성
+- [x] `9f61718` runtime-wiring 체리픽
+- [x] `16a60b0` E2E 확장 체리픽
+- [x] `7840896` 스킵 (16a60b0과 동일 patch-id)
+- [x] `c9f4503` 스킵 (`from app.resume_fill` 은 pythonpath=app 에서 역의존을 고치지 않음)
+- [x] 깨진 `from .lrule_enforcer` 를 `auto_write.services` 정본 import 로 교정
+- [ ] main 머지 하지 않음 (준비만)
+
+### KEEP
+- AW-001~AW-008, T-20260814-01, T-20260814-02 내용 합치지 않음
+- 기존 origin/main baseline 실패(L001 래퍼 파일 검사, resume_extract `__all__` 등)를 이 PR에서 고치지 않음
+
+### FORBIDDEN
+- main 머지
+- force push / reset --hard
+- `git add -A`
+- 동일 패치 이중 체리픽
+
+### VERIFY
+- 브랜치가 origin/main 위에 있음
+- autopilot 이 `auto_write.services.lrule_enforcer` / `finalizer` 를 import
+- E2E 15 + LRule + Finalizer + 이번 변경 관련 autopilot 테스트 통과
+- draft PR, MAIN_MERGED=NO
+
+### DONE
+REQUEST_SOLVED=YES(이번 턴): 최신 main 기준 이식 브랜치 + draft PR. 머지와 AW-001 실사용 E2E는 다음 턴.
 
 # 9. 실제사용 시나리오
 

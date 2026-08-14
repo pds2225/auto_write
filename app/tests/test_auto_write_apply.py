@@ -176,8 +176,21 @@ def test_autopilot_end_to_end(tmp_path: Path) -> None:
     assert not out.exists()
 
 
+def test_autopilot_imports_lrule_finalizer_from_canonical_services() -> None:
+    """core.docx.autopilot 이 auto_write.services LRule/Finalizer 를 쓰는지 잠금."""
+    import core.docx.services.autopilot_pipeline as core_ap
+    from auto_write.services import autopilot_pipeline as ap
+
+    src = Path(core_ap.__file__).read_text(encoding="utf-8")
+    assert "from auto_write.services.lrule_enforcer import enforce_lrules" in src
+    assert "from auto_write.services.finalizer import finalize_artifact" in src
+    assert "from .lrule_enforcer import" not in src
+    assert callable(ap.enforce_lrules)
+    assert callable(ap.finalize_artifact)
+
+
 def test_autopilot_acceptance_gate_passes_clean_doc(tmp_path: Path) -> None:
-    """R8: 수용검사를 통과하는 출력은 지정한 이름 그대로 내보낸다."""
+    """R8: 수용검사는 통과해도, LRule/Finalizer가 UNVERIFIABLE이면 _DRAFT."""
     from auto_write.services.autopilot_pipeline import run_autopilot
 
     src = tmp_path / "clean.docx"
@@ -190,8 +203,13 @@ def test_autopilot_acceptance_gate_passes_clean_doc(tmp_path: Path) -> None:
     )
     assert report.acceptance_submittable is True
     assert report.acceptance_verdict == "제출가능"
-    assert report.draft_marked is False
-    assert report.output_docx == str(out) and out.exists()
+    assert report.lrule_total > 0
+    assert report.lrule_can_finalize is False
+    assert report.finalizer_submittable is False
+    assert len(report.finalizer_sha256) == 64
+    assert report.draft_marked is True
+    assert report.output_docx.endswith("_DRAFT.docx")
+    assert Path(report.output_docx).exists() and not out.exists()
 
 
 def test_autopilot_strict_acceptance_promotes_paren_warn_to_draft(tmp_path: Path) -> None:
@@ -211,19 +229,20 @@ def test_autopilot_strict_acceptance_promotes_paren_warn_to_draft(tmp_path: Path
 
     base = run_autopilot(str(src), str(tmp_path / "base_out.docx"),
                          max_images=0, psst_scaffold=False, write_report=False)
-    assert base.acceptance_submittable is True       # 기본: warn → 제출 가능
-    assert base.draft_marked is False
+    assert base.acceptance_submittable is True       # 기본: warn → 수용검사 제출 가능
+    assert base.draft_marked is True                 # LRule UNVERIFIABLE → _DRAFT
+    assert base.output_docx.endswith("_DRAFT.docx")
 
     strict = run_autopilot(str(src), str(tmp_path / "strict_out.docx"),
                            max_images=0, psst_scaffold=False, write_report=False,
                            strict_acceptance=True)
-    assert strict.acceptance_submittable is False     # opt-in: fail 승격 → 제출불가
+    assert strict.acceptance_submittable is False     # opt-in: fail 승격 → 수용검사 제출불가
     assert strict.draft_marked is True
     assert strict.output_docx.endswith("_DRAFT.docx")
 
 
 def test_autopilot_acceptance_gate_can_be_disabled(tmp_path: Path) -> None:
-    """acceptance_gate=False 면 기존 동작 그대로(이름 유지, 판정 없음)."""
+    """acceptance_gate=False 면 수용검사 판정은 없지만 LRule/Finalizer는 남는다."""
     from auto_write.services.autopilot_pipeline import run_autopilot
 
     src = tmp_path / "in.docx"
@@ -231,8 +250,10 @@ def test_autopilot_acceptance_gate_can_be_disabled(tmp_path: Path) -> None:
     _make_doc(src, with_table=True)
     report = run_autopilot(str(src), str(out), acceptance_gate=False, write_report=False)
     assert report.acceptance_verdict == ""
-    assert report.draft_marked is False
-    assert report.output_docx == str(out) and out.exists()
+    assert report.lrule_total > 0
+    assert report.draft_marked is True
+    assert report.output_docx.endswith("_DRAFT.docx")
+    assert Path(report.output_docx).exists() and not out.exists()
 
 
 def test_autopilot_gate_fail_closed_on_acceptance_error(tmp_path: Path, monkeypatch) -> None:
@@ -522,8 +543,11 @@ def test_autopilot_rerun_preserves_previous_output(tmp_path: Path) -> None:
     doc.add_paragraph("개요: 게이트 통과용 깨끗한 문서.")
     doc.save(str(src))
     r1 = run_autopilot(str(src), str(out), max_images=0, psst_scaffold=False, write_report=False)
-    assert r1.overwrite_backup == "" and Path(r1.output_docx) == out
-    r2 = run_autopilot(str(src), str(out), max_images=0, psst_scaffold=False, write_report=False)
+    assert r1.overwrite_backup == ""
+    assert r1.draft_marked is True
+    first_out = Path(r1.output_docx)
+    assert first_out.exists() and first_out.name.endswith("_DRAFT.docx")
+    r2 = run_autopilot(str(src), str(first_out), max_images=0, psst_scaffold=False, write_report=False)
     assert r2.overwrite_backup and Path(r2.overwrite_backup).exists()  # 1회차 산출물 보존
 
 
@@ -593,7 +617,9 @@ def test_autopilot_submit_clean_passes_gate(tmp_path: Path) -> None:
     assert report.prompt_md and Path(report.prompt_md).exists()
     assert len(Path(report.prompt_md).read_text(encoding="utf-8")) > 10  # 내용 보존
     assert report.acceptance_submittable is True
-    assert report.output_docx == str(out) and out.exists()
+    assert report.draft_marked is True
+    assert report.output_docx.endswith("_DRAFT.docx")
+    assert Path(report.output_docx).exists() and not out.exists()
 
 
 def test_strip_cli_gates_final_name(tmp_path: Path) -> None:
