@@ -26,7 +26,7 @@ REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 [~] T-20260814-01 | 기본 브랜치 보호를 걸고 문서 머지 규칙을 맞춘다
 [ ] T-20260814-02 | AIMY급 사업계획서를 공고·양식·기업사실에 맞춰 자동 작성하는 통합 과업을 명세한다
 [x] T-20260814-03 | 야간 A~H 미머지 브랜치를 최신 main에 체리픽 이식 준비한다
-[~] T-20260815-01 | 남은 고유 커밋을 체리픽하고 삭제 가능한 원격 브랜치를 지운다
+[x] T-20260815-01 | 남은 고유 커밋을 체리픽하고 삭제 가능한 원격 브랜치를 지운다
 
 
 ---
@@ -2103,8 +2103,8 @@ STATUS_THIS_TURN: 고유 커밋 체리픽 + 삭제 가능 원격 정리. main �
 - [x] `dcccff67` OO/◈·붙임1 스킵 (정본 `core.docx.services.cross_form_autofill` / hwpx_form_extract 테스트가 이미 main)
 - [x] `1ac2cac5` M4 스킵 (generate_missing / m4 CLI 테스트가 이미 main)
 - [x] leftover squash SHA(`refactor/*`, `ci/merge-gate-20260813`, `docs/task-T-20260814-02`) 재체리픽 금지
-- [ ] 삭제 가능 원격 브랜치 삭제 (open PR head·`backup/*` 제외)
-- [ ] main 머지 하지 않음
+- [x] 삭제 가능 원격 브랜치 삭제 (open PR head·`backup/*` 제외) — 21개
+- [x] main 머지 하지 않음
 
 ### KEEP
 - 열린 PR 브랜치: #138 #136 #133 #132 #139
@@ -2120,9 +2120,9 @@ STATUS_THIS_TURN: 고유 커밋 체리픽 + 삭제 가능 원격 정리. main �
 
 ### VERIFY
 - [x] `git_sync_service.py` 에 `_push_branch_verified` / `_remote_branch_matches`
-- [ ] `test_operator_console.py` git-sync 관련 테스트 통과
-- [ ] 삭제 대상 원격이 없고, open PR·backup 은 유지
-- [ ] draft PR, MAIN_MERGED=NO
+- [x] `test_operator_console.py` 19 passed
+- [x] 삭제 대상 원격이 없고, open PR·backup 은 유지
+- [x] draft PR #140, MAIN_MERGED=NO
 
 ### DONE
 REQUEST_SOLVED=YES(이번 턴): 고유 커밋은 이식 브랜치에 있고, 이미 main에 흡수된 원격은 삭제됨. git-sync PR 머지는 다음 턴.
