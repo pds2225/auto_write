@@ -8,9 +8,10 @@
 `pds2225/auto_write` 가 단일 정본. `main` @ `9cffb24` (PR #137: autopilot LRule+Finalizer + E2E 15).
 에이전트 입구 = **bizdoc-hub** / CLI 입구 = **auto_write_hub.py**. 맵: `docs/BIZDOC_HUB_MAP.md`.
 
-**대기:** T-20260814-02 정밀화 지식 수신 중. 구현·TASK 본문 반영은 다음 명령. 저장본: `docs/BPQ_PIPELINE_INSIGHTS_20260815.md`.
-핵심: 프롬프트가 아니라 `Facts → SectionContextPack → Draft → Self-check → QA → Approval → STALE 재검증 → Final`.
-LRule ≠ QualityProfile ≠ PromptTemplate. 공란은 FactState. 비밀은 `.env`만.
+**대기:** T-20260814-02 정밀화 지식 수신 중(배달앱 + 상권분석.html). 구현·TASK 본문 반영은 다음 명령.
+저장본: `docs/BPQ_PIPELINE_INSIGHTS_20260815.md`.
+핵심: `LLM → StageResult(JSON) → 검증 → 다음 Stage → 렌더 → Finalizer`. 한 번에 최종 DOCX 금지.
+LRule ≠ QualityProfile ≠ PromptTemplate. 공란은 FactState. 숫자는 코드 계산. 비밀은 `.env`만.
 
 ## 최근 완료
 
@@ -20,7 +21,7 @@ LRule ≠ QualityProfile ≠ PromptTemplate. 공란은 FactState. 비밀은 `.en
 | 2026-08-09~ | 도메인 리팩터(CORE/BIZPLAN/RESUME)·P0 배선·E2E | PR #114~#119 |
 | 2026-08-11 | RESUME.md 신설 + 허브 맵·bizplan-orchestrator 스킬·죽은 커맨드 참조 정리 | 이 체크포인트 |
 | 2026-08-15 | overnight A–H 체리픽 main 머지 (LRule+Finalizer wiring, E2E 15) | PR #137 |
-| 2026-08-15 | 배달앱 작성도구에서 단계형 파이프라인 인사이트 저장 (구현 대기) | `docs/BPQ_PIPELINE_INSIGHTS_20260815.md` |
+| 2026-08-15 | 배달앱+상권분석.html 단계형 파이프라인 인사이트 저장 (구현 대기) | `docs/BPQ_PIPELINE_INSIGHTS_20260815.md` |
 
 ## 입구 (헷갈리면 여기만)
 
