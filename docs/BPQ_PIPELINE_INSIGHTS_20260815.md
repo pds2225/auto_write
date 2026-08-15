@@ -121,3 +121,99 @@ AW-005 흐름(새문서→양식→기존자료→작성→출처→LRule→FINA
 P0: StageResult 공통 모델, FactGraph, Claim provenance(파일+페이지), Audit, 결정론 숫자, DocumentPlan→section generator  
 P1: workflow monitor, Stage 재실행, QualityProfile/Prompt 버전, Review Queue  
 P2: checkpoint export/import, Golden fixture, stage debug view
+
+---
+
+## 구현 스냅샷 (2026-08-15, `origin/main` `9cffb24`)
+
+작업 시작 전 고정 절차(이번 명령으로 고정): `git fetch` 기본 브랜치 → `TASK.md` 읽기 → 현재 구현 조사 → 그다음 작업. 제품 코드·T-20260814-02 본문 반영은 **다음 명령 대기**.
+
+### Git / TASK LIST
+
+- Remote: `https://github.com/pds2225/auto_write` · BASE 실제값: **`main`** (`TASK.md` §1은 `main`, §3 판정 문단에 구버전 `master` 잔존. 원격 `master` 없음)
+- HEAD: `9cffb24` `prep: cherry-pick overnight A–H lanes onto current main (#137)`
+- ahead/behind vs `origin/main`: 이 스냅샷 작성 시점 로컬 `main` = 원격과 동기
+- LIST: `[ ]` AW-001~008 · `[~]` T-20260814-01 · `[ ]` T-20260814-02 (명세만, 구현 시작 아님) · `[x]` T-20260814-03 (체리픽 **준비**; #137 머지는 그 이후)
+- 지식 브랜치: `cursor/bpq-pipeline-insights-2036` (PR #139, draft). 본 스냅샷만 추가. TASK 본문 미변경
+
+### 정본 경로 드리프트 (BPQ-00이 다시 고정해야 함)
+
+T-20260814-02 KEEP는 `app/auto_write/services/*`를 정본으로 적는다. **2026-08-15 HEAD에서는 DOCX 엔진 상당수가 `core.docx.services`에 실구현**이고 `auto_write.services`는 3줄 re-export다. import는 계속 `from auto_write.services…`가 동작한다. **병렬 `*V2` 금지. 세 벌을 동시에 수정 금지.**
+
+| 역할 | 실구현 | `auto_write.services` | `bizplan.services` |
+|---|---|---|---|
+| DomainRouter | `app/auto_write/domains/domain_router.py` | — | — |
+| LRuleEnforcer | `app/auto_write/services/lrule_enforcer.py` | 실파일 | — |
+| Finalizer | `app/auto_write/services/finalizer.py` | 실파일 | — |
+| company_extract | `app/auto_write/services/company_extract.py` (299줄) | 실파일 | 없음 |
+| announcement_analyzer | `app/auto_write/services/announcement_analyzer.py` | 실파일 | 얇은 re-export |
+| form_analyzer | `app/auto_write/services/form_analyzer.py` | 실파일 | 얇은 re-export |
+| plan_builder | `app/auto_write/services/plan_builder.py` (64줄) | 실파일 | 얇은 re-export |
+| project_service / provenance | `app/auto_write/services/project_service.py` | 실파일 | — |
+| document_ingest | `app/auto_write/document_ingest.py` (664줄) | 실파일 | `core/docx/document_ingest.py` **바이트 동일 복제** |
+| autopilot_pipeline | `app/core/docx/services/autopilot_pipeline.py` (571줄, LRule 4.6 포함) | 3줄 re-export | 얇은 re-export |
+| bizplan_ai_writer | `app/core/docx/services/bizplan_ai_writer.py` | 3줄 re-export | 얇은 re-export |
+| bizplan_autopilot | `app/core/docx/services/bizplan_autopilot.py` | 3줄 re-export | 얇은 re-export |
+| quality_rules (서식 프리셋) | `app/core/docx/services/quality_rules.py` | 3줄 re-export | **전문 복제** (core와 동일 본문) |
+| cross_form_autofill | `app/core/docx/services/cross_form_autofill.py` (2463줄) | 3줄 re-export | **전문 복제** (import만 `auto_write.services.*`) |
+| usage_acceptance | `app/core/docx/services/usage_acceptance.py` | 3줄 re-export | — |
+| evaluation_service | `app/core/docx/services/evaluation_service.py` | 3줄 re-export | 얇은 re-export |
+| render_service | `app/core/docx/services/render_service.py` | 3줄 re-export | **전문 복제** (import만 다름) |
+| docx_ops / submittable_filler | `app/core/docx/services/` | 3줄 re-export | — |
+| psst_check / psst_fill | `app/core/docx/services/` | 3줄 re-export | psst_fill는 **전문 복제**(import만 다름) |
+
+실행 import 권장: `from auto_write.services.<name>` (호환). 파일 수정 시 **실구현 1곳만**. AW-007이 복제본 정리 owner.
+
+### KEEP 모듈 — 구현됨 vs 갭 (인사이트 대비)
+
+| 인사이트 / BPQ 개념 | 현재 | 갭 |
+|---|---|---|
+| DomainRouter | 구현. `resolve`/`resolve_from_docx`. explicit > document_type > classifier | KEEP |
+| LRuleEnforcer | 구현. 151 canonical (`lessons_coverage.json` mechanized 44 / gap 21 / judgment 86). `guards` dict 없으면 mechanized → **UNVERIFIABLE** | 가드 callable을 autopilot이 넘기지 않음 → 거의 항상 FINAL 불가 |
+| Finalizer | 구현. FAIL/REVIEW/UNVERIFIABLE → `_DRAFT`. artifact SHA256 | KEEP. 내용 QA 아님 |
+| Autopilot 4.6 | **#137 이후 배선됨**. `classify_domain` → `enforce_lrules` → `finalize_artifact`. 예외는 `finalizer_blocked_reason=lrule_finalizer_error:…` (침묵 성공 금지). usage_acceptance와 **이중 게이트** | AW-001 경로 KEEP. 거의 `_DRAFT`는 의도(fail-closed) |
+| CompanyMaster | 식별 12필드만 (기업명·대표자·사업자번호·설립일·업종·주소·연락처·이메일·홈페이지·직원수·자본금·팩스). `confidence` high/medium/conflict. `confirmed=false`. provenance=`file`+`raw_label`. 숫자값 보존 | **FactGraph 없음**: fact_id, unit, as_of, actual/plan/estimate, page, FactState. 아이템·KPI·IP·매출 없음 |
+| Conflict | 파일 간 식별값 `_norm_value` 불일치 → Conflict Queue. LLM 비해소 | KPI/날짜/Actual·Plan 충돌 없음. source precedence 코드 없음 |
+| ProgramSpec | `AnnouncementReport`: criteria, deadline, documents, funding 휴리스틱/AI | 단일 ProgramSpec JSON 없음. 글자/페이지 한도·삭제금지·섹션 중요도 미구조화 |
+| FormSpec | `FormReport`: 섹션/표/이미지슬롯/필수칸/PSST 유무, `classify_field_kind` fact vs narrative | FormSpec(자수·삭제금지·섹션 가중) 없음 |
+| QualityProfile (작성) | **미구현**. `quality_rules.PRESETS`는 색/pt/공란 **서식** | AIMY 문체 프로필 JSON 없음. PromptTemplate 버전/해시 없음 |
+| DocumentPlan / Content planner | `plan_builder.build_fill_plan` = identity/overview + 외부 fill_plan.json 좌표 | 평가전략·Claim·Evidence·분량 계획 없음 |
+| Writer | `bizplan_ai_writer`: PSST 약점 영역에 LLM이 **문단 리스트를 바로 DOCX에 삽입**. `[확인필요]`/`[산출근거]` 문자열. `needs_confirm: list[str]` | StageResult schema 없음. SectionContextPack 없음. field_id Review Queue 없음 |
+| bizplan_autopilot | `max_loops=3`, `target_ratio=0.85`. **점수 낮으면 writer+autopilot 전체 재실행** | 인사이트: **실패 Stage만 retry**. 점수→전문 재작성 금지 |
+| cross-form 전사 | 구현(날조0, high만 자동, 원본 미수정) | **서술 재작성 경로 없음** (별 파일로 둘 것) |
+| Claim provenance | `answers_provenance.json` source enum: user/docx_seed/psst/ai/fallback/needs_confirm | file+page+as_of+actual/plan 없음. typed claim 객체 없음 |
+| QA 서식/제출 | usage_acceptance + doc_quality_score + self_diagnose | 내용 KPI 일관성 약함 |
+| `check_unverified_claims` | 옵트인 warn, 게이트 비영향 | 결정론 숫자 엔진 없음 (TAM/SAM/SOM, 합계, BEP) |
+| `check_recruit_date_conflict` | usage_acceptance에 존재 | AIMY형 표지↔본문 KPI 동일소스 미구현 |
+| StageResult / STALE / SectionContextPack | **코드 0**. `TASK.md` 스펙 표에만 존재 | 신규는 기존 모듈 확장. `FactGraphService` 등 병렬 클래스명 금지 |
+| E2E | `app/tests/test_e2e_domain_pipeline.py` **15 tests** (BP+CA, SHA256, empty, force_draft, cross-domain N/A) | Golden stage fixture 없음 |
+| AIMY 벤치마크 파일 | 이 클라우드 워크스페이스에 `results/aimy_form_rules/` **없음**. MarketGate 레포 예시 `tools/injector/examples/content_marketgate.json` **있음**. 원본 HWP는 OneDrive(로컬). txt 역추정 요청본은 명세 시점부터 **없음** | BPQ-01은 skip-if-missing. 가짜 corpus 금지 |
+| `templates/` | 저장소에 디렉터리 없음 | 명세와 동일 |
+
+### 현재 실제 작성 경로 (목표 S0–S8과 불일치)
+
+```text
+초안 DOCX
+ → bizplan_ai_writer (PSST 약점 영역 문단 직접 삽입)
+ → autopilot_pipeline (백업·서식·PSST 가이드·점수·usage_acceptance)
+ → LRule+Finalizer (#137) → 대개 _DRAFT
+루프: 공고 채점 비율 < 0.85 이면 위 전체 재실행 (max 3)
+```
+
+목표: `S0…S8 StageResult` → 원본 양식 렌더 → LRule+Hash+Finalizer. **지금 코드는 LLM→DOCX 루프.**
+
+### Autopilot LRule 실측 의미
+
+`run_autopilot`은 `enforce_lrules(..., guards=없음)`을 호출한다. mechanized인데 guard callable이 없으면 UNVERIFIABLE → `can_finalize=False` → Finalizer `_DRAFT`. 서식 수용검사가 통과해도 파일명은 `_DRAFT`. 이는 AW-001 fail-closed이며, BPQ 내용 파이프라인이 끝난 것이 아니다.
+
+### 다음 명령이 오기 전까지 하지 않음
+
+- T-20260814-02 DETAILS 키워드 삽입 (Stage Pipeline / StageResult / Data Audit / Deterministic Calculation / Claim Provenance / Stage Retry)
+- BPQ-00 제품 코드 / 새 Epic / `*V2` 클래스
+- PR #139 머지, leftover `task/*` 머지, PR #140 간섭
+- AIMY 숫자 전이, 비밀 커밋
+
+다음 명령 해석 힌트:
+
+- 「TASK에 반영해」→ 기존 BPQ-02/03/07/08/12/13에만 키워드 추가. AW-001~008 원문 유지
+- 「구현 시작해」→ `origin/main` 재fetch 후 BPQ-00 감사만. 정본=실구현 1곳. `py -3.11 -m pytest`
