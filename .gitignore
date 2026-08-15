@@ -91,3 +91,17 @@ _tmp_*
 /대구여성창업스타전_*
 /비앤코_*
 /원문링크.txt
+
+# Debug scratch scripts / document inspection temps (not commit targets)
+app/tmp_*.py
+app/tmp_*.txt
+tmp_hwp_images/
+tmp_pdf_pages/
+tmp_hwpx_inspect.py
+
+# Session / IDE marker files
+.claude/.resume_due
+.claude/.closeout_due
+.claude/.closeout_tick
+app/.claude/.resume_due
+.mimocode/
