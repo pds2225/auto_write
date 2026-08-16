@@ -32,6 +32,7 @@ REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 [x] T-20260816-02 | GitHub에서 auto_write를 git clone으로 받을 수 있게 한다
 [ ] T-20260816-03 | clone 후 로컬 PC 리모트 컨트롤을 켤 수 있게 한다
 [~] T-20260816-04 | #132 AW-009와 #136 clone 헬퍼를 최신 main에 살린다
+[~] T-20260816-05 | T-20260814-02의 BPQ-02·03·07·08·12·13에 파이프라인 인사이트 키워드를 넣는다
 
 
 ---
@@ -1549,6 +1550,7 @@ BASE: main
 TASK_ID: T-20260814-02
 WORK_BRANCH: docs/task-T-20260814-02-on-main
 STATUS_THIS_TURN: 명세만 등록 (`[ ]`). 구현 시작 아님. 제품 코드 0줄.
+2026-08-16: `docs/BPQ_PIPELINE_INSIGHTS_20260815.md` 키워드를 BPQ-02/03/07/08/12/13에만 추가 (T-20260816-05). 8-1 원문·기존 워크스트림 본문은 덮어쓰지 않음. LIST는 `[ ]` 유지. 구현 시작 아님.
 
 관계: AW-001~AW-008과 **합치지 않는다**. 본 TASK는 사업계획서 **작성 품질 파이프라인** Epic이다. 구현 시 AW-001의 DomainRouter → LRuleEnforcer → Finalizer 경로를 **KEEP**로 통과해야 한다. AW-001이 `[~]`여도 본 LIST는 `[ ]`로 둔다(이번 턴은 구현 시작이 아님).
 
@@ -1930,6 +1932,16 @@ AIMY에서 **절대 승격 금지**: 97.9/97.5, 1.1만, 400억, 특허 건수, 5
 → FINAL 또는 _DRAFT
 ```
 
+단계 계약 (2026-08-16, 위 흐름을 대체하지 않고 계약만 보강):
+
+`LLM → StageResult JSON → 검증 → 다음 Stage → 원본 양식 렌더 → LRule+Hash+Finalizer`
+
+금지: `LLM → 최종 DOCX`. 점수 루프에서 문서 전체를 다시 쓰지 않는다. 실패한 Stage만 재실행한다.
+
+StageResult 누적(S0–S8, 신규 Epic 아님): S0 프로젝트 → S1 공고/양식 → S2 사실추출 → S3 사실감사 → S4 작성전략 → S5 DocumentPlan → S6 섹션 Structured Draft → S7 원본 양식 렌더 → S8 LRule+Hash+Finalizer. 다음 Stage는 직전 StageResult 객체만 소비한다.
+
+경로 주의: DOCX 엔진 다수는 `app/core/docx/services/*`에 있다. `auto_write.services`는 3줄 re-export인 경우가 많다. KEEP의 정본=`auto_write.services`를 맹목적으로 덮어쓰지 말 것. BPQ-00 감사에서 확인한다.
+
 ---
 
 ## Workstream BPQ-00 ~ BPQ-13
@@ -2003,6 +2015,7 @@ AIMY에서 **절대 승격 금지**: 97.9/97.5, 1.1만, 400억, 특허 건수, 5
 - **수치 DONE**: 최소 키 19종 정의, 픽스처 라벨→키 정확도 측정 가능
 - **실패/BLOCKED**: 양식마다 if filename== 분기
 - **의존**: 00
+- **키워드(2026-08-16)**: FactState. 출처 우선순위(source precedence)를 코드화. Actual / Plan / Unknown / Conflict를 `""`로 합치지 않음. 공란도 상태값이다.
 
 ---
 
@@ -2019,6 +2032,7 @@ AIMY에서 **절대 승격 금지**: 97.9/97.5, 1.1만, 400억, 특허 건수, 5
 - **수치 DONE**: 신규 fact에 source 필드 100%. 식별 12필드 회귀 0
 - **실패/BLOCKED**: 출처 없이 시장규모 생성
 - **의존**: 02
+- **키워드(2026-08-16)**: SectionContextPack(섹션별 팩만 공급, CompanyMaster+ProgramSpec+QualityProfile+DocumentPlan 통째 주입 금지). 의존 그래프. STALE 전파.
 
 ---
 
@@ -2083,6 +2097,7 @@ AIMY에서 **절대 승격 금지**: 97.9/97.5, 1.1만, 400억, 특허 건수, 5
 - **수치 DONE**: 섹션마다 plan 없이 writer 호출 불가(가드). missing_evidence는 빈칸/[확인필요]
 - **실패/BLOCKED**: writer가 기업 원문을 그대로 장문 생성
 - **의존**: 02, 03, 05, 06
+- **키워드(2026-08-16)**: 섹션 입력 계약. required/forbidden facts. evidence. QualityProfile vs LRule vs PromptTemplate 분리(LRule=절대규칙, QualityProfile=작성전략, PromptTemplate=실행 템플릿이며 LRule 정본이 되면 안 됨). prompt template version.
 
 ---
 
@@ -2099,6 +2114,7 @@ AIMY에서 **절대 승격 금지**: 97.9/97.5, 1.1만, 400억, 특허 건수, 5
 - **수치 DONE**: Golden 1회 파이프라인 통과(또는 _DRAFT+결함 목록). AIMY 전이 0
 - **실패/BLOCKED**: MarketGate 근거 파일 부재·접근 불가 시 가정 데이터 금지, BLOCKED
 - **의존**: 03, 06, 07, 11, 12
+- **키워드(2026-08-16)**: Stage 단위 expected fixture(CompanyMaster / ProgramSpec / DocumentPlan / section context / Draft / QA). Golden을 최종 DOCX 바이트만으로 판정하지 않음.
 
 ---
 
@@ -2163,6 +2179,7 @@ AIMY에서 **절대 승격 금지**: 97.9/97.5, 1.1만, 400억, 특허 건수, 5
 - **수치 DONE**: 측정 가능한 것부터: unsupported=0, numeric=0, actual/plan=0 을 **픽스처에서**. Coverage 98% 등은 측정기 없으면 별 이슈로 남김 (근거 없이 달성 주장 금지)
 - **실패/BLOCKED**: 서식 90점을 내용 성공으로 보고
 - **의존**: 03, 04, 11(렌더 산출)
+- **키워드(2026-08-16)**: Writer self-check → schema → factual/numeric → LRule → layout → Finalizer (결정론 QA 체인). LLM 점수는 게이트가 아님. 숫자는 deterministic engine(LLM이 TAM/CAGR 등을 계산하지 않음). Review Queue는 필드 단위(`field_id` / MISSING / BLOCKING). 점수 루프로 문장을 메우지 않음.
 
 ---
 
@@ -2179,6 +2196,7 @@ AIMY에서 **절대 승격 금지**: 97.9/97.5, 1.1만, 400억, 특허 건수, 5
 - **수치 DONE**: 실제 파일 100건. 없으면 PARTIAL/BLOCKED
 - **실패/BLOCKED**: 복제·합성으로 100 채우기
 - **의존**: 09
+- **키워드(2026-08-16)**: 상류 fact 변경 → STALE → 재생성 → 숫자 정합. 구결과를 최신처럼 쓰지 않음. 승인 전 FINAL 금지.
 
 ---
 
@@ -2521,6 +2539,53 @@ STATUS_THIS_TURN: 132/136 살림 + TASK/RESUME 정합. T-20260814-02 본문 미�
 
 ### DONE
 REQUEST_SOLVED=YES(이번 턴): 132/136 내용이 최신 main 위 한 브랜치에 있고, TASK/RESUME이 #141과 맞다. 머지는 다음 명령.
+
+## T-20260816-05
+
+TASK_ID: T-20260816-05
+WORK_BRANCH: cursor/t20260814-02-bpq-keywords-2036
+BASE: origin/main
+TASK_START_SHA: d6d530e60d002808cb320a74dd2fd82546803b84
+TASK_BLOB_SHA: 042b3cd904116bf5524d01a3ffad3990bd5c12f8
+STATUS_THIS_TURN: T-20260814-02 기존 6개 워크스트림에 키워드만 추가. 구현·머지 금지. LIST `[~]`.
+
+### 8-1. 사용자 원문
+task에 반영해
+
+(직전 채팅에서 보고한 내용만. 새 Epic / 제품코드 / 테스트 / #143 797줄 덤프는 아님.)
+
+### MUST
+- [x] T-20260814-02 LIST는 `[ ]` 유지 (명세 보강이지 구현 시작 아님)
+- [x] 목표 파이프라인에 단계 계약 한 줄 추가. 기존 ASCII 흐름은 삭제하지 않음
+- [x] BPQ-02: FactState, source precedence, Actual/Plan/Unknown/Conflict를 `""`로 합치지 않음
+- [x] BPQ-03: SectionContextPack, 의존 그래프, STALE 전파
+- [x] BPQ-07: 섹션 입력 계약, required/forbidden facts, evidence, QualityProfile vs LRule vs PromptTemplate, prompt template version
+- [x] BPQ-08: Stage 단위 expected fixture. Golden을 최종 DOCX 바이트만으로 판정하지 않음
+- [x] BPQ-12: Writer self-check → schema → factual/numeric → LRule → layout → Finalizer. LLM 점수는 게이트 아님
+- [x] BPQ-13: 상류 fact 변경 → STALE → 재생성 → 숫자 정합
+- [x] 8-1 원문·AW-001~009 원문 미수정
+- [ ] 이번 턴 main 머지 금지
+
+### KEEP
+- T-20260814-02 역사적 명세(8-1, MUST 14, BPQ-00~13 기존 불릿)
+- T-20260814-01 `[~]`
+- draft #143 (`cursor/t20260814-02-impl-instruction-2036`) — 본 TASK가 그 PR을 머지·대체하지 않음
+
+### FORBIDDEN
+- 새 Epic / `*V2` 클래스 / 제품 코드 / 테스트 코드
+- AIMY 기업 사실·숫자, HTML API 키를 TASK에 넣기
+- BPQ-00~01, 04~06, 09~11에 키워드 삽입(이번 승인 범위 밖)
+- T-20260814-02 LIST를 `[x]` 또는 `[~]`로 바꾸기
+- #143 squash-merge
+- force push / reset --hard / `git add -A`
+
+### VERIFY
+- diff = TASK.md only
+- T-20260814-02 LIST 줄이 `[ ]` 로 남아 있음
+- `### 8-1. 사용자 원문` 아래 2026-08-14 원문 블록이 그대로
+
+### DONE
+REQUEST_SOLVED=YES(이번 턴): 보고한 키워드가 T-20260814-02 DETAILS의 해당 6개 워크스트림에 들어가 있다. 구현 시작 아님. MAIN_MERGED=NO. 머지는 다음 명령(`병합해`).
 
 # 9. 실제사용 시나리오
 
