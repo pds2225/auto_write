@@ -31,9 +31,10 @@ REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 [x] T-20260816-01 | #138·#133·#139를 한 브랜치로 합쳐 한 번에 머지할 수 있게 한다
 [x] T-20260816-02 | GitHub에서 auto_write를 git clone으로 받을 수 있게 한다
 [ ] T-20260816-03 | clone 후 로컬 PC 리모트 컨트롤을 켤 수 있게 한다
-[~] T-20260816-04 | #132 AW-009와 #136 clone 헬퍼를 최신 main에 살린다
-[~] T-20260816-05 | T-20260814-02의 BPQ-02·03·07·08·12·13에 파이프라인 인사이트 키워드를 넣는다
+[x] T-20260816-04 | #132 AW-009와 #136 clone 헬퍼를 최신 main에 살린다
+[x] T-20260816-05 | T-20260814-02의 BPQ-02·03·07·08·12·13에 파이프라인 인사이트 키워드를 넣는다
 [x] T-20260816-06 | 브랜치 보호 할 일을 사용자가 더 볼 필요 없게 닫는다
+[x] T-20260816-07 | main에 이미 들어간 원격 브랜치를 지우고 backup은 남긴다
 
 
 ---
@@ -1573,6 +1574,7 @@ TASK_ID: T-20260814-02
 WORK_BRANCH: docs/task-T-20260814-02-on-main
 STATUS_THIS_TURN: 명세만 등록 (`[ ]`). 구현 시작 아님. 제품 코드 0줄.
 2026-08-16: `docs/BPQ_PIPELINE_INSIGHTS_20260815.md` 키워드를 BPQ-02/03/07/08/12/13에만 추가 (T-20260816-05). 8-1 원문·기존 워크스트림 본문은 덮어쓰지 않음. LIST는 `[ ]` 유지. 구현 시작 아님.
+2026-08-16 충돌해소: #139 인사이트(PR #141 합본 + PR #144 키워드)와 실행지시(PR #143)가 TASK.md에서 겹침. BPQ-02/03/07/08/12/13은 `실행지시 추가`와 `키워드(2026-08-16)`를 **둘 다 유지**. 한쪽 삭제·V2 우회 금지. 닫힌 #139의 GitHub CONFLICTING 표시는 무시(재머지 금지).
 
 관계: AW-001~AW-008과 **합치지 않는다**. 본 TASK는 사업계획서 **작성 품질 파이프라인** Epic이다. 구현 시 AW-001의 DomainRouter → LRuleEnforcer → Finalizer 경로를 **KEEP**로 통과해야 한다. AW-001이 `[~]`여도 본 LIST는 `[ ]`로 둔다(이번 턴은 구현 시작이 아님).
 
@@ -2008,6 +2010,60 @@ StageResult 누적(S0–S8, 신규 Epic 아님): S0 프로젝트 → S1 공고/�
 - **2026-08-16 실행지시 추가**: 다음 **구현** 세션에서 전수 Baseline Audit 표를 작성한다 (존재: IMPLEMENTED/PARTIAL/PLACEHOLDER/DUPLICATED/NOT_IMPLEMENTED × 조치: REUSE/EXTEND/CREATE ONLY IF GAP/DELETE·MERGE/DO NOT TOUCH). 코드 파일 존재만으로 IMPLEMENTED가 아니다. 각 책임은 `definition → production caller → runtime path → failure blocking → production test` 로 증명. 정본 경로를 HEAD에서 재확인한다(`auto_write.services` 가 re-export이면 실구현 `core.docx.services` 1곳만 수정). `*V2` 병렬 시스템 금지. **이 TASK.md 반영 세션에서는 Audit을 실행하지 않는다.** 전문은 같은 TASK의 `최신 실행지시 (2026-08-16 implementation update)`.
 - **2026-08-16 조치 우선순위 추가**: Audit 후 최우선은 PARTIAL → IMPLEMENTED. 작업순서: PARTIAL 완성 → PLACEHOLDER는 production wiring 또는 제거 → DUPLICATED는 canonical로 통합 → NOT_IMPLEMENTED는 필수 GAP만 CREATE. 조치 판단 순서(충돌 시 이 순서가 이김): 1 REUSE 2 DELETE/MERGE 3 EXTEND 4 CREATE ONLY IF GAP 5 DO NOT TOUCH. PARTIAL을 방치하고 같은 목적의 새 시스템으로 우회 금지. 선행이 완전 NOT_IMPLEMENTED일 때만 그 GAP을 먼저 최소 구현. IMPLEMENTED는 결함 없으면 REUSE/DO NOT TOUCH. 근거 없는 삭제 금지. 전문은 같은 TASK의 `조치 우선순위 — 매우 중요`.
 
+#### BPQ-00 실측 로그 (2026-08-16, SHA `95a0f63`)
+
+한 줄: KEEP 핵심(DomainRouter / LRuleEnforcer / Finalizer / cross_form 전사)은 HEAD에 있다. DOCX 엔진 정본은 `app/core/docx/services`( `auto_write.services` 39개가 3줄 re-export). ProgramSpec / FormSpec / QualityProfile / FactState / SectionContextPack / StageResult / 내용 DocumentPlan / cross-form 재작성은 코드에 없다. `*V2` 신설 없음. BLOCKED 아님.
+
+PINNING: `origin/main` `95a0f63c398a2c250b0cd2cf1639b92116fa5846` (#143 머지 후). WORK_BRANCH=`cursor/bpq-00-baseline-audit-2036`. import 스모크 19/19 OK. 제품 코드 0줄.
+
+정본 규칙 (이후 BPQ가 이김):
+
+| 종류 | 수정 위치 | 만지지 말 것 |
+|---|---|---|
+| DOCX/HWP 엔진 (cross_form, psst_*, quality_*, render, fill, autopilot, evaluation, usage_acceptance, openai_client, label_utils, …) | `app/core/docx/services/<module>.py` | `auto_write.services` re-export, `bizplan/services` 복사본, salvage |
+| LRule / Finalizer / company_extract / announcement_analyzer / form_analyzer / plan_builder / project_service / generation_store / domains | `app/auto_write/services/` 또는 `domains/` | `*V2`, core에 없는 모듈을 core로 복제 |
+| ingest / docx_template | 지금은 twin (바이트 동일). 호출은 `auto_write.document_ingest` / `auto_write.analysis.docx_template` | 한쪽만 고치고 다른 쪽 방치 (AW-007) |
+
+| 항목 | 정본 경로 | 존재 | 조치 | 증명 / 갭 |
+|---|---|---|---|---|
+| DomainRouter | `app/auto_write/domains/domain_router.py` | IMPLEMENTED | REUSE | definition+test(`test_e2e_domain_pipeline`) OK. CLI autopilot은 `classify_domain`만 쓰고 `resolve()` 미호출 |
+| DomainPipeline 타입 | 없음 | NOT_IMPLEMENTED | DO NOT TOUCH | 클래스명 없음. 만들지 말 것 |
+| BusinessPlanPipeline | `app/auto_write/domains/business_plan/pipeline.py` | PARTIAL | EXTEND | facade만. StageResult 오케스트레이션 없음. CLI는 서비스 직접 호출 |
+| ConsultantApplicationPipeline | `app/auto_write/domains/consultant_application/pipeline.py` | PARTIAL | EXTEND | 동일 facade |
+| LRuleEnforcer | `app/auto_write/services/lrule_enforcer.py` | IMPLEMENTED | REUSE | `autopilot_pipeline.enforce_lrules` production. tests `test_lrule_enforcer` |
+| lessons_coverage | `app/tests/lessons_coverage.json` | IMPLEMENTED | REUSE | counts total=151 mechanized=44 gap=21 judgment=86 |
+| lrule_gate | `app/lrule_gate.py` | IMPLEMENTED | REUSE | HWPX diagnose 래퍼. Enforcer CLI 아님 |
+| Finalizer | `app/auto_write/services/finalizer.py` | IMPLEMENTED | REUSE | `finalize_artifact` production. fail→_DRAFT |
+| CompanyMaster | `app/auto_write/services/company_extract.py` | PARTIAL | EXTEND | 식별 12필드. fact_id/unit/as_of/Actual·Plan 없음 |
+| announcement_analyzer | `app/auto_write/services/announcement_analyzer.py` | IMPLEMENTED | EXTEND | AnnouncementReport. ProgramSpec 아님. caller `analyze_docs.py` |
+| form_analyzer | `app/auto_write/services/form_analyzer.py` | IMPLEMENTED | EXTEND | FormReport. FormSpec 아님 |
+| ProgramSpec | 없음 | NOT_IMPLEMENTED | CREATE ONLY IF GAP | 선행 GAP. 새 파일보다 analyzer 정규화 우선 |
+| FormSpec | 없음 | NOT_IMPLEMENTED | CREATE ONLY IF GAP | 동일 |
+| QualityProfile (작성전략) | 없음 | NOT_IMPLEMENTED | CREATE ONLY IF GAP | `quality_rules.PRESETS`는 서식층. 섞지 말 것 |
+| quality_rules PRESETS | `core.docx.services.quality_rules` | IMPLEMENTED | REUSE | 서식만 |
+| plan_builder | `app/auto_write/services/plan_builder.py` | PARTIAL | EXTEND | fill 좌표. 내용 DocumentPlan/Claim 없음 |
+| Content planner | 없음 | NOT_IMPLEMENTED | CREATE ONLY IF GAP | writer가 계획 없이 문단 작성 |
+| answers_provenance | `project_service` + `generation_store.py` | PARTIAL | EXTEND | 출처 태그만. `core…/openai_client`가 `.generation_store` import → core에 파일 없음, fail-soft no-op |
+| document_ingest | `auto_write/document_ingest.py` ≡ `core/docx/document_ingest.py` | DUPLICATED | DELETE/MERGE | sha256 동일 twin |
+| docx_template | `auto_write/analysis/docx_template.py` ≡ `core/docx/docx_template.py` | DUPLICATED | DELETE/MERGE | sha256 동일 twin |
+| bizplan_ai_writer | `core.docx.services.bizplan_ai_writer` | IMPLEMENTED | EXTEND | 직접 LLM 문단. planner 후단 재배선 필요 |
+| bizplan_autopilot | `core.docx.services.bizplan_autopilot` | IMPLEMENTED | EXTEND | 전문 재작성 루프. Stage retry 아님 |
+| autopilot_pipeline | `core.docx.services.autopilot_pipeline` | IMPLEMENTED | REUSE | LRule+Finalizer 배선됨. BPQ StageResult 아님 |
+| psst_check / psst_fill | `core.docx.services.psst_*` | IMPLEMENTED | REUSE | 구조 4영역 |
+| cross_form 전사 | `core.docx.services.cross_form_autofill` | IMPLEMENTED | REUSE | KEEP. 날조0 |
+| cross_form 재작성 | 없음 | NOT_IMPLEMENTED | CREATE ONLY IF GAP | 전사 함수와 파일/시그니처 분리 |
+| evaluation_service | `core.docx.services.evaluation_service` | IMPLEMENTED | EXTEND | 평가항목 ≠ ProgramSpec |
+| eval_loop_runner | `auto_write.services.eval_loop_runner` | IMPLEMENTED | REUSE | 약점 섹션 재생성. Stage 머신 아님 |
+| document_quality_orchestrator | `core.docx.services.document_quality_orchestrator` | IMPLEMENTED | REUSE | 서식 100점 ≠ 내용 QA |
+| render / hwpx_fill / hwp_fill / hwp_com_fill | `core.docx.services.*` | IMPLEMENTED | REUSE | 원본 양식 채움 |
+| usage_acceptance / self_diagnose | core usage_acceptance + `app/self_diagnose.py` | IMPLEMENTED | EXTEND | 내용 KPI 가드는 약함 (BPQ-12) |
+| operator console | `operator_main.py` + `lrule_console_service.py` | IMPLEMENTED | REUSE | FastAPI. DomainRouter 여기선 호출 |
+| FactState / SectionContextPack / StageResult | 없음 (TASK/문서만) | NOT_IMPLEMENTED | CREATE ONLY IF GAP | 제안 클래스명으로 병렬 시스템 금지. 기존 DTO 확장 |
+| bizplan/resume 복사본 | `app/bizplan/services/*` 일부 impl 복사 | DUPLICATED | DELETE/MERGE | cross_form_autofill 1943줄 등. 정본 아님 |
+| salvage | `docs/archive/salvage/` | DUPLICATED | DO NOT TOUCH | 실행 경로 아님 |
+
+다음 구현 순서(감사 후, 조치 우선순위 적용): CompanyMaster EXTEND (BPQ-02/03 선행) → announcement/form → ProgramSpec/FormSpec GAP → plan_builder EXTEND → QualityProfile GAP. IMPLEMENTED KEEP는 결함 없으면 손대지 않음. twin/bizplan 복제는 AW-007과 조율, BPQ가 세 벌 동시 수정 금지.
+
 ---
 
 ### BPQ-01 Benchmark Corpus
@@ -2374,6 +2430,17 @@ BASE: origin/main
 ```
 
 현재 LIST의 `[~]` ACTIVE는 `T-20260816-01`(열린 draft를 한 브랜치로 합침). 본 변경은 **T-20260814-02 DETAILS만** 추가한다. `T-20260816-01`에 섞지 않는다. `T-20260814-02` LIST는 `[ ]` 유지(이 세션은 구현 시작이 아님). 구현 세션이 BPQ-00을 시작할 때 PINNING을 그 세션 HEAD로 다시 기록한다.
+
+BPQ-00 실측 PINNING (2026-08-16 구현 세션, Audit 실행함):
+
+```
+TASK_ID: T-20260814-02 / BPQ-00
+TASK_START_SHA: 95a0f63c398a2c250b0cd2cf1639b92116fa5846
+WORK_BRANCH: cursor/bpq-00-baseline-audit-2036
+BASE: origin/main
+```
+
+표는 위 `#### BPQ-00 실측 로그` 에 있다. 이 세션은 Audit만. 제품 코드 0줄. T-20260814-02 LIST는 `[ ]` 유지.
 
 `T-20260816-01` KEEP의 「T-20260814-02 DETAILS 키워드 삽입하지 않음」은 **그 합치기 TASK의 범위**다. 이번 사용자 명시 요청(최신 우선순위)이 T-20260814-02에 실행지시를 넣으라고 하므로, 합치기 TASK 본문은 건드리지 않고 여기만 추가한다.
 
@@ -3446,10 +3513,10 @@ STATUS_THIS_TURN: 132/136 살림 + TASK/RESUME 정합. T-20260814-02 본문 미�
 
 ### VERIFY
 - [x] clone 단위테스트 통과 (24 passed)
-- [x] draft PR #142, MAIN_MERGED=NO
+- [x] draft PR #142, 이후 squash-merge `d6d530e`. MAIN_MERGED=YES
 
 ### DONE
-REQUEST_SOLVED=YES(이번 턴): 132/136 내용이 최신 main 위 한 브랜치에 있고, TASK/RESUME이 #141과 맞다. 머지는 다음 명령.
+REQUEST_SOLVED=YES: 132/136 내용이 #142로 origin/main `d6d530e`에 들어갔다.
 
 ## T-20260816-05
 
@@ -3496,7 +3563,7 @@ task에 반영해
 - `### 8-1. 사용자 원문` 아래 2026-08-14 원문 블록이 그대로
 
 ### DONE
-REQUEST_SOLVED=YES(이번 턴): 보고한 키워드가 T-20260814-02 DETAILS의 해당 6개 워크스트림에 들어가 있다. 구현 시작 아님. MAIN_MERGED=NO. 머지는 다음 명령(`병합해`).
+REQUEST_SOLVED=YES(이번 턴): 보고한 키워드가 T-20260814-02 DETAILS의 해당 6개 워크스트림에 들어가 있다. 이후 `병합해`로 #144 squash-merge (`e8ac939`). MAIN_MERGED=YES.
 
 ## T-20260816-06
 
@@ -3535,7 +3602,47 @@ STATUS_THIS_TURN: T-20260814-01을 사용자 지시로 닫음. 설정 화면 확
 - LIST `T-20260814-01` 이 `[x]`
 
 ### DONE
-REQUEST_SOLVED=YES: 보호 할 일은 확인된 범위까지 처리했고 LIST에서 끝냈다. 사용자는 더 할 일 없음. MAIN_MERGED=NO.
+REQUEST_SOLVED=YES: 보호 할 일은 확인된 범위까지 처리했고 LIST에서 끝냈다. 사용자는 더 할 일 없음. 이후 `병합해`로 #144 머지. MAIN_MERGED=YES.
+
+## T-20260816-07
+
+TASK_ID: T-20260816-07
+WORK_BRANCH: cursor/bpq-00-baseline-audit-2036
+BASE: origin/main
+TASK_START_SHA: 95a0f63c398a2c250b0cd2cf1639b92116fa5846
+STATUS_THIS_TURN: 흡수된 원격 브랜치 삭제. backup 유지. #146(BPQ-00 감사)은 고유 내용이라 유지.
+
+### 8-1. 사용자 원문
+남은 브랜치 정리
+
+### MUST
+- [x] `backup/*` 삭제 금지
+- [x] #145 고유 1줄(#139/#143 충돌해소 메모)을 #146 브랜치 TASK.md에 흡수
+- [x] 중복 draft #145 닫기
+- [x] 흡수된 `cursor/t20260814-02-impl-instruction-2036` 원격 삭제
+- [x] 로컬 gone 브랜치 삭제
+- [ ] #146 BPQ-00 감사 브랜치는 지우지 않음 (main에 아직 없음)
+- [ ] 이번 턴 main 머지 금지 (`병합해` 전까지)
+
+### KEEP
+- `origin/main`
+- `origin/backup/WIN-K20QOC29TOB`
+- `origin/backup/omc-lessons-md`
+- `origin/cursor/bpq-00-baseline-audit-2036` (PR #146)
+
+### FORBIDDEN
+- backup 삭제
+- force push / `git add -A` / `reset --hard`
+- 고유 미머지 커밋이 있는 브랜치를 확인 없이 삭제
+- 닫힌 #139 재오픈·재머지
+
+### VERIFY
+- 원격 목록 = main + backup 2개 + bpq-00 감사 브랜치
+- #145 CLOSED
+- #139 재머지 없음
+
+### DONE
+REQUEST_SOLVED=YES: 흡수된 원격은 지웠고 backup과 BPQ-00 감사 브랜치는 남겼다. MAIN_MERGED=NO (#146).
 
 # 9. 실제사용 시나리오
 
