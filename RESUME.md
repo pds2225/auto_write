@@ -1,74 +1,53 @@
-# RESUME.md — auto_write 세션 체크포인트
+# RESUME.md — 세션 재시작 시 이어하기 진입점
 
-> 세션을 새로 시작하면 **이 파일을 먼저** 읽는다. 상세 트랙은 아래 링크.
-> 최종 갱신: **2026-08-15** (PR auto-merge 재시도, 대상·인증 확인 중)
+> 새 세션을 시작하면 이 파일을 가장 먼저 읽어라. (최종 갱신: 2026-08-16)
 
-## 한 줄 상태
+## 0. 30초 컨텍스트
+도보네비 사업계획서. 기준 양식은 PSST. AIMY 본선본을 모듈 팩으로 잘랐고 1단계 검수는 PASS. **지금은 정지.** 공고+빈 양식이 오면 초안 1건만 쓴다. AIMY급 자동작성(BPQ-00)은 사용자가 대기라 시작하지 않는다.
 
-`pds2225/auto_write` 가 단일 정본. 구 `autowrite` 고유 자산은 `tools/injector/` 로 흡수 완료(PR #100).
-에이전트 입구 = **bizdoc-hub** / CLI 입구 = **auto_write_hub.py**. 맵: `docs/BIZDOC_HUB_MAP.md`.
-현재 자동화는 Calendar/Gmail을 읽기 전용 조회하며, 메일·일정 상태와 저장소 코드는 변경하지 않는다.
-
-## 최근 완료
-
-| 날짜 | 내용 | 근거 |
-|------|------|------|
-| 2026-08-02 | autowrite 잔여 자산 흡수 → `tools/injector/` | PR #100 merged |
-| 2026-08-09~ | 도메인 리팩터(CORE/BIZPLAN/RESUME)·P0 배선·E2E | PR #114~#119 |
-| 2026-08-11 | RESUME.md 신설 + 허브 맵·bizplan-orchestrator 스킬·죽은 커맨드 참조 정리 | 이 체크포인트 |
-
-## 현재 진행 상태
-
-- `master`는 `origin/master`보다 61커밋 뒤이며, 작업 트리에 사용자 수정 5개와 미추적 `.claude/settings.local.json`이 있다.
-- 열린 PR은 #137, #136, #133, #132이며 모두 DRAFT다. 대상 번호가 없어 머지하지 않았다.
-- `gh auth status`에서 pds2225 토큰이 invalid로 확인되어 PR 조회·auto-merge가 막혔다.
-- 다른 워크트리와 stash가 존재하므로 삭제·덮어쓰기 없이 보존한다.
-
-## 다음 액션
-
-1. 사용자가 실제 PR 번호를 지정하고 `gh auth login -h github.com`으로 재인증한다.
-2. 해당 PR이 비-DRAFT·검증 통과·충돌 없음이면 `gh pr merge --auto`를 실행한다.
-
-## 입구 (헷갈리면 여기만)
-
-| 상황 | 쓸 것 |
-|------|--------|
-| "문서 도와줘 / 뭘로 처리해" (의도 불명) | 스킬 `bizdoc-hub` 또는 `/bizdoc` |
-| PC·폴더 어디서든 채움·진단 CLI | `py -3.11 app/auto_write_hub.py env\|diagnose\|fill …` |
-| 구 BizPlan Injector (JSON→DOCX) | `tools/injector/inject.py` / `run.sh` |
-| 상세 라우팅표 | `docs/BIZDOC_HUB_MAP.md` |
-
-## 남은 일 (우선순위)
-
-1. **owner 수동**: `pds2225/autowrite` GitHub Delete (이미 archived, admin 토큰 없음)
-   → https://github.com/pds2225/autowrite/settings
-2. **실측 1건** (추천 시나리오 중 하나):
-   - HWPX: `py -3.11 app/hwpx_submit.py 양식.hwpx -o 결과.hwpx --identity identity.json`
-   - DOCX 품질: `py -3.11 app/auto_write_autopilot.py 문서.docx --submit-clean --strict`
-   - 인젝터: `cd tools/injector && python3 -m pytest tests/test_v2.py -q`
-3. **REQUEST_LEDGER** 실제출 확인 대기(A1~A5) — 경로/제출 여부는 사용자만 확인 가능
-4. **보류**: HWPX 세로 라벨(c) — 코퍼스 수요 극소(AC6)
-5. **보류**: SFT P3 후속·DOCX↔HWP 100% — 실사용에서 막힐 때
-
-## 재개 명령
-
+## 1. 빠른 재개 (복붙용)
 ```powershell
 cd D:\auto_write
-git checkout master && git pull
-# 테스트 (반드시 3.11 — PATH 기본 3.14 는 matplotlib 부재)
-cd app
-py -3.11 -m pytest tests/test_archived_commands_not_resurrected.py tests/test_hub_entrypoints.py -q
-py -3.11 auto_write_hub.py env
+# 공고+빈양식이 오면: 모듈 팩을 읽고 초안 1건 (원본 덮어쓰기 금지)
+# 모듈: results\aimy_form_rules\modules\
+# 테스트는 py -3.11 (기본 3.14 는 matplotlib 부재)
 ```
 
-## 관련 문서
+## 2. 완료된 작업 ✅
+- [x] KICXUP 1~3 종료(미접수)
+- [x] 킥스업 문체·라벨 대조표
+- [x] AIMY 본선 역추정 보고서
+- [x] PSST 모듈 팩 + AUDIT PASS (이슈 2건은 기록만, 코드 미수정)
+- [x] 작업지시서 원격 등록(T-20260814-02 명세). 구현 안 함
 
-- 허브 맵: `docs/BIZDOC_HUB_MAP.md`
-- autowrite 통합: `REPO_DUPLICATION_CHECK.md`
-- HWPX 파리티(B 완결): `RESUME_hwpx_parity.md`
-- 실사용 원장: `REQUEST_LEDGER.md`
-- 작업 규약: `CLAUDE.md` · `AGENTS.md`
+## 3. 남은 작업 ⬜ (다음 세션에서 이어서)
+- [ ] **공고 + 빈 양식이 오면** 모듈을 P→S→Sc→T 순으로 읽어 초안 1건
+- [ ] 그 1건에서 칸 갭이 숫자로 나온 뒤에만 엔진 연결·킥스업/KAMCO 쪼개기
+- [ ] BPQ-00 / T-20260814-02 구현 — **시작하지 않음** (사용자 대기)
 
-## 안전 불변
+## 4. 핵심 결정·제약 (되돌리지 말 것)
+- `facts_aimy.json` 수치·고유명사를 **다음 아이템 기본값으로 쓰지 말 것**
+- 교차양식 = 사실 전사. 서술 재작성과 섞지 말 것
+- GitHub default = `main`. TASK.md 도 main. master 는 구버전
+- 원본 미수정 · 날조 0 · 출력≠입력 · 더미 공고 없음
+- 대량 HWP 이미지는 비전으로 열지 말고 추출문+파일명으로 보고
 
-원본 미수정 · 날조 0 · fail 시 `_DRAFT` · 경로 광역 스캔 금지 · 테스트 `py -3.11`.
+## 5. 핵심 파일 인덱스 (어디에 뭐가 있나)
+| 알고 싶은 것 | 파일 |
+|---|---|
+| 모듈 팩 | `results/aimy_form_rules/modules/` |
+| 검수 | `results/aimy_form_rules/modules/AUDIT.md` |
+| AIMY 역추정 | `results/aimy_form_rules/AIMY_대한안전보건교육원_본선제출_역추정.md` |
+| 플랜 | `.omc/plans/2026-08-15-psst-modules-next.md` |
+| 운영 위키 | `.omc/wiki/psst.md` |
+| 최근 신청서 | `WORKS/KAMCO_TechBlaze/KAMCO_신청서_도보네비_박다솜_v4.1.hwp` |
+
+## 6. 검증된 사실 (재확인 불필요)
+- 모듈 1단계 검수 PASS. 엔진은 `modules/` 를 아직 안 읽음
+- 양식 「해결방안」 vs 코드 「실현 가능성」, Team 헤더 정규식 = 알려진 갭(코드 미수정)
+- KICXUP 추천·케이블텔레콤·신청서/동의서 = 종료(미접수)
+
+## 7. 재개 시 첫 행동
+1. 이 파일을 읽는다.
+2. 공고+빈 양식이 **있으면** 초안 1건. **없으면** 기다린다. BPQ-00 구현을 시작하지 않는다.
+3. AIMY 숫자를 새 초안에 복사하지 않는다.
