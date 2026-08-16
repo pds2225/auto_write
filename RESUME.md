@@ -1,11 +1,11 @@
 # RESUME.md — auto_write 세션 체크포인트
 
 > 세션을 새로 시작하면 **이 파일을 먼저** 읽는다. 상세 트랙은 아래 링크.
-> 최종 갱신: **2026-08-16** (#138+#133+#139를 한 브랜치로 합침. 머지는 다음 명령)
+> 최종 갱신: **2026-08-16** (#141 `c28be6d` main 머지. #132/#136은 이식 브랜치에서 살림)
 
 ## 한 줄 상태
 
-`pds2225/auto_write` 단일 정본. `origin/main` @ `7a2dc5a` (#137 LRule+Finalizer, #140 git-sync push 검증).
+`pds2225/auto_write` 단일 정본. `origin/main` @ `c28be6d` (#137 LRule+Finalizer, #140 git-sync, #141 #138+#133+#139 합본).
 에이전트 입구 = **bizdoc-hub** / CLI 입구 = **auto_write_hub.py**. 맵: `docs/BIZDOC_HUB_MAP.md`.
 
 **문서 작업:** 항우연 「2026 STAR-Exploration」 **선정됨**. 지원금은 최종발표 **상위 2팀만**. 공개 공고에 발표 배점표 없음 — 원장 A6.
@@ -30,6 +30,7 @@
 
 | 날짜 | 내용 | 근거 |
 |------|------|------|
+| 2026-08-16 | #138+#133+#139 합본 main 머지 (gitignore, L154–L156, A6, BPQ 노트, 합친 RESUME) | PR #141 |
 | 2026-08-16 | git-sync push 검증/롤백 main 머지 | PR #140 |
 | 2026-08-15 | overnight A–H 체리픽 (LRule+Finalizer wiring, E2E 15) | PR #137 |
 | 2026-08-15 | 배달앱+상권분석 단계형 파이프라인 인사이트 저장 (구현 대기) | `docs/BPQ_PIPELINE_INSIGHTS_20260815.md` |
@@ -59,7 +60,7 @@
 3. **REQUEST_LEDGER** 실제출 확인 대기(A1~A5) + A6 평가표/IR 양식 — 경로/제출 여부는 사용자만 확인 가능
 4. **보류**: HWPX 세로 라벨(c) — 코퍼스 수요 극소(AC6)
 5. **보류**: SFT P3 후속·DOCX↔HWP 100% — 실사용에서 막힐 때
-6. **열린 draft 미포함:** #132 AW-009(TASK 충돌), #136 clone 헬퍼(`T-20260814-03` ID 충돌). `backup/*` 유지
+6. **열린 draft:** 옛 #132/#136은 `main`과 충돌. 내용은 `cursor/revive-open-drafts-2036`에 이식. `backup/*` 유지
 
 ## 재개 명령
 

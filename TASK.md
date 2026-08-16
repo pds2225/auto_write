@@ -23,11 +23,15 @@ REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 [ ] AW-006 | 루트 파일을 역할별로 정리한다
 [ ] AW-007 | 중복·미사용 코드를 찾아 정리한다
 [ ] AW-008 | 남은 L 규칙 빈칸을 실제 검사로 채운다
+[ ] AW-009 | 요구사항 문서로 운영 웹앱 P0를 만든다
 [~] T-20260814-01 | 기본 브랜치 보호를 걸고 문서 머지 규칙을 맞춘다
 [ ] T-20260814-02 | AIMY급 사업계획서를 공고·양식·기업사실에 맞춰 자동 작성하는 통합 과업을 명세한다
 [x] T-20260814-03 | 야간 A~H 미머지 브랜치를 최신 main에 체리픽 이식 준비한다
 [x] T-20260815-01 | 남은 고유 커밋을 체리픽하고 삭제 가능한 원격 브랜치를 지운다
-[~] T-20260816-01 | #138·#133·#139를 한 브랜치로 합쳐 한 번에 머지할 수 있게 한다
+[x] T-20260816-01 | #138·#133·#139를 한 브랜치로 합쳐 한 번에 머지할 수 있게 한다
+[x] T-20260816-02 | GitHub에서 auto_write를 git clone으로 받을 수 있게 한다
+[ ] T-20260816-03 | clone 후 로컬 PC 리모트 컨트롤을 켤 수 있게 한다
+[~] T-20260816-04 | #132 AW-009와 #136 clone 헬퍼를 최신 main에 살린다
 
 
 ---
@@ -276,6 +280,7 @@ TASK LIST 한 줄 요약과 아래 상세 TASK는 TASK_ID로 연결한다.
 새 사용자 요청을 TASK로 만들 때 반드시 MUST / KEEP / REMOVE / FORBIDDEN / VERIFY / DONE 관점으로 변환한다.
 독립 TRACK은 파일군이 겹치지 않으면 병렬 가능. 동일 entrypoint/registry는 한 owner만 수정.
 NEXT_TASK.md 이관(2026-08-13): A/B/C/D/E→AW-001, H→§12 테스트. F→AW-006, G→AW-007, I→AW-008. ACTIVE(AW-001)에 내용 합치지 않음. 파일 삭제.
+AW-009(2026-08-14): 웹앱 최종 사양서 실행 TASK. AW-001에 합치지 않음. AW-002~005는 사양서 부분 요구.
 -->
 
 ## T-20260814-01
@@ -532,6 +537,8 @@ DEPENDS_ON:
 
 파일군이 겹치지 않으면 병렬 가능.
 
+웹으로 구현할 때는 최신 사양 AW-009를 따른다. 이 TASK를 별도 SaaS sync 제품으로 확장하지 않는다.
+
 ### 8-10. 구현범위
 
 수정 가능 범위:
@@ -652,6 +659,8 @@ DEPENDS_ON:
 - NONE
 
 canonical LRule source가 둘 이상이면 사용자 결정 없이는 통합 불가 → BLOCKED.
+
+웹으로 구현할 때는 최신 사양 AW-009(L 규칙 전수조회·수정·Git 반영)를 따른다.
 
 ### 8-10. 구현범위
 
@@ -782,6 +791,8 @@ DEPENDS_ON:
 
 파일군이 겹치지 않으면 화면 골격은 병렬 착수 가능. 완료 처리는 AW-001 이후.
 
+웹으로 구현할 때는 최신 사양 AW-009(P2 업무흐름·runtime 모니터링)를 따른다. P0 미완 상태에서 이 화면만 고도화하지 않는다.
+
 ### 8-10. 구현범위
 
 수정 가능 범위:
@@ -902,6 +913,8 @@ DEPENDS_ON:
 - AW-001
 
 완료 처리는 runtime 경로가 연결된 뒤.
+
+웹으로 구현할 때는 최신 사양 AW-009(문서 작업 단일 화면, Module 선택, 출처=파일명+페이지)를 따른다.
 
 ### 8-10. 구현범위
 
@@ -1298,6 +1311,234 @@ P0가 안정되기 전에는 착수하지 않는다. 완료 처리는 AW-001 이
 - runtime wiring 누락
 
 성공으로 위장하지 않는다.
+
+---
+
+## AW-009
+
+### 8-1. 사용자 원문 요청
+
+> 내드라이브 요구사항문서와 ChatGPT 공유본을 대조한 최종 사양으로 웹앱을 구현하라고 TASK.md에 넣고 시키려고 한다. 한국어·영어 프롬프트 둘 다 넣는다.
+
+원문 보존:
+
+- 유일한 사양서: Google Docs `auto_write 웹앱 구축 요구사항_최종_20260814`
+- 최신본: https://docs.google.com/document/d/1afL0r7pk0Iei0RZoDNgSulpd5uc8fYbdT7eb_wrTxuY/edit
+- 동일 제목 사본: https://docs.google.com/document/d/1KXaO0fjsbAaacaLOtjgm5NotSJ4I3LAZoPWpW7OwizQ/edit
+- 대화 근거: https://chatgpt.com/share/6a7e7a01-2e24-83e9-8447-125f43d8c454
+- 실행 시 영어 프롬프트를 기본으로 쓰고, 문서 제목/링크는 한국어 그대로 둔다.
+
+원문의 의미를 축약 과정에서 변경하지 않는다.
+
+### 8-2. 비개발자용 1줄 요약
+
+요구사항 문서로 운영 웹앱 P0를 만든다
+
+이 문장이 상단 TASK LIST에 그대로 표시된다.
+
+### 8-3. 사용자가 원하는 최종 결과
+
+사용자가 실제로 사용했을 때:
+
+- 브라우저에서 파일을 올리고 자연어로 시키면 기존 auto_write 엔진이 문서를 만든다
+- GitHub `pds2225/auto_write`와 웹 상태가 실제로 같고, 다른데 SYNCED라고 하지 않는다
+- L 규칙을 웹에서 보고 고치면 GitHub에 실제 반영된다
+- 여러 과거 문서에서 원문을 직접 보고 필요한 부분만 골라 `[1][2][3]`으로 조합 지시할 수 있다
+- 품질점수·제출가능성·프로젝트 대시보드·DOCX 신규기능이 생기지 않는다
+
+이 결과가 달성되지 않으면 DONE이 아니다. 사양서 §31 DoD 중 P0 항목과 §30 E2E 근거가 있어야 한다.
+
+### 8-4. 현재상태
+
+- 현재 구현: auto_write 엔진/CLI/DomainRouter/LRule/Finalizer, 기존 웹 흔적 가능(`web/operator-console` 등)
+- 현재 문제: 사양서 P0 운영 웹앱(문서작업 단일화면 + Git 양방향 Sync + Module 원문선택)이 미완
+- 이미 구현된 부분: 기존 엔진. 재사용만 하고 웹용으로 다시 만들지 않는다
+- 확인 필요한 부분: 기존 웹/API 코드 위치, LRule registry 정본 경로, HWP/HWPX 실제 지원 범위
+
+문서의 DONE 표시만 믿지 말고 실제 코드/runtime을 확인한다. Drive 문서가 안 열리면 BLOCKED로 보고하고 가짜 사양으로 진행하지 않는다.
+
+### 8-5. MUST — 반드시 구현
+
+P0만 이번 TASK 완료 조건이다. P1/P2는 P0 E2E가 산 뒤에만 착수한다.
+
+- [ ] 사양서를 읽고 기존 repo를 전수 분석한 뒤 P0 계획 → 구현 → E2E 근거 보고
+- [ ] GitHub 원격이 Source of Truth. GitHub → Web, Web → GitHub 양방향 Sync 실제 동작
+- [ ] 상단에 repo/branch/Web SHA/Remote SHA/Sync 상태 표시. Remote SHA 미확인·push/PR 실패면 SYNCED 금지
+- [ ] 기존 엔진/서비스/CLI/DomainRouter/LRuleEnforcer/Finalizer 재사용. 동일 기능 웹 재구현 금지
+- [ ] 메뉴: 문서 작업 / L 규칙 / 업무 흐름 / 시스템. 별도 대시보드·프로젝트관리·품질점수·제출가능성 메뉴 금지
+- [ ] 문서 작업 단일 화면. 신규/기존자료/수정을 별도 메뉴로 나누지 않고 자동 라우팅
+- [ ] 업로드 파일 역할 자동판별 + 사용자가 결과 수정 가능
+- [ ] 과거 문서를 Module → Block → 문장/표로 분해. 실제 원문 Viewer
+- [ ] 내부 Locator와 사용자 출처(파일명+페이지) 분리. 줄 번호를 찾게 만들지 않음
+- [ ] 선택 재료 `[1][2][3]` 번호화, 직접 붙여넣기, 주자료/보조자료 UI 없음
+- [ ] 자연어 작성지시 → 작성계획 확인 → Composition Plan → 기존 엔진 실행
+- [ ] PRESERVE/ADAPT/REWRITE/NEW 라디오 기본 노출 금지
+- [ ] L 규칙 repo 전수 수집·조회(P0 분석). 웹 수정·Git 반영은 사양상 P1이나, Sync 기반이 P0에 포함되면 가짜 목록을 만들지 말 것
+- [ ] 사양서 §30 중 P0 관련 E2E: GIT-E2E-01/02/04, MOD-E2E-01/02/03, COMP-E2E-01/02
+- [ ] 보고는 사양서 §34 `[WEB BUILD RESULT]` + 이 파일 `# 22. 최종보고`
+
+### 8-6. KEEP — 유지
+
+- [ ] 기존 auto_write 엔진, CLI, DomainRouter, LRule, Finalizer
+- [ ] 기존 HWP/HWPX 경로와 repo에 이미 있는 DOCX 호환(삭제하지 않음)
+- [ ] TASK.md Git 안전규칙(force push / reset --hard 금지)
+- [ ] AW-001 엔진 검사 경로. 이 TASK가 AW-001을 대체하지 않음
+- [ ] 사용자가 변경 요청하지 않은 기존 동작
+
+### 8-7. REMOVE — 제거
+
+- [ ] 주자료/보조자료 사용자 선택 UI
+- [ ] 그대로활용/최소수정/보완재작성/새로작성 4단 라디오
+- [ ] `master를 원격에 강제로 맞추기` 류 destructive Git 동작
+- [ ] 품질점수·제출가능성 자동판정 UI가 있으면 신규로 넣지 않고 기존도 웹 메뉴에 올리지 않음
+
+### 8-8. FORBIDDEN — 금지
+
+- 사용자 요청에 없는 기능 임의 추가 금지
+- 불필요한 대규모 리팩터링 금지
+- 관련 없는 DB/API/UI 변경 금지
+- 테스트를 통과시키기 위한 기능 삭제 금지
+- 기존 실패 테스트 skip 금지
+- 근거 없는 값/데이터 생성 금지
+
+TASK별 추가 금지사항:
+
+- 품질점수 / 제출가능성 자동판정 / CRM / 프로젝트관리 / 매출대시보드 / SaaS 결제
+- DOCX 신규 개발·고도화(기존 DOCX 코드 삭제는 금지, 이번 범위 추가도 금지)
+- 웹 DB에만 L 규칙 저장
+- Remote와 다른 상태를 SYNCED/완료로 표시
+- force push / reset --hard / 사용자·원격 작업 덮어쓰기
+- UI 목업만 만들고 엔진 미연결
+- runtime과 무관한 가짜 progress
+- 기존 엔진 중복 재구현
+- 고객 문서를 GitHub 코드 repo에 커밋
+- 페이지 번호만 주고 몇 번째 줄인지 찾게 하는 UX
+- AW-001 ACTIVE 내용에 이 요청을 합치지 않음
+- 사양서 없이 기억만으로 기능 추가
+
+### 8-9. 선행조건·의존성
+
+DEPENDS_ON:
+
+- NONE (P0 웹 골격+엔진 호출은 착수 가능)
+- 엔진 FINAL 경로 강화는 AW-001 owner. 웹은 기존 엔진을 호출만 한다
+
+관련 대기 TASK (별도 제품으로 다시 만들지 말 것):
+
+- AW-002 = 사양서 Git Sync
+- AW-003 = 사양서 L 규칙 화면 (P1)
+- AW-004 = 사양서 업무흐름·모니터링 (P2)
+- AW-005 = 사양서 문서 작업 단일 진입
+
+같은 web entrypoint를 동시에 고치지 않는다. AW-001과 파일군이 겹치면 순차.
+
+### 8-10. 구현범위
+
+수정 가능 범위:
+
+- 운영 웹앱(문서 작업 P0 화면, Git Sync 상태, 기존 엔진 연결 API)
+- Module/Block/Locator/작성계획/Composition Plan
+- 사양서 P0 E2E 테스트
+- 새 브랜치 + PR
+
+P0 완료 전 금지:
+
+- P1/P2 UI 고도화만 하기
+- 디자인 시스템 과투자
+
+기존 구조를 최대한 유지하고 최소 변경한다.
+
+### 8-11. 입력검증
+
+반드시 확인:
+
+- 업로드 파일 존재·형식은 repo가 실제로 지원하는 범위만 표시
+- 지원하지 않는 포맷을 지원한다고 표시하지 않음
+- 파일 역할 자동판별 오판은 사용자가 고칠 수 있어야 함
+- 출처는 실제 파일/페이지가 있을 때만 표시. 없으면 날조하지 않음
+
+해당되지 않는 항목은 N/A 근거를 남긴다.
+
+### 8-12. 빈상태
+
+검증:
+
+- 파일 없음: 다음 입력 안내
+- 선택 재료 없음: 새로 작성 지시로 진행 가능, 출처 날조 금지
+- Git 변경 없음: 최신/SYNCED는 SHA 확인 후에만
+- L 규칙 0건: 하드코딩 목록으로 채우지 않음
+
+### 8-13. 로딩상태
+
+문서 분석·Module 분해·작성계획·엔진 실행·Git fetch/push 각각 실제 runtime 상태. 가짜 timer 금지. 중복 실행 방지.
+
+### 8-14. 오류상태
+
+필요한 경우:
+
+- 파싱/변환 실패
+- Git fetch/push/PR 실패
+- Sync 충돌
+- 엔진 호출 실패
+- 사양서/Drive 문서 읽기 실패
+
+각 오류는 원인 한 줄 + 다음 행동. 성공으로 위장하지 않는다. 막히면 `BLOCKED`.
+
+### 8-15. 에이전트 실행 프롬프트 (이 블록을 그대로 사용)
+
+영어를 기본 입력으로 쓴다. 사양서 제목·링크는 그대로 둔다. 불확실하면 멈추고 묻고, 엔진을 지어내거나 SYNCED를 위장하지 않는다.
+
+#### English (default)
+
+```text
+Use Google Doc “auto_write 웹앱 구축 요구사항_최종_20260814”
+(https://docs.google.com/document/d/1afL0r7pk0Iei0RZoDNgSulpd5uc8fYbdT7eb_wrTxuY/edit)
+as the ONLY spec. Build a production web app on top of GitHub repo `pds2225/auto_write`.
+
+This TASK.md item is AW-009. Do not merge it into AW-001.
+
+Rules:
+1) Implement P0 only first. Do not polish UI or start P1/P2 before P0 works end-to-end.
+2) Reuse existing auto_write engines/services/CLI/DomainRouter/LRuleEnforcer/Finalizer. Do NOT reimplement the same logic for the web.
+3) GitHub remote is Source of Truth. Bidirectional GitHub ↔ Web sync must actually work. Never show SYNCED/complete without verifying Remote SHA. Never mark push/PR failure as success. No force-push.
+4) Explicitly out of scope: quality scoring, auto submit-readiness judgment, CRM, project management, dashboards, SaaS billing, any new/enhanced DOCX development.
+5) Core UX: one “Document Work” screen. Upload → auto role detection → decompose into Module/Block/sentence/table with real source text → user selects materials numbered [1][2][3] (allow paste-in) → natural-language compose instructions → show structured writing plan → Composition Plan → run existing engines. No primary/secondary material UI. Do not expose PRESERVE/ADAPT/REWRITE/NEW radios.
+6) User-facing citation = filename + page. Internals use precise Locators. Never force users to hunt “which line on page N”.
+7) L-rules: full inventory from repo, search, edit, Git history/rollback. Do not store canonical rules only in a web DB.
+8) Non-dev Flow / live runtime monitoring / Architecture are P2. No fake progress animations.
+9) Work on a new branch and open a PR. Done means spec §30 E2E + §31 DoD with evidence. Mock-only is FAIL.
+10) Final report must follow spec §34 [WEB BUILD RESULT] and TASK.md §22. If blocked, say BLOCKED with cause—do not hide failures.
+
+If unsure, stop and ask; do not invent engines or fake SYNCED.
+
+First analyze the remote repo + the spec, then propose a P0 plan, implement it, and report with real E2E evidence.
+```
+
+#### 한국어
+
+```text
+Google Docs 「auto_write 웹앱 구축 요구사항_최종_20260814」
+(https://docs.google.com/document/d/1afL0r7pk0Iei0RZoDNgSulpd5uc8fYbdT7eb_wrTxuY/edit)
+를 유일한 사양서로 삼아, GitHub `pds2225/auto_write` 위에 운영용 웹앱을 구현하라.
+
+이 항목은 AW-009다. AW-001에 합치지 마라.
+
+규칙:
+1) 사양서 P0만 먼저 구현. P0 미완이면 P1/P2·UI 고도화 금지.
+2) 기존 auto_write 엔진/서비스/CLI/DomainRouter/LRuleEnforcer/Finalizer를 재사용할 것. 동일 기능 웹용 중복 구현 금지.
+3) GitHub 원격이 Source of Truth. GitHub↔Web 양방향 Sync 실제 동작 필수. Remote SHA 미확인·push/PR 실패 시 SYNCED/완료 표시 금지. force push 금지.
+4) 금지: 품질점수, 제출가능성 자동판정, CRM, 프로젝트관리, 대시보드, SaaS 결제, DOCX 신규 개발/고도화.
+5) UX 핵심: ‘문서 작업’ 단일 화면. 업로드 → 파일역할 자동판별 → Module/Block/문장·표 원문 보기·선택 → 선택재료 [1][2][3] 번호화(+직접붙여넣기) → 자연어 작성지시 → AI 작성계획 확인 → Composition Plan → 기존 엔진 실행. 주자료/보조자료 UI 금지. PRESERVE/ADAPT/REWRITE/NEW 라디오 노출 금지.
+6) 출처 표시는 파일명+페이지. 내부는 정확한 Locator. 페이지 번호만 주고 줄을 찾게 만들지 말 것.
+7) L 규칙은 repo 전수 수집·조회·수정·Git history/rollback. 웹 DB에만 저장 금지.
+8) 비개발자용 업무 Flow / 실시간 runtime 모니터링 / Architecture는 P2. 가짜 progress 금지.
+9) 새 브랜치에서 작업 후 PR. 완료 판정은 사양서 §30 E2E + §31 DoD만. 목업만으로 PASS 금지.
+10) 보고는 사양서 §34 [WEB BUILD RESULT]와 TASK.md §22. BLOCKED는 숨기지 말 것.
+
+불확실하면 멈추고 물어라. 엔진을 지어내거나 SYNCED를 위장하지 마라.
+
+먼저 원격 repo와 사양서를 분석한 뒤, P0 구현 계획 → 구현 → E2E 근거와 함께 보고하라.
+```
 
 ---
 
@@ -2147,7 +2388,7 @@ STATUS_THIS_TURN: 추천 3PR을 한 브랜치로 합침. 머지 금지.
 - [x] #133 원장 A6 + STAR-Exploration을 같은 `RESUME.md`에 합침 (두 PR이 앞부분을 덮지 않게)
 - [x] #132 AW-009 · #136 clone 헬퍼는 넣지 않음 (TASK ID/충돌)
 - [x] `backup/*` 유지
-- [ ] 이 브랜치를 main에 머지하지 않음 (한 번 머지용 준비만)
+- [x] 한 번 머지: PR #141 squash `c28be6d` (2026-08-16T05:19:25Z). MAIN_MERGED=YES
 
 ### KEEP
 - AW-001~AW-008, T-20260814-01, T-20260814-02 본문 합치지 않음
@@ -2164,10 +2405,122 @@ STATUS_THIS_TURN: 추천 3PR을 한 브랜치로 합침. 머지 금지.
 ### VERIFY
 - [x] 한 브랜치에 #138+#133+#139 고유 내용이 있음
 - [x] `RESUME.md`에 STAR-Exploration과 BPQ 포인터가 함께 있음
-- [x] draft PR #141, MAIN_MERGED=NO
+- [x] draft PR #141 squash-merged `c28be6d`, MAIN_MERGED=YES
 
 ### DONE
-REQUEST_SOLVED=YES(이번 턴): 추천 3건을 한 브랜치로 고쳤다. 머지는 다음 명령.
+REQUEST_SOLVED=YES: #138+#133+#139 합본이 origin/main `c28be6d`에 있다.
+
+## T-20260816-02
+
+TASK_ID: T-20260816-02
+WORK_BRANCH: cursor/revive-open-drafts-2036
+BASE: origin/main
+STATUS_THIS_TURN: #136 clone 헬퍼를 새 ID로 이식. 옛 T-20260814-03(야간 A~H)과 충돌 없음.
+
+### 8-1. 사용자 원문
+git clone
+
+### 최종 결과
+비개발자가 GitHub `pds2225/auto_write` 를 기존 폴더를 덮어쓰지 않고 받을 수 있다.
+
+### MUST
+- clone URL: `https://github.com/pds2225/auto_write.git`
+- Windows 기본 대상: `D:\auto_write`
+- 대상이 이미 같은 저장소면 재clone하지 않고 안내
+- 대상이 비어 있지 않거나 다른 저장소면 중단. 삭제·덮어쓰기 금지
+- README에 처음 받는 명령이 있다
+
+### KEEP
+- 기존 Git sync / force-push 금지 규칙
+- 기존 `T-20260814-03` (야간 A~H 체리픽) ID를 덮어쓰지 않음
+
+### FORBIDDEN
+- `git reset --hard` / force push / `git clean -fd`
+- 기존 `D:\auto_write` 삭제
+- secret / .env 출력
+
+### VERIFY
+- 로컬 clone 테스트
+- 같은 저장소 재실행 = already_present
+- 비어 있지 않은 폴더 / 다른 저장소 = CloneError
+
+### DONE
+REQUEST_SOLVED=YES: clone 도구가 동작하고 기존 폴더를 덮어쓰지 않는다. (코드+단위테스트)
+
+## T-20260816-03
+
+TASK_ID: T-20260816-03
+WORK_BRANCH: cursor/revive-open-drafts-2036
+BASE: origin/main
+
+### 8-1. 사용자 원문
+다되면 로컬-pc리모트컨트롤
+
+### 최종 결과
+git clone이 끝난 뒤 Windows 로컬 PC에서 더블클릭 한 번으로 Cursor My Machines 또는 Claude Code Remote Control이 켜진다.
+
+### MUST
+- clone이 끝난 `D:\auto_write` 에서만 시작
+- 기존 폴더 덮어쓰기·삭제 금지
+- Cursor `agent worker start --name auto-write-pc` 우선, 없으면 `claude remote-control`
+- 클라우드 VM에서 D:\ 에 붙지 못하면 정직하게 안내
+- operator console 을 외부에 열지 않음
+
+### KEEP
+- T-20260816-02 clone 도구
+- Git force-push 금지
+
+### FORBIDDEN
+- 로컬 PC에 무단 원격 접속 도구 설치
+- API key / .env 출력
+- operator console 원격 바인딩
+
+### VERIFY
+- checkout 없으면 시작 거부
+- mock runner로 실제 워커 미기동
+
+### DONE
+REQUEST_SOLVED=YES는 PC에서 `remote_control.bat` 가 실제로 켜졌을 때만. 클라우드만으로는 YES 금지. LIST는 `[ ]`.
+
+## T-20260816-04
+
+TASK_ID: T-20260816-04
+WORK_BRANCH: cursor/revive-open-drafts-2036
+BASE: origin/main
+TASK_START_SHA: c28be6d3f6ccdedba488d989fad3430e09be37c0
+TASK_BLOB_SHA: 244ec6b81ae6d0bb62db0a7504b588e2839abc35
+STATUS_THIS_TURN: 132/136 살림 + TASK/RESUME 정합. T-20260814-02 본문 미수정. 머지 금지.
+
+### 8-1. 사용자 원문
+132 리베이스해서 살려 / 136 ID 고쳐서 살려 / 지우지 않음 / TASK 체크랑 RESUME만 고쳐 / 보호 설정 확인해 [x] 할지 막아인지 보고 / T-20260814-02 TASK에 반영하기전에 나한테 내용보고해
+
+### MUST
+- [x] #132 AW-009를 현재 TASK.md에 충돌 없이 이식
+- [x] #136 clone/remote를 T-20260816-02/03으로 이식 (T-20260814-03 야간 ID 유지)
+- [x] `backup/*` 삭제 금지
+- [x] T-20260816-01 LIST `[x]`, #141 머지 SHA 기록
+- [x] RESUME.md를 `c28be6d` / #141 완료로 고침
+- [x] 브랜치 보호는 증명되는 범위만 보고. 거짓 `[x]` 금지
+- [x] T-20260814-02 DETAILS에 BPQ 키워드를 넣지 않음 (채팅 보고만)
+- [ ] 이번 턴 main 머지 금지
+
+### KEEP
+- T-20260814-01 `[~]` (보호 API 403으로 enforce_admins 미증명)
+- T-20260814-02 본문
+- 기존 draft #132 #136 브랜치 (force-push로 덮지 않음)
+
+### FORBIDDEN
+- force push / reset --hard / `git add -A`
+- backup 삭제
+- T-20260814-02 본문 키워드 삽입
+- T-20260814-01을 증거 없이 `[x]`
+
+### VERIFY
+- [x] clone 단위테스트 통과 (24 passed)
+- [x] draft PR #142, MAIN_MERGED=NO
+
+### DONE
+REQUEST_SOLVED=YES(이번 턴): 132/136 내용이 최신 main 위 한 브랜치에 있고, TASK/RESUME이 #141과 맞다. 머지는 다음 명령.
 
 # 9. 실제사용 시나리오
 
