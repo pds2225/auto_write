@@ -35,6 +35,7 @@ ERROR_KO = {
     "FILE_MISSING": "입력 파일을 찾지 못함",
     "EXTRACT_ERROR": "현재 추출기 실행 중 오류",
     "PARTIAL_INGEST": "문서 전체가 아니라 일부/미리보기 텍스트만 읽었을 가능성이 있음",
+    "STRUCTURED_EXTRACT_ERROR": "원문은 읽었지만 현재 구조화 파서 실행이 실패함",
     "READ_MISS": "원문을 읽지 못했거나 Golden의 기대 원문 단서를 찾지 못함",
     "VALUE_ERROR": "구조화한 값이 Golden 정답과 다름",
     "CLASSIFY_MISS": "원문에는 값이 있으나 현재 구조화 파서가 해당 필드로 분류하지 못함",
@@ -55,10 +56,22 @@ SEMANTIC_KO = {
 # 현재 production company_extract가 실제로 구조화할 수 있는 Golden 필드만 연결한다.
 # 없는 기능을 Baseline 도구 안에서 새로 구현하지 않는다.
 COMPANY_FIELD_MAP = {
+    "company_name": "기업명",
     "applicant_name": "대표자",
     "representative_name": "대표자",
-    "business_location": "주소",
+    "business_registration_number": "사업자등록번호",
+    "established_date": "설립일",
+    "founding_date": "설립일",
     "industry": "업종",
+    "business_location": "주소",
+    "address": "주소",
+    "contact": "연락처",
+    "phone": "연락처",
+    "email": "이메일",
+    "website": "홈페이지",
+    "employee_count": "직원수",
+    "capital": "자본금",
+    "fax": "팩스",
 }
 
 RAW_PROBE_BEHAVIORS = {
@@ -132,11 +145,36 @@ def _raw_terms_for(assertion: dict[str, Any]) -> list[str]:
     return [str(expected)]
 
 
+def _contains_raw_term(text: str, term: str) -> bool:
+    """Golden raw term이 실제 텍스트에 있는지 보수적으로 확인한다.
+
+    숫자-only term은 substring으로 찾지 않는다. 예: 100이 1000에 들어 있다고
+    FOUND 처리하면 ingest/classifier 원인 분류가 틀어지므로 숫자 토큰 전체가
+    동일할 때만 인정한다.
+    """
+    stripped = str(term).strip()
+    if not stripped:
+        return True
+
+    if re.fullmatch(r"[0-9\s,._-]+", stripped):
+        expected_digits = re.sub(r"\D", "", stripped)
+        numeric_tokens = re.findall(
+            r"(?<!\d)\d[\d\s,._-]*\d(?!\d)|(?<!\d)\d(?!\d)",
+            text,
+        )
+        return any(
+            re.sub(r"\D", "", token) == expected_digits
+            for token in numeric_tokens
+        )
+
+    needle = _norm_text(stripped)
+    return needle in _norm_text(text)
+
+
 def _raw_contains_all(text: str, terms: list[str]) -> bool | None:
     if not terms:
         return None
-    haystack = _norm_text(text)
-    return all(_norm_text(term) in haystack for term in terms if _norm_text(term))
+    return all(_contains_raw_term(text, term) for term in terms)
 
 
 def _structured_company_value(
@@ -169,6 +207,7 @@ def evaluate_assertion(
     source_file: str,
     raw_text: str,
     parsed_company: dict[str, dict[str, str]],
+    structured_parser_failed: bool = False,
 ) -> AssertionResult:
     category = str(assertion.get("category", ""))
     field = str(assertion.get("field", ""))
@@ -191,7 +230,10 @@ def evaluate_assertion(
     # 현재 company_extract 결과에는 실제 page/section/paragraph locator가 없다.
     source_location_preserved = False
 
-    if raw_check is False:
+    if structured_supported and structured_parser_failed:
+        status = "STRUCTURED_EXTRACT_ERROR"
+        detail = "원문 ingest는 성공했지만 현재 company 구조화 파서 실행이 실패했습니다."
+    elif raw_check is False:
         status = "READ_MISS"
         detail = "Golden이 지정한 원문 단서를 현재 canonical ingest 텍스트에서 모두 찾지 못했습니다."
     elif structured_supported:
@@ -366,14 +408,18 @@ def run_baseline(
             raw_text, notes = "", [f"{type(exc).__name__}: {exc}"]
 
         parsed_company: dict[str, dict[str, str]] = {}
+        structured_parser_failed = False
         if raw_text.strip():
             try:
                 parsed_company = company_parser(raw_text)
             except Exception as exc:  # noqa: BLE001
+                structured_parser_failed = True
                 notes = [*notes, f"company parser error: {type(exc).__name__}: {exc}"]
 
         if not raw_text.strip():
             doc_status = "EXTRACT_ERROR"
+        elif structured_parser_failed:
+            doc_status = "STRUCTURED_EXTRACT_ERROR"
         elif _is_partial_ingest(notes):
             doc_status = "PARTIAL_INGEST"
         else:
@@ -396,6 +442,7 @@ def run_baseline(
                     source_file=name,
                     raw_text=raw_text,
                     parsed_company=parsed_company,
+                    structured_parser_failed=structured_parser_failed,
                 )
             )
 
@@ -550,6 +597,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         "## 코드 설명",
         "",
         "- `PARTIAL_INGEST` — HWP 미리보기(PrvText) 등 일부 텍스트만 읽었을 가능성이 있어 전체 Baseline을 신뢰하면 안 됩니다.",
+        "- `STRUCTURED_EXTRACT_ERROR` — 원문은 읽었지만 현재 구조화 파서가 예외로 실패했습니다. Baseline 실행 자체를 성공으로 보지 않습니다.",
         "- `READ_MISS` — Golden의 원문 단서를 ingest 단계에서 잃었습니다. 구조화 로직보다 먼저 고칠 대상입니다.",
         "- `STRUCTURED_EXTRACTION_MISSING` — 원문을 못 읽었다는 뜻이 아니라 해당 항목의 구조화 extractor가 아직 없다는 뜻입니다.",
         "- `SOURCE_LOST` — 값은 맞지만 파일 내 실제 위치(page/section/table/cell 등)를 보존하지 못했습니다.",
@@ -643,7 +691,12 @@ def main(argv: list[str] | None = None) -> int:
     # 문서 자체를 못 읽었거나 일부 미리보기만 읽은 경우에는
     # 리포트는 남기되 baseline 실행을 성공으로 종료하지 않는다.
     fatal = any(
-        doc.get("status") in {"FILE_MISSING", "EXTRACT_ERROR", "PARTIAL_INGEST"}
+        doc.get("status") in {
+            "FILE_MISSING",
+            "EXTRACT_ERROR",
+            "PARTIAL_INGEST",
+            "STRUCTURED_EXTRACT_ERROR",
+        }
         for doc in report["documents"].values()
     )
     return 1 if fatal else 0
