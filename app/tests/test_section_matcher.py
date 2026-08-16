@@ -200,7 +200,7 @@ def test_blocking_missing_requirement_makes_section_not_writable():
 def test_program_requirement_can_target_section_id_directly():
     requirement = _requirement(
         requirement_id="R-DIRECT",
-        name="공고상 문제인식 필수 서술",
+        name="바이어 발굴 문제",
         target_section_ids=["problem"],
         material_type="EVIDENCE",
     )
