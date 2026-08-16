@@ -19,12 +19,21 @@ import re
 from dataclasses import asdict, dataclass, field
 from typing import Any, Iterable
 
+from .step2_output_contract import Step2Output, parse_step2_output
+
 
 STATUS_KO = {
     "WRITABLE": "현재 자료만으로 작성 가능",
     "PARTIAL_WRITABLE": "일부 정보가 부족하지만 현재 자료로 작성 가능",
     "BLOCKED_REQUIRED_INFO": "필수 정보가 부족해 작성 보류",
     "NO_USABLE_MATERIAL": "사용할 수 있는 근거가 없어 작성 보류",
+}
+
+HUMAN_STATUS_KO = {
+    "WRITABLE": "작성 가능",
+    "PARTIAL_WRITABLE": "작성 가능",
+    "BLOCKED_REQUIRED_INFO": "작성 보류",
+    "NO_USABLE_MATERIAL": "작성 보류",
 }
 
 UNUSABLE_REASON_KO = {
@@ -102,6 +111,7 @@ class SectionMatch:
     missing_requirements: list[MissingRequirement] = field(default_factory=list)
     conflicts: list[dict[str, Any]] = field(default_factory=list)
     unusable_materials: list[UnusableMaterial] = field(default_factory=list)
+    matched_provenance: list[dict[str, Any]] = field(default_factory=list)
     writable: bool = False
     status: str = "NO_USABLE_MATERIAL"
     writable_ko: str = STATUS_KO["NO_USABLE_MATERIAL"]
@@ -223,8 +233,44 @@ def _source_location(material: dict[str, Any]) -> str:
     return ""
 
 
+def _iter_sources(material: dict[str, Any]) -> list[dict[str, Any]]:
+    raw = material.get("sources")
+    rows: list[dict[str, Any]] = []
+    if isinstance(raw, list):
+        rows.extend(row for row in raw if isinstance(row, dict))
+    if not rows:
+        rows.append(material)
+    return rows
+
+
+def _material_sources(material: dict[str, Any]) -> list[dict[str, Any]]:
+    sources: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for row in _iter_sources(material):
+        source_file = _text(row.get("source_file"))
+        location = _source_location(row)
+        if not source_file and not location:
+            continue
+        key = (source_file, location)
+        if key in seen:
+            continue
+        seen.add(key)
+        item: dict[str, Any] = {
+            "source_file": source_file,
+            "source_location": location,
+        }
+        locator = row.get("locator")
+        if isinstance(locator, dict) and locator:
+            item["locator"] = dict(locator)
+        sources.append(item)
+    return sources
+
+
 def _has_provenance(material: dict[str, Any]) -> bool:
-    return bool(_text(material.get("source_file")) and _source_location(material))
+    return any(
+        _text(row.get("source_file")) and _source_location(row)
+        for row in _iter_sources(material)
+    )
 
 
 def _material_value(material: dict[str, Any], material_type: str) -> str:
@@ -322,7 +368,7 @@ def _requirement_target_ids(requirement: dict[str, Any]) -> set[str]:
         return {_text(v) for v in raw if _text(v)}
     if raw not in (None, ""):
         return {_text(raw)}
-    direct = _text(requirement.get("target_section_id"))
+    direct = _text(requirement.get("target_section_id")) or _text(requirement.get("section_id"))
     return {direct} if direct else set()
 
 
@@ -494,6 +540,22 @@ def match_section(
                 continue
             matched.append(material)
 
+    matched_provenance = [
+        {
+            "material_id": _id_of(item, "fact"),
+            "material_type": "FACT",
+            "sources": _material_sources(item),
+        }
+        for item in matched_facts
+    ]
+    matched_provenance.extend(
+        {
+            "material_id": _id_of(item, "evidence"),
+            "material_type": "EVIDENCE",
+            "sources": _material_sources(item),
+        }
+        for item in matched_evidence
+    )
     applicable_requirements = [
         requirement
         for requirement in (requirements or [])
@@ -574,6 +636,7 @@ def match_section(
         missing_requirements=missing,
         conflicts=section_conflicts,
         unusable_materials=unusable,
+        matched_provenance=matched_provenance,
         writable=writable,
         status=status,
         writable_ko=STATUS_KO[status],
@@ -593,3 +656,39 @@ def match_sections(
         match_section(section, facts, evidence, requirements, conflicts)
         for section in sections
     ]
+
+
+def match_from_step2(
+    sections: list[dict[str, Any]],
+    step2: dict[str, Any] | Step2Output,
+    requirements: list[dict[str, Any]] | None = None,
+) -> list[SectionMatch]:
+    """검증된 STEP 2 출력만 받아 섹션 매칭한다. 추출기를 호출하지 않는다."""
+    parsed = step2 if isinstance(step2, Step2Output) else parse_step2_output(step2)
+    payload = parsed.as_matcher_payload()
+    return match_sections(
+        sections,
+        payload["facts"],
+        payload["evidence"],
+        requirements,
+        payload["conflicts"],
+    )
+
+
+def format_human_report(matches: list[SectionMatch]) -> str:
+    """비개발자용 한글 리포트. Writer 초안이 아니라 작성 가능/부족정보만 보여 준다."""
+    blocks: list[str] = []
+    for match in matches:
+        lines = [
+            f"{match.target_section_name} — {HUMAN_STATUS_KO.get(match.status, match.status)}"
+        ]
+        usable = len(match.matched_fact_ids) + len(match.matched_evidence_ids)
+        if usable:
+            lines.append(f"사용 가능한 근거 {usable}개")
+        if match.missing_requirements:
+            names = ", ".join(item.name for item in match.missing_requirements)
+            lines.append(f"부족한 정보 {len(match.missing_requirements)}개: {names}")
+        if match.conflicts:
+            lines.append(f"확인할 충돌 {len(match.conflicts)}개")
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks) + ("\n" if blocks else "")
