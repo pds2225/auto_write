@@ -359,6 +359,45 @@ def test_git_feature_branch_reuses_branch_and_syncs_new_master(tmp_path, monkeyp
 
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
+def test_failed_base_merge_push_rolls_back_local_merge(tmp_path, monkeypatch):
+    remote, web, peer = _setup_git_remote(tmp_path)
+    _disable_gh(monkeypatch)
+    service = GitSyncService(web)
+
+    base = service.base_remote_sha()
+    service.assert_write_base(base)
+    _write_rule(web, "v2")
+    first = service.commit_and_push(
+        [str(RULE_REL).replace("\\", "/")],
+        message="rule v2",
+        expected_base_remote_sha=base,
+    )
+    original_sha = service.local_sha()
+
+    (peer / "master_change.txt").write_text("advanced\n", encoding="utf-8")
+    _git(peer, "add", "master_change.txt")
+    _git(peer, "commit", "-m", "advance master")
+    _git(peer, "push", "origin", "master")
+
+    hook = remote / "hooks" / "pre-receive"
+    hook.write_text("#!/bin/sh\necho rejected >&2\nexit 1\n", encoding="utf-8")
+    hook.chmod(0o755)
+    with pytest.raises(GitSyncError):
+        service.sync_from_remote()
+
+    assert service.current_branch() == first["branch"]
+    assert service.local_sha() == original_sha
+    assert _git(web, "status", "--porcelain") == ""
+    assert not (web / "master_change.txt").exists()
+
+    hook.unlink()
+    synced = service.sync_from_remote()
+    assert synced.status == "SYNCED"
+    assert service.remote_sha(first["branch"]) == service.local_sha()
+    assert (web / "master_change.txt").read_text(encoding="utf-8") == "advanced\n"
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
 def test_equal_registry_content_does_not_false_detect_merge_without_pr_state(tmp_path, monkeypatch):
     _, web, peer = _setup_git_remote(tmp_path)
     _disable_gh(monkeypatch)
@@ -439,6 +478,41 @@ def test_git_failed_feature_push_rolls_back_worktree(tmp_path, monkeypatch):
     assert service.current_branch() == "master"
     assert _git(web, "status", "--porcelain") == ""
     assert json.loads((web / RULE_REL).read_text(encoding="utf-8"))["lessons"][0]["summary"] == "v1"
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
+def test_successful_push_with_post_push_fetch_failure_is_not_rolled_back(tmp_path, monkeypatch):
+    _, web, _ = _setup_git_remote(tmp_path)
+    _disable_gh(monkeypatch)
+    service = GitSyncService(web)
+
+    expected = service.base_remote_sha()
+    service.assert_write_base(expected)
+
+    real_fetch = service.fetch
+    fetch_calls = 0
+
+    def flaky_fetch() -> None:
+        nonlocal fetch_calls
+        fetch_calls += 1
+        if fetch_calls > 1:
+            raise GitSyncError("network fetch failed")
+        real_fetch()
+
+    monkeypatch.setattr(service, "fetch", flaky_fetch)
+
+    _write_rule(web, "push-kept")
+    result = service.commit_and_push(
+        [str(RULE_REL).replace("\\", "/")],
+        message="push succeeds before fetch failure",
+        expected_base_remote_sha=expected,
+    )
+
+    assert result["branch"].startswith("web/lrule-")
+    assert service.current_branch() == result["branch"]
+    assert service.local_sha() == result["commit_sha"]
+    assert service.remote_sha(result["branch"]) == result["commit_sha"]
+    assert result["snapshot"]["status"] == "SYNCED"
 
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")

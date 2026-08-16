@@ -26,6 +26,7 @@ REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 [~] T-20260814-01 | 기본 브랜치 보호를 걸고 문서 머지 규칙을 맞춘다
 [ ] T-20260814-02 | AIMY급 사업계획서를 공고·양식·기업사실에 맞춰 자동 작성하는 통합 과업을 명세한다
 [x] T-20260814-03 | 야간 A~H 미머지 브랜치를 최신 main에 체리픽 이식 준비한다
+[x] T-20260815-01 | 남은 고유 커밋을 체리픽하고 삭제 가능한 원격 브랜치를 지운다
 
 
 ---
@@ -2083,6 +2084,48 @@ STATUS_THIS_TURN: 이식 준비. main 머지 금지.
 
 ### DONE
 REQUEST_SOLVED=YES(이번 턴): 최신 main 기준 이식 브랜치 + draft PR. 머지와 AW-001 실사용 E2E는 다음 턴.
+
+## T-20260815-01
+
+TASK_ID: T-20260815-01
+WORK_BRANCH: cursor/absorb-stale-branches-2036
+BASE: origin/main
+TASK_START_SHA: 9cffb2459532acc1fc5f8aba125219850f3fe654
+TASK_BLOB_SHA: 665c4ddc8dfca8147cb2bc03e927fd6fad5a0973
+STATUS_THIS_TURN: 고유 커밋 체리픽 + 삭제 가능 원격 정리. main 머지 금지.
+
+### 8-1. 사용자 원문
+체리픽하고 지울수있믄것 작업해
+
+### MUST
+- [x] 최신 origin/main(`9cffb24`)에서 작업 브랜치 생성
+- [x] `d5980f38` git-sync push 검증/롤백 체리픽 (PR #131은 `web/operator-console-20260811`에만 머지되어 main에 없음)
+- [x] `dcccff67` OO/◈·붙임1 스킵 (정본 `core.docx.services.cross_form_autofill` / hwpx_form_extract 테스트가 이미 main)
+- [x] `1ac2cac5` M4 스킵 (generate_missing / m4 CLI 테스트가 이미 main)
+- [x] leftover squash SHA(`refactor/*`, `ci/merge-gate-20260813`, `docs/task-T-20260814-02`) 재체리픽 금지
+- [x] 삭제 가능 원격 브랜치 삭제 (open PR head·`backup/*` 제외) — 21개
+- [x] main 머지 하지 않음
+
+### KEEP
+- 열린 PR 브랜치: #138 #136 #133 #132 #139
+- `backup/WIN-K20QOC29TOB`, `backup/omc-lessons-md`
+- AW-001~AW-008, T-20260814-01, T-20260814-02 내용 합치지 않음
+
+### FORBIDDEN
+- main 머지
+- force push / reset --hard / `git add -A`
+- open PR head 삭제
+- backup 브랜치 삭제
+- TASK.md 를 옛 `docs/task-T-20260814-02` 내용으로 덮어쓰기
+
+### VERIFY
+- [x] `git_sync_service.py` 에 `_push_branch_verified` / `_remote_branch_matches`
+- [x] `test_operator_console.py` 19 passed
+- [x] 삭제 대상 원격이 없고, open PR·backup 은 유지
+- [x] draft PR #140, MAIN_MERGED=NO
+
+### DONE
+REQUEST_SOLVED=YES(이번 턴): 고유 커밋은 이식 브랜치에 있고, 이미 main에 흡수된 원격은 삭제됨. git-sync PR 머지는 다음 턴.
 
 # 9. 실제사용 시나리오
 
