@@ -60,6 +60,7 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
    `python app/tools/step2_extraction_baseline.py --golden … --input-dir …`
    → `baseline_report`의 READ_MISS / STRUCTURED_EXTRACTION_MISSING / VALUE_ERROR / SOURCE_LOST 건수.
    Golden·HWP는 커밋 금지. Golden이 없으면 비교는 BLOCKED(41건 재구성 금지).
+   이 세션: D1·D2 Drive 제목 일치 확보, Linux `unhwp` ingest는 PARTIAL 아님. D3·Golden 없음 → 41건 카운트 BLOCKED.
    그 건수를 기준으로 STEP 2 추출기(ITEM/PROBLEM/SOLUTION/BM/TEAM/FINANCE, ACTUAL/PLAN, Conflict, source 위치) 개발.
 1. **owner 수동**: `pds2225/autowrite` GitHub Delete (이미 archived, admin 토큰 없음)
    → https://github.com/pds2225/autowrite/settings

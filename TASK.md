@@ -2730,8 +2730,9 @@ READ_MISS / STRUCTURED_EXTRACTION_MISSING / VALUE_ERROR / SOURCE_LOST 건수
 
 - D1 HWP 제목 일치. Drive id `1Bo6fc9PDRfU0kKJW4-JZkKciJLqR-sA1`
 - D2 HWP 제목 일치. Drive id `1dRiF02OhYTIm_qbZzaXt9nb__zXdv9jR`
-- D3 제목 정확 검색 0. `재도전(추경)` 폴더에는 접수증·초안만. 공고/빈양식과 혼동 금지.
+- D3 제목 정확 검색 0. `재도전(추경)` 폴더에는 접수증·초안만. 가까운 3/4 제출본을 D3로 바꿔 쓰지 말 것.
 - Golden 제목 정확 검색 0 (Drive·Gmail). 없으면 41건을 지어내지 말 것.
+- D1/D2를 이 Linux VM에서 `extract_text` ingest smoke: `unhwp` 표 구조 복원, `PARTIAL_INGEST` 아님. 현재 company parser가 비어있지 않게 뽑은 키만: D1=`대표자`(1), D2=`설립일`·`이메일`·`대표자`(3). **값 대조·41건 카운트는 Golden 없어 BLOCKED.**
 
 실행:
 
