@@ -9,10 +9,11 @@
 에이전트 입구 = **bizdoc-hub** / CLI 입구 = **auto_write_hub.py**. 맵: `docs/BIZDOC_HUB_MAP.md`.
 
 **문서 작업:** 항우연 「2026 STAR-Exploration」 **선정됨**. 지원금은 최종발표 **상위 2팀만**. 공개 공고에 발표 배점표 없음 — 원장 A6.
-**엔진 병렬 트랙 (만남점 = STEP 2 Output Contract):**
-- **이 트랙 / STEP 3A:** 양식 섹션 ↔ Fact/Evidence ↔ 공고 요구사항 matcher. 합성 fixture + Golden + 비개발자 한글 리포트. Writer/UI/HWP 금지. STEP 2 추출기 파일 금지.
-- **다른 세션 / STEP 2:** 문서 ingest → Fact / NarrativeEvidence / Actual·Plan / Source / Conflict. 최종 반환 JSON을 `app/auto_write/services/step2_output_contract.py`에 맞춘다.
-- **41건 Baseline:** Golden `STEP2_EXTRACTION_GOLDEN_V1.json` + D3 없으면 BLOCKED. 41건 추측 생성 금지. #150은 측정기만.
+**엔진 병렬 트랙 — 지금은 병합하지 말 것:**
+- `#152` draft (base=`main`): TASK/RESUME만. STEP 2 코드 없음.
+- `#153` draft (base=`#152` 브랜치): STEP 3A matcher 정본. 파일 2개(`section_matcher.py`, `test_section_matcher.py`). mergeable. `#152`가 `main`에 들어간 뒤 base를 `main`으로 바꾸고, 그때 STEP 2 실제 출력과 연결.
+- `#154` draft (base=`#153` 브랜치): 합성 계약·Golden 리포트 후속. `#153`과 같이 지금은 병합 금지.
+- **41건 Baseline:** Golden + D3 없으면 BLOCKED. 41건 추측 생성 금지. #150은 측정기만.
 
 P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금지. 파일 오면 초안 1건). **P 완료 후는 최우선 사용 케이스.** 사업자등록증은 첫 화면 필수 아님.
 
@@ -62,10 +63,8 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
    → `baseline_report`의 READ_MISS / STRUCTURED_EXTRACTION_MISSING / VALUE_ERROR / SOURCE_LOST 건수.
    Golden·HWP는 커밋 금지. Golden이 없으면 비교는 BLOCKED(41건 재구성 금지).
    출력 JSON은 `Fact[]` / `NarrativeEvidence[]` / `Conflict[]` 계약에 맞출 것.
-0c. **이 트랙 / STEP 3A (합성 fixture로 완료 목표):** matcher Golden + 한글 리포트.
-   `cd /workspace && python3 -m pytest app/tests/test_section_matcher.py app/tests/test_step2_output_contract.py app/tests/test_step3a_golden.py -q`
-   `python3 app/tools/step3a_section_match.py --bundle app/tests/fixtures/step3a/writable_problem_bundle.json`
-   다음이 아님: Writer, Preview UI, HWP 렌더, STEP 3B 실공고 Golden.
+0c. **STEP 3A 병합 대기:** `#153` 2파일 matcher는 검증됨. `#152` main 머지 → `#153` base를 `main`으로 → STEP 2 실제 출력 연결. **지금은 #152/#153/#154 병합 금지.**
+   Writer, Preview UI, HWP 렌더, STEP 3B 실공고 Golden은 그 다음.
 1. **owner 수동**: `pds2225/autowrite` GitHub Delete (이미 archived, admin 토큰 없음)
    → https://github.com/pds2225/autowrite/settings
 2. **실측 1건** (추천 시나리오 중 하나):
@@ -80,10 +79,9 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 ## 재개 명령
 
 ```text
-이어서: STEP 3A matcher 트랙이면 `cursor/step3a-section-matcher-e248`.
-합성 Golden·한글 리포트가 있으면 Writer/UI/HWP는 아직 하지 말 것.
-다른 세션: STEP 2 추출기. 만남점=`app/auto_write/services/step2_output_contract.py`.
-41 Baseline은 Golden+D3 없으면 BLOCKED. P 개발 중=Problem만. P 완료 후=최우선 사용 케이스.
+이어서: #152·#153·#154는 draft. 지금은 병합하지 말 것.
+#152가 main에 들어가면 #153 base를 main으로 바꾸고 STEP 2 실제 출력과 연결.
+#153 정본 diff= matcher 2파일. Writer/UI/HWP 금지. P 개발 중=Problem만.
 ```
 
 ```powershell

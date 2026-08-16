@@ -2797,6 +2797,11 @@ Golden (합성 fixture. 실 HWP/Golden 41 재구성 금지):
 
 금지: Writer, 파트별 Preview UI, HWP 렌더, STEP 2 추출기 파일 수정, Golden 41 추측 생성.
 
+**병합 대기 (2026-08-16 확인. 지금은 병합하지 말 것):**
+- `#152` = TASK/RESUME만. STEP 2 코드 없음. base=`main`. draft.
+- `#153` = STEP 3A matcher 정본. diff는 `section_matcher.py` + `test_section_matcher.py` **2파일**. TASK/RESUME/측정기/ProjectService/Writer/웹앱 없음. `#152` 위에 쌓인 draft. mergeable.
+- `#152`가 `main`에 들어간 뒤에 `#153` base를 `main`으로 바꾸고, 그때 STEP 2 실제 출력 구조와 연결한다. 그 전 병합 금지.
+
 이후 순서(이 트랙 이후): STEP 3B 실제 공고+양식 Golden → STEP 4 Writer+Preview → STEP 5 부족정보 질문 → 전체 QA/HWP 렌더.
 
 ---
