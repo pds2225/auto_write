@@ -48,14 +48,20 @@ class GitSyncService:
 
     WEB_RULE_PREFIX = "web/lrule-"
     MANAGED_RULE_PATH = "app/tests/lessons_coverage.json"
+    FALLBACK_BASE_BRANCH = "main"
     _RULE_CODE_RE = re.compile(r"\bL\d{3}\b", re.IGNORECASE)
+    _SYMREF_HEAD_RE = re.compile(
+        r"^ref:\s+refs/heads/(\S+)\s+HEAD\s*$",
+        re.IGNORECASE | re.MULTILINE,
+    )
 
     def __init__(self, repo_root: str | Path | None = None):
         self.repo_root = Path(repo_root or Path(__file__).resolve().parents[3])
         self.remote = os.getenv("AUTO_WRITE_GIT_REMOTE", "origin")
-        self.base_branch = os.getenv("AUTO_WRITE_GIT_BASE_BRANCH", "master")
         self.repository = os.getenv("AUTO_WRITE_GITHUB_REPOSITORY", "pds2225/auto_write")
         self.managed_paths = {self.MANAGED_RULE_PATH}
+        # Env override wins; otherwise GitHub/remote HEAD; otherwise "main".
+        self.base_branch = self._resolve_base_branch()
 
     def _run(self, *args: str, check: bool = True, timeout: int = 60) -> str:
         proc = subprocess.run(
@@ -79,6 +85,94 @@ class GitSyncService:
             capture_output=True,
             timeout=15,
         ).returncode == 0
+
+    def _git_capture(self, *args: str, timeout: int = 15) -> str:
+        try:
+            proc = subprocess.run(
+                ["git", *args],
+                cwd=self.repo_root,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=timeout,
+            )
+        except Exception:
+            return ""
+        if proc.returncode != 0:
+            return ""
+        return (proc.stdout or "").strip()
+
+    def _normalize_branch_name(self, raw: str) -> str:
+        name = (raw or "").strip().replace("\\", "/")
+        if name.startswith("refs/heads/"):
+            name = name[len("refs/heads/") :]
+        remote_prefix = f"{self.remote}/"
+        if name.startswith(remote_prefix):
+            name = name[len(remote_prefix) :]
+        if name.startswith("refs/remotes/"):
+            parts = name.split("/")
+            if len(parts) >= 4:
+                name = "/".join(parts[3:])
+        if name in {"", "HEAD", "DETACHED"}:
+            return ""
+        return name
+
+    def _remote_branch_exists(self, branch: str) -> bool:
+        return bool(branch) and self._ref_exists(f"{self.remote}/{branch}")
+
+    def _detect_from_symbolic_ref(self) -> str:
+        raw = self._git_capture(
+            "symbolic-ref", "--quiet", "--short", f"refs/remotes/{self.remote}/HEAD"
+        )
+        name = self._normalize_branch_name(raw)
+        return name if self._remote_branch_exists(name) else ""
+
+    def _detect_from_ls_remote(self) -> str:
+        raw = self._git_capture("ls-remote", "--symref", self.remote, "HEAD", timeout=60)
+        if not raw:
+            return ""
+        match = self._SYMREF_HEAD_RE.search(raw)
+        if not match:
+            return ""
+        name = self._normalize_branch_name(match.group(1))
+        if not name:
+            return ""
+        has_sha = any(
+            not line.lower().startswith("ref:") and line.split()[-1:] == ["HEAD"]
+            for line in raw.splitlines()
+            if line.strip()
+        )
+        if self._remote_branch_exists(name) or has_sha:
+            return name
+        return ""
+
+    def _detect_default_branch(self) -> str:
+        """Resolve the GitHub (or git remote) default branch without a hardcoded master.
+
+        Order:
+        1. ``origin/HEAD`` symbolic ref (clone-time default)
+        2. ``git ls-remote --symref`` HEAD (live remote/GitHub default)
+        3. ``origin/main`` if it exists
+        4. ``origin/master`` if it exists
+        """
+        for candidate in (
+            self._detect_from_symbolic_ref(),
+            self._detect_from_ls_remote(),
+        ):
+            if candidate:
+                return candidate
+        if self._remote_branch_exists("main"):
+            return "main"
+        if self._remote_branch_exists("master"):
+            return "master"
+        return ""
+
+    def _resolve_base_branch(self) -> str:
+        env = (os.getenv("AUTO_WRITE_GIT_BASE_BRANCH") or "").strip()
+        if env:
+            return env
+        return self._detect_default_branch() or self.FALLBACK_BASE_BRANCH
 
     def _is_ancestor(self, ancestor: str, descendant: str) -> bool:
         if not ancestor or not descendant:
@@ -260,8 +354,8 @@ class GitSyncService:
         local = self.local_sha()
         base_remote = self.base_remote_sha()
         # Content equality is not proof of merge: an open PR may happen to match
-        # master after an independent change. For squash merges, require actual
-        # PR merged state from GitHub CLI; normal/merge commits use ancestry.
+        # the base branch after an independent change. For squash merges, require
+        # actual PR merged state from GitHub CLI; normal/merge commits use ancestry.
         return self._is_ancestor(local, base_remote) or self._feature_pr_merged(branch)
 
     def _switch_to_base_after_merge(self) -> bool:
@@ -293,14 +387,19 @@ class GitSyncService:
         if proc.returncode != 0:
             self._run("merge", "--abort", check=False)
             message = (proc.stderr or proc.stdout or "merge conflict").strip()
-            raise GitSyncError(f"REMOTE_CONFLICT: 최신 master를 L 규칙 브랜치에 병합하지 못했습니다. {message[:900]}")
+            raise GitSyncError(
+                f"REMOTE_CONFLICT: 최신 {self.base_branch}를 L 규칙 브랜치에 병합하지 못했습니다. {message[:900]}"
+            )
         new_sha = self.local_sha()
         try:
             self._push_branch_verified(
                 branch,
                 new_sha,
                 set_upstream=False,
-                verify_message="PUSH_VERIFY_FAILED: master 동기화 merge commit이 원격 feature branch와 일치하지 않습니다.",
+                verify_message=(
+                    f"PUSH_VERIFY_FAILED: {self.base_branch} 동기화 merge commit이 "
+                    "원격 feature branch와 일치하지 않습니다."
+                ),
             )
         except Exception:
             if not self._remote_branch_matches(branch, new_sha):
@@ -318,11 +417,15 @@ class GitSyncService:
         snap = self.snapshot(fetch=False)
         if snap.branch == self.base_branch:
             if snap.status == "CONFLICT":
-                raise GitSyncError("로컬과 원격 master가 서로 갈라져 있어 fast-forward 할 수 없습니다.")
+                raise GitSyncError(
+                    f"로컬과 원격 {self.base_branch}가 서로 갈라져 있어 fast-forward 할 수 없습니다."
+                )
             if snap.status == "REMOTE_AHEAD":
                 self._run("merge", "--ff-only", f"{self.remote}/{self.base_branch}", timeout=120)
             elif snap.status == "LOCAL_AHEAD":
-                raise GitSyncError("로컬 master가 원격보다 앞서 있습니다. base 직접 push는 금지입니다.")
+                raise GitSyncError(
+                    f"로컬 {self.base_branch}가 원격보다 앞서 있습니다. base 직접 push는 금지입니다."
+                )
             return self.snapshot(fetch=False)
 
         if not snap.branch.startswith(self.WEB_RULE_PREFIX):
@@ -368,14 +471,20 @@ class GitSyncService:
 
         if snap.branch == self.base_branch:
             if not snap.remote_sha or snap.local_sha != snap.remote_sha:
-                raise GitSyncError("로컬 master와 원격 master가 일치하지 않습니다. 먼저 GitHub 최신상태를 가져오세요.")
+                raise GitSyncError(
+                    f"로컬 {self.base_branch}와 원격 {self.base_branch}가 일치하지 않습니다. "
+                    "먼저 GitHub 최신상태를 가져오세요."
+                )
             return snap
 
         if snap.branch.startswith(self.WEB_RULE_PREFIX):
             if not snap.remote_sha or snap.local_sha != snap.remote_sha:
                 raise GitSyncError("활성 L 규칙 브랜치와 원격 feature branch가 일치하지 않습니다. 먼저 GitHub 최신상태를 가져오세요.")
             if not self._is_ancestor(snap.base_remote_sha, snap.local_sha):
-                raise GitSyncError("BASE_OUTDATED: 원격 master가 진행되었습니다. GitHub 최신상태 가져오기로 feature branch를 갱신하세요.")
+                raise GitSyncError(
+                    f"BASE_OUTDATED: 원격 {self.base_branch}가 진행되었습니다. "
+                    "GitHub 최신상태 가져오기로 feature branch를 갱신하세요."
+                )
             return snap
 
         raise GitSyncError(
@@ -462,7 +571,9 @@ class GitSyncService:
         current = self.snapshot(fetch=False)
         if expected_base_remote_sha and current.base_remote_sha != expected_base_remote_sha:
             self._restore_managed_paths(path_args)
-            raise GitSyncError("REMOTE_CHANGED: 저장 직전 원격 master가 변경되어 registry를 현재 branch 값으로 복구했습니다.")
+            raise GitSyncError(
+                f"REMOTE_CHANGED: 저장 직전 원격 {self.base_branch}가 변경되어 registry를 현재 branch 값으로 복구했습니다."
+            )
 
         changed = self._changed_names()
         unrelated = sorted(changed - set(path_args))
@@ -472,14 +583,20 @@ class GitSyncService:
         if current.branch == self.base_branch:
             if not current.remote_sha or current.local_sha != current.remote_sha:
                 self._restore_managed_paths(path_args)
-                raise GitSyncError("REMOTE_CHANGED: 저장 직전 로컬 master와 원격 master가 달라져 registry를 복구했습니다.")
+                raise GitSyncError(
+                    f"REMOTE_CHANGED: 저장 직전 로컬 {self.base_branch}와 원격 {self.base_branch}가 "
+                    "달라져 registry를 복구했습니다."
+                )
         elif current.branch.startswith(self.WEB_RULE_PREFIX):
             if not current.remote_sha or current.local_sha != current.remote_sha:
                 self._restore_managed_paths(path_args)
                 raise GitSyncError("REMOTE_CHANGED: 활성 L 규칙 브랜치와 원격 feature branch가 달라져 registry를 복구했습니다.")
             if not self._is_ancestor(current.base_remote_sha, current.local_sha):
                 self._restore_managed_paths(path_args)
-                raise GitSyncError("BASE_OUTDATED: 최신 master를 먼저 동기화해야 합니다. registry는 현재 feature branch 값으로 복구했습니다.")
+                raise GitSyncError(
+                    f"BASE_OUTDATED: 최신 {self.base_branch}를 먼저 동기화해야 합니다. "
+                    "registry는 현재 feature branch 값으로 복구했습니다."
+                )
         else:
             self._restore_managed_paths(path_args)
             raise GitSyncError(f"현재 브랜치에서는 규칙 commit을 만들 수 없습니다: {current.branch}")
