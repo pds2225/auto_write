@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -36,8 +37,8 @@ def test_lrule_preview_route_renders_failed_validation_without_confirm(monkeypat
         def as_dict(self):
             return {
                 "repository": "test/repo",
-                "branch": "master",
-                "base_branch": "master",
+                "branch": "main",
+                "base_branch": "main",
                 "local_sha": "abc123",
                 "remote_sha": "abc123",
                 "base_remote_sha": "abc123",
@@ -192,6 +193,9 @@ def test_git_sync_source_forbids_force_and_base_direct_push():
     assert '"--force-with-lease"' not in source
     assert "AUTO_WRITE_GIT_WRITE_MODE" not in source
     assert 'write_mode = "direct"' not in source
+    assert re.search(r'AUTO_WRITE_GIT_BASE_BRANCH["\']\s*,\s*["\']master["\']', source) is None
+    assert 'FALLBACK_BASE_BRANCH = "main"' in source
+    assert "def _detect_default_branch" in source
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -236,7 +240,7 @@ def _write_rule(repo: Path, summary: str) -> None:
     path.write_text(_rule_payload(summary), encoding="utf-8")
 
 
-def _setup_git_remote(tmp_path: Path) -> tuple[Path, Path, Path]:
+def _setup_git_remote(tmp_path: Path, *, base_branch: str = "main") -> tuple[Path, Path, Path]:
     remote = tmp_path / "remote.git"
     seed = tmp_path / "seed"
     web = tmp_path / "web"
@@ -249,11 +253,16 @@ def _setup_git_remote(tmp_path: Path) -> tuple[Path, Path, Path]:
     _write_rule(seed, "v1")
     _git(seed, "add", str(RULE_REL).replace("\\", "/"))
     _git(seed, "commit", "-m", "seed rule")
-    _git(seed, "branch", "-M", "master")
-    _git(seed, "push", "-u", "origin", "master")
+    _git(seed, "branch", "-M", base_branch)
+    _git(seed, "push", "-u", "origin", base_branch)
+    subprocess.run(
+        ["git", "--git-dir", str(remote), "symbolic-ref", "HEAD", f"refs/heads/{base_branch}"],
+        check=True,
+        capture_output=True,
+    )
 
-    subprocess.run(["git", "clone", "-b", "master", str(remote), str(web)], check=True, capture_output=True)
-    subprocess.run(["git", "clone", "-b", "master", str(remote), str(peer)], check=True, capture_output=True)
+    subprocess.run(["git", "clone", "-b", base_branch, str(remote), str(web)], check=True, capture_output=True)
+    subprocess.run(["git", "clone", "-b", base_branch, str(remote), str(peer)], check=True, capture_output=True)
     for repo in (web, peer):
         _git(repo, "config", "user.email", "test@example.com")
         _git(repo, "config", "user.name", "Auto Write Test")
@@ -270,12 +279,13 @@ def test_git_remote_to_web_and_stale_base_guard(tmp_path):
     _, web, peer = _setup_git_remote(tmp_path)
     service = GitSyncService(web)
 
+    assert service.base_branch == "main"
     assert service.snapshot(fetch=True).status == "SYNCED"
 
     (peer / "remote_change.txt").write_text("remote v2\n", encoding="utf-8")
     _git(peer, "add", "remote_change.txt")
     _git(peer, "commit", "-m", "remote update")
-    _git(peer, "push", "origin", "master")
+    _git(peer, "push", "origin", service.base_branch)
     synced = service.sync_from_remote()
     assert synced.status == "SYNCED"
     assert (web / "remote_change.txt").read_text(encoding="utf-8") == "remote v2\n"
@@ -284,7 +294,7 @@ def test_git_remote_to_web_and_stale_base_guard(tmp_path):
     (peer / "remote_change_2.txt").write_text("remote v3\n", encoding="utf-8")
     _git(peer, "add", "remote_change_2.txt")
     _git(peer, "commit", "-m", "remote race")
-    _git(peer, "push", "origin", "master")
+    _git(peer, "push", "origin", service.base_branch)
     with pytest.raises(GitSyncError, match="REMOTE_CHANGED"):
         service.assert_write_base(stale_base)
 
@@ -309,9 +319,9 @@ def test_git_web_rule_edit_uses_feature_branch_and_returns_after_merge(tmp_path,
     assert service.remote_sha(result["branch"]) == service.local_sha()
     assert service.base_remote_sha() != service.local_sha()
 
-    _git(web, "push", "origin", f"{result['branch']}:master")
+    _git(web, "push", "origin", f"{result['branch']}:{service.base_branch}")
     synced = service.sync_from_remote()
-    assert service.current_branch() == "master"
+    assert service.current_branch() == service.base_branch
     assert synced.status == "SYNCED"
     assert json.loads((web / RULE_REL).read_text(encoding="utf-8"))["lessons"][0]["summary"] == "v2-web"
 
@@ -334,7 +344,7 @@ def test_git_feature_branch_reuses_branch_and_syncs_new_master(tmp_path, monkeyp
     (peer / "master_change.txt").write_text("advanced\n", encoding="utf-8")
     _git(peer, "add", "master_change.txt")
     _git(peer, "commit", "-m", "advance master")
-    _git(peer, "push", "origin", "master")
+    _git(peer, "push", "origin", service.base_branch)
 
     synced = service.sync_from_remote()
     assert service.current_branch() == first["branch"]
@@ -342,7 +352,7 @@ def test_git_feature_branch_reuses_branch_and_syncs_new_master(tmp_path, monkeyp
     assert (web / "master_change.txt").read_text(encoding="utf-8") == "advanced\n"
     assert service.remote_sha(first["branch"]) == service.local_sha()
     assert subprocess.run(
-        ["git", "merge-base", "--is-ancestor", "origin/master", "HEAD"],
+        ["git", "merge-base", "--is-ancestor", f"origin/{service.base_branch}", "HEAD"],
         cwd=web,
         capture_output=True,
     ).returncode == 0
@@ -377,7 +387,7 @@ def test_failed_base_merge_push_rolls_back_local_merge(tmp_path, monkeypatch):
     (peer / "master_change.txt").write_text("advanced\n", encoding="utf-8")
     _git(peer, "add", "master_change.txt")
     _git(peer, "commit", "-m", "advance master")
-    _git(peer, "push", "origin", "master")
+    _git(peer, "push", "origin", service.base_branch)
 
     hook = remote / "hooks" / "pre-receive"
     hook.write_text("#!/bin/sh\necho rejected >&2\nexit 1\n", encoding="utf-8")
@@ -417,7 +427,7 @@ def test_equal_registry_content_does_not_false_detect_merge_without_pr_state(tmp
     _write_rule(peer, "same-value")
     _git(peer, "add", str(RULE_REL).replace("\\", "/"))
     _git(peer, "commit", "-m", "independent same rule value")
-    _git(peer, "push", "origin", "master")
+    _git(peer, "push", "origin", service.base_branch)
 
     synced = service.sync_from_remote()
     assert service.current_branch() == feature["branch"]
@@ -445,11 +455,11 @@ def test_reported_merged_pr_allows_squash_return_to_master(tmp_path, monkeypatch
     _write_rule(peer, "squash-value")
     _git(peer, "add", str(RULE_REL).replace("\\", "/"))
     _git(peer, "commit", "-m", "squash merged rule")
-    _git(peer, "push", "origin", "master")
+    _git(peer, "push", "origin", service.base_branch)
     monkeypatch.setattr(service, "_feature_pr_merged", lambda branch: branch == feature["branch"])
 
     synced = service.sync_from_remote()
-    assert service.current_branch() == "master"
+    assert service.current_branch() == service.base_branch
     assert synced.status == "SYNCED"
     assert json.loads((web / RULE_REL).read_text(encoding="utf-8"))["lessons"][0]["summary"] == "squash-value"
 
@@ -475,7 +485,7 @@ def test_git_failed_feature_push_rolls_back_worktree(tmp_path, monkeypatch):
             expected_base_remote_sha=expected,
         )
 
-    assert service.current_branch() == "master"
+    assert service.current_branch() == service.base_branch
     assert _git(web, "status", "--porcelain") == ""
     assert json.loads((web / RULE_REL).read_text(encoding="utf-8"))["lessons"][0]["summary"] == "v1"
 
@@ -537,7 +547,7 @@ def test_git_precommit_remote_change_restores_managed_registry(tmp_path, monkeyp
     (peer / "master_change.txt").write_text("remote advanced\n", encoding="utf-8")
     _git(peer, "add", "master_change.txt")
     _git(peer, "commit", "-m", "advance master")
-    _git(peer, "push", "origin", "master")
+    _git(peer, "push", "origin", service.base_branch)
 
     with pytest.raises(GitSyncError, match="REMOTE_CHANGED"):
         service.commit_and_push(
@@ -601,3 +611,73 @@ def test_rule_history_tracks_field_edits_not_only_id_occurrence_changes(tmp_path
     assert "change L001 summary to v2" in subjects
     assert "seed rule" in subjects
     assert "unrelated commit" not in subjects
+
+
+def test_git_sync_this_repository_follows_github_default_main(monkeypatch):
+    monkeypatch.delenv("AUTO_WRITE_GIT_BASE_BRANCH", raising=False)
+    service = GitSyncService(REPO_ROOT)
+    assert service.base_branch == "main"
+    assert service.snapshot(fetch=False).base_branch == "main"
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
+def test_git_sync_detects_legacy_master_remote_head(tmp_path, monkeypatch):
+    monkeypatch.delenv("AUTO_WRITE_GIT_BASE_BRANCH", raising=False)
+    _, web, _ = _setup_git_remote(tmp_path, base_branch="master")
+    service = GitSyncService(web)
+    assert service.base_branch == "master"
+    assert service.snapshot(fetch=True).base_branch == "master"
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
+def test_git_sync_env_overrides_detected_default(tmp_path, monkeypatch):
+    _, web, _ = _setup_git_remote(tmp_path, base_branch="main")
+    monkeypatch.setenv("AUTO_WRITE_GIT_BASE_BRANCH", "release")
+    service = GitSyncService(web)
+    assert service.base_branch == "release"
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
+def test_git_sync_prefers_detected_main_over_leftover_master(tmp_path, monkeypatch):
+    monkeypatch.delenv("AUTO_WRITE_GIT_BASE_BRANCH", raising=False)
+    _, web, peer = _setup_git_remote(tmp_path, base_branch="main")
+    _git(peer, "branch", "master")
+    _git(peer, "push", "origin", "master")
+    _git(web, "fetch", "origin")
+    service = GitSyncService(web)
+    assert service.base_branch == "main"
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
+def test_git_sync_fallback_is_main_when_no_remote(tmp_path, monkeypatch):
+    monkeypatch.delenv("AUTO_WRITE_GIT_BASE_BRANCH", raising=False)
+    repo = tmp_path / "solo"
+    subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
+    _git(repo, "config", "user.email", "test@example.com")
+    _git(repo, "config", "user.name", "Auto Write Test")
+    (repo / "readme.txt").write_text("solo\n", encoding="utf-8")
+    _git(repo, "add", "readme.txt")
+    _git(repo, "commit", "-m", "init")
+    service = GitSyncService(repo)
+    assert service.base_branch == GitSyncService.FALLBACK_BASE_BRANCH
+    assert service.base_branch == "main"
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
+def test_git_sync_ls_remote_head_when_origin_head_missing(tmp_path, monkeypatch):
+    monkeypatch.delenv("AUTO_WRITE_GIT_BASE_BRANCH", raising=False)
+    _, web, _ = _setup_git_remote(tmp_path, base_branch="main")
+    subprocess.run(
+        ["git", "symbolic-ref", "-d", "refs/remotes/origin/HEAD"],
+        cwd=web,
+        capture_output=True,
+        check=False,
+    )
+    subprocess.run(
+        ["git", "update-ref", "-d", "refs/remotes/origin/HEAD"],
+        cwd=web,
+        capture_output=True,
+        check=False,
+    )
+    service = GitSyncService(web)
+    assert service.base_branch == "main"
