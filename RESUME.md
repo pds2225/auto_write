@@ -1,16 +1,17 @@
 # RESUME.md — auto_write 세션 체크포인트
 
 > 세션을 새로 시작하면 **이 파일을 먼저** 읽는다. 상세 트랙은 아래 링크.
-> 최종 갱신: **2026-08-16** (#146 BPQ-00 감사 main 머지 `9efd78e`)
+> 최종 갱신: **2026-08-16** (세션 마무리. main `fd5269a` = #148)
 
 ## 한 줄 상태
 
-`pds2225/auto_write` 단일 정본. `origin/main` @ `9efd78e` (#146 BPQ-00 감사).
+`pds2225/auto_write` 단일 정본. `origin/main` @ `fd5269a` (#148 사용자요청 최우선 + AW-005 제품목표).
 에이전트 입구 = **bizdoc-hub** / CLI 입구 = **auto_write_hub.py**. 맵: `docs/BIZDOC_HUB_MAP.md`.
+`NEXT_TASK.md` **없음**. 실행 기준은 `TASK.md`만.
 
 **문서 작업:** 항우연 「2026 STAR-Exploration」 **선정됨**. 지원금은 최종발표 **상위 2팀만**. 공개 공고에 발표 배점표 없음 — 원장 A6.
-**엔진:** T-20260814-02 명세+실행지시+BPQ-00 감사 표가 main에 있음. DOCX 정본=`core.docx.services`. 다음=BPQ-02/03 CompanyMaster EXTEND (구현 명령 시).
-작업 시작 전: `git fetch` → `TASK.md` → 현재 구현 조사 → 그다음 작업.
+**엔진:** BPQ-00 감사 완료(핀 `95a0f63`, 표는 TASK.md). DOCX 정본=`core.docx.services`. 제품 1순위 = **기존 사업계획서 있는 경우**(공고+빈양식+기존계획서 → 가능 파트 즉시 작성 → 부족한 것만 요청). T-20260814-02 긴 8-1은 명세이지 제품 목표가 아님. 에이전트는 LIST + 열린 8-1만.
+작업 시작 전: `git fetch` → `TASK.md` LIST → 열린 8-1. 통째 로드 금지.
 목표 흐름: `LLM → StageResult(JSON) → 검증 → 다음 Stage → 렌더 → Finalizer`. 한 번에 최종 DOCX 금지.
 
 ## 지금 세션 — STAR-Exploration (A6)
@@ -30,8 +31,11 @@
 
 | 날짜 | 내용 | 근거 |
 |------|------|------|
-| 2026-08-16 | #146 BPQ-00 감사 main 머지. 원격은 main+backup 2개 | PR #146 `9efd78e` |
-| 2026-08-16 | #138+#133+#139 합본 main 머지 (gitignore, L154–L156, A6, BPQ 노트, 합친 RESUME) | PR #141 |
+| 2026-08-16 | 사용자 요청 최우선 + 제품 목표=AW-005 8-1, 긴 T-20260814-02 8-1 생략 | PR #148 `fd5269a` |
+| 2026-08-16 | 체크포인트 SHA를 #146 머지에 맞춤 | PR #147 `b479b73` |
+| 2026-08-16 | BPQ-00 감사 표 main 머지 | PR #146 `9efd78e` |
+| 2026-08-16 | T-20260814-02 실행지시 + BPQ 키워드 | PR #143 #144 |
+| 2026-08-16 | #138+#133+#139 합본, clone 헬퍼, 야간 A–H | PR #141 #142 #137 |
 | 2026-08-16 | git-sync push 검증/롤백 main 머지 | PR #140 |
 | 2026-08-15 | overnight A–H 체리픽 (LRule+Finalizer wiring, E2E 15) | PR #137 |
 | 2026-08-15 | 배달앱+상권분석 단계형 파이프라인 인사이트 저장 (구현 대기) | `docs/BPQ_PIPELINE_INSIGHTS_20260815.md` |
@@ -61,13 +65,16 @@
 3. **REQUEST_LEDGER** 실제출 확인 대기(A1~A5) + A6 평가표/IR 양식 — 경로/제출 여부는 사용자만 확인 가능
 4. **보류**: HWPX 세로 라벨(c) — 코퍼스 수요 극소(AC6)
 5. **보류**: SFT P3 후속·DOCX↔HWP 100% — 실사용에서 막힐 때
-6. **열린 draft:** 없음. 원격 = `main` + `backup/*` 2개. 닫힌 #139 충돌 표시는 무시.
+6. **열린 PR:** #149 draft AW-009 웹앱 사양서 · #150 STEP2 extraction baseline. `backup/*` 유지. 닫힌 #139 충돌 표시는 무시. `NEXT_TASK.md` 없음.
 
 ## 재개 명령
 
 ```text
-이어서: 항우연 STAR-Exploration. 메일에서 6팀인지 상위 2팀인지, 평가표·IR 양식·발표시간을 주면 발표자료부터.
-엔진: T-20260814-02 명세+실행지시+BPQ-00 감사가 main `9efd78e`. 구현은 CompanyMaster EXTEND부터.
+이어서: git fetch → TASK.md LIST + 열린 8-1만.
+제품 1순위: 공고+빈 양식+기존 사업계획서 → 가능 파트 즉시 작성 → 부족한 것만 요청 (AW-005).
+엔진 다음: CompanyMaster EXTEND (BPQ-02/03). *V2 금지. DOCX 정본=core.docx.services.
+STAR-Exploration: 메일에서 6팀인지 상위 2팀인지, 평가표·IR 양식·발표시간을 주면 발표자료부터.
+열린 PR: #149(웹앱 사양, draft) #150(STEP2 extraction). 이 세션이 머지하지 않음.
 ```
 
 ```powershell
