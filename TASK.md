@@ -2164,7 +2164,7 @@ STATUS_THIS_TURN: 추천 3PR을 한 브랜치로 합침. 머지 금지.
 ### VERIFY
 - [x] 한 브랜치에 #138+#133+#139 고유 내용이 있음
 - [x] `RESUME.md`에 STAR-Exploration과 BPQ 포인터가 함께 있음
-- [ ] draft PR 1개, MAIN_MERGED=NO
+- [x] draft PR #141, MAIN_MERGED=NO
 
 ### DONE
 REQUEST_SOLVED=YES(이번 턴): 추천 3건을 한 브랜치로 고쳤다. 머지는 다음 명령.
