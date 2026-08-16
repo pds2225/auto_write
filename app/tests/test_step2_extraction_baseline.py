@@ -191,3 +191,53 @@ def test_duplicate_assertion_id_is_rejected(tmp_path: Path):
         assert "중복" in str(exc)
     else:
         raise AssertionError("duplicate assertion id must be rejected")
+
+
+def test_all_current_company_identity_fields_can_be_declared_supported(tmp_path: Path):
+    source = tmp_path / "sample.txt"
+    source.write_text("기업명: 측정기업\n", encoding="utf-8")
+    assertion = _assertion(
+        field="company_name",
+        field_ko="기업명",
+        value="측정기업",
+    )
+
+    report = run_baseline(_golden([assertion]), {"D1": source})
+    row = report["results"][0]
+
+    assert row["structured_supported"] is True
+    assert row["value_match"] is True
+    assert row["status"] == "SOURCE_LOST"
+
+
+def test_company_parser_exception_is_fatal_measurement_state(tmp_path: Path):
+    source = tmp_path / "sample.txt"
+    source.write_text("대표자: 홍길동\n", encoding="utf-8")
+
+    def broken_parser(_text):
+        raise RuntimeError("synthetic parser failure")
+
+    report = run_baseline(
+        _golden([_assertion()]),
+        {"D1": source},
+        company_parser=broken_parser,
+    )
+
+    assert report["documents"]["D1"]["status"] == "STRUCTURED_EXTRACT_ERROR"
+    assert report["results"][0]["status"] == "STRUCTURED_EXTRACT_ERROR"
+
+
+def test_numeric_raw_probe_does_not_match_substring_inside_larger_number(tmp_path: Path):
+    source = tmp_path / "sample.txt"
+    source.write_text("직원수: 1000\n", encoding="utf-8")
+    assertion = _assertion(
+        category="TEAM",
+        field="headcount",
+        value=100,
+        expected_behavior="extract_number_exact",
+    )
+
+    report = run_baseline(_golden([assertion]), {"D1": source})
+
+    assert report["results"][0]["raw_presence"] == "MISSING"
+    assert report["results"][0]["status"] == "READ_MISS"
