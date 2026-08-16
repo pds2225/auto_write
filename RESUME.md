@@ -1,15 +1,15 @@
 # RESUME.md — auto_write 세션 체크포인트
 
 > 세션을 새로 시작하면 **이 파일을 먼저** 읽는다. 상세 트랙은 아래 링크.
-> 최종 갱신: **2026-08-16** (#144+#143 main 머지. BPQ-00 감사 브랜치)
+> 최종 갱신: **2026-08-16** (#146 BPQ-00 감사 main 머지 `9efd78e`)
 
 ## 한 줄 상태
 
-`pds2225/auto_write` 단일 정본. `origin/main` @ `95a0f63` (#144 키워드+#143 실행지시).
+`pds2225/auto_write` 단일 정본. `origin/main` @ `9efd78e` (#146 BPQ-00 감사).
 에이전트 입구 = **bizdoc-hub** / CLI 입구 = **auto_write_hub.py**. 맵: `docs/BIZDOC_HUB_MAP.md`.
 
 **문서 작업:** 항우연 「2026 STAR-Exploration」 **선정됨**. 지원금은 최종발표 **상위 2팀만**. 공개 공고에 발표 배점표 없음 — 원장 A6.
-**엔진:** T-20260814-02 명세+실행지시가 main에 있음. BPQ-00 감사 표는 TASK.md (`95a0f63` 핀). DOCX 정본=`core.docx.services`. 다음=BPQ-02/03 CompanyMaster EXTEND (구현 명령 시).
+**엔진:** T-20260814-02 명세+실행지시+BPQ-00 감사 표가 main에 있음. DOCX 정본=`core.docx.services`. 다음=BPQ-02/03 CompanyMaster EXTEND (구현 명령 시).
 작업 시작 전: `git fetch` → `TASK.md` → 현재 구현 조사 → 그다음 작업.
 목표 흐름: `LLM → StageResult(JSON) → 검증 → 다음 Stage → 렌더 → Finalizer`. 한 번에 최종 DOCX 금지.
 
@@ -30,7 +30,7 @@
 
 | 날짜 | 내용 | 근거 |
 |------|------|------|
-| 2026-08-16 | #144 키워드+#143 실행지시 main 머지. BPQ-00 감사 (정본=core.docx.services) | PR #144 #143; TASK BPQ-00 실측 로그 |
+| 2026-08-16 | #146 BPQ-00 감사 main 머지. 원격은 main+backup 2개 | PR #146 `9efd78e` |
 | 2026-08-16 | #138+#133+#139 합본 main 머지 (gitignore, L154–L156, A6, BPQ 노트, 합친 RESUME) | PR #141 |
 | 2026-08-16 | git-sync push 검증/롤백 main 머지 | PR #140 |
 | 2026-08-15 | overnight A–H 체리픽 (LRule+Finalizer wiring, E2E 15) | PR #137 |
@@ -61,13 +61,13 @@
 3. **REQUEST_LEDGER** 실제출 확인 대기(A1~A5) + A6 평가표/IR 양식 — 경로/제출 여부는 사용자만 확인 가능
 4. **보류**: HWPX 세로 라벨(c) — 코퍼스 수요 극소(AC6)
 5. **보류**: SFT P3 후속·DOCX↔HWP 100% — 실사용에서 막힐 때
-6. **열린 draft:** BPQ-00 감사 PR #146 (`cursor/bpq-00-baseline-audit-2036`). `backup/*` 유지. 닫힌 #139 충돌 표시는 무시.
+6. **열린 draft:** 없음. 원격 = `main` + `backup/*` 2개. 닫힌 #139 충돌 표시는 무시.
 
 ## 재개 명령
 
 ```text
 이어서: 항우연 STAR-Exploration. 메일에서 6팀인지 상위 2팀인지, 평가표·IR 양식·발표시간을 주면 발표자료부터.
-엔진: T-20260814-02는 main에 명세+실행지시. BPQ-00 감사 완료(표는 TASK.md). 구현은 CompanyMaster EXTEND부터. 병합은 「병합해」.
+엔진: T-20260814-02 명세+실행지시+BPQ-00 감사가 main `9efd78e`. 구현은 CompanyMaster EXTEND부터.
 ```
 
 ```powershell
