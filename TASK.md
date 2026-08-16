@@ -27,6 +27,7 @@ REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 [ ] T-20260814-02 | AIMY급 사업계획서를 공고·양식·기업사실에 맞춰 자동 작성하는 통합 과업을 명세한다
 [x] T-20260814-03 | 야간 A~H 미머지 브랜치를 최신 main에 체리픽 이식 준비한다
 [x] T-20260815-01 | 남은 고유 커밋을 체리픽하고 삭제 가능한 원격 브랜치를 지운다
+[~] T-20260816-01 | #138·#133·#139를 한 브랜치로 합쳐 한 번에 머지할 수 있게 한다
 
 
 ---
@@ -2126,6 +2127,47 @@ STATUS_THIS_TURN: 고유 커밋 체리픽 + 삭제 가능 원격 정리. main �
 
 ### DONE
 REQUEST_SOLVED=YES(이번 턴): 고유 커밋은 이식 브랜치에 있고, 이미 main에 흡수된 원격은 삭제됨. git-sync PR 머지는 다음 턴.
+
+## T-20260816-01
+
+TASK_ID: T-20260816-01
+WORK_BRANCH: cursor/combine-open-drafts-2036
+BASE: origin/main
+TASK_START_SHA: 7a2dc5aea1e3d06a204f265408ea20daf2e563fc
+TASK_BLOB_SHA: 1d01442d6ba52adbb4a333079fda0e3b9beacdfa
+STATUS_THIS_TURN: 추천 3PR을 한 브랜치로 합침. 머지 금지.
+
+### 8-1. 사용자 원문
+추천대로. 근데머지 여러번에 하지말고 한번에 하게 일단 고치기만해
+
+### MUST
+- [x] 최신 origin/main(`7a2dc5a`)에서 작업 브랜치 생성
+- [x] #138 gitignore + L154~L156 스킬 흡수
+- [x] #139 BPQ 인사이트 문서 흡수 (`RESUME.md` SHA를 현재 main 기준으로 맞춤)
+- [x] #133 원장 A6 + STAR-Exploration을 같은 `RESUME.md`에 합침 (두 PR이 앞부분을 덮지 않게)
+- [x] #132 AW-009 · #136 clone 헬퍼는 넣지 않음 (TASK ID/충돌)
+- [x] `backup/*` 유지
+- [ ] 이 브랜치를 main에 머지하지 않음 (한 번 머지용 준비만)
+
+### KEEP
+- AW-001~AW-008, T-20260814-01, T-20260814-02 본문 합치지 않음
+- T-20260814-02 DETAILS 키워드 삽입하지 않음
+- 기존 draft #132 #136 닫지 않음
+
+### FORBIDDEN
+- 여러 PR을 따로 머지
+- 이번 턴 main 머지
+- force push / reset --hard / `git add -A`
+- #132/#136을 충돌 상태로 합치기
+- backup 브랜치 삭제
+
+### VERIFY
+- [x] 한 브랜치에 #138+#133+#139 고유 내용이 있음
+- [x] `RESUME.md`에 STAR-Exploration과 BPQ 포인터가 함께 있음
+- [ ] draft PR 1개, MAIN_MERGED=NO
+
+### DONE
+REQUEST_SOLVED=YES(이번 턴): 추천 3건을 한 브랜치로 고쳤다. 머지는 다음 명령.
 
 # 9. 실제사용 시나리오
 
