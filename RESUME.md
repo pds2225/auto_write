@@ -61,7 +61,7 @@
 3. **REQUEST_LEDGER** 실제출 확인 대기(A1~A5) + A6 평가표/IR 양식 — 경로/제출 여부는 사용자만 확인 가능
 4. **보류**: HWPX 세로 라벨(c) — 코퍼스 수요 극소(AC6)
 5. **보류**: SFT P3 후속·DOCX↔HWP 100% — 실사용에서 막힐 때
-6. **열린 draft:** BPQ-00 감사 브랜치 `cursor/bpq-00-baseline-audit-2036`. `backup/*` 유지
+6. **열린 draft:** BPQ-00 감사 PR #146 (`cursor/bpq-00-baseline-audit-2036`). `backup/*` 유지. 닫힌 #139 충돌 표시는 무시.
 
 ## 재개 명령
 

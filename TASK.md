@@ -31,9 +31,10 @@ REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 [x] T-20260816-01 | #138·#133·#139를 한 브랜치로 합쳐 한 번에 머지할 수 있게 한다
 [x] T-20260816-02 | GitHub에서 auto_write를 git clone으로 받을 수 있게 한다
 [ ] T-20260816-03 | clone 후 로컬 PC 리모트 컨트롤을 켤 수 있게 한다
-[~] T-20260816-04 | #132 AW-009와 #136 clone 헬퍼를 최신 main에 살린다
+[x] T-20260816-04 | #132 AW-009와 #136 clone 헬퍼를 최신 main에 살린다
 [x] T-20260816-05 | T-20260814-02의 BPQ-02·03·07·08·12·13에 파이프라인 인사이트 키워드를 넣는다
 [x] T-20260816-06 | 브랜치 보호 할 일을 사용자가 더 볼 필요 없게 닫는다
+[x] T-20260816-07 | main에 이미 들어간 원격 브랜치를 지우고 backup은 남긴다
 
 
 ---
@@ -1573,6 +1574,7 @@ TASK_ID: T-20260814-02
 WORK_BRANCH: docs/task-T-20260814-02-on-main
 STATUS_THIS_TURN: 명세만 등록 (`[ ]`). 구현 시작 아님. 제품 코드 0줄.
 2026-08-16: `docs/BPQ_PIPELINE_INSIGHTS_20260815.md` 키워드를 BPQ-02/03/07/08/12/13에만 추가 (T-20260816-05). 8-1 원문·기존 워크스트림 본문은 덮어쓰지 않음. LIST는 `[ ]` 유지. 구현 시작 아님.
+2026-08-16 충돌해소: #139 인사이트(PR #141 합본 + PR #144 키워드)와 실행지시(PR #143)가 TASK.md에서 겹침. BPQ-02/03/07/08/12/13은 `실행지시 추가`와 `키워드(2026-08-16)`를 **둘 다 유지**. 한쪽 삭제·V2 우회 금지. 닫힌 #139의 GitHub CONFLICTING 표시는 무시(재머지 금지).
 
 관계: AW-001~AW-008과 **합치지 않는다**. 본 TASK는 사업계획서 **작성 품질 파이프라인** Epic이다. 구현 시 AW-001의 DomainRouter → LRuleEnforcer → Finalizer 경로를 **KEEP**로 통과해야 한다. AW-001이 `[~]`여도 본 LIST는 `[ ]`로 둔다(이번 턴은 구현 시작이 아님).
 
@@ -3511,10 +3513,10 @@ STATUS_THIS_TURN: 132/136 살림 + TASK/RESUME 정합. T-20260814-02 본문 미�
 
 ### VERIFY
 - [x] clone 단위테스트 통과 (24 passed)
-- [x] draft PR #142, MAIN_MERGED=NO
+- [x] draft PR #142, 이후 squash-merge `d6d530e`. MAIN_MERGED=YES
 
 ### DONE
-REQUEST_SOLVED=YES(이번 턴): 132/136 내용이 최신 main 위 한 브랜치에 있고, TASK/RESUME이 #141과 맞다. 머지는 다음 명령.
+REQUEST_SOLVED=YES: 132/136 내용이 #142로 origin/main `d6d530e`에 들어갔다.
 
 ## T-20260816-05
 
@@ -3601,6 +3603,46 @@ STATUS_THIS_TURN: T-20260814-01을 사용자 지시로 닫음. 설정 화면 확
 
 ### DONE
 REQUEST_SOLVED=YES: 보호 할 일은 확인된 범위까지 처리했고 LIST에서 끝냈다. 사용자는 더 할 일 없음. 이후 `병합해`로 #144 머지. MAIN_MERGED=YES.
+
+## T-20260816-07
+
+TASK_ID: T-20260816-07
+WORK_BRANCH: cursor/bpq-00-baseline-audit-2036
+BASE: origin/main
+TASK_START_SHA: 95a0f63c398a2c250b0cd2cf1639b92116fa5846
+STATUS_THIS_TURN: 흡수된 원격 브랜치 삭제. backup 유지. #146(BPQ-00 감사)은 고유 내용이라 유지.
+
+### 8-1. 사용자 원문
+남은 브랜치 정리
+
+### MUST
+- [x] `backup/*` 삭제 금지
+- [x] #145 고유 1줄(#139/#143 충돌해소 메모)을 #146 브랜치 TASK.md에 흡수
+- [x] 중복 draft #145 닫기
+- [x] 흡수된 `cursor/t20260814-02-impl-instruction-2036` 원격 삭제
+- [x] 로컬 gone 브랜치 삭제
+- [ ] #146 BPQ-00 감사 브랜치는 지우지 않음 (main에 아직 없음)
+- [ ] 이번 턴 main 머지 금지 (`병합해` 전까지)
+
+### KEEP
+- `origin/main`
+- `origin/backup/WIN-K20QOC29TOB`
+- `origin/backup/omc-lessons-md`
+- `origin/cursor/bpq-00-baseline-audit-2036` (PR #146)
+
+### FORBIDDEN
+- backup 삭제
+- force push / `git add -A` / `reset --hard`
+- 고유 미머지 커밋이 있는 브랜치를 확인 없이 삭제
+- 닫힌 #139 재오픈·재머지
+
+### VERIFY
+- 원격 목록 = main + backup 2개 + bpq-00 감사 브랜치
+- #145 CLOSED
+- #139 재머지 없음
+
+### DONE
+REQUEST_SOLVED=YES: 흡수된 원격은 지웠고 backup과 BPQ-00 감사 브랜치는 남겼다. MAIN_MERGED=NO (#146).
 
 # 9. 실제사용 시나리오
 
