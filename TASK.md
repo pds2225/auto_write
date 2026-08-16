@@ -35,7 +35,7 @@ REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 [x] T-20260816-05 | T-20260814-02의 BPQ-02·03·07·08·12·13에 파이프라인 인사이트 키워드를 넣는다
 [x] T-20260816-06 | 브랜치 보호 할 일을 사용자가 더 볼 필요 없게 닫는다
 [x] T-20260816-07 | main에 이미 들어간 원격 브랜치를 지우고 backup은 남긴다
-[~] T-20260816-08 | 열린 draft #149·#152·#153·#154를 한 브랜치로 합쳐 한 번에 머지할 수 있게 한다
+[x] T-20260816-08 | 열린 draft #149·#152·#153·#154를 한 브랜치로 합쳐 한 번에 머지할 수 있게 한다
 
 에이전트 본문 금지: `# 0` LIST + 열린(`[ ]`/`[~]`) `8-1`만. T-20260814-02 8-1 전문은 생략. 제품 목표=`AW-005` 8-1 + `최우선 사용 케이스`. 웹앱 실행 정본=`웹앱 최종 요구사항_20260816`(승인 전 웹앱 코드 대기). 원장 A/B 표만. TASK 통째·CHANGELOG·닫힌 `[x]` DETAILS 금지.
 
@@ -4118,10 +4118,12 @@ TASK_ID: T-20260816-08
 WORK_BRANCH: cursor/combine-open-drafts-c7c0
 BASE: origin/main
 TASK_START_SHA: 0a8b262c6afd626dd8b083caa28012a063205c28
-STATUS_THIS_TURN: 열린 draft 고유 내용을 한 브랜치로 합침. 이번 턴 main 머지 금지.
+STATUS_THIS_TURN: 사용자 「병합」. #156 squash. #155는 이미 main `ddac657`.
 
 ### 8-1. 사용자 원문
 지금PR정리
+
+나중 요청: 병합
 
 ### MUST
 - [x] 최신 origin/main(`0a8b262`)에서 작업 브랜치 생성
@@ -4132,34 +4134,33 @@ STATUS_THIS_TURN: 열린 draft 고유 내용을 한 브랜치로 합침. 이번 
 - [x] TASK.md 충돌은 양쪽 고유 문단을 모두 유지
 - [x] 낡은 #151(RESUME `fd5269a` 체크포인트) 닫기
 - [x] 흡수된 #149 #152 #153 #154 닫고 합본 PR로 안내
-- [x] #155 GitSyncService(다른 세션 RUNNING)는 건드리지 않음
+- [x] #155 GitSyncService는 이 세션이 머지하지 않음 → 타세션이 `ddac657`로 main 머지
 - [x] `backup/*` 유지
-- [x] 이번 턴 main 머지 금지
+- [x] origin/main(`ddac657`, #155)을 합본 브랜치에 합침 (충돌 0)
+- [ ] #156 squash `--auto` (Checks 초록, `--admin` 금지)
 
 ### KEEP
 - AW-001~AW-008, T-20260814-02 본문 합치지 않음
-- #155 `cursor/git-sync-default-main-990e`
 - `origin/backup/WIN-K20QOC29TOB`, `origin/backup/omc-lessons-md`
 - 웹앱 제품 코드 대기(승인 전)
 
 ### FORBIDDEN
-- 여러 PR을 따로 머지
-- 이번 턴 main 머지
+- #155를 이 세션에서 다시 머지
 - force push / reset --hard / `git add -A`
-- #155 닫기·브랜치 삭제
+- `gh pr merge --admin`
 - backup 브랜치 삭제
 - Golden 41 추측 재구성 / Writer·HWP 렌더 추가
 
 ### VERIFY
 - [x] 한 브랜치에 #149+#152+#153+#154 고유 내용이 있음
 - [x] #151 CLOSED (낡은 RESUME)
-- [x] #149 #152 #153 #154 CLOSED, 합본 PR만 main 대상 draft
-- [x] #155 OPEN 유지
+- [x] #149 #152 #153 #154 CLOSED
+- [x] #155 MERGED `ddac657` (타세션)
 - [x] matcher/contract/golden 테스트 PASS (33 passed)
-- [x] draft 합본 PR #156, MAIN_MERGED=NO
+- [ ] draft 합본 PR #156 squash, MAIN_MERGED=YES
 
 ### DONE
-REQUEST_SOLVED=YES: 열린 draft 고유 내용은 #156에 있고, 낡은/흡수 draft는 닫힘. #155는 유지. MAIN_MERGED=NO.
+REQUEST_SOLVED는 #156이 origin/main에 들어간 뒤. MAIN_MERGED는 squash SHA로 기록.
 
 # 9. 실제사용 시나리오
 
