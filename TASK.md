@@ -35,6 +35,7 @@ REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 [x] T-20260816-05 | T-20260814-02의 BPQ-02·03·07·08·12·13에 파이프라인 인사이트 키워드를 넣는다
 [x] T-20260816-06 | 브랜치 보호 할 일을 사용자가 더 볼 필요 없게 닫는다
 [x] T-20260816-07 | main에 이미 들어간 원격 브랜치를 지우고 backup은 남긴다
+[~] T-20260816-08 | 열린 draft #149·#152·#153·#154를 한 브랜치로 합쳐 한 번에 머지할 수 있게 한다
 
 에이전트 본문 금지: `# 0` LIST + 열린(`[ ]`/`[~]`) `8-1`만. T-20260814-02 8-1 전문은 생략. 제품 목표=`AW-005` 8-1 + `최우선 사용 케이스`. 웹앱 실행 정본=`웹앱 최종 요구사항_20260816`(승인 전 웹앱 코드 대기). 원장 A/B 표만. TASK 통째·CHANGELOG·닫힌 `[x]` DETAILS 금지.
 
@@ -112,6 +113,7 @@ AW DETAILS에는 「원칙」 칸이 없다. 칸은 MUST / KEEP / FORBIDDEN이�
 | AW-009 | 2026-08-16 새 사양서가 웹앱 실행 정본. 승인 전 웹앱 코드 대기 |
 | T-20260814-02 | 8-1은 2026-08-14 **명세만 작성** 지시. **제품 목표 아님.** 제품 목표=`AW-005` 8-1 + `최우선 사용 케이스`. 이 8-1 전문은 기본 생략 |
 | T-20260816-03 | clone 끝나면 로컬 PC 리모트 컨트롤 |
+| T-20260816-08 | 지금PR정리 |
 
 같은 파일에 나중에 기록된 사용자 요청 (8-1 아님. 충돌 시 나중 요청이 해당 부분만 덮음):
 
@@ -4109,6 +4111,55 @@ STATUS_THIS_TURN: 흡수된 원격 브랜치 삭제. backup 유지. #146(BPQ-00 
 
 ### DONE
 REQUEST_SOLVED=YES: 흡수된 원격은 지웠고, BPQ-00 감사는 #146으로 origin/main `9efd78e`에 있다. MAIN_MERGED=YES. backup 유지.
+
+## T-20260816-08
+
+TASK_ID: T-20260816-08
+WORK_BRANCH: cursor/combine-open-drafts-c7c0
+BASE: origin/main
+TASK_START_SHA: 0a8b262c6afd626dd8b083caa28012a063205c28
+STATUS_THIS_TURN: 열린 draft 고유 내용을 한 브랜치로 합침. 이번 턴 main 머지 금지.
+
+### 8-1. 사용자 원문
+지금PR정리
+
+### MUST
+- [x] 최신 origin/main(`0a8b262`)에서 작업 브랜치 생성
+- [x] #149 AW-009 웹앱 최종 사양서 흡수
+- [x] #152 계획 보강(P개발중 vs 최우선, 증빙 UX, 3 HWP Baseline) 흡수
+- [x] #153 STEP 3A matcher 2파일 흡수
+- [x] #154 STEP2 출력 계약·Golden·비개발자 리포트 흡수
+- [x] TASK.md 충돌은 양쪽 고유 문단을 모두 유지
+- [ ] 낡은 #151(RESUME `fd5269a` 체크포인트) 닫기
+- [ ] 흡수된 #149 #152 #153 #154 닫고 합본 PR로 안내
+- [x] #155 GitSyncService(다른 세션 RUNNING)는 건드리지 않음
+- [x] `backup/*` 유지
+- [x] 이번 턴 main 머지 금지
+
+### KEEP
+- AW-001~AW-008, T-20260814-02 본문 합치지 않음
+- #155 `cursor/git-sync-default-main-990e`
+- `origin/backup/WIN-K20QOC29TOB`, `origin/backup/omc-lessons-md`
+- 웹앱 제품 코드 대기(승인 전)
+
+### FORBIDDEN
+- 여러 PR을 따로 머지
+- 이번 턴 main 머지
+- force push / reset --hard / `git add -A`
+- #155 닫기·브랜치 삭제
+- backup 브랜치 삭제
+- Golden 41 추측 재구성 / Writer·HWP 렌더 추가
+
+### VERIFY
+- [ ] 한 브랜치에 #149+#152+#153+#154 고유 내용이 있음
+- [ ] #151 CLOSED (낡은 RESUME)
+- [ ] #149 #152 #153 #154 CLOSED, 합본 PR만 main 대상 draft
+- [ ] #155 OPEN 유지
+- [ ] matcher/contract/golden 테스트 PASS
+- [ ] draft 합본 PR, MAIN_MERGED=NO
+
+### DONE
+REQUEST_SOLVED는 합본 PR이 열리고 낡은/흡수 draft가 닫힌 뒤. MAIN_MERGED=NO.
 
 # 9. 실제사용 시나리오
 
