@@ -4130,8 +4130,8 @@ STATUS_THIS_TURN: 열린 draft 고유 내용을 한 브랜치로 합침. 이번 
 - [x] #153 STEP 3A matcher 2파일 흡수
 - [x] #154 STEP2 출력 계약·Golden·비개발자 리포트 흡수
 - [x] TASK.md 충돌은 양쪽 고유 문단을 모두 유지
-- [ ] 낡은 #151(RESUME `fd5269a` 체크포인트) 닫기
-- [ ] 흡수된 #149 #152 #153 #154 닫고 합본 PR로 안내
+- [x] 낡은 #151(RESUME `fd5269a` 체크포인트) 닫기
+- [x] 흡수된 #149 #152 #153 #154 닫고 합본 PR로 안내
 - [x] #155 GitSyncService(다른 세션 RUNNING)는 건드리지 않음
 - [x] `backup/*` 유지
 - [x] 이번 턴 main 머지 금지
@@ -4151,15 +4151,15 @@ STATUS_THIS_TURN: 열린 draft 고유 내용을 한 브랜치로 합침. 이번 
 - Golden 41 추측 재구성 / Writer·HWP 렌더 추가
 
 ### VERIFY
-- [ ] 한 브랜치에 #149+#152+#153+#154 고유 내용이 있음
-- [ ] #151 CLOSED (낡은 RESUME)
-- [ ] #149 #152 #153 #154 CLOSED, 합본 PR만 main 대상 draft
-- [ ] #155 OPEN 유지
-- [ ] matcher/contract/golden 테스트 PASS
-- [ ] draft 합본 PR, MAIN_MERGED=NO
+- [x] 한 브랜치에 #149+#152+#153+#154 고유 내용이 있음
+- [x] #151 CLOSED (낡은 RESUME)
+- [x] #149 #152 #153 #154 CLOSED, 합본 PR만 main 대상 draft
+- [x] #155 OPEN 유지
+- [x] matcher/contract/golden 테스트 PASS (33 passed)
+- [x] draft 합본 PR #156, MAIN_MERGED=NO
 
 ### DONE
-REQUEST_SOLVED는 합본 PR이 열리고 낡은/흡수 draft가 닫힌 뒤. MAIN_MERGED=NO.
+REQUEST_SOLVED=YES: 열린 draft 고유 내용은 #156에 있고, 낡은/흡수 draft는 닫힘. #155는 유지. MAIN_MERGED=NO.
 
 # 9. 실제사용 시나리오
 
