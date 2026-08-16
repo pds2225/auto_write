@@ -53,7 +53,21 @@ cd D:\auto_write
 3. AIMY 숫자를 새 초안에 복사하지 않는다.
 
 ## 8. 현재 세션 상태 (2026-08-16)
+- [x] 사용자 요청: 로그아웃/세션 종료. Codex 전역 설정 오류 수정은 보류
 - [x] Codex 시작 로그 진단: `cockpit-collector.toml`, `mail-acc-coverage-sentinel.toml`의 description 안 Windows 경로 백슬래시 때문에 TOML 파싱 실패
 - [x] 코드·프로젝트 파일 수정 없음. 해당 에이전트 2개만 이번 세션에서 로드되지 않음
 - [ ] 다음 액션: 사용자 요청 시 두 TOML의 백슬래시를 TOML 문법에 맞게 수정하고 `codex` 재시작으로 로드 여부 확인
 - [ ] MCP 초기화 중단(`context7`, `filesystem`, `github` 등)은 별도 연결/플러그인 점검 대상
+
+## 9. 다른 AI 작업 상태 점검 (2026-08-16)
+- [x] 로컬 `TASK.md`, 루트 dirty 파일, Git worktree·stash·브랜치·실행 프로세스를 읽기 전용 점검
+- [x] 확정된 코드 dirty 작업: `D:\tmp\wt-auto_write-m4-generate-prep`의 이미지 자동화 4개 수정 + 테스트 1개 추가(마지막 파일 수정 2026-08-10)
+- [x] `rusalka-fill-task`는 추적 파일 변경 없이 HWPX 점검용 임시 파일만 남아 있고, 나머지는 문서 브랜치 또는 clean 상태
+- [x] 루트 `master`는 로컬 `origin/master`보다 61커밋 뒤이며 `.claude/*`, `.gitignore`, `REQUEST_LEDGER.md`, `RESUME.md`가 dirty; 삭제·정리하지 않음
+- [ ] GitHub live PR 확인은 인증/Windows 자격 증명 오류로 미완료. 다음에는 인증 복구 후 PR·원격 TASK를 재확인
+
+## 10. 원격 인증 진단 (2026-08-16)
+- [x] 기본 Git HTTPS(Schannel)는 `SEC_E_NO_CREDENTIALS`로 실패
+- [x] 같은 원격에 `git -c http.sslBackend=openssl ls-remote origin HEAD`는 성공하여 원격/네트워크 자체는 접근 가능
+- [x] `gh auth status`에서 GitHub 계정 인증 토큰이 무효로 확인됨
+- [ ] 실제 복구 명령은 아직 실행하지 않음. 다음 액션: 사용자 승인 후 Git 전역 SSL backend를 OpenSSL로 전환하고 `gh auth login --web` + `gh auth setup-git` 실행
