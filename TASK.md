@@ -124,6 +124,7 @@ AW DETAILS에는 「원칙」 칸이 없다. 칸은 MUST / KEEP / FORBIDDEN이�
 | `요청 한 장 — 2026-08-16` | 공고+빈 양식 오기 전 초안·BPQ-00 코드 시작 금지. 양식=PSST, 지금은 Problem만. AIMY 사실 복사 금지. HTML 2개 미반영 |
 | `웹앱 최종 요구사항_20260816` | 새 Google Doc이 AW-009 실행 정본. 첫 화면=공고+양식(1파일 가능·2+가능), 기존 계획서 선택. 파트만 작성. 칸=양식 대목차. 전사→유사→생성. 제출자동판정 UI 없음. P0 미완이면 업무흐름 고도화 금지. 이 계획 승인 전 웹앱 코드 대기 |
 | `계획 보강 — 2026-08-16` | P 개발 중=Problem만·파일 오면 초안 1건. P 완료 후=최우선. 사업자등록증은 첫 화면 필수 아님. 우선순위 1–5. #150은 측정기, 다음=3 HWP×Golden 41 Baseline |
+| `STEP 3A 병렬 — 2026-08-16` | 이 트랙=양식↔Fact/Evidence↔공고 매칭 계약·Golden·비개발자 리포트. STEP 2 추출기 파일 금지. 만남점=`Fact[]`/`NarrativeEvidence[]`/`Conflict[]`. Writer/UI/HWP 금지 |
 
 실제 제출물·옛 엔진 요청 (표만): `docs/REQUEST_LEDGER.md` A1~A6(한난·울산·비앤코·이지비건·입주신청·항우연) / B1~B7(허브·HWPX 값만 채움·이미지·규칙 검사 등) / C1.
 
@@ -2800,6 +2801,61 @@ python app/tools/step2_extraction_baseline.py --golden <local.json> --input-dir 
 산출: `results/step2_extraction_baseline/baseline_report.json` · `.md`. 실 HWP/Golden/리포트 원문은 커밋하지 않는다. 익명 건수 요약만 커밋 가능.
 
 Linux Cloud에서는 HWP가 PrvText만이면 `PARTIAL_INGEST` — 전체 Baseline을 성공으로 치지 말 것. 전문 추출이 필요하면 Windows `D:\auto_write`.
+
+### STEP 3A 병렬 — 2026-08-16 (나중 사용자 요청. 충돌 부분만 덮음)
+
+> 이 블록은 위 역사 명세·`최우선 사용 케이스`·`원칙 — 생성은 허용`·`요청 한 장`·`계획 보강` 본문을 **삭제·재작성하지 않는다.**
+> `# 1` 규칙: 나중 요청이 **충돌하는 그 부분만** 덮는다. 새 Epic/`T-20260816-*` 복제 금지.
+>
+> 덮는 충돌: 「다음 엔진 작업 = 실문서 3 HWP × Golden 41만」을 **이 세션이 STEP 2 추출기를 구현해야 한다**로 읽지 말 것.
+> STEP 2 추출기(ITEM/PROBLEM/SOLUTION/BM/TEAM/FINANCE, ACTUAL/PLAN, Conflict, source 위치)는 **다른 세션**이 한다.
+> 이 트랙은 STEP 3A만 한다. #150 측정기(`app/tools/step2_extraction_baseline.py`)는 만지지 않는다.
+
+제품 목표(최우선 사용 케이스)의 「작성 가능한 파트부터 작성」을 **Writer 없이** 여기서 구현한다. 하는 일:
+
+```
+공고 요구사항 + 빈 양식 구조 + [가짜/합성 STEP2 결과]
+        ↓
+Section Matching
+        ↓
+사용할 Fact / 사용할 Evidence / 부족정보 / Conflict / 작성 가능 여부
+        ↓
+Matching Golden Test
+```
+
+만남점 **딱 하나** — 다른 세션이 최종 반환하는:
+
+- `Fact[]`
+- `NarrativeEvidence[]`
+- `Conflict[]`
+
+를 matcher 입력 형식과 맞춘다. 계약 코드: `app/auto_write/services/step2_output_contract.py`.
+matcher는 이미 있으면 EXTEND (`app/auto_write/services/section_matcher.py`). FactGraphV2 신설 금지.
+
+Golden (합성 fixture. 실 HWP/Golden 41 재구성 금지):
+
+| 테스트 | 기대 결과 |
+|---|---|
+| Problem 근거 충분 | Problem과 매칭 |
+| BM 근거를 Problem에 넣음 | FAIL |
+| PLAN 매출을 실제매출로 사용 | FAIL |
+| CONFLICT Fact를 자동 선택 | FAIL |
+| 없는 Fact를 생성 | FAIL |
+| 일부 근거만 있음 | writable 가능 + missing 표시 |
+| 출처 없는 근거 | 사용 불가 |
+| 같은 Fact 여러 출처 | provenance 유지 |
+
+비개발자 리포트 형식(초안 문장 아님):
+
+```
+문제인식 — 작성 가능
+사용 가능한 근거 4개
+부족한 정보 1개: 고객 인터뷰 결과
+```
+
+금지: Writer, 파트별 Preview UI, HWP 렌더, STEP 2 추출기 파일 수정, Golden 41 추측 생성.
+
+이후 순서(이 트랙 이후): STEP 3B 실제 공고+양식 Golden → STEP 4 Writer+Preview → STEP 5 부족정보 질문 → 전체 QA/HWP 렌더.
 
 ---
 
