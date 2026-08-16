@@ -69,5 +69,6 @@ cd D:\auto_write
 ## 10. 원격 인증 진단 (2026-08-16)
 - [x] 기본 Git HTTPS(Schannel)는 `SEC_E_NO_CREDENTIALS`로 실패
 - [x] 같은 원격에 `git -c http.sslBackend=openssl ls-remote origin HEAD`는 성공하여 원격/네트워크 자체는 접근 가능
-- [x] `gh auth status`에서 GitHub 계정 인증 토큰이 무효로 확인됨
-- [ ] 실제 복구 명령은 아직 실행하지 않음. 다음 액션: 사용자 승인 후 Git 전역 SSL backend를 OpenSSL로 전환하고 `gh auth login --web` + `gh auth setup-git` 실행
+- [x] Git 전역 `http.sslBackend=openssl` 적용 및 `git ls-remote origin HEAD` 성공
+- [x] 기존 무효 pds2225 GitHub 인증정보 로그아웃 완료
+- [ ] 사용자가 브라우저 인증을 완료했지만 `gh auth status`는 여전히 로그인 호스트 없음. CLI의 device 인증 완료가 필요하며 `gh auth setup-git`·PR 조회는 아직 미완료
