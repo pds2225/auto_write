@@ -3621,14 +3621,13 @@ STATUS_THIS_TURN: 흡수된 원격 브랜치 삭제. backup 유지. #146(BPQ-00 
 - [x] 중복 draft #145 닫기
 - [x] 흡수된 `cursor/t20260814-02-impl-instruction-2036` 원격 삭제
 - [x] 로컬 gone 브랜치 삭제
-- [ ] #146 BPQ-00 감사 브랜치는 지우지 않음 (main에 아직 없음)
-- [ ] 이번 턴 main 머지 금지 (`병합해` 전까지)
+- [x] #146 BPQ-00 감사 브랜치는 지우지 않음 (main에 아직 없음) → 이후 타세션이 #146을 `9efd78e`로 머지. 원격 브랜치는 GitHub가 삭제
+- [x] 이번 턴 이후 main 머지는 타세션 #146으로 완료
 
 ### KEEP
 - `origin/main`
 - `origin/backup/WIN-K20QOC29TOB`
 - `origin/backup/omc-lessons-md`
-- `origin/cursor/bpq-00-baseline-audit-2036` (PR #146)
 
 ### FORBIDDEN
 - backup 삭제
@@ -3637,12 +3636,13 @@ STATUS_THIS_TURN: 흡수된 원격 브랜치 삭제. backup 유지. #146(BPQ-00 
 - 닫힌 #139 재오픈·재머지
 
 ### VERIFY
-- 원격 목록 = main + backup 2개 + bpq-00 감사 브랜치
-- #145 CLOSED
-- #139 재머지 없음
+- [x] 원격 목록 = main + backup 2개
+- [x] #145 CLOSED
+- [x] #146 MERGED `9efd78e`
+- [x] #139 재머지 없음
 
 ### DONE
-REQUEST_SOLVED=YES: 흡수된 원격은 지웠고 backup과 BPQ-00 감사 브랜치는 남겼다. MAIN_MERGED=NO (#146).
+REQUEST_SOLVED=YES: 흡수된 원격은 지웠고, BPQ-00 감사는 #146으로 origin/main `9efd78e`에 있다. MAIN_MERGED=YES. backup 유지.
 
 # 9. 실제사용 시나리오
 
