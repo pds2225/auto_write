@@ -1972,6 +1972,7 @@ AIMY에서 **절대 승격 금지**: 97.9/97.5, 1.1만, 400억, 특허 건수, 5
 - **구현범위**: 감사만. 새 클래스 금지
 - **목표/현재상태**: 위 표와 동일
 - **2026-08-16 실행지시 추가**: 다음 **구현** 세션에서 전수 Baseline Audit 표를 작성한다 (존재: IMPLEMENTED/PARTIAL/PLACEHOLDER/DUPLICATED/NOT_IMPLEMENTED × 조치: REUSE/EXTEND/CREATE ONLY IF GAP/DELETE·MERGE/DO NOT TOUCH). 코드 파일 존재만으로 IMPLEMENTED가 아니다. 각 책임은 `definition → production caller → runtime path → failure blocking → production test` 로 증명. 정본 경로를 HEAD에서 재확인한다(`auto_write.services` 가 re-export이면 실구현 `core.docx.services` 1곳만 수정). `*V2` 병렬 시스템 금지. **이 TASK.md 반영 세션에서는 Audit을 실행하지 않는다.** 전문은 같은 TASK의 `최신 실행지시 (2026-08-16 implementation update)`.
+- **2026-08-16 조치 우선순위 추가**: Audit 후 최우선은 PARTIAL → IMPLEMENTED. 작업순서: PARTIAL 완성 → PLACEHOLDER는 production wiring 또는 제거 → DUPLICATED는 canonical로 통합 → NOT_IMPLEMENTED는 필수 GAP만 CREATE. 조치 판단 순서(충돌 시 이 순서가 이김): 1 REUSE 2 DELETE/MERGE 3 EXTEND 4 CREATE ONLY IF GAP 5 DO NOT TOUCH. PARTIAL을 방치하고 같은 목적의 새 시스템으로 우회 금지. 선행이 완전 NOT_IMPLEMENTED일 때만 그 GAP을 먼저 최소 구현. IMPLEMENTED는 결함 없으면 REUSE/DO NOT TOUCH. 근거 없는 삭제 금지. 전문은 같은 TASK의 `조치 우선순위 — 매우 중요`.
 
 ---
 
@@ -2342,6 +2343,8 @@ BASE: origin/main
 
 판정 순서: `REUSE → EXTEND → ONLY-IF-GAP CREATE`. 조사 없이 새 클래스부터 만들지 않는다. 제안 개념명(`SectionContextPack`, `SectionDraft`, `FactGraph` 등)은 책임 설명용이다. 기존 타입/DTO가 있으면 그것을 확장한다.
 
+→ **최신(같은 날 후속 요청)이 이 3단계와 충돌하면 아래 「조치 우선순위 — 매우 중요」가 이긴다:** `REUSE → DELETE/MERGE → EXTEND → CREATE ONLY IF GAP → DO NOT TOUCH`. 최우선 목표는 PARTIAL을 새 시스템으로 우회하지 않고 IMPLEMENTED로 완성하는 것이다.
+
 ---
 
 ### 향후 전체 개발 절차 (참고. 이번 세션은 [1]~[3]만)
@@ -2481,6 +2484,93 @@ definition exists
 ```
 
 caller 없는 helper를 구현하고 DONE 처리하지 않는다.
+
+위 2열 표(PLACEHOLDER→CREATE ONLY IF GAP, NOT_IMPLEMENTED→DO NOT TOUCH)는 초기 초안이다. **아래 블록과 충돌하면 아래가 이긴다.** 이 TASK.md 반영 세션에서는 Audit을 실행하지 않는다.
+
+---
+
+### 조치 우선순위 — 매우 중요 (2026-08-16 후속. Baseline Audit 이후 구현 판단)
+
+> 이 블록은 위 역사 명세·2026-08-16 implementation update 원문을 삭제하지 않는다. Audit 이후 **무엇을 먼저 손댈지**와 **REUSE/MERGE/EXTEND/CREATE/DO NOT TOUCH 판단식**만 확정한다. 새 Epic/`T-20260815-*`/`T-20260816-*` 병렬 복제 금지. BPQ-00~13 폐기·복제 금지. 제품 코드는 이 블록 등록만으로 수정하지 않는다.
+
+이번 작업의 최우선 목표는 **PARTIAL 상태의 기존 기능을 IMPLEMENTED 상태로 완성하는 것**이다.
+
+Baseline Audit 후 작업순서는 원칙적으로 다음과 한다.
+
+```
+PARTIAL → IMPLEMENTED
+→ PLACEHOLDER → production wiring 또는 제거
+→ DUPLICATED → canonical implementation으로 통합
+→ NOT_IMPLEMENTED → 필수 GAP에 한해서만 신규 구현
+```
+
+이미 IMPLEMENTED인 기능은 특별한 결함이 없으면 REUSE 또는 DO NOT TOUCH한다.
+
+새 모듈을 만드는 것보다 기존 부분구현을 production-ready로 완성하는 것을 우선한다.
+
+단, 어떤 PARTIAL을 완성하기 위해 필수 선행기능이 완전히 NOT_IMPLEMENTED인 경우에만 그 선행 GAP을 먼저 최소 구현할 수 있다.
+
+PARTIAL을 방치한 채 같은 목적의 새 시스템을 만들어 문제를 우회하는 것은 금지한다.
+
+#### 조치 우선순위 (반드시 이 순서로 판단)
+
+Baseline Audit 이후 각 기능의 조치는 반드시 다음 우선순위로 판단한다.
+
+1. REUSE
+2. DELETE / MERGE
+3. EXTEND
+4. CREATE ONLY IF GAP
+5. DO NOT TOUCH
+
+의미:
+
+**1) REUSE**
+기존 production 구현으로 요구사항을 충족할 수 있다면 그대로 재사용한다.
+같은 목적의 신규 구현을 만들지 않는다.
+
+**2) DELETE / MERGE**
+같은 책임을 가진 구현이 둘 이상이면 신규 기능을 추가하기 전에 먼저 canonical implementation을 정한다.
+production caller, runtime wiring, 테스트, 호환성을 확인한 뒤 중복·placeholder·dual source of truth를 제거하거나 통합한다.
+근거 없는 삭제는 금지한다.
+
+**3) EXTEND**
+canonical implementation이 존재하지만 PARTIAL인 경우 해당 구현을 확장하여 IMPLEMENTED 상태로 완성한다.
+새로운 V2/New/Next 계열 구현을 만드는 것보다 PARTIAL → IMPLEMENTED를 우선한다.
+
+**4) CREATE ONLY IF GAP**
+REUSE, MERGE, EXTEND로 해결할 수 없고 필수 책임 자체가 존재하지 않을 때만 최소 신규 구현을 허용한다.
+
+**5) DO NOT TOUCH**
+이미 IMPLEMENTED이며 이번 요구사항을 충족하는 안정적인 코드는 특별한 결함이 없으면 수정하지 않는다.
+
+따라서 기본 판단식은:
+
+```
+REUSE 가능한가?
+→ YES: REUSE
+
+NO라면 중복 구현이 있는가?
+→ YES: DELETE / MERGE하여 정본 확정
+
+정본이 있지만 부족한가?
+→ YES: EXTEND하여 IMPLEMENTED로 완성
+
+그래도 필수 기능이 존재하지 않는가?
+→ YES: CREATE ONLY IF GAP
+
+이미 충분히 구현되어 있고 변경 필요가 없는가?
+→ DO NOT TOUCH
+```
+
+| 현재 상태 | 우선 조치 |
+|---|---|
+| `IMPLEMENTED` | **REUSE** |
+| `DUPLICATED` | **DELETE / MERGE** |
+| `PARTIAL` | **EXTEND → IMPLEMENTED** |
+| `PLACEHOLDER` | MERGE/DELETE 우선, 필요하면 EXTEND |
+| `NOT_IMPLEMENTED` | 마지막에만 CREATE |
+
+금지 예: PARTIAL `company_extract`를 두고 같은 목적의 `FactGraphV2`를 새로 만들어 우회. DUPLICATED `auto_write.services` / `core.docx.services` / `bizplan.services` 삼벌을 동시에 확장. PLACEHOLDER를 근거 없이 삭제하거나, caller·테스트 확인 없이 삭제. IMPLEMENTED DomainRouter/LRule/Finalizer를 특별한 결함 없이 재작성.
 
 ---
 
@@ -3085,6 +3175,8 @@ auto_write 실행
 | AW-001 | DomainRouter → LRule → Finalizer KEEP 통과 | 우회 FINAL |
 
 구현 순서 권장 흐름이 역사 의존 `00 → 01 → 02 → 03 → 04 → 06 → 05 → 07 → 11 → 12 → 08 → 09 → 10 → 13` 과 충돌하면 **기존 TASK dependency가 이긴다.**
+
+Audit 이후 기능별 조치는 위 BPQ 순서와 별개로 **조치 우선순위**를 따른다: `REUSE → DELETE/MERGE → EXTEND → CREATE ONLY IF GAP → DO NOT TOUCH`. 최우선은 PARTIAL → IMPLEMENTED. PLACEHOLDER는 MERGE/DELETE 우선. NOT_IMPLEMENTED CREATE는 필수 GAP만. PARTIAL 우회용 신규 시스템 금지.
 
 ## T-20260814-03
 
