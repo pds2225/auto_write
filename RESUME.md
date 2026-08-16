@@ -106,3 +106,17 @@ cd D:\auto_write
 - 결정: 명령은 `D:\auto_write`에서 실행하되 최신 기준은 로컬 `master`가 아닌 원격 `main`; dirty root에서 코드 작업·병합 금지
 - 다음: 입력이 오면 별도 worktree에서 baseline 먼저 실행. 그 전에는 PR stack 병합·BPQ-00 구현·야간 자동개발 실행 금지
 - [x] 고스트 요청: 다음 실행 프롬프트는 D3 HWP·Golden 경로 확인 후 baseline 실행으로 고정
+- [x] 2026-08-17 새 `codex.cmd exec --ephemeral --sandbox read-only` 세션에서 실제 `👉 다음 프롬프트:` 출력 재현(session `01a00cd0-aa2b-7020-8634-7bda79273d2f`)
+- [x] 사용자 요청: 동일한 읽기 전용 Codex 세션에서 고스트 출력 재현 완료 — 실제 `👉 다음 프롬프트:` 출력 확인(session `01a00cd8-aae3-7fc1-bb45-f521b07a435b`)
+- [x] Codex 전역 AGENTS·Claude CLAUDE·Cursor rule·`run-next-suggestion` 스킬의 고스트 규칙 존재 확인
+- [ ] Codex Desktop 회색 입력 제안 UI는 시각 확인 불가; 별도 agent TOML 2개는 백슬래시 파싱 경고가 남아 있음
+
+## 15. 현재 세션 (2026-08-17)
+- [x] `RESUME.md`를 통해 새 Codex 세션으로 복원됨
+- [x] 사용자에게 새 세션임을 안내할 준비 완료
+- [ ] 사용자 확인 후, 입력이 있을 때만 다음 작업 진행
+
+## 16. 현재 안내 (2026-08-17)
+- [x] 실행 위치 안내 요청(`ㅇㄷㅁㅎ`) 확인
+- 결정: 작업 명령은 `D:\auto_write`에서 실행하고, 공고·빈 양식이 오기 전에는 코드 작업을 시작하지 않음
+- 다음: PowerShell에서 입력 파일 존재 여부와 모듈 팩 경로만 확인
