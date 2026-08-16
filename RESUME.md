@@ -1,7 +1,7 @@
 # RESUME.md — auto_write 세션 체크포인트
 
 > 세션을 새로 시작하면 **이 파일을 먼저** 읽는다. 상세 트랙은 아래 링크.
-> 최종 갱신: **2026-08-16** (#150 STEP 2 측정기 main 머지 `0a8b262` + 계획 보강)
+> 최종 갱신: **2026-08-16** (STEP 3A matcher 계약·Golden 병렬 트랙)
 
 ## 한 줄 상태
 
@@ -9,10 +9,10 @@
 에이전트 입구 = **bizdoc-hub** / CLI 입구 = **auto_write_hub.py**. 맵: `docs/BIZDOC_HUB_MAP.md`.
 
 **문서 작업:** 항우연 「2026 STAR-Exploration」 **선정됨**. 지원금은 최종발표 **상위 2팀만**. 공개 공고에 발표 배점표 없음 — 원장 A6.
-**엔진:** T-20260814-02 명세+실행지시+BPQ-00 감사+#150 측정기가 main에 있음. DOCX 정본=`core.docx.services`.
-**다음 엔진 작업 = 실문서 3 HWP × Golden 41 Baseline** (CompanyMaster EXTEND가 다음이 아님. PR #150은 측정기, 추출기 본체 아님).
-작업 시작 전: `git fetch` → `TASK.md` → 현재 구현 조사 → 그다음 작업.
-목표 흐름: `LLM → StageResult(JSON) → 검증 → 다음 Stage → 렌더 → Finalizer`. 한 번에 최종 DOCX 금지.
+**엔진 병렬 트랙 (만남점 = STEP 2 Output Contract):**
+- **이 트랙 / STEP 3A:** 양식 섹션 ↔ Fact/Evidence ↔ 공고 요구사항 matcher. 합성 fixture + Golden + 비개발자 한글 리포트. Writer/UI/HWP 금지. STEP 2 추출기 파일 금지.
+- **다른 세션 / STEP 2:** 문서 ingest → Fact / NarrativeEvidence / Actual·Plan / Source / Conflict. 최종 반환 JSON을 `app/auto_write/services/step2_output_contract.py`에 맞춘다.
+- **41건 Baseline:** Golden `STEP2_EXTRACTION_GOLDEN_V1.json` + D3 없으면 BLOCKED. 41건 추측 생성 금지. #150은 측정기만.
 
 P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금지. 파일 오면 초안 1건). **P 완료 후는 최우선 사용 케이스.** 사업자등록증은 첫 화면 필수 아님.
 
@@ -33,6 +33,7 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 
 | 날짜 | 내용 | 근거 |
 |------|------|------|
+| 2026-08-16 | STEP 3A: STEP2 출력 계약 + matcher Golden + 비개발자 리포트 (합성 fixture) | `cursor/step3a-section-matcher-e248` |
 | 2026-08-16 | #150 STEP 2 추출 Baseline 측정기 main 머지. 추출기 본체 아님 | PR #150 `0a8b262` |
 | 2026-08-16 | #146 BPQ-00 감사 main 머지. 원격은 main+backup 2개 | PR #146 `9efd78e` |
 | 2026-08-16 | #138+#133+#139 합본 main 머지 (gitignore, L154–L156, A6, BPQ 노트, 합친 RESUME) | PR #141 |
@@ -56,11 +57,15 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 ## 남은 일 (우선순위)
 
 0. **STAR-Exploration (사용자 진행 중):** 최종발표 IR / 상위 2팀이면 사업자등록+견적+사용계획. 평가표·양식 경로 대기 (A6)
-0b. **엔진 다음 (측정, 구현 명령 시):** 실문서 D1–D3 HWP + `STEP2_EXTRACTION_GOLDEN_V1.json` 으로
+0b. **다른 세션 / STEP 2 추출기:** 실문서 D1–D3 HWP + `STEP2_EXTRACTION_GOLDEN_V1.json` 으로
    `python app/tools/step2_extraction_baseline.py --golden … --input-dir …`
    → `baseline_report`의 READ_MISS / STRUCTURED_EXTRACTION_MISSING / VALUE_ERROR / SOURCE_LOST 건수.
    Golden·HWP는 커밋 금지. Golden이 없으면 비교는 BLOCKED(41건 재구성 금지).
-   그 건수를 기준으로 STEP 2 추출기(ITEM/PROBLEM/SOLUTION/BM/TEAM/FINANCE, ACTUAL/PLAN, Conflict, source 위치) 개발.
+   출력 JSON은 `Fact[]` / `NarrativeEvidence[]` / `Conflict[]` 계약에 맞출 것.
+0c. **이 트랙 / STEP 3A (합성 fixture로 완료 목표):** matcher Golden + 한글 리포트.
+   `cd /workspace && python3 -m pytest app/tests/test_section_matcher.py app/tests/test_step2_output_contract.py app/tests/test_step3a_golden.py -q`
+   `python3 app/tools/step3a_section_match.py --bundle app/tests/fixtures/step3a/writable_problem_bundle.json`
+   다음이 아님: Writer, Preview UI, HWP 렌더, STEP 3B 실공고 Golden.
 1. **owner 수동**: `pds2225/autowrite` GitHub Delete (이미 archived, admin 토큰 없음)
    → https://github.com/pds2225/autowrite/settings
 2. **실측 1건** (추천 시나리오 중 하나):
@@ -75,9 +80,10 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 ## 재개 명령
 
 ```text
-이어서: 항우연 STAR-Exploration. 메일에서 6팀인지 상위 2팀인지, 평가표·IR 양식·발표시간을 주면 발표자료부터.
-엔진: T-20260814-02 + #150 측정기가 main `0a8b262`. 다음 실측은 3 HWP × Golden 41 Baseline.
-P 개발 중=Problem만. P 완료 후=최우선 사용 케이스. 사업자등록증은 첫 화면 필수 아님.
+이어서: STEP 3A matcher 트랙이면 `cursor/step3a-section-matcher-e248`.
+합성 Golden·한글 리포트가 있으면 Writer/UI/HWP는 아직 하지 말 것.
+다른 세션: STEP 2 추출기. 만남점=`app/auto_write/services/step2_output_contract.py`.
+41 Baseline은 Golden+D3 없으면 BLOCKED. P 개발 중=Problem만. P 완료 후=최우선 사용 케이스.
 ```
 
 ```powershell
