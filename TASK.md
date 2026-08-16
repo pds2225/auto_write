@@ -4118,7 +4118,7 @@ TASK_ID: T-20260816-08
 WORK_BRANCH: cursor/combine-open-drafts-c7c0
 BASE: origin/main
 TASK_START_SHA: 0a8b262c6afd626dd8b083caa28012a063205c28
-STATUS_THIS_TURN: 사용자 「병합」. #156 squash. #155는 이미 main `ddac657`.
+STATUS_THIS_TURN: #156 squash `1001b76`. #155는 이미 main `ddac657`. MAIN_MERGED=YES.
 
 ### 8-1. 사용자 원문
 지금PR정리
@@ -4137,7 +4137,7 @@ STATUS_THIS_TURN: 사용자 「병합」. #156 squash. #155는 이미 main `ddac
 - [x] #155 GitSyncService는 이 세션이 머지하지 않음 → 타세션이 `ddac657`로 main 머지
 - [x] `backup/*` 유지
 - [x] origin/main(`ddac657`, #155)을 합본 브랜치에 합침 (충돌 0)
-- [ ] #156 squash `--auto` (Checks 초록, `--admin` 금지)
+- [x] #156 squash `--auto` `1001b76` (Checks 초록, `--admin` 없음)
 
 ### KEEP
 - AW-001~AW-008, T-20260814-02 본문 합치지 않음
@@ -4157,10 +4157,10 @@ STATUS_THIS_TURN: 사용자 「병합」. #156 squash. #155는 이미 main `ddac
 - [x] #149 #152 #153 #154 CLOSED
 - [x] #155 MERGED `ddac657` (타세션)
 - [x] matcher/contract/golden 테스트 PASS (33 passed)
-- [ ] draft 합본 PR #156 squash, MAIN_MERGED=YES
+- [x] 합본 PR #156 squash `1001b76`, MAIN_MERGED=YES
 
 ### DONE
-REQUEST_SOLVED는 #156이 origin/main에 들어간 뒤. MAIN_MERGED는 squash SHA로 기록.
+REQUEST_SOLVED=YES: 합본이 origin/main `1001b76`에 있다. #155는 `ddac657`. 열린 PR 0. backup 유지. MAIN_MERGED=YES.
 
 # 9. 실제사용 시나리오
 
