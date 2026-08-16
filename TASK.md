@@ -2516,8 +2516,8 @@ STATUS_THIS_TURN: 132/136 살림 + TASK/RESUME 정합. T-20260814-02 본문 미�
 - T-20260814-01을 증거 없이 `[x]`
 
 ### VERIFY
-- [ ] clone 단위테스트 통과
-- [ ] draft PR, MAIN_MERGED=NO
+- [x] clone 단위테스트 통과 (24 passed)
+- [x] draft PR #142, MAIN_MERGED=NO
 
 ### DONE
 REQUEST_SOLVED=YES(이번 턴): 132/136 내용이 최신 main 위 한 브랜치에 있고, TASK/RESUME이 #141과 맞다. 머지는 다음 명령.
