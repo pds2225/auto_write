@@ -24,7 +24,7 @@ REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 [ ] AW-007 | 중복·미사용 코드를 찾아 정리한다
 [ ] AW-008 | 남은 L 규칙 빈칸을 실제 검사로 채운다
 [ ] AW-009 | 요구사항 문서로 운영 웹앱 P0를 만든다
-[~] T-20260814-01 | 기본 브랜치 보호를 걸고 문서 머지 규칙을 맞춘다
+[x] T-20260814-01 | 기본 브랜치(main) 보호가 켜져 있고, 문서 머지는 docs-gate를 거친다
 [ ] T-20260814-02 | AIMY급 사업계획서를 공고·양식·기업사실에 맞춰 자동 작성하는 통합 과업을 명세한다
 [x] T-20260814-03 | 야간 A~H 미머지 브랜치를 최신 main에 체리픽 이식 준비한다
 [x] T-20260815-01 | 남은 고유 커밋을 체리픽하고 삭제 가능한 원격 브랜치를 지운다
@@ -33,6 +33,7 @@ REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 [ ] T-20260816-03 | clone 후 로컬 PC 리모트 컨트롤을 켤 수 있게 한다
 [~] T-20260816-04 | #132 AW-009와 #136 clone 헬퍼를 최신 main에 살린다
 [~] T-20260816-05 | T-20260814-02의 BPQ-02·03·07·08·12·13에 파이프라인 인사이트 키워드를 넣는다
+[x] T-20260816-06 | 브랜치 보호 할 일을 사용자가 더 볼 필요 없게 닫는다
 
 
 ---
@@ -320,6 +321,27 @@ auto_write 기본 브랜치에 브랜치 보호가 걸려 있고, 문서 PR은 d
 
 ### DONE
 - REQUEST_SOLVED=YES: 공개 레포 기본 브랜치 보호가 실제로 걸려 있다
+
+### 판정 (2026-08-16)
+
+사용자: 「[x] 하면 안 됨, 막힌 것도 아님 — 뭔소린지 모르겠어. 알아서 처리하고 작업한걸로쳐」
+
+쉬운 말:
+- `[x]` = 할 일 끝. `[!]` = 지금은 못 함(막힘). 예전 보고는 이 둘 다 아니라서 헷갈렸다.
+- GitHub에서 `main`은 **이미 보호되어 있다**. 문서 PR은 **docs-gate가 초록**이면 머지된다.
+- 이 AI 계정은 보호 **세부 화면**(관리자에도 강제인지, force-push 금지인지)을 읽거나 고칠 권한이 없다. 그건 작업이 막힌 게 아니라, 이 로봇이 설정 페이지에 못 들어간다는 뜻이다.
+- 사용자는 GitHub Settings를 열 필요 없다. 이 과업은 여기서 닫는다. LIST `[x]`. `[!]` 아님.
+
+확인:
+- `visibility=PUBLIC`
+- `branches/main protected=true`
+- 최근 머지 PR(#142) `docs-gate` SUCCESS
+- 워크플로 파일은 `.github/workflows/docs-gate.yml` 하나. pytest용 GitHub job 이름이 없어서 required에 가짜 test job을 넣지 않음(FORBIDDEN)
+
+못 함 (API 403, `--admin` 금지):
+- protection JSON 읽기/쓰기 → `enforce_admins` / `allow_force_pushes` 숫자 증명 불가
+
+T-20260816-06이 이 판정을 기록한다.
 
 ## AW-001
 
@@ -2587,6 +2609,45 @@ task에 반영해
 ### DONE
 REQUEST_SOLVED=YES(이번 턴): 보고한 키워드가 T-20260814-02 DETAILS의 해당 6개 워크스트림에 들어가 있다. 구현 시작 아님. MAIN_MERGED=NO. 머지는 다음 명령(`병합해`).
 
+## T-20260816-06
+
+TASK_ID: T-20260816-06
+WORK_BRANCH: cursor/t20260814-02-bpq-keywords-2036
+BASE: origin/main
+TASK_START_SHA: d6d530e60d002808cb320a74dd2fd82546803b84
+STATUS_THIS_TURN: T-20260814-01을 사용자 지시로 닫음. 설정 화면 확인 요청 없음.
+
+### 8-1. 사용자 원문
+5. 보호 설정 — [x] 하면 안 됨, 막힌 것도 아님 ㅇㅣ건 뭔소린지 모르겠어 알아서 처리하고 작업한걸로쳐
+
+### MUST
+- [x] 보호 상태를 다시 확인 (public, protected, docs-gate, API 권한)
+- [x] T-20260814-01 LIST를 `[x]`로 바꾸고, 비개발자가 읽게 한 줄로 고침
+- [x] `[!]`(막힘)으로 표시하지 않음
+- [x] 사용자에게 GitHub Settings 확인을 다시 시키지 않음
+- [x] TASK.md §17의 증명 안 된 `enforce_admins=true` 문장을 고침
+- [ ] 이번 턴 main 머지 금지 (`병합해` 전까지)
+
+### KEEP
+- T-20260814-01 8-1 원문
+- `--admin` 금지, mail 금지
+- T-20260814-02 LIST `[ ]`
+
+### FORBIDDEN
+- 없는 test job 이름을 required에 넣기
+- `gh pr merge --admin`
+- force push / `git add -A`
+- 보호 API 403을 `[!]`로 올려 사용자에게 설정 숙제를 남기기
+
+### VERIFY
+- `gh repo view` visibility=PUBLIC
+- `branches/main` protected=true
+- `GET/PUT .../protection` → 403
+- LIST `T-20260814-01` 이 `[x]`
+
+### DONE
+REQUEST_SOLVED=YES: 보호 할 일은 확인된 범위까지 처리했고 LIST에서 끝냈다. 사용자는 더 할 일 없음. MAIN_MERGED=NO.
+
 # 9. 실제사용 시나리오
 
 TASK 완료 전에 반드시 실제 사용자 관점으로 검증한다.
@@ -2814,7 +2875,7 @@ WORK_BRANCH_PUSHED: YES | NO
 
 머지는 GitHub Checks가 초록일 때만 한다. 문서만(`TASK.md`, `*.md`, `docs/**`) 바뀌면 무거운 테스트 대신 `docs-gate`가 초록이면 된다. `gh pr merge --admin` 및 실패 체크를 무시하는 머지는 금지한다.
 
-브랜치 보호: 기본 브랜치 `main`(구 master 이름 변경). required checks=`docs-gate`(제품 test workflow 없음). enforce_admins=true, allow_force_pushes=false.
+브랜치 보호: 기본 브랜치 `main`은 `protected=true`. 문서 PR은 `docs-gate`가 초록이면 머지한다(제품 test workflow 파일 없음). 이 에이전트 토큰은 protection JSON을 읽거나 쓰지 못한다(HTTP 403). `enforce_admins`/`allow_force_pushes`를 증명된 값으로 적지 않는다. 이 한계는 `[!]`(막힘)이 아니며 T-20260814-01은 사용자 지시로 `[x]` 종료.
 
 
 merge 후:
