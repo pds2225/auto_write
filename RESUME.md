@@ -98,10 +98,11 @@ cd D:\auto_write
 - [x] 최신 새 `codex.cmd exec` 세션(`01a00ae4-abe1-7500-9ec4-583c9d4e694e`)에서도 동일 응답 재현
 - [ ] Codex Desktop의 회색 입력 제안 UI 자체는 현재 도구에서 시각 확인 불가
 
-## 14. 야간 자동개발 재개 점검 (2026-08-16)
+## 14. 원격 PR/실행 위치 점검 (2026-08-17)
 - [x] 원격 `main` fetch 완료: `origin/main=0a8b262c`; GitHub default branch=`main`; 원격 `main:TASK.md` 존재
-- [x] PR 직접 대조: #152=`main→cursor/step2-baseline-run-e248`, #153=`#152 head→feat/step3a-section-matcher-20260816`, #154=`#153 head→cursor/step3a-section-matcher-e248`; 모두 OPEN/DRAFT/mergeable clean
-- [x] #152 changed files=2( TASK/RESUME ), #153=2( matcher/test ), #154=9( TASK/RESUME + matcher contract + STEP2 output contract + CLI/fixtures/tests )
-- [x] #152 기록상 D3 HWP·`STEP2_EXTRACTION_GOLDEN_V1.json` 부재로 3 HWP×41 baseline은 BLOCKED; 카운트 추정·재구성 금지
-- [x] #153은 matcher 정본을 신설하고, #154는 같은 matcher에 STEP2 contract parser/CLI/Golden 연결을 추가
-- 결정: 지금은 병합·base 변경·코드 연결·야간 실행을 하지 않음. 입력 확보 후 #152 문서 정리 → #153 base main 재검증 → #154 base main 재검증 순서
+- [x] PR 직접 대조: #152→#153→#154 stacked; 모두 OPEN/DRAFT/mergeable clean
+- [x] #152=TASK/RESUME 문서, #153=matcher 정본+테스트, #154=STEP2 output contract·matcher 연결·CLI·fixture·테스트
+- [x] D3 HWP·`STEP2_EXTRACTION_GOLDEN_V1.json` 부재로 실제 3 HWP×41 baseline은 BLOCKED; 합성 fixture로 대체 금지
+- 결정: 명령은 `D:\auto_write`에서 실행하되 최신 기준은 로컬 `master`가 아닌 원격 `main`; dirty root에서 코드 작업·병합 금지
+- 다음: 입력이 오면 별도 worktree에서 baseline 먼저 실행. 그 전에는 PR stack 병합·BPQ-00 구현·야간 자동개발 실행 금지
+- [x] 고스트 요청: 다음 실행 프롬프트는 D3 HWP·Golden 경로 확인 후 baseline 실행으로 고정
