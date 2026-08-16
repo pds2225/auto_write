@@ -51,3 +51,9 @@ cd D:\auto_write
 1. 이 파일을 읽는다.
 2. 공고+빈 양식이 **있으면** 초안 1건. **없으면** 기다린다. BPQ-00 구현을 시작하지 않는다.
 3. AIMY 숫자를 새 초안에 복사하지 않는다.
+
+## 8. 현재 세션 상태 (2026-08-16)
+- [x] Codex 시작 로그 진단: `cockpit-collector.toml`, `mail-acc-coverage-sentinel.toml`의 description 안 Windows 경로 백슬래시 때문에 TOML 파싱 실패
+- [x] 코드·프로젝트 파일 수정 없음. 해당 에이전트 2개만 이번 세션에서 로드되지 않음
+- [ ] 다음 액션: 사용자 요청 시 두 TOML의 백슬래시를 TOML 문법에 맞게 수정하고 `codex` 재시작으로 로드 여부 확인
+- [ ] MCP 초기화 중단(`context7`, `filesystem`, `github` 등)은 별도 연결/플러그인 점검 대상
