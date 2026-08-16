@@ -2041,8 +2041,8 @@ StageResult 누적(S0–S8, 신규 Epic 아님): S0 프로젝트 → S1 공고/�
 - **수치 DONE**: 최소 키 19종 정의, 픽스처 라벨→키 정확도 측정 가능
 - **실패/BLOCKED**: 양식마다 if filename== 분기
 - **의존**: 00
-- **2026-08-16 실행지시 추가**: Fact 모델을 직교로 둔다. Verification/Resolution (CONFIRMED/INFERRED/UNKNOWN/CONFLICT/NOT_APPLICABLE) 과 Semantic/Time (ACTUAL/PLAN/ESTIMATE/HYPOTHESIS) 을 한 enum에 섞지 않는다. `0` / `NONE` / `UNKNOWN` / `CONFLICT` / `PLAN` / `NOT_APPLICABLE` 을 빈 문자열 `""` 하나로 표현하지 않는다. 기존 명칭이 있으면 호환 매핑을 우선한다.
 - **키워드(2026-08-16)**: FactState. 출처 우선순위(source precedence)를 코드화. Actual / Plan / Unknown / Conflict를 `""`로 합치지 않음. 공란도 상태값이다.
+- **2026-08-16 실행지시 추가**: Fact 모델을 직교로 둔다. Verification/Resolution (CONFIRMED/INFERRED/UNKNOWN/CONFLICT/NOT_APPLICABLE) 과 Semantic/Time (ACTUAL/PLAN/ESTIMATE/HYPOTHESIS) 을 한 enum에 섞지 않는다. `0` / `NONE` / `UNKNOWN` / `CONFLICT` / `PLAN` / `NOT_APPLICABLE` 을 빈 문자열 `""` 하나로 표현하지 않는다. 기존 명칭이 있으면 호환 매핑을 우선한다.
 
 ---
 
@@ -2059,8 +2059,8 @@ StageResult 누적(S0–S8, 신규 Epic 아님): S0 프로젝트 → S1 공고/�
 - **수치 DONE**: 신규 fact에 source 필드 100%. 식별 12필드 회귀 0
 - **실패/BLOCKED**: 출처 없이 시장규모 생성
 - **의존**: 02
-- **2026-08-16 실행지시 추가**: 기존 `company_extract` / CompanyMaster / provenance를 확장한다. 병렬 FactGraph 정본을 만들지 않는다. 최소 필드: fact_id, canonical_field, value, unit, as_of, verification_state, semantic_state, source_id, source_file, source_location, source_type, confidence, updated_at. 실제 페이지를 모르면 가짜 `p.N` 금지 → `PAGE_UNKNOWN`(또는 equivalent). 가능하면 created_by / supersedes_fact_id / verification_note.
 - **키워드(2026-08-16)**: SectionContextPack(섹션별 팩만 공급, CompanyMaster+ProgramSpec+QualityProfile+DocumentPlan 통째 주입 금지). 의존 그래프. STALE 전파.
+- **2026-08-16 실행지시 추가**: 기존 `company_extract` / CompanyMaster / provenance를 확장한다. 병렬 FactGraph 정본을 만들지 않는다. 최소 필드: fact_id, canonical_field, value, unit, as_of, verification_state, semantic_state, source_id, source_file, source_location, source_type, confidence, updated_at. 실제 페이지를 모르면 가짜 `p.N` 금지 → `PAGE_UNKNOWN`(또는 equivalent). 가능하면 created_by / supersedes_fact_id / verification_note.
 
 ---
 
@@ -2128,8 +2128,8 @@ StageResult 누적(S0–S8, 신규 Epic 아님): S0 프로젝트 → S1 공고/�
 - **수치 DONE**: 섹션마다 plan 없이 writer 호출 불가(가드). missing_evidence는 빈칸/[확인필요]
 - **실패/BLOCKED**: writer가 기업 원문을 그대로 장문 생성
 - **의존**: 02, 03, 05, 06
-- **2026-08-16 실행지시 추가**: 섹션마다 전체 4층을 dump하지 않고 projection한다 (개념명 SectionContextPack: required/allowed/forbidden facts, allowed numbers, conflicts, unknowns, related previous sections, dependency_ids). 기존 DocumentPlan / planner / writer 경로에 넣는다. 병렬 writer pipeline 금지. `bizplan_autopilot` 전문 재작성 루프가 아니라 실패 Stage만 재실행.
 - **키워드(2026-08-16)**: 섹션 입력 계약. required/forbidden facts. evidence. QualityProfile vs LRule vs PromptTemplate 분리(LRule=절대규칙, QualityProfile=작성전략, PromptTemplate=실행 템플릿이며 LRule 정본이 되면 안 됨). prompt template version.
+- **2026-08-16 실행지시 추가**: 섹션마다 전체 4층을 dump하지 않고 projection한다 (개념명 SectionContextPack: required/allowed/forbidden facts, allowed numbers, conflicts, unknowns, related previous sections, dependency_ids). 기존 DocumentPlan / planner / writer 경로에 넣는다. 병렬 writer pipeline 금지. `bizplan_autopilot` 전문 재작성 루프가 아니라 실패 Stage만 재실행.
 
 ---
 
@@ -2146,8 +2146,8 @@ StageResult 누적(S0–S8, 신규 Epic 아님): S0 프로젝트 → S1 공고/�
 - **수치 DONE**: Golden 1회 파이프라인 통과(또는 _DRAFT+결함 목록). AIMY 전이 0
 - **실패/BLOCKED**: MarketGate 근거 파일 부재·접근 불가 시 가정 데이터 금지, BLOCKED
 - **의존**: 03, 06, 07, 11, 12
-- **2026-08-16 실행지시 추가**: Golden은 최종파일 byte-equality만으로 판정하지 않는다. 단계별 expected fixture/invariant (CompanyMaster states → ProgramSpec → conflicts/unknowns → DocumentPlan → section context allowed/forbidden fact IDs → claim+provenance → QA → format). AIMY leakage=0. Blind: 사람 완성본은 생성 완료 후 평가만. 테스트 J.
 - **키워드(2026-08-16)**: Stage 단위 expected fixture(CompanyMaster / ProgramSpec / DocumentPlan / section context / Draft / QA). Golden을 최종 DOCX 바이트만으로 판정하지 않음.
+- **2026-08-16 실행지시 추가**: Golden은 최종파일 byte-equality만으로 판정하지 않는다. 단계별 expected fixture/invariant (CompanyMaster states → ProgramSpec → conflicts/unknowns → DocumentPlan → section context allowed/forbidden fact IDs → claim+provenance → QA → format). AIMY leakage=0. Blind: 사람 완성본은 생성 완료 후 평가만. 테스트 J.
 
 ---
 
@@ -2215,8 +2215,8 @@ StageResult 누적(S0–S8, 신규 Epic 아님): S0 프로젝트 → S1 공고/�
 - **수치 DONE**: 측정 가능한 것부터: unsupported=0, numeric=0, actual/plan=0 을 **픽스처에서**. Coverage 98% 등은 측정기 없으면 별 이슈로 남김 (근거 없이 달성 주장 금지)
 - **실패/BLOCKED**: 서식 90점을 내용 성공으로 보고
 - **의존**: 03, 04, 11(렌더 산출)
-- **2026-08-16 실행지시 추가**: Writer Self Check는 비권위 1차 진단이며 FactState/source를 변경하지 않는다. 권위는 deterministic QA chain (schema → program constraint → fact/numeric/date/Actual·Plan → conflict/unknown misuse → provenance → claim↔evidence → PSST → LRule → format → artifact/hash → Finalizer). LLM score 하나로 대체 금지. fail-closed. 측정 불가면 PASS가 아니라 MEASUREMENT_NOT_IMPLEMENTED. blocking UNKNOWN/CONFLICT/STALE/REVIEW_REQUIRED/UNVERIFIABLE 이 있으면 clean FINAL 금지.
 - **키워드(2026-08-16)**: Writer self-check → schema → factual/numeric → LRule → layout → Finalizer (결정론 QA 체인). LLM 점수는 게이트가 아님. 숫자는 deterministic engine(LLM이 TAM/CAGR 등을 계산하지 않음). Review Queue는 필드 단위(`field_id` / MISSING / BLOCKING). 점수 루프로 문장을 메우지 않음.
+- **2026-08-16 실행지시 추가**: Writer Self Check는 비권위 1차 진단이며 FactState/source를 변경하지 않는다. 권위는 deterministic QA chain (schema → program constraint → fact/numeric/date/Actual·Plan → conflict/unknown misuse → provenance → claim↔evidence → PSST → LRule → format → artifact/hash → Finalizer). LLM score 하나로 대체 금지. fail-closed. 측정 불가면 PASS가 아니라 MEASUREMENT_NOT_IMPLEMENTED. blocking UNKNOWN/CONFLICT/STALE/REVIEW_REQUIRED/UNVERIFIABLE 이 있으면 clean FINAL 금지.
 
 ---
 
@@ -2233,8 +2233,8 @@ StageResult 누적(S0–S8, 신규 Epic 아님): S0 프로젝트 → S1 공고/�
 - **수치 DONE**: 실제 파일 100건. 없으면 PARTIAL/BLOCKED
 - **실패/BLOCKED**: 복제·합성으로 100 채우기
 - **의존**: 09
-- **2026-08-16 실행지시 추가**: STALE은 선택적 무효화(관련 downstream만). blocking STALE section이 FINAL에 포함되면 FAIL. 테스트 G/H/I. [18] Acceptance 오류는 원인 분류 후 fixture+regression으로 환류하고 같은 문서를 재생성한다. 합성 공고로 100건 채우기 금지.
 - **키워드(2026-08-16)**: 상류 fact 변경 → STALE → 재생성 → 숫자 정합. 구결과를 최신처럼 쓰지 않음. 승인 전 FINAL 금지.
+- **2026-08-16 실행지시 추가**: STALE은 선택적 무효화(관련 downstream만). blocking STALE section이 FINAL에 포함되면 FAIL. 테스트 G/H/I. [18] Acceptance 오류는 원인 분류 후 fixture+regression으로 환류하고 같은 문서를 재생성한다. 합성 공고로 100건 채우기 금지.
 
 ---
 
