@@ -1,16 +1,16 @@
 # RESUME.md — auto_write 세션 체크포인트
 
 > 세션을 새로 시작하면 **이 파일을 먼저** 읽는다. 상세 트랙은 아래 링크.
-> 최종 갱신: **2026-08-16** (사용자 「병합」 → 합본 #156 squash. #155는 이미 main)
+> 최종 갱신: **2026-08-16** (#156 합본 squash `1001b76`. #155는 `ddac657`)
 
 ## 한 줄 상태
 
-`pds2225/auto_write` 단일 정본. `origin/main` @ `ddac657` (#155 GitSyncService default=`main`) + 합본 #156 squash 진행.
+`pds2225/auto_write` 단일 정본. `origin/main` @ `1001b76` (#156 합본 squash).
 에이전트 입구 = **bizdoc-hub** / CLI 입구 = **auto_write_hub.py**. 맵: `docs/BIZDOC_HUB_MAP.md`.
 
 **문서 작업:** 항우연 「2026 STAR-Exploration」 **선정됨**. 지원금은 최종발표 **상위 2팀만**. 공개 공고에 발표 배점표 없음 — 원장 A6.
-**엔진:** T-20260814-02 명세+실행지시+BPQ-00 감사+#150 측정기+#155 git-sync가 main에 있음. 합본=#149 웹앱 사양+#152 계획+#153/#154 STEP 3A. DOCX 정본=`core.docx.services`.
-**PR:** 사용자 「병합」은 합본 #156 한 번. #155는 타세션이 이미 머지.
+**엔진:** T-20260814-02 명세+실행지시+BPQ-00 감사+#150 측정기+#155 git-sync+#156(웹앱 사양·계획 보강·STEP 3A)이 main에 있음. DOCX 정본=`core.docx.services`.
+**열린 PR:** 없음. 원격 = `main` + `backup/*` 2개.
 작업 시작 전: `git fetch` → `TASK.md` → 현재 구현 조사 → 그다음 작업.
 목표 흐름: `LLM → StageResult(JSON) → 검증 → 다음 Stage → 렌더 → Finalizer`. 한 번에 최종 DOCX 금지.
 
@@ -34,7 +34,7 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 
 | 날짜 | 내용 | 근거 |
 |------|------|------|
-| 2026-08-16 | 열린 draft #149+#152+#153+#154 합본 #156 squash (사용자 병합). #155는 타세션이 먼저 main | T-20260816-08 / PR #156 |
+| 2026-08-16 | 열린 draft #149+#152+#153+#154 합본 #156 squash `1001b76`. #155는 `ddac657` | T-20260816-08 / PR #156 |
 | 2026-08-16 | #150 STEP 2 추출 Baseline 측정기 main 머지. 추출기 본체 아님 | PR #150 `0a8b262` |
 | 2026-08-16 | #146 BPQ-00 감사 main 머지. 원격은 main+backup 2개 | PR #146 `9efd78e` |
 | 2026-08-16 | #138+#133+#139 합본 main 머지 (gitignore, L154–L156, A6, BPQ 노트, 합친 RESUME) | PR #141 |
@@ -76,7 +76,7 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 3. **REQUEST_LEDGER** 실제출 확인 대기(A1~A5) + A6 평가표/IR 양식 — 경로/제출 여부는 사용자만 확인 가능
 4. **보류**: HWPX 세로 라벨(c) — 코퍼스 수요 극소(AC6)
 5. **보류**: SFT P3 후속·DOCX↔HWP 100% — 실사용에서 막힐 때
-6. **열린 draft:** 합본 #156 squash 후 없음 예정. `backup/*` 2개. 닫힌 #139 충돌 표시는 무시.
+6. **열린 draft:** 없음. 원격 = `main` + `backup/*` 2개. 닫힌 #139 충돌 표시는 무시.
 
 ## 재개 명령
 
