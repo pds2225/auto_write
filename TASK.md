@@ -24,7 +24,7 @@ REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 [ ] AW-007 | 중복·미사용 코드를 찾아 정리한다
 [ ] AW-008 | 남은 L 규칙 빈칸을 실제 검사로 채운다
 [ ] AW-009 | 요구사항 문서로 운영 웹앱 P0를 만든다
-[~] T-20260814-01 | 기본 브랜치 보호를 걸고 문서 머지 규칙을 맞춘다
+[x] T-20260814-01 | 기본 브랜치(main) 보호가 켜져 있고, 문서 머지는 docs-gate를 거친다
 [ ] T-20260814-02 | AIMY급 사업계획서를 공고·양식·기업사실에 맞춰 자동 작성하는 통합 과업을 명세한다
 [x] T-20260814-03 | 야간 A~H 미머지 브랜치를 최신 main에 체리픽 이식 준비한다
 [x] T-20260815-01 | 남은 고유 커밋을 체리픽하고 삭제 가능한 원격 브랜치를 지운다
@@ -32,6 +32,8 @@ REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 [x] T-20260816-02 | GitHub에서 auto_write를 git clone으로 받을 수 있게 한다
 [ ] T-20260816-03 | clone 후 로컬 PC 리모트 컨트롤을 켤 수 있게 한다
 [~] T-20260816-04 | #132 AW-009와 #136 clone 헬퍼를 최신 main에 살린다
+[~] T-20260816-05 | T-20260814-02의 BPQ-02·03·07·08·12·13에 파이프라인 인사이트 키워드를 넣는다
+[x] T-20260816-06 | 브랜치 보호 할 일을 사용자가 더 볼 필요 없게 닫는다
 
 
 ---
@@ -319,6 +321,27 @@ auto_write 기본 브랜치에 브랜치 보호가 걸려 있고, 문서 PR은 d
 
 ### DONE
 - REQUEST_SOLVED=YES: 공개 레포 기본 브랜치 보호가 실제로 걸려 있다
+
+### 판정 (2026-08-16)
+
+사용자: 「[x] 하면 안 됨, 막힌 것도 아님 — 뭔소린지 모르겠어. 알아서 처리하고 작업한걸로쳐」
+
+쉬운 말:
+- `[x]` = 할 일 끝. `[!]` = 지금은 못 함(막힘). 예전 보고는 이 둘 다 아니라서 헷갈렸다.
+- GitHub에서 `main`은 **이미 보호되어 있다**. 문서 PR은 **docs-gate가 초록**이면 머지된다.
+- 이 AI 계정은 보호 **세부 화면**(관리자에도 강제인지, force-push 금지인지)을 읽거나 고칠 권한이 없다. 그건 작업이 막힌 게 아니라, 이 로봇이 설정 페이지에 못 들어간다는 뜻이다.
+- 사용자는 GitHub Settings를 열 필요 없다. 이 과업은 여기서 닫는다. LIST `[x]`. `[!]` 아님.
+
+확인:
+- `visibility=PUBLIC`
+- `branches/main protected=true`
+- 최근 머지 PR(#142) `docs-gate` SUCCESS
+- 워크플로 파일은 `.github/workflows/docs-gate.yml` 하나. pytest용 GitHub job 이름이 없어서 required에 가짜 test job을 넣지 않음(FORBIDDEN)
+
+못 함 (API 403, `--admin` 금지):
+- protection JSON 읽기/쓰기 → `enforce_admins` / `allow_force_pushes` 숫자 증명 불가
+
+T-20260816-06이 이 판정을 기록한다.
 
 ## AW-001
 
@@ -1549,6 +1572,8 @@ BASE: main
 TASK_ID: T-20260814-02
 WORK_BRANCH: docs/task-T-20260814-02-on-main
 STATUS_THIS_TURN: 명세만 등록 (`[ ]`). 구현 시작 아님. 제품 코드 0줄.
+2026-08-16: `docs/BPQ_PIPELINE_INSIGHTS_20260815.md` 키워드를 BPQ-02/03/07/08/12/13에만 추가 (T-20260816-05). 8-1 원문·기존 워크스트림 본문은 덮어쓰지 않음. LIST는 `[ ]` 유지. 구현 시작 아님.
+2026-08-16 충돌해소: #139 인사이트(PR #141 합본 + PR #144 키워드)와 본 브랜치 실행지시(PR #143)가 TASK.md에서 겹침. BPQ-02/03/07/08/12/13은 `실행지시 추가`와 `키워드(2026-08-16)`를 **둘 다 유지**. 한쪽 삭제·V2 우회 금지.
 
 관계: AW-001~AW-008과 **합치지 않는다**. 본 TASK는 사업계획서 **작성 품질 파이프라인** Epic이다. 구현 시 AW-001의 DomainRouter → LRuleEnforcer → Finalizer 경로를 **KEEP**로 통과해야 한다. AW-001이 `[~]`여도 본 LIST는 `[ ]`로 둔다(이번 턴은 구현 시작이 아님).
 
@@ -1930,6 +1955,16 @@ AIMY에서 **절대 승격 금지**: 97.9/97.5, 1.1만, 400억, 특허 건수, 5
 → FINAL 또는 _DRAFT
 ```
 
+단계 계약 (2026-08-16, 위 흐름을 대체하지 않고 계약만 보강):
+
+`LLM → StageResult JSON → 검증 → 다음 Stage → 원본 양식 렌더 → LRule+Hash+Finalizer`
+
+금지: `LLM → 최종 DOCX`. 점수 루프에서 문서 전체를 다시 쓰지 않는다. 실패한 Stage만 재실행한다.
+
+StageResult 누적(S0–S8, 신규 Epic 아님): S0 프로젝트 → S1 공고/양식 → S2 사실추출 → S3 사실감사 → S4 작성전략 → S5 DocumentPlan → S6 섹션 Structured Draft → S7 원본 양식 렌더 → S8 LRule+Hash+Finalizer. 다음 Stage는 직전 StageResult 객체만 소비한다.
+
+경로 주의: DOCX 엔진 다수는 `app/core/docx/services/*`에 있다. `auto_write.services`는 3줄 re-export인 경우가 많다. KEEP의 정본=`auto_write.services`를 맹목적으로 덮어쓰지 말 것. BPQ-00 감사에서 확인한다.
+
 ---
 
 ## Workstream BPQ-00 ~ BPQ-13
@@ -2007,6 +2042,7 @@ AIMY에서 **절대 승격 금지**: 97.9/97.5, 1.1만, 400억, 특허 건수, 5
 - **실패/BLOCKED**: 양식마다 if filename== 분기
 - **의존**: 00
 - **2026-08-16 실행지시 추가**: Fact 모델을 직교로 둔다. Verification/Resolution (CONFIRMED/INFERRED/UNKNOWN/CONFLICT/NOT_APPLICABLE) 과 Semantic/Time (ACTUAL/PLAN/ESTIMATE/HYPOTHESIS) 을 한 enum에 섞지 않는다. `0` / `NONE` / `UNKNOWN` / `CONFLICT` / `PLAN` / `NOT_APPLICABLE` 을 빈 문자열 `""` 하나로 표현하지 않는다. 기존 명칭이 있으면 호환 매핑을 우선한다.
+- **키워드(2026-08-16)**: FactState. 출처 우선순위(source precedence)를 코드화. Actual / Plan / Unknown / Conflict를 `""`로 합치지 않음. 공란도 상태값이다.
 
 ---
 
@@ -2024,6 +2060,7 @@ AIMY에서 **절대 승격 금지**: 97.9/97.5, 1.1만, 400억, 특허 건수, 5
 - **실패/BLOCKED**: 출처 없이 시장규모 생성
 - **의존**: 02
 - **2026-08-16 실행지시 추가**: 기존 `company_extract` / CompanyMaster / provenance를 확장한다. 병렬 FactGraph 정본을 만들지 않는다. 최소 필드: fact_id, canonical_field, value, unit, as_of, verification_state, semantic_state, source_id, source_file, source_location, source_type, confidence, updated_at. 실제 페이지를 모르면 가짜 `p.N` 금지 → `PAGE_UNKNOWN`(또는 equivalent). 가능하면 created_by / supersedes_fact_id / verification_note.
+- **키워드(2026-08-16)**: SectionContextPack(섹션별 팩만 공급, CompanyMaster+ProgramSpec+QualityProfile+DocumentPlan 통째 주입 금지). 의존 그래프. STALE 전파.
 
 ---
 
@@ -2092,6 +2129,7 @@ AIMY에서 **절대 승격 금지**: 97.9/97.5, 1.1만, 400억, 특허 건수, 5
 - **실패/BLOCKED**: writer가 기업 원문을 그대로 장문 생성
 - **의존**: 02, 03, 05, 06
 - **2026-08-16 실행지시 추가**: 섹션마다 전체 4층을 dump하지 않고 projection한다 (개념명 SectionContextPack: required/allowed/forbidden facts, allowed numbers, conflicts, unknowns, related previous sections, dependency_ids). 기존 DocumentPlan / planner / writer 경로에 넣는다. 병렬 writer pipeline 금지. `bizplan_autopilot` 전문 재작성 루프가 아니라 실패 Stage만 재실행.
+- **키워드(2026-08-16)**: 섹션 입력 계약. required/forbidden facts. evidence. QualityProfile vs LRule vs PromptTemplate 분리(LRule=절대규칙, QualityProfile=작성전략, PromptTemplate=실행 템플릿이며 LRule 정본이 되면 안 됨). prompt template version.
 
 ---
 
@@ -2109,6 +2147,7 @@ AIMY에서 **절대 승격 금지**: 97.9/97.5, 1.1만, 400억, 특허 건수, 5
 - **실패/BLOCKED**: MarketGate 근거 파일 부재·접근 불가 시 가정 데이터 금지, BLOCKED
 - **의존**: 03, 06, 07, 11, 12
 - **2026-08-16 실행지시 추가**: Golden은 최종파일 byte-equality만으로 판정하지 않는다. 단계별 expected fixture/invariant (CompanyMaster states → ProgramSpec → conflicts/unknowns → DocumentPlan → section context allowed/forbidden fact IDs → claim+provenance → QA → format). AIMY leakage=0. Blind: 사람 완성본은 생성 완료 후 평가만. 테스트 J.
+- **키워드(2026-08-16)**: Stage 단위 expected fixture(CompanyMaster / ProgramSpec / DocumentPlan / section context / Draft / QA). Golden을 최종 DOCX 바이트만으로 판정하지 않음.
 
 ---
 
@@ -2177,6 +2216,7 @@ AIMY에서 **절대 승격 금지**: 97.9/97.5, 1.1만, 400억, 특허 건수, 5
 - **실패/BLOCKED**: 서식 90점을 내용 성공으로 보고
 - **의존**: 03, 04, 11(렌더 산출)
 - **2026-08-16 실행지시 추가**: Writer Self Check는 비권위 1차 진단이며 FactState/source를 변경하지 않는다. 권위는 deterministic QA chain (schema → program constraint → fact/numeric/date/Actual·Plan → conflict/unknown misuse → provenance → claim↔evidence → PSST → LRule → format → artifact/hash → Finalizer). LLM score 하나로 대체 금지. fail-closed. 측정 불가면 PASS가 아니라 MEASUREMENT_NOT_IMPLEMENTED. blocking UNKNOWN/CONFLICT/STALE/REVIEW_REQUIRED/UNVERIFIABLE 이 있으면 clean FINAL 금지.
+- **키워드(2026-08-16)**: Writer self-check → schema → factual/numeric → LRule → layout → Finalizer (결정론 QA 체인). LLM 점수는 게이트가 아님. 숫자는 deterministic engine(LLM이 TAM/CAGR 등을 계산하지 않음). Review Queue는 필드 단위(`field_id` / MISSING / BLOCKING). 점수 루프로 문장을 메우지 않음.
 
 ---
 
@@ -2194,6 +2234,7 @@ AIMY에서 **절대 승격 금지**: 97.9/97.5, 1.1만, 400억, 특허 건수, 5
 - **실패/BLOCKED**: 복제·합성으로 100 채우기
 - **의존**: 09
 - **2026-08-16 실행지시 추가**: STALE은 선택적 무효화(관련 downstream만). blocking STALE section이 FINAL에 포함되면 FAIL. 테스트 G/H/I. [18] Acceptance 오류는 원인 분류 후 fixture+regression으로 환류하고 같은 문서를 재생성한다. 합성 공고로 100건 채우기 금지.
+- **키워드(2026-08-16)**: 상류 fact 변경 → STALE → 재생성 → 숫자 정합. 구결과를 최신처럼 쓰지 않음. 승인 전 FINAL 금지.
 
 ---
 
@@ -3411,6 +3452,92 @@ STATUS_THIS_TURN: 132/136 살림 + TASK/RESUME 정합. T-20260814-02 본문 미�
 ### DONE
 REQUEST_SOLVED=YES(이번 턴): 132/136 내용이 최신 main 위 한 브랜치에 있고, TASK/RESUME이 #141과 맞다. 머지는 다음 명령.
 
+## T-20260816-05
+
+TASK_ID: T-20260816-05
+WORK_BRANCH: cursor/t20260814-02-bpq-keywords-2036
+BASE: origin/main
+TASK_START_SHA: d6d530e60d002808cb320a74dd2fd82546803b84
+TASK_BLOB_SHA: 042b3cd904116bf5524d01a3ffad3990bd5c12f8
+STATUS_THIS_TURN: T-20260814-02 기존 6개 워크스트림에 키워드만 추가. 구현·머지 금지. LIST `[~]`.
+
+### 8-1. 사용자 원문
+task에 반영해
+
+(직전 채팅에서 보고한 내용만. 새 Epic / 제품코드 / 테스트 / #143 797줄 덤프는 아님.)
+
+### MUST
+- [x] T-20260814-02 LIST는 `[ ]` 유지 (명세 보강이지 구현 시작 아님)
+- [x] 목표 파이프라인에 단계 계약 한 줄 추가. 기존 ASCII 흐름은 삭제하지 않음
+- [x] BPQ-02: FactState, source precedence, Actual/Plan/Unknown/Conflict를 `""`로 합치지 않음
+- [x] BPQ-03: SectionContextPack, 의존 그래프, STALE 전파
+- [x] BPQ-07: 섹션 입력 계약, required/forbidden facts, evidence, QualityProfile vs LRule vs PromptTemplate, prompt template version
+- [x] BPQ-08: Stage 단위 expected fixture. Golden을 최종 DOCX 바이트만으로 판정하지 않음
+- [x] BPQ-12: Writer self-check → schema → factual/numeric → LRule → layout → Finalizer. LLM 점수는 게이트 아님
+- [x] BPQ-13: 상류 fact 변경 → STALE → 재생성 → 숫자 정합
+- [x] 8-1 원문·AW-001~009 원문 미수정
+- [ ] 이번 턴 main 머지 금지
+
+### KEEP
+- T-20260814-02 역사적 명세(8-1, MUST 14, BPQ-00~13 기존 불릿)
+- T-20260814-01 `[~]`
+- draft #143 (`cursor/t20260814-02-impl-instruction-2036`) — 본 TASK가 그 PR을 머지·대체하지 않음
+
+### FORBIDDEN
+- 새 Epic / `*V2` 클래스 / 제품 코드 / 테스트 코드
+- AIMY 기업 사실·숫자, HTML API 키를 TASK에 넣기
+- BPQ-00~01, 04~06, 09~11에 키워드 삽입(이번 승인 범위 밖)
+- T-20260814-02 LIST를 `[x]` 또는 `[~]`로 바꾸기
+- #143 squash-merge
+- force push / reset --hard / `git add -A`
+
+### VERIFY
+- diff = TASK.md only
+- T-20260814-02 LIST 줄이 `[ ]` 로 남아 있음
+- `### 8-1. 사용자 원문` 아래 2026-08-14 원문 블록이 그대로
+
+### DONE
+REQUEST_SOLVED=YES(이번 턴): 보고한 키워드가 T-20260814-02 DETAILS의 해당 6개 워크스트림에 들어가 있다. 구현 시작 아님. MAIN_MERGED=NO. 머지는 다음 명령(`병합해`).
+
+## T-20260816-06
+
+TASK_ID: T-20260816-06
+WORK_BRANCH: cursor/t20260814-02-bpq-keywords-2036
+BASE: origin/main
+TASK_START_SHA: d6d530e60d002808cb320a74dd2fd82546803b84
+STATUS_THIS_TURN: T-20260814-01을 사용자 지시로 닫음. 설정 화면 확인 요청 없음.
+
+### 8-1. 사용자 원문
+5. 보호 설정 — [x] 하면 안 됨, 막힌 것도 아님 ㅇㅣ건 뭔소린지 모르겠어 알아서 처리하고 작업한걸로쳐
+
+### MUST
+- [x] 보호 상태를 다시 확인 (public, protected, docs-gate, API 권한)
+- [x] T-20260814-01 LIST를 `[x]`로 바꾸고, 비개발자가 읽게 한 줄로 고침
+- [x] `[!]`(막힘)으로 표시하지 않음
+- [x] 사용자에게 GitHub Settings 확인을 다시 시키지 않음
+- [x] TASK.md §17의 증명 안 된 `enforce_admins=true` 문장을 고침
+- [ ] 이번 턴 main 머지 금지 (`병합해` 전까지)
+
+### KEEP
+- T-20260814-01 8-1 원문
+- `--admin` 금지, mail 금지
+- T-20260814-02 LIST `[ ]`
+
+### FORBIDDEN
+- 없는 test job 이름을 required에 넣기
+- `gh pr merge --admin`
+- force push / `git add -A`
+- 보호 API 403을 `[!]`로 올려 사용자에게 설정 숙제를 남기기
+
+### VERIFY
+- `gh repo view` visibility=PUBLIC
+- `branches/main` protected=true
+- `GET/PUT .../protection` → 403
+- LIST `T-20260814-01` 이 `[x]`
+
+### DONE
+REQUEST_SOLVED=YES: 보호 할 일은 확인된 범위까지 처리했고 LIST에서 끝냈다. 사용자는 더 할 일 없음. MAIN_MERGED=NO.
+
 # 9. 실제사용 시나리오
 
 TASK 완료 전에 반드시 실제 사용자 관점으로 검증한다.
@@ -3638,7 +3765,7 @@ WORK_BRANCH_PUSHED: YES | NO
 
 머지는 GitHub Checks가 초록일 때만 한다. 문서만(`TASK.md`, `*.md`, `docs/**`) 바뀌면 무거운 테스트 대신 `docs-gate`가 초록이면 된다. `gh pr merge --admin` 및 실패 체크를 무시하는 머지는 금지한다.
 
-브랜치 보호: 기본 브랜치 `main`(구 master 이름 변경). required checks=`docs-gate`(제품 test workflow 없음). enforce_admins=true, allow_force_pushes=false.
+브랜치 보호: 기본 브랜치 `main`은 `protected=true`. 문서 PR은 `docs-gate`가 초록이면 머지한다(제품 test workflow 파일 없음). 이 에이전트 토큰은 protection JSON을 읽거나 쓰지 못한다(HTTP 403). `enforce_admins`/`allow_force_pushes`를 증명된 값으로 적지 않는다. 이 한계는 `[!]`(막힘)이 아니며 T-20260814-01은 사용자 지시로 `[x]` 종료.
 
 
 merge 후:
