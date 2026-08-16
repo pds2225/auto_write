@@ -1,6 +1,6 @@
 # RESUME.md — 세션 재시작 시 이어하기 진입점
 
-> 새 세션을 시작하면 이 파일을 가장 먼저 읽어라. (최종 갱신: 2026-08-16)
+> 새 세션을 시작하면 이 파일을 가장 먼저 읽어라. (최종 갱신: 2026-08-16 22:56)
 
 ## 0. 30초 컨텍스트
 도보네비 사업계획서. 기준 양식은 PSST. AIMY 본선본을 모듈 팩으로 잘랐고 1단계 검수는 PASS. **지금은 정지.** 공고+빈 양식이 오면 초안 1건만 쓴다. AIMY급 자동작성(BPQ-00)은 사용자가 대기라 시작하지 않는다.
@@ -64,11 +64,35 @@ cd D:\auto_write
 - [x] 확정된 코드 dirty 작업: `D:\tmp\wt-auto_write-m4-generate-prep`의 이미지 자동화 4개 수정 + 테스트 1개 추가(마지막 파일 수정 2026-08-10)
 - [x] `rusalka-fill-task`는 추적 파일 변경 없이 HWPX 점검용 임시 파일만 남아 있고, 나머지는 문서 브랜치 또는 clean 상태
 - [x] 루트 `master`는 로컬 `origin/master`보다 61커밋 뒤이며 `.claude/*`, `.gitignore`, `REQUEST_LEDGER.md`, `RESUME.md`가 dirty; 삭제·정리하지 않음
-- [ ] GitHub live PR 확인은 인증/Windows 자격 증명 오류로 미완료. 다음에는 인증 복구 후 PR·원격 TASK를 재확인
+- [x] GitHub live PR 확인 완료: draft PR #149, #151~#154 확인
 
 ## 10. 원격 인증 진단 (2026-08-16)
 - [x] 기본 Git HTTPS(Schannel)는 `SEC_E_NO_CREDENTIALS`로 실패
 - [x] 같은 원격에 `git -c http.sslBackend=openssl ls-remote origin HEAD`는 성공하여 원격/네트워크 자체는 접근 가능
 - [x] Git 전역 `http.sslBackend=openssl` 적용 및 `git ls-remote origin HEAD` 성공
 - [x] 기존 무효 pds2225 GitHub 인증정보 로그아웃 완료
-- [ ] 사용자가 브라우저 인증을 완료했지만 `gh auth status`는 여전히 로그인 호스트 없음. CLI의 device 인증 완료가 필요하며 `gh auth setup-git`·PR 조회는 아직 미완료
+- [x] 브라우저 인증 완료 후 `gh auth status`·`gh auth setup-git`·Git 원격 조회·열린 PR 조회 성공
+- [x] live origin은 `HEAD`/`main`=`0a8b262c...`이며 `master` ref는 조회되지 않음. 로컬 `origin/master`는 stale 추적 ref
+
+## 11. 다음 프롬프트 고스트 스킬 (2026-08-16)
+- [x] 중복 스킬 대신 기존 `run-next-suggestion`을 확장: 실질 작업 종료 시 `👉 다음 프롬프트:` 한 개를 생성하고, 선택 시 기존 실행 매핑을 유지
+- [x] Claude 정본 스킬과 Codex·Claude·Cursor trigger pack에 `다음프롬프트 고스트`·`고스트 프롬프트`·`다음 프롬프트 스킬` 추가
+- [x] `PYTHONUTF8=1 python ... quick_validate.py` 통과 및 `codex debug prompt-input`에서 loader 노출 확인
+- [ ] 이미 열린 세션의 UI/캐시는 새 Codex 세션 또는 재시작 후 최종 반영 확인
+
+## 12. 압축 후 복원 상태 (2026-08-16)
+- [x] 대화 압축 후 `RESUME.md` 체크포인트 갱신
+- [x] 사용자 확인 후 `session-closeout` 저장 절차 시작
+- [x] agent-self-learning: 자가학습 감시견 정상, 최근 평가 표본 부족 상태 확인
+- [x] skill-harvester: 기존 `run-next-suggestion` 확장으로 중복 생성 없음
+- [x] wiki-session-capture: 인증 우회법·고스트 프롬프트 지식 저장, broken refs 0
+- [x] session-recap: `D:\auto_write\SESSION_RECAP.md`에 최신 회고 누적
+- [x] session-resume: 이 체크포인트 최종 갱신
+- [x] 새 Codex CLI 세션에서 고스트 프롬프트 응답 노출 확인
+- [ ] 저장 완료 후 사용자가 `/clear` 실행
+
+## 13. 현재 확인 작업 (2026-08-16)
+- [x] `run-next-suggestion` 규칙과 Codex trigger pack에 `다음프롬프트 고스트`가 포함된 것을 읽기 전용 확인
+- [x] `codex debug prompt-input "다음프롬프트 고스트"`에서 해당 트리거가 로더 입력에 노출됨을 확인
+- [x] 별도 새 `codex exec` 세션에서 동일 문구를 입력하고 실제 `👉 다음 프롬프트:` 응답 확인
+- [ ] Codex Desktop의 회색 입력 제안 UI 자체는 현재 도구에서 시각 확인 불가
