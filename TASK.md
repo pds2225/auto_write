@@ -74,6 +74,15 @@ REMOTE: https://github.com/pds2225/auto_write
 
 AW DETAILS에는 「원칙」 칸이 없다. 칸은 MUST / KEEP / FORBIDDEN이다. 사용자 원문 우선은 이 절이 정본이다.
 
+확인 방법 (최소 토큰):
+
+1. 이 파일 `# 0` LIST만 읽는다 (20줄).
+2. `[ ]`/`[~]` 항목의 `8-1` 인용문만 읽는다. `8-2`~`8-14`·BPQ 본문은 그 TASK를 실행할 때만.
+3. 실제출·옛 기능 요청은 `docs/REQUEST_LEDGER.md` A/B 표만.
+4. T-20260814-02의 긴 `8-1` 전문은 기본 생략. 제품 목표는 `# 1` 우선순위 + `최우선 사용 케이스` + AW-005 `8-1`.
+
+금지: TASK.md 통째 로드, CHANGELOG 통째, 닫힌 `[x]` DETAILS 재독.
+
 ---
 
 # 2. GOOGLE TASKS 완전 분리
