@@ -1,12 +1,15 @@
 # RESUME.md — auto_write 세션 체크포인트
 
 > 세션을 새로 시작하면 **이 파일을 먼저** 읽는다. 상세 트랙은 아래 링크.
-> 최종 갱신: **2026-08-18** (세션 마무리. main 핀 `fe4aa17` #157. GitSync #155 `ddac657`)
+> 최종 갱신: **2026-08-19** (밤샘자동개발 AW-001 게이트. 브랜치 `cursor/overnight-aw-001-2cb9`)
 
 ## 한 줄 상태
 
-`pds2225/auto_write` 단일 정본. `origin/main` @ `fe4aa17` (#157 핀, 기능 끝은 #156 `1001b76`).
+`pds2225/auto_write` 단일 정본. `origin/main` @ `d6b96b8` (#158 핀).
 에이전트 입구 = **bizdoc-hub** / CLI 입구 = **auto_write_hub.py**. 맵: `docs/BIZDOC_HUB_MAP.md`.
+
+**밤샘 2026-08-19:** AW-001 ACTIVE(`[~]`). `run_to_final`(DomainRouter→LRule→Hash→Finalizer) 배선.
+웹앱·BPQ-00 제품 코드는 승인 전 대기. 공고+양식 오기 전 초안 대기.
 
 **문서 작업:** 항우연 「2026 STAR-Exploration」 **선정됨**. 지원금은 최종발표 **상위 2팀만**. 공개 공고에 발표 배점표 없음 — 원장 A6.
 **엔진:** T-20260814-02 명세+실행지시+BPQ-00 감사+#150 측정기+#155 git-sync(기준 브랜치=GitHub default/`main`)+#156(웹앱 사양·계획 보강·STEP 3A)이 main에 있음. DOCX 정본=`core.docx.services`.
@@ -35,6 +38,7 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 
 | 날짜 | 내용 | 근거 |
 |------|------|------|
+| 2026-08-19 | 밤샘 AW-001: DomainRouter→LRule→Hash→Finalizer `run_to_final` 배선. LIST `[~]`, REQUEST_SOLVED=NO | 브랜치 `cursor/overnight-aw-001-2cb9` |
 | 2026-08-18 | 세션 마무리. GitSyncService `master` 하드코딩 제거(#155 already on main). draft면 자동머지 불가 확인 | PR #155 `ddac657` / 이 체크포인트 |
 | 2026-08-16 | 열린 draft #149+#152+#153+#154 합본 #156 squash `1001b76`. #155는 `ddac657` | T-20260816-08 / PR #156 |
 | 2026-08-16 | #150 STEP 2 추출 Baseline 측정기 main 머지. 추출기 본체 아님 | PR #150 `0a8b262` |
