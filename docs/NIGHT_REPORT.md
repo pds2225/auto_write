@@ -5,6 +5,37 @@
 
 ---
 
+## 2026-08-19 밤 사이클 2 — mechanized 가드를 실제 검사에 연결
+
+### 무엇을 고쳤나
+
+- **전에는:** 검사 경로는 한 함수(`run_to_final`)로 모였지만, L규칙 44개 mechanized 가드를 넘기지 않아 기계 검사 가능한 항목도 **UNVERIFIABLE** 로 남았습니다. `[확인필요]` 같은 실제 결함도 FAIL이 아니라 “검사 못 함”이었습니다.
+- **이제는:** 산출물이 있으면 `build_lrule_guards` 가 자동으로 붙습니다.
+  1. 문서에서 바로 볼 수 있는 규칙(마커 L009, 유색 L006/L022, 마스킹 L007, 안내문구 L012, NotebookLM 블록 L017 등)은 **진짜 PASS/FAIL**
+  2. 채움 시점·gitignore 같은 과정 규칙은 **과정 PASS**(문서만 보고 거짓 검사하지 않음)
+  3. 사람 판단이 필요한 규칙(judgment/gap)은 **그대로 REVIEW_REQUIRED** → 제출 이름(FINAL)은 계속 막힘
+- 자동다듬기(`run_autopilot`)는 수용검사 설정을 가드에 같이 넘깁니다.
+- HWPX 제출(`submit_hwpx`)은 **이번에도 안 바꿨습니다.** 그쪽은 수용검사 통과가 제출 이름 계약입니다.
+
+### 테스트 결과 (증거)
+
+- 가드·게이트·hub **58 passed** (신규 `test_lrule_guards.py` 포함).
+- 실행: `python3 -m pytest app/tests/test_lrule_guards.py app/tests/test_e2e_domain_pipeline.py app/tests/test_finalizer.py app/tests/test_lrule_enforcer.py app/tests/test_lrule_domain_gate.py app/tests/test_auto_write_apply.py::test_autopilot_imports_lrule_finalizer_from_canonical_services app/tests/test_auto_write_apply.py::test_autopilot_acceptance_gate_passes_clean_doc app/tests/test_auto_write_apply.py::test_autopilot_strict_acceptance_promotes_paren_warn_to_draft app/tests/test_auto_write_apply.py::test_autopilot_acceptance_gate_can_be_disabled app/tests/test_hub_entrypoints.py -q`
+- Python **3.12.3** (이 환경에 3.11 없음).
+- main 기존 실패(수용검사 monkeypatch가 re-export를 못 패치, HWPX 유색 ImportError 등)는 **만지지 않았습니다**.
+
+### 건너뛴 것 / 다음 후보
+
+- AW-001 LIST는 `[~]` 유지. REQUEST_SOLVED=NO — 사람 판단 규칙이 남아 FINAL이 열리지 않음(의도).
+- HWPX `submit_hwpx` 에 LRule을 붙일지 (수용검사 exit 0 계약과 충돌).
+- 웹앱·BPQ-00·공고 초안: 대기 유지.
+
+### 안전(불변)
+
+원본 덮어쓰기 없음 · 날조 0 · fail이면 `_DRAFT` · `*V2` 병렬 게이트 없음.
+
+---
+
 ## 2026-08-19 밤 사이클 — TASK.md AW-001 (문서가 정해진 검사 경로를 거쳐 끝나게)
 
 ### 무엇을 고쳤나

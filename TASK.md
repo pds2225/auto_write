@@ -425,7 +425,7 @@ TASK_ID: AW-001
 TASK_START_SHA: d6b96b86a0015f53141054c27517607923a596a8
 TASK_BLOB_SHA: f6f8023b0dd47d301acedc75a5d4957edd147d4e
 WORK_BRANCH: cursor/overnight-aw-001-2cb9
-STATUS_THIS_TURN: DomainRouter → LRule → Hash → Finalizer 생산 게이트(`run_to_final`) 배선. LIST `[~]`. REQUEST_SOLVED=NO(가드 callable 미연결·HWPX 제출은 R9 수용검사 KEEP).
+STATUS_THIS_TURN: mechanized 가드(`build_lrule_guards`)를 `run_to_final`/autopilot에 연결. mechanized unverifiable=0, L009 실 FAIL. LIST `[~]`. REQUEST_SOLVED=NO(judgment/gap REVIEW_REQUIRED로 FINAL 차단 유지·HWPX `submit_hwpx`는 R9 수용검사 KEEP).
 
 ### 8-1. 사용자 원문 요청
 
@@ -468,9 +468,10 @@ INPUT
 
 - 현재 구현: DomainRouter, 도메인 Pipeline, LRule, Finalizer, workspace/results 구조가 존재
 - 2026-08-19: `app/auto_write/domains/pipeline_gate.py` `run_to_final` 이 생산 수렴점. autopilot 4.6·BP/CA pipeline·resume_fill CLI가 호출. ambiguous/누락 report/중복 ID/artifact·registry 해시 불일치 → FINAL 금지
-- 현재 문제: mechanized 가드 callable을 autopilot이 넘기지 않아 실문서는 대개 UNVERIFIABLE → `_DRAFT`(의도된 fail-closed). HWPX `submit_hwpx` 는 R9 수용검사 게이트 KEEP(LRule 미연결)
-- 이미 구현된 부분: 기존 CORE/shared services, LRule, Finalizer
-- 확인 필요한 부분: 가드 callable 연결, HWPX 경로를 LRule에 붙일지(수용검사 계약과 충돌)
+- 2026-08-19 가드: `app/auto_write/services/lrule_guards.py` `build_lrule_guards` 가 44 mechanized 규칙 callable을 `run_to_final`에 자동 주입. 산출물 검사(L009 마커 등)는 실 PASS/FAIL. 채움/git 규칙은 process PASS(가짜 산출물 검사 아님). judgment/gap은 넣지 않음 → REVIEW_REQUIRED 유지로 FINAL 계속 차단(의도된 fail-closed)
+- 현재 문제: judgment/gap 미가드이므로 실문서 FINAL 불가(의도). HWPX `submit_hwpx` 는 R9 수용검사 게이트 KEEP(LRule 미연결)
+- 이미 구현된 부분: 기존 CORE/shared services, LRule, Finalizer, mechanized 가드
+- 확인 필요한 부분: HWPX 경로를 LRule에 붙일지(수용검사 계약과 충돌). 실사용자 문서 E2E
 
 문서의 DONE 표시만 믿지 말고 실제 코드/runtime을 확인한다.
 
