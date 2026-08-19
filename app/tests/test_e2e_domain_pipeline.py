@@ -51,6 +51,12 @@ class TestE2EBusinessPlan:
         result = classify_domain(text="사업계획서 PSST 창업아이템 사업화 전략")
         assert result.domain == Domain.BUSINESS_PLAN
         assert result.confidence > 0.5
+        assert not result.is_ambiguous()
+
+    def test_other_domain_is_ambiguous(self):
+        result = classify_domain(text="안녕하세요")
+        assert result.domain == Domain.OTHER
+        assert result.is_ambiguous()
 
     def test_domain_routing(self):
         """DomainRouter가 business_plan 컨텍스트를 생성해야 한다."""
@@ -242,3 +248,74 @@ class TestE2EConsultantApplication:
             assert all(r["status"] == "N/A" for r in ca_rules)
         finally:
             Path(tmppath).unlink()
+
+
+class TestProductionPipelineGate:
+    def test_bp_pipeline_run_to_final(self, tmp_path):
+        from auto_write.domains.business_plan.pipeline import BusinessPlanPipeline
+
+        path = tmp_path / "bp.docx"
+        _create_bp_docx(path)
+        gate = BusinessPlanPipeline().run_to_final(path, apply_draft_name=True)
+        assert gate.domain == "business_plan"
+        assert not gate.ambiguous
+        assert gate.lrule_report is not None
+        assert gate.lrule_report.artifact_sha256
+        assert gate.finalizer is not None
+        assert not gate.finalizer.submittable  # unguarded mechanized → UNVERIFIABLE
+        assert "_DRAFT" in Path(gate.renamed_path).name
+        assert Path(gate.renamed_path).exists()
+
+    def test_ca_pipeline_run_to_final(self, tmp_path):
+        from auto_write.domains.consultant_application.pipeline import (
+            ConsultantApplicationPipeline,
+        )
+
+        path = tmp_path / "ca.docx"
+        _create_ca_docx(path)
+        gate = ConsultantApplicationPipeline().run_to_final(path, apply_draft_name=True)
+        assert gate.domain == "consultant_application"
+        assert not gate.ambiguous
+        assert gate.lrule_report is not None
+        ca_rules = [r for r in gate.lrule_report.rules if r["domain"] == "consultant_application"]
+        assert all(r["applicable"] for r in ca_rules)
+        assert not gate.finalizer.submittable
+        assert "_DRAFT" in Path(gate.renamed_path).name
+
+    def test_ambiguous_domain_blocks_final(self, tmp_path):
+        from auto_write.domains.pipeline_gate import run_to_final
+
+        path = tmp_path / "blank.docx"
+        doc = Document()
+        doc.add_paragraph("안녕하세요.")
+        doc.save(str(path))
+        gate = run_to_final(path, apply_draft_name=True)
+        assert gate.ambiguous
+        assert gate.domain == "other"
+        assert not gate.finalizer.submittable
+        assert "ambiguous" in gate.blocked_reason
+        assert "_DRAFT" in Path(gate.renamed_path).name
+
+    def test_run_to_final_records_registry_hash(self, tmp_path):
+        from auto_write.domains.pipeline_gate import run_to_final
+
+        path = tmp_path / "bp.docx"
+        _create_bp_docx(path)
+        gate = run_to_final(
+            path,
+            explicit_domain="business_plan",
+            apply_draft_name=False,
+        )
+        assert gate.lrule_report.registry_sha256
+        assert len(gate.lrule_report.registry_sha256) == 64
+        assert gate.lrule_report.registry_path
+        assert Path(gate.lrule_report.registry_path).exists()
+
+    def test_pipeline_gate_is_single_module(self):
+        """AW-007: pipeline_gate V2 / 이중 정본 금지."""
+        import auto_write.domains.pipeline_gate as gate_mod
+
+        app_dir = Path(__file__).resolve().parents[1]
+        hits = [p for p in app_dir.rglob("pipeline_gate.py")]
+        assert len(hits) == 1
+        assert hits[0].resolve() == Path(gate_mod.__file__).resolve()

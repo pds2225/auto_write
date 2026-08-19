@@ -85,6 +85,7 @@ class LRuleReport:
     artifact_path: str = ""
     artifact_sha256: str = ""
     registry_sha256: str = ""
+    registry_path: str = ""
     timestamp: str = ""
     summary: dict = field(default_factory=dict)
     rules: list[dict] = field(default_factory=list)
@@ -99,6 +100,7 @@ class LRuleReport:
             "artifact_path": self.artifact_path,
             "artifact_sha256": self.artifact_sha256,
             "registry_sha256": self.registry_sha256,
+            "registry_path": self.registry_path,
             "timestamp": self.timestamp,
             "summary": self.summary,
             "rules": self.rules,
@@ -169,6 +171,8 @@ class LRuleEnforcer:
 
         # Evaluate each rule
         entries: list[LRuleEntry] = []
+        seen_ids: set[str] = set()
+        duplicate_ids: list[str] = []
         summary = {
             "total": 0,
             "pass": 0,
@@ -181,6 +185,9 @@ class LRuleEnforcer:
 
         for lesson in self._lessons:
             rule_id = lesson.get("id", "?")
+            if rule_id in seen_ids:
+                duplicate_ids.append(rule_id)
+            seen_ids.add(rule_id)
             rule_title = lesson.get("summary", "")
             rule_domain = lesson.get("domain", "all")
             category = lesson.get("category", "judgment")
@@ -253,7 +260,14 @@ class LRuleEnforcer:
         can_finalize = True
         block_reason = ""
 
-        if summary["fail"] > 0:
+        if not self._lessons or summary["total"] == 0:
+            can_finalize = False
+            block_reason = "LRule report missing or empty"
+        elif duplicate_ids:
+            can_finalize = False
+            uniq = ",".join(sorted(set(duplicate_ids)))
+            block_reason = f"duplicate LRule ids: {uniq}"
+        elif summary["fail"] > 0:
             can_finalize = False
             block_reason = f"{summary['fail']} FAIL rules"
         elif summary["review_required"] > 0:
@@ -263,9 +277,12 @@ class LRuleEnforcer:
             can_finalize = False
             block_reason = f"{summary['unverifiable']} UNVERIFIABLE rules"
 
-        if artifact_path and artifact_hash:
-            # Hash mismatch check would go here
-            pass
+        if artifact_path and Path(artifact_path).exists():
+            end_hash = _compute_sha256(artifact_path)
+            if artifact_hash and end_hash != artifact_hash:
+                can_finalize = False
+                block_reason = "artifact SHA256 changed during enforcement"
+                artifact_hash = end_hash
 
         report = LRuleReport(
             run_id=run_id,
@@ -274,6 +291,7 @@ class LRuleEnforcer:
             artifact_path=str(artifact_path),
             artifact_sha256=artifact_hash,
             registry_sha256=registry_hash,
+            registry_path=str(self.lessons_path),
             timestamp=now,
             summary=summary,
             rules=[e.as_dict() for e in entries],

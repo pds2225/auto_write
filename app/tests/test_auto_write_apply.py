@@ -177,14 +177,17 @@ def test_autopilot_end_to_end(tmp_path: Path) -> None:
 
 
 def test_autopilot_imports_lrule_finalizer_from_canonical_services() -> None:
-    """core.docx.autopilot 이 auto_write.services LRule/Finalizer 를 쓰는지 잠금."""
+    """core.docx.autopilot 이 DomainRouter 게이트 + canonical LRule/Finalizer 를 쓰는지 잠금."""
     import core.docx.services.autopilot_pipeline as core_ap
     from auto_write.services import autopilot_pipeline as ap
 
     src = Path(core_ap.__file__).read_text(encoding="utf-8")
+    assert "from auto_write.domains.pipeline_gate import run_to_final" in src
     assert "from auto_write.services.lrule_enforcer import enforce_lrules" in src
     assert "from auto_write.services.finalizer import finalize_artifact" in src
+    assert "from auto_write.domains.domain_classifier import classify_domain" not in src
     assert "from .lrule_enforcer import" not in src
+    assert callable(ap.run_to_final)
     assert callable(ap.enforce_lrules)
     assert callable(ap.finalize_artifact)
 
@@ -206,6 +209,8 @@ def test_autopilot_acceptance_gate_passes_clean_doc(tmp_path: Path) -> None:
     assert report.lrule_total > 0
     assert report.lrule_can_finalize is False
     assert report.finalizer_submittable is False
+    assert report.domain
+    assert report.finalizer_blocked_reason
     assert len(report.finalizer_sha256) == 64
     assert report.draft_marked is True
     assert report.output_docx.endswith("_DRAFT.docx")

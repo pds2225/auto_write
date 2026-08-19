@@ -42,9 +42,9 @@ from .psst_fill import PSSTFillReport, apply_psst_scaffold
 from .usage_acceptance import (
     AcceptanceConfig, SEV_FAIL, backup_existing_output, force_draft_name, run_acceptance,
 )
+from auto_write.domains.pipeline_gate import run_to_final
 from auto_write.services.lrule_enforcer import enforce_lrules
 from auto_write.services.finalizer import finalize_artifact
-from auto_write.domains.domain_classifier import classify_domain
 
 # 잔존 빈칸(placeholder) 보수적 탐지 패턴 — [확인필요], [산출근거] 포함
 _RESIDUAL_RE = re.compile(
@@ -94,6 +94,9 @@ class AutopilotReport:
     finalizer_submittable: bool = False
     finalizer_blocked_reason: str = ""
     finalizer_sha256: str = ""
+    domain: str = ""
+    domain_confidence: float = 0.0
+    domain_ambiguous: bool = False
     # 5단계(잔존·최종 재채점)
     residual_placeholders: list[str] = field(default_factory=list)
     residual_total: int = 0  # 잔존 빈칸/[확인필요] 총 건수(샘플 limit=20 과 별개)
@@ -138,6 +141,9 @@ class AutopilotReport:
             "finalizer_submittable": self.finalizer_submittable,
             "finalizer_blocked_reason": self.finalizer_blocked_reason,
             "finalizer_sha256": self.finalizer_sha256,
+            "domain": self.domain,
+            "domain_confidence": round(self.domain_confidence, 3),
+            "domain_ambiguous": self.domain_ambiguous,
             "residual_placeholders": self.residual_placeholders,
             "residual_total": self.residual_total,
             "manual_todo": self.manual_todo,
@@ -388,33 +394,37 @@ def run_autopilot(
                 report.output_docx = str(final_path)
                 report.draft_marked = True
 
-    # --- 4.6단계: LRule Enforcement + Finalizer (production wiring) ---
-    #     DomainRouter → LRuleEnforcer → Finalizer 체인을 실제 production에서 호출한다.
-    #     기존 usage_acceptance 게이트와 독립적으로 동작하며, LRule report의 can_finalize가
-    #     False이면 Finalizer가 _DRAFT를 유지한다.
+    # --- 4.6단계: DomainRouter → LRuleEnforcer → Hash → Finalizer ---
+    #     기존 usage_acceptance 게이트와 독립. ambiguous / LRule blocker /
+    #     hash mismatch 이면 Finalizer가 _DRAFT를 유지한다.
     try:
-        domain_result = classify_domain(text=_extract_text_preview(str(final_path)))
-        domain = domain_result.domain
-        lrule_report = enforce_lrules(
-            domain=domain,
-            artifact_path=str(final_path),
+        gate = run_to_final(
+            final_path,
+            apply_draft_name=False,
+            avoid_path=in_path,
         )
-        report.lrule_total = lrule_report.summary.get("total", 0)
-        report.lrule_fail = lrule_report.summary.get("fail", 0)
-        report.lrule_review = lrule_report.summary.get("review_required", 0)
-        report.lrule_unverifiable = lrule_report.summary.get("unverifiable", 0)
-        report.lrule_can_finalize = lrule_report.can_finalize
+        report.domain = gate.domain
+        report.domain_confidence = gate.confidence
+        report.domain_ambiguous = gate.ambiguous
+        lrule_report = gate.lrule_report
+        if lrule_report is not None:
+            report.lrule_total = lrule_report.summary.get("total", 0)
+            report.lrule_fail = lrule_report.summary.get("fail", 0)
+            report.lrule_review = lrule_report.summary.get("review_required", 0)
+            report.lrule_unverifiable = lrule_report.summary.get("unverifiable", 0)
+            report.lrule_can_finalize = lrule_report.can_finalize
+        finalizer_result = gate.finalizer
+        if finalizer_result is not None:
+            report.finalizer_submittable = finalizer_result.submittable
+            report.finalizer_blocked_reason = (
+                gate.blocked_reason or finalizer_result.blocked_reason
+            )
+            report.finalizer_sha256 = finalizer_result.artifact_sha256
+        else:
+            report.finalizer_submittable = False
+            report.finalizer_blocked_reason = gate.blocked_reason or "finalizer missing"
 
-        finalizer_result = finalize_artifact(
-            artifact_path=str(final_path),
-            lrule_report=lrule_report,
-        )
-        report.finalizer_submittable = finalizer_result.submittable
-        report.finalizer_blocked_reason = finalizer_result.blocked_reason
-        report.finalizer_sha256 = finalizer_result.artifact_sha256
-
-        # Finalizer가 차단하면 _DRAFT 마킹 (기존 acceptance 게이트와 독립)
-        if not finalizer_result.submittable and not report.draft_marked:
+        if not report.finalizer_submittable and not report.draft_marked:
             new_path, mark_error = force_draft_name(final_path, avoid=in_path)
             if mark_error:
                 report.draft_mark_error = report.draft_mark_error or mark_error
