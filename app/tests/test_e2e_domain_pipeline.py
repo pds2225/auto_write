@@ -262,7 +262,8 @@ class TestProductionPipelineGate:
         assert gate.lrule_report is not None
         assert gate.lrule_report.artifact_sha256
         assert gate.finalizer is not None
-        assert not gate.finalizer.submittable  # unguarded mechanized → UNVERIFIABLE
+        assert not gate.finalizer.submittable  # judgment/gap → REVIEW_REQUIRED
+        assert gate.lrule_report.summary.get("unverifiable", 0) == 0
         assert "_DRAFT" in Path(gate.renamed_path).name
         assert Path(gate.renamed_path).exists()
 

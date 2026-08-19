@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -17,12 +18,34 @@ from typing import Any, Optional
 
 from auto_write.domains.domain_classifier import Domain
 
+_RULE_CODE_RE = re.compile(r"\bL\d{3}\b", re.IGNORECASE)
+
+
+def rule_code(rule_id: str) -> str:
+    """'L009 | …' 또는 'L009' 에서 규칙 코드를 뽑는다."""
+    match = _RULE_CODE_RE.search(str(rule_id or ""))
+    return match.group(0).upper() if match else str(rule_id or "").strip()
+
+
+def lookup_guard(rule_id: str, guards: dict[str, Any] | None) -> dict[str, Any] | None:
+    """전체 id 또는 Lxxx 코드로 가드 결과를 찾는다."""
+    if not guards:
+        return None
+    if rule_id in guards:
+        return guards[rule_id]
+    code = rule_code(rule_id)
+    if code and code in guards:
+        return guards[code]
+    return None
+
 __all__ = [
     "LRuleStatus",
     "LRuleEntry",
     "LRuleReport",
     "LRuleEnforcer",
     "enforce_lrules",
+    "rule_code",
+    "lookup_guard",
 ]
 
 # Allowed statuses
@@ -195,14 +218,14 @@ class LRuleEnforcer:
 
             # Determine applicability
             applicable = self._is_applicable(rule_domain, domain)
+            guard_result = lookup_guard(rule_id, guards)
 
             # Determine status
             if not applicable:
                 status = STATUS_NA
                 reason = f"rule belongs to {rule_domain}, not {domain.value}"
                 evidence = ""
-            elif rule_id in guards:
-                guard_result = guards[rule_id]
+            elif guard_result is not None:
                 if guard_result.get("passed", False):
                     status = STATUS_PASS
                     evidence = guard_result.get("evidence", "guard passed")

@@ -63,6 +63,7 @@ def run_to_final(
     apply_draft_name: bool = True,
     avoid_path: str | Path | None = None,
     settings: Any = None,
+    acceptance_config: Any = None,
 ) -> PipelineGateResult:
     """DomainRouter → LRule → Hash → Finalizer 를 한 번에 실행한다.
 
@@ -101,6 +102,12 @@ def run_to_final(
 
     lrule_report: Optional[LRuleReport] = None
     try:
+        if guards is None and artifact.exists():
+            from auto_write.services.lrule_guards import build_lrule_guards
+
+            guards = build_lrule_guards(
+                artifact, acceptance_config=acceptance_config
+            )
         lrule_report = enforce_lrules(
             domain=ctx.domain,
             document_type=document_type or ctx.document_type,

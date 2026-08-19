@@ -402,6 +402,12 @@ def run_autopilot(
             final_path,
             apply_draft_name=False,
             avoid_path=in_path,
+            acceptance_config=AcceptanceConfig(
+                blind_review=blind_review,
+                max_pages=max_pages,
+                ai_section_max=ai_section_max,
+                strict_acceptance=strict_acceptance,
+            ),
         )
         report.domain = gate.domain
         report.domain_confidence = gate.confidence

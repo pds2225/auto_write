@@ -193,7 +193,7 @@ def test_autopilot_imports_lrule_finalizer_from_canonical_services() -> None:
 
 
 def test_autopilot_acceptance_gate_passes_clean_doc(tmp_path: Path) -> None:
-    """R8: 수용검사는 통과해도, LRule/Finalizer가 UNVERIFIABLE이면 _DRAFT."""
+    """R8: 수용검사는 통과해도, judgment/gap REVIEW_REQUIRED면 _DRAFT."""
     from auto_write.services.autopilot_pipeline import run_autopilot
 
     src = tmp_path / "clean.docx"
@@ -207,6 +207,7 @@ def test_autopilot_acceptance_gate_passes_clean_doc(tmp_path: Path) -> None:
     assert report.acceptance_submittable is True
     assert report.acceptance_verdict == "제출가능"
     assert report.lrule_total > 0
+    assert report.lrule_unverifiable == 0  # mechanized guards wired
     assert report.lrule_can_finalize is False
     assert report.finalizer_submittable is False
     assert report.domain
@@ -235,7 +236,7 @@ def test_autopilot_strict_acceptance_promotes_paren_warn_to_draft(tmp_path: Path
     base = run_autopilot(str(src), str(tmp_path / "base_out.docx"),
                          max_images=0, psst_scaffold=False, write_report=False)
     assert base.acceptance_submittable is True       # 기본: warn → 수용검사 제출 가능
-    assert base.draft_marked is True                 # LRule UNVERIFIABLE → _DRAFT
+    assert base.draft_marked is True                 # judgment/gap REVIEW_REQUIRED → _DRAFT
     assert base.output_docx.endswith("_DRAFT.docx")
 
     strict = run_autopilot(str(src), str(tmp_path / "strict_out.docx"),
