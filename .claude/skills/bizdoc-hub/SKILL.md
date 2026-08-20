@@ -49,6 +49,7 @@ description: >-
 | 완성 DOCX **다듬기·품질점수**(서식·안내문구·강조) | 스킬 `document-quality-orchestrator` · `/improve-doc-quality` (구 `/auto-write-quality` 는 아카이브) | ✅ | 게이트만(hwpx_submit) |
 | HWP/HWPX ↔ DOCX **변환** | 스킬 `docx-hwp-conversion` | ✅ | ✅ |
 | 제출 가능성 **진단만**(읽기전용) | CLI `py -3.11 app\self_diagnose.py`(DOCX) / `hwpx_submit.py`(HWPX) | ✅ | ✅ |
+| 일러스트 스토리보드 → **발표 PPT** | 스킬 `ir-storyboard-pptx` (Skywork. 원본 시안 이미지 첨부) | — | — |
 
 - ✅=완성 경로 · ⚠=우회 경로 · —=해당 없음. HWPX 열은 2026-07-05 PR #60 기준.
 - 서술 본문 작성과 사실 전사는 다르다: **내용을 새로 쓰면 bizplan, 있는 값을 옮기면
@@ -72,3 +73,5 @@ description: >-
 
 - 개별 스킬을 정확히 지목한 요청 → 그 스킬 직접(허브 생략).
 - 쇼핑·업무관제·웹개발 등 문서 외 도메인 → 이 허브 대상 아님.
+- 여러 칸 일러스트 스토리보드를 PPT로 만들라는 요청 → `ir-storyboard-pptx`.
+  python-pptx 카드덱으로 시안을 다시 그리지 않는다.

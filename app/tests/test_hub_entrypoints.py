@@ -32,6 +32,7 @@ _REQUIRED_SKILLS = (
     "document-quality-orchestrator/SKILL.md",
     "docx-hwp-conversion/SKILL.md",
     "hwpx-doctor/SKILL.md",
+    "ir-storyboard-pptx/SKILL.md",
 )
 _REQUIRED_COMMANDS = (
     "bizdoc.md",
