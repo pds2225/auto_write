@@ -20,6 +20,19 @@ description: >-
 
 문서 DOCX 다듬기는 `document-quality-orchestrator`. 이 스킬은 **이미지 배너** 전용.
 
+## 후크 (자동 발동)
+
+스킬만 있으면 다음 세션이 `aspect_ratio=16:9` 를 믿고 끝낸다. 가드는 `.claude/hooks/promo_banner_guard.js`.
+
+| 이벤트 | 언제 | 하는 일 |
+|--------|------|---------|
+| `UserPromptSubmit` | 프롬프트에 K-Navi/16:9/배너 영문 등 | 스킬 경로 + 실측 규칙을 `additionalContext` 로 주입 |
+| `PostToolUse` `GenerateImage` | 요청이 16:9 인데 파일이 3:2 | 1920×1080 크롭 절차를 주입. 완료 보고 금지 |
+
+등록은 `.claude/settings.json`. 매 프롬프트에 안 떠든다(키워드/16:9 생성만). 훅 실패는 작업을 막지 않는다.
+
+수동 확인: `echo '{"hook_event_name":"UserPromptSubmit","prompt":"배너 영문 16:9"}' \| node .claude/hooks/promo_banner_guard.js`
+
 ## 핵심 원칙 (실측)
 
 `GenerateImage(aspect_ratio="16:9")` 는 **픽셀을 보장하지 않는다.**

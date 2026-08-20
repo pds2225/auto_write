@@ -76,7 +76,7 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 ## 남은 일 (우선순위)
 
 0. **STAR-Exploration (사용자 진행 중):** 최종발표 IR / 상위 2팀이면 사업자등록+견적+사용계획. 평가표·양식 경로 대기 (A6)
-0a. **K-Navi 배너:** 16:9 한글/영문 artifact 완료. 재작업은 스킬 `promo-banner-localize`. 저장소 커밋·슬라이드 삽입은 사용자가 원할 때만
+0a. **K-Navi 배너:** 16:9 한글/영문 artifact 완료. 재작업은 스킬 `promo-banner-localize`. 후크 `.claude/hooks/promo_banner_guard.js` (UserPromptSubmit 키워드 + GenerateImage 16:9 실측). 저장소 커밋·슬라이드 삽입은 사용자가 원할 때만
 0b. **엔진 / STEP 2 추출기:** 실문서 D1–D3 HWP + `STEP2_EXTRACTION_GOLDEN_V1.json` 으로
    `python app/tools/step2_extraction_baseline.py --golden … --input-dir …`
    → `baseline_report`의 READ_MISS / STRUCTURED_EXTRACTION_MISSING / VALUE_ERROR / SOURCE_LOST 건수.
