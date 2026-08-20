@@ -19,8 +19,8 @@ description: >-
 > 슬래시 커맨드: `/bizdoc`. 전체 맵(에이전트 vs CLI): `docs/BIZDOC_HUB_MAP.md`.
 > 사용자가 **업무 절차 / 그대로 실행 / 도보네비 카드**를 말하면 스킬 `user-bizdoc-playbook`과
 > 카드 `docs/clients/dobonevi_card.md`를 이 허브와 함께 따른다.
-> **뭐 신청했지 / 아이템별로 / 지원사업 목록**이면 `docs/clients/user_applications.md`를 읽고
-> **채팅으로만** 답한다. Google Docs 정리본은 만들지 않는다.
+> **뭐 신청했지 / 아이템별로 / 지원사업 목록**이면 스킬 `user-applications-memory`와
+> `docs/clients/user_applications.md`를 읽고 **채팅으로만** 답한다. Google Docs 정리본은 만들지 않는다.
 >
 > **CLI 허브와 혼동 금지:** `app/auto_write_hub.py` 는 사람이 치는 실행 CLI
 > (`env`/`diagnose`/`fill`)다. 이 스킬은 의도→스킬 라우터이고, 채움·진단 실행이
