@@ -21,6 +21,7 @@
 | 의도 | 에이전트(스킬/커맨드) | CLI (사람이 직접) |
 |------|----------------------|-------------------|
 | 뭘 해야 할지 모름 / "문서 도와줘" | **bizdoc-hub** `/bizdoc` | — (먼저 의도 확정) |
+| 뭐 신청했지 / 아이템별 지원 목록 | **user-applications-memory** + `docs/clients/user_applications.md` (채팅만. Docs 정리본 금지) | — |
 | 공고·양식 분석 | `announcement-form-analysis` · `/auto-write-analyze` | `py -3.11 app/analyze_docs.py …` |
 | 처음부터 본문 작성 | **bizplan-orchestrator** · `/auto-write-bizplan` | `py -3.11 app/bizplan_autopilot.py …` |
 | 완성본 A → 빈 양식 B 전사 | `cross-form-submission` | `py -3.11 app/cross_form_fill.py …` |

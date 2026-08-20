@@ -1,14 +1,16 @@
 # RESUME.md — auto_write 세션 체크포인트
 
 > 세션을 새로 시작하면 **이 파일을 먼저** 읽는다. 상세 트랙은 아래 링크.
-> 최종 갱신: **2026-08-18** (세션 마무리. main 핀 `fe4aa17` #157. GitSync #155 `ddac657`)
+> 최종 갱신: **2026-08-20** (사용자 지원사업 절차·도보네비 카드 정본. 엔진 핀은 2026-08-18 `fe4aa17`)
 
 ## 한 줄 상태
 
 `pds2225/auto_write` 단일 정본. `origin/main` @ `fe4aa17` (#157 핀, 기능 끝은 #156 `1001b76`).
 에이전트 입구 = **bizdoc-hub** / CLI 입구 = **auto_write_hub.py**. 맵: `docs/BIZDOC_HUB_MAP.md`.
 
-**문서 작업:** 항우연 「2026 STAR-Exploration」 **선정됨**. 지원금은 최종발표 **상위 2팀만**. 공개 공고에 발표 배점표 없음 — 원장 A6.
+**문서 작업:** KICXUP 챌린지 발표 진행(정본 v3). 항우연 STAR-Exploration **선정됨**(별도 트랙).
+사용자 지원 절차 정본=`user-bizdoc-playbook`. 기업 카드=`docs/clients/dobonevi_card.md`.
+신청 원장=`docs/clients/user_applications.md` (채팅으로만 답함. Google Docs 정리본 만들지 말 것).
 **엔진:** T-20260814-02 명세+실행지시+BPQ-00 감사+#150 측정기+#155 git-sync(기준 브랜치=GitHub default/`main`)+#156(웹앱 사양·계획 보강·STEP 3A)이 main에 있음. DOCX 정본=`core.docx.services`.
 **열린 PR:** 없음. 원격 = `main` + `backup/*` 2개.
 **머지 주의:** Cursor 클라우드 PR은 기본 draft. GitHub 자동머지는 draft에서 불가. 머지 요청 시 Ready for review 후 `gh pr merge --auto --squash`.
@@ -30,6 +32,18 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 | 코드/양식 | 저장소에 공고·양식 없음. IR·평가표·견적 양식은 사용자 메일 |
 
 **다음:** 운영사 메일(6팀인지 상위 2팀인지 + 평가표/IR 양식·발표시간)을 주면 슬라이드·사용계획서. 없으면 `jp@jptnr.com`에 평가표 요청.
+
+## 지금 세션 — KICXUP / 도보네비 카드 (2026-08-20)
+
+| 항목 | 내용 |
+|------|------|
+| 사업 | 2026 KICXUP 챌린지 · 1지망 한국케이블텔레콤 · 외국인 대상 서비스 |
+| 제출 기업명 | 케이네비 (브랜드 도보네비) |
+| 발표 정본 | Drive v3 `1cwNIyu1ut4JHjBBADA1RFhOc9G2sagBs` |
+| 카드 | `docs/clients/dobonevi_card.md` |
+| 절차 | `.claude/skills/user-bizdoc-playbook/SKILL.md` — "그대로 실행" 시 이 순서 |
+
+사용자가 "업무 절차 / 그대로 실행"이면 플레이북 5단계를 **설명한 뒤 실행**. 카드에 없는 숫자는 `[확인필요]`.
 
 ## 최근 완료
 
@@ -53,6 +67,8 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 | 상황 | 쓸 것 |
 |------|--------|
 | "문서 도와줘 / 뭘로 처리해" (의도 불명) | 스킬 `bizdoc-hub` 또는 `/bizdoc` |
+| "업무 절차 / 그대로 실행 / 도보네비 카드" | 스킬 `user-bizdoc-playbook` + `docs/clients/dobonevi_card.md` |
+| "뭐 신청했지 / 아이템별로" | 스킬 `user-applications-memory` + `docs/clients/user_applications.md`. 채팅만. Docs 정리본 금지 |
 | PC·폴더 어디서든 채움·진단 CLI | `py -3.11 app/auto_write_hub.py env\|diagnose\|fill …` |
 | 구 BizPlan Injector (JSON→DOCX) | `tools/injector/inject.py` / `run.sh` |
 | 상세 라우팅표 | `docs/BIZDOC_HUB_MAP.md` |
