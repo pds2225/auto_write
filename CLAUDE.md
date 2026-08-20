@@ -10,6 +10,9 @@
 > **현재 상태(2026-08-11):** RESUME.md 신설 + 허브 맵(`docs/BIZDOC_HUB_MAP.md`)·
 > `bizplan-orchestrator` 스킬·`/bizdoc` 커맨드로 입구 정리. autowrite 흡수는 PR #100 완료
 > (원격 삭제는 owner 수동). 테스트는 반드시 `py -3.11 -m pytest` (기본 3.14 는 matplotlib 부재).
+>
+> **스킬 훅(전역):** 스킬을 만들게 한 **요청 원문**을 `description` 훅 최우선으로 넣는다.
+> 텍스트 프롬프트에 자동으로 안 걸리면 효용이 줄어든다. 상세 `AGENTS.md` §7.
 
 ## 프로젝트 개요
 
