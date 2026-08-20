@@ -23,6 +23,7 @@
 | 뭘 해야 할지 모름 / "문서 도와줘" | **bizdoc-hub** `/bizdoc` | — (먼저 의도 확정) |
 | 공고·양식 분석 | `announcement-form-analysis` · `/auto-write-analyze` | `py -3.11 app/analyze_docs.py …` |
 | 처음부터 본문 작성 | **bizplan-orchestrator** · `/auto-write-bizplan` | `py -3.11 app/bizplan_autopilot.py …` |
+| 기술 문장 출처 / IR 보유기술 단정 여부 | `tech-framing-provenance` | — (위키 `tech-framing-provenance.md`) |
 | 완성본 A → 빈 양식 B 전사 | `cross-form-submission` | `py -3.11 app/cross_form_fill.py …` |
 | HWPX 직접 채움(변환 없음) | (hub가 CLI로 안내) | `py -3.11 app/hwp_fill_direct.py …` |
 | 채움+검수+제출 판정 | (hub가 CLI로 안내) | `py -3.11 app/hwpx_submit.py …` 또는 `auto_write_hub.py fill …` |

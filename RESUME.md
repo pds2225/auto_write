@@ -36,7 +36,7 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 
 | 날짜 | 내용 | 근거 |
 |------|------|------|
-| 2026-08-20 | 세션 마무리. STAR 위성항법 내용은 도보네비↔공고 맞춤 프레이밍(원문 없음)으로 확인 | Drive 위키 `star-exploration.md` · 제출 PDF · 국방경진 신청서 · 이 체크포인트 |
+| 2026-08-20 | 세션 마무리. STAR 위성항법=프레이밍(원문 없음). 스킬수확 `tech-framing-provenance` + 위키 추가 | Drive 위키 · `.claude/skills/tech-framing-provenance` · 이 체크포인트 |
 | 2026-08-18 | 세션 마무리. GitSyncService `master` 하드코딩 제거(#155 already on main). draft면 자동머지 불가 확인 | PR #155 `ddac657` / #158 |
 | 2026-08-16 | 열린 draft #149+#152+#153+#154 합본 #156 squash `1001b76`. #155는 `ddac657` | T-20260816-08 / PR #156 |
 | 2026-08-16 | #150 STEP 2 추출 Baseline 측정기 main 머지. 추출기 본체 아님 | PR #150 `0a8b262` |
@@ -104,6 +104,7 @@ py -3.11 auto_write_hub.py env
 ## 관련 문서
 
 - 허브 맵: `docs/BIZDOC_HUB_MAP.md`
+- 기술 프레이밍 vs 보유기술: `.claude/skills/tech-framing-provenance/SKILL.md` · 위키 `tech-framing-provenance.md`
 - autowrite 통합: `docs/REPO_DUPLICATION_CHECK.md`
 - HWPX 파리티(B 완결): `docs/RESUME_hwpx_parity.md`
 - 실사용 원장: `docs/REQUEST_LEDGER.md`

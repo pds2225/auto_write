@@ -42,6 +42,7 @@ description: >-
 |---|---|:--:|:--:|
 | **공고·양식 파일 확보(다운로드)** — "공고 받아줘", 메일로 온 공고 첨부 | `공고첨부_받기.cmd`(바탕화면) = `cd /d D:\mail && py scripts\fetch_notice_attachments.py --interactive --open --quiet` → 저장: `바탕 화면\지원사업_공고첨부_문서전용_20260625\번호_사업명\` | ✅ | ✅ |
 | 공고·양식 분석, 자격·마감·평가기준, "어디 지원?" (+📞고객사 확인 항목) | 스킬 `announcement-form-analysis` | ✅ | ✅(텍스트 추출) |
+| 기술 문장 출처·"어디서 가져온거지"·IR 보유기술 단정 여부 | 스킬 `tech-framing-provenance` | ✅ | ✅ |
 | 처음부터 사업계획서 **내용(본문) 작성** (PSST 서술) | 스킬 `bizplan-orchestrator` · `/auto-write-bizplan` | ✅(md→이식) | md→이식 |
 | 완성본 A → 빈 양식 B **사실 전사**(글 새로 안 씀) | 스킬 `cross-form-submission` | ✅ | ⚠ DOCX 경유 |
 | 원본 양식에 **기업정보 직접 채움**(변환 없이) | CLI `py -3.11 app\hwp_fill_direct.py` | — | ✅ |
