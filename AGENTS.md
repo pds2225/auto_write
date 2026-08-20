@@ -3,6 +3,15 @@
 > AI 에이전트(Claude Code / Codex 등)가 `D:\auto_write` 에서 작업할 때의 규약.
 > 세션 재개: `RESUME.md` 먼저. 입구 맵: `docs/BIZDOC_HUB_MAP.md`.
 > 상세 작업 지침은 `CLAUDE.md`, 하네스 설계는 `docs/HARNESS_TEAM_DESIGN.md` 참조.
+>
+> **세션 시작 시** `git pull` 후 `.session/closeout_due.json` 의 `due` 가 true 이면
+> (로컬 Claude 훅은 `python scripts/session_closeout.py sync-disk` 로 디스크 깃발 동기)
+> **이 (agent, location) 이 acks 에 없을 때만** `RESUME.md` 를 갱신하고
+> `python scripts/session_closeout.py ack --agent <cursor|claude|codex> --location <local|cloud|github>`
+> 한 뒤 커밋·푸시한다. `due` 는 `cancel` 전까지 유지(다른 위치·AI가 이어서 저장).
+> 다른 창 대화를 대신 저장했다고 말하지 않는다.
+> 깃발 예약(여기 클라우드에서도 가능): `python scripts/session_closeout.py plant --from <이창>` → 커밋·푸시.
+> 확인: `python scripts/session_closeout.py status`. 설명: `.session/README.md`.
 
 ## 0. 프로젝트 구조 — 저장소 분리 진행 중
 
@@ -106,6 +115,7 @@ python -m pytest tests/test_document_quality_harness.py -q       # 테스트
 
 | 날짜 | 변경 내용 | 사유 |
 |------|----------|------|
+| 2026-08-20 | 세션 마무리 깃발을 GitHub 파일(`.session/closeout_due.json`)로 공유 | 로컬/클라우드/다른 AI가 같은 신호를 보게 함 |
 | 2026-06-05 | 문서 품질 하네스 에이전트 12종 규약 신규 | 하네스 초기 구축 |
 | 2026-06-07 | §2 에이전트 표 12→6 동기화 | 실제 `.claude/agents/` 슬림화(12→6)와 본 규약 불일치 해소 |
 | 2026-08-18 | §5 draft PR은 GitHub 자동머지 불가 → Ready 후 `--auto` | #155가 draft라 자동머지가 안 걸린 실측 |
