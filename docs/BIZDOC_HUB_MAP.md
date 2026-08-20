@@ -33,6 +33,7 @@
 | 제출 가능성 진단만 | — | `py -3.11 app/self_diagnose.py …` 또는 `auto_write_hub.py diagnose …` |
 | JSON→DOCX 주입(구 autowrite) | — | `tools/injector/inject.py` / `run.sh` |
 | 이력서 L규칙 | `resume-l-rules` | `py -3.11 app/lrule_gate.py …` |
+| 일러스트 스토리보드 → PPT (IR/피치덱 시안) | **`ir-storyboard-pptx`** · Skywork + `docs/KNEVI_KICKXUP_SKYWORK_PROMPT.md` | Cursor python-pptx 카드덱 금지. 원본 이미지 첨부 |
 | GitHub에서 저장소 받기 | — | `git clone https://github.com/pds2225/auto_write.git D:\auto_write` / `clone.bat` / `py -3.11 app/clone_repo.py --dest …` |
 | 로컬 PC 리모트 컨트롤 | — | PC에서 `remote_control.bat` 더블클릭. `py -3.11 app/local_pc_remote.py --dest D:\auto_write --start` |
 

@@ -9,7 +9,7 @@
 에이전트 입구 = **bizdoc-hub** / CLI 입구 = **auto_write_hub.py**. 맵: `docs/BIZDOC_HUB_MAP.md`.
 
 **문서 작업:** 항우연 「2026 STAR-Exploration」 **선정됨**. 지원금은 최종발표 **상위 2팀만**. 공개 공고에 발표 배점표 없음 — 원장 A6.
-**K-네비 KICKXUP 9장 PPT:** Cursor 1차(카드형 PNG→PPTX) **사용자 불합격**. Skywork 이관. 프롬프트=`docs/KNEVI_KICKXUP_SKYWORK_PROMPT.md`. Cursor에서 같은 PPT 재생성 금지.
+**K-네비 KICKXUP 9장 PPT:** Cursor 1차=카드형 PNG→PPTX. 사용자는 같은 작업을 **Skywork로 이관** 요청(불합격 판정 아님). 프롬프트=`docs/KNEVI_KICKXUP_SKYWORK_PROMPT.md`. 일러스트 스토리보드 PPT는 Cursor 카드덱으로 다시 그리지 말 것.
 **엔진:** T-20260814-02 명세+실행지시+BPQ-00 감사+#150 측정기+#155 git-sync(기준 브랜치=GitHub default/`main`)+#156(웹앱 사양·계획 보강·STEP 3A)이 main에 있음. DOCX 정본=`core.docx.services`.
 **열린 PR:** 없음(이 체크포인트 PR 제외). 원격 = `main` + `backup/*` 2개.
 **머지 주의:** Cursor 클라우드 PR은 기본 draft. GitHub 자동머지는 draft에서 불가. 머지 요청 시 Ready for review 후 `gh pr merge --auto --squash`.
@@ -29,7 +29,7 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 | 지원금 | 상위 2팀만. 재료비·외주용역비. **지원기간 내 개인/법인 사업자등록 필수** |
 | 발표평가 | 2026 공개 공고에 배점 숫자 없음. 공고 축 = 항공우주 기술 근거 · BM고도화 · 시장검증 · 시제품 구현 · IR · 창업일정 |
 | 코드/양식 | 저장소에 공고·양식 없음. IR·평가표·견적 양식은 사용자 메일 |
-| K-네비 덱 | 9칸 스토리보드 → PPT 요청(2026-08-19). 에이전트 1차 불합격. Skywork에 원본 이미지+프롬프트. 결과 검수 대기 |
+| K-네비 덱 | 9칸 스토리보드 → PPT 요청(2026-08-19). Cursor 카드덱 후 Skywork 이관. 결과 검수 대기 |
 
 **다음:** (1) Skywork PPT 결과가 오면 검수·문구만. Cursor가 카드덱을 다시 그리지 말 것. (2) 운영사 메일(6팀인지 상위 2팀인지 + 평가표/IR 양식·발표시간)을 주면 STAR 발표자료·사용계획서. 없으면 `jp@jptnr.com`에 평가표 요청.
 
@@ -37,7 +37,7 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 
 | 날짜 | 내용 | 근거 |
 |------|------|------|
-| 2026-08-20 | 세션 마무리. K-네비 KICKXUP 9장 PPT는 Skywork 이관(Cursor 1차 불합격). 프롬프트 문서화 | 이 체크포인트 · `docs/KNEVI_KICKXUP_SKYWORK_PROMPT.md` |
+| 2026-08-20 | 세션 마무리. K-네비 PPT는 Skywork 이관(도구 라우팅. 불합격 아님). 스킬 `ir-storyboard-pptx` 수확 + 위키 기록 | 이 체크포인트 · `.claude/skills/ir-storyboard-pptx` · `.omc/wiki/` |
 | 2026-08-18 | 세션 마무리. GitSyncService `master` 하드코딩 제거(#155 already on main). draft면 자동머지 불가 확인 | PR #155 `ddac657` / #158 `d6b96b8` |
 | 2026-08-16 | 열린 draft #149+#152+#153+#154 합본 #156 squash `1001b76`. #155는 `ddac657` | T-20260816-08 / PR #156 |
 | 2026-08-16 | #150 STEP 2 추출 Baseline 측정기 main 머지. 추출기 본체 아님 | PR #150 `0a8b262` |
@@ -59,11 +59,11 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 | PC·폴더 어디서든 채움·진단 CLI | `py -3.11 app/auto_write_hub.py env\|diagnose\|fill …` |
 | 구 BizPlan Injector (JSON→DOCX) | `tools/injector/inject.py` / `run.sh` |
 | 상세 라우팅표 | `docs/BIZDOC_HUB_MAP.md` |
-| K-네비 9장 PPT | Skywork + `docs/KNEVI_KICKXUP_SKYWORK_PROMPT.md` (원본 스토리보드 이미지 첨부) |
+| K-네비 9장 PPT | 스킬 `ir-storyboard-pptx` · Skywork + `docs/KNEVI_KICKXUP_SKYWORK_PROMPT.md` (원본 스토리보드 이미지 첨부) |
 
 ## 남은 일 (우선순위)
 
-0. **K-네비 KICKXUP PPT (사용자 진행 중):** Skywork 결과 검수. Cursor 카드덱 재생성 금지. PPT/PNG는 git 커밋 금지.
+0. **K-네비 KICKXUP PPT (사용자 진행 중):** Skywork 결과 검수. 일러스트 스토리보드를 Cursor 카드덱으로 다시 그리지 말 것. PPT/PNG는 git 커밋 금지.
 0b. **STAR-Exploration (A6):** 최종발표 IR / 상위 2팀이면 사업자등록+견적+사용계획. 평가표·양식 경로 대기
 0c. **엔진 / STEP 2 추출기:** 실문서 D1–D3 HWP + `STEP2_EXTRACTION_GOLDEN_V1.json` 으로
    `python app/tools/step2_extraction_baseline.py --golden … --input-dir …`
@@ -88,7 +88,7 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 ## 재개 명령
 
 ```text
-이어서: K-네비 KICKXUP 9장 PPT는 Skywork 이관. 원본 9칸 스토리보드 이미지 + docs/KNEVI_KICKXUP_SKYWORK_PROMPT.md. Cursor 카드덱 재생성 금지. Skywork 결과가 오면 검수만.
+이어서: K-네비 KICKXUP 9장 PPT는 Skywork 이관(도구 라우팅, 불합격 아님). 원본 9칸 스토리보드 이미지 + docs/KNEVI_KICKXUP_SKYWORK_PROMPT.md. 일러스트 스토리보드를 Cursor 카드덱으로 다시 그리지 말 것. Skywork 결과가 오면 검수.
 항우연 STAR-Exploration: 메일에서 6팀인지 상위 2팀인지, 평가표·IR 양식·발표시간을 주면 발표자료부터.
 엔진: T-20260814-02 + #150 측정기 + #155 git-sync(base=GitHub default/main) main `ddac657`. 합본 #156 squash `1001b76`. 핀 `d6b96b8` (#158).
 P 개발 중=Problem만. P 완료 후=최우선 사용 케이스.
@@ -109,6 +109,7 @@ py -3.11 auto_write_hub.py env
 
 - 허브 맵: `docs/BIZDOC_HUB_MAP.md`
 - K-네비 Skywork 프롬프트: `docs/KNEVI_KICKXUP_SKYWORK_PROMPT.md`
+- 스토리보드→PPT 스킬: `.claude/skills/ir-storyboard-pptx/SKILL.md`
 - autowrite 통합: `docs/REPO_DUPLICATION_CHECK.md`
 - HWPX 파리티(B 완결): `docs/RESUME_hwpx_parity.md`
 - 실사용 원장: `docs/REQUEST_LEDGER.md`
