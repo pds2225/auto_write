@@ -1,12 +1,12 @@
 # RESUME.md — auto_write 세션 체크포인트
 
 > 세션을 새로 시작하면 **이 파일을 먼저** 읽는다. 상세 트랙은 아래 링크.
-> 최종 갱신: **2026-08-18** (세션 마무리. main 핀 `fe4aa17` #157. GitSync #155 `ddac657`)
+> 최종 갱신: **2026-08-20** (세션 마무리. 케이네비 MVP 녹화 컷시트+16.5초 하이라이트. main 핀 `d6b96b8` #158)
 
 ## 한 줄 상태
 
-`pds2225/auto_write` 단일 정본. `origin/main` @ `fe4aa17` (#157 핀, 기능 끝은 #156 `1001b76`).
-에이전트 입구 = **bizdoc-hub** / CLI 입구 = **auto_write_hub.py**. 맵: `docs/BIZDOC_HUB_MAP.md`.
+`pds2225/auto_write` 단일 정본. `origin/main` @ `d6b96b8` (#158 핀. 기능 끝은 #156 `1001b76`, GitSync #155 `ddac657`).
+에이전트 입구 = **bizdoc-hub** / CLI 입구 = `auto_write_hub.py`. 맵: `docs/BIZDOC_HUB_MAP.md`.
 
 **문서 작업:** 항우연 「2026 STAR-Exploration」 **선정됨**. 지원금은 최종발표 **상위 2팀만**. 공개 공고에 발표 배점표 없음 — 원장 A6.
 **엔진:** T-20260814-02 명세+실행지시+BPQ-00 감사+#150 측정기+#155 git-sync(기준 브랜치=GitHub default/`main`)+#156(웹앱 사양·계획 보강·STEP 3A)이 main에 있음. DOCX 정본=`core.docx.services`.
@@ -18,7 +18,22 @@
 P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금지. 파일 오면 초안 1건). **P 완료 후는 최우선 사용 케이스.** 사업자등록증은 첫 화면 필수 아님.
 웹앱 실행 정본=`웹앱 최종 요구사항_20260816`. 승인 전 웹앱 제품 코드 대기.
 
-## 지금 세션 — STAR-Exploration (A6)
+## 지금 세션 — 케이네비 MVP 영상 (KICXUP, 2026-08-19~20)
+
+| 항목 | 내용 |
+|------|------|
+| 원본 | Drive `1_BUufLAantULLQkHEQshEAHMgxAcjxqz` `케이네비 녹화영상 .mp4` (2:21, 620×1006, Streamlit 도보 내비게이션) |
+| 한 일 | 쓸 장면만 컷시트 → 3컷 하이라이트 **16.5초**. 창 전환·진단로그·랜드마크 0/3·`Manage app` 하단 제거 |
+| Keep | `00:15–00:18` 여의도역 5호선 검색 · `00:31–00:37` 다음 회전 135m/좌회전 111m · `00:46–00:53` 총 403m·도보 약 5분·출발/회전/목적지 |
+| 산출 | 저장소 밖 아티팩트(커밋 금지). 세로 `knavi_mvp_highlight.mp4`, 발표용 16:9 `knavi_mvp_highlight_16x9.mp4` |
+| 발표 넣기 | KICXUP 9장 **Solution(3) 또는 현재단계(8)** 에 16:9 파일. 나레이션: “목적지를 넣으면 보행 경로가 바로 그려집니다. 여의도역까지 403m, 약 5분.” |
+| 사진 안내 | 이 녹화에 **없음**(랜드마크 0/3). 약속하지 말 것. SBAS/KASS·초정밀도 이 영상으로 증명 금지 |
+| 남은 점 | 안내 화면에 **GPS ±97m 낮음** 잔존(실내 녹화). 원하면 “실내 테스트” 자막만 추가. Drive 원본이 **링크 있는 사람 편집 가능**이었음 → **제한됨**으로 되돌릴 것 |
+| 스킬·위키 | 재실행 스킬 `.claude/skills/k-navi-mvp-highlight`. 위키 `.omc/wiki/k-navi-mvp-highlight-edit.md` · `k-navi-cloud-drive-ingest.md` |
+
+**다음(케이네비):** 16:9 하이라이트를 발표 PPT에 삽입. 자막/재편집은 스킬 `k-navi-mvp-highlight`(같은 Drive 원본+위 Keep 타임코드).
+
+## 병행 트랙 — STAR-Exploration (A6)
 
 | 항목 | 내용 |
 |------|------|
@@ -35,7 +50,8 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 
 | 날짜 | 내용 | 근거 |
 |------|------|------|
-| 2026-08-18 | 세션 마무리. GitSyncService `master` 하드코딩 제거(#155 already on main). draft면 자동머지 불가 확인 | PR #155 `ddac657` / 이 체크포인트 |
+| 2026-08-20 | 세션 마무리 + 스킬수확. 케이네비 MVP 컷시트·16.5초 하이라이트. 스킬 `k-navi-mvp-highlight` · 위키 3페이지 | Drive `1_BUufLAantULLQkHEQshEAHMgxAcjxqz` / `.claude/skills/k-navi-mvp-highlight` |
+| 2026-08-18 | 세션 마무리. GitSyncService `master` 하드코딩 제거(#155 already on main). draft면 자동머지 불가 확인 | PR #155 `ddac657` / PR #158 `d6b96b8` |
 | 2026-08-16 | 열린 draft #149+#152+#153+#154 합본 #156 squash `1001b76`. #155는 `ddac657` | T-20260816-08 / PR #156 |
 | 2026-08-16 | #150 STEP 2 추출 Baseline 측정기 main 머지. 추출기 본체 아님 | PR #150 `0a8b262` |
 | 2026-08-16 | #146 BPQ-00 감사 main 머지. 원격은 main+backup 2개 | PR #146 `9efd78e` |
@@ -83,8 +99,9 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 ## 재개 명령
 
 ```text
-이어서: 항우연 STAR-Exploration. 메일에서 6팀인지 상위 2팀인지, 평가표·IR 양식·발표시간을 주면 발표자료부터.
-엔진: T-20260814-02 + #150 측정기 + #155 git-sync(base=GitHub default/main) main `ddac657`. 합본 #156 squash `1001b76`. 핀 `fe4aa17`.
+이어서: 케이네비 KICXUP — 16:9 하이라이트를 PPT에 삽입. 자막/재편집은 스킬 k-navi-mvp-highlight (Drive 원본 + Keep 타임코드).
+병행: 항우연 STAR-Exploration. 메일에서 6팀인지 상위 2팀인지, 평가표·IR 양식·발표시간을 주면 발표자료부터.
+엔진: T-20260814-02 + #150 측정기 + #155 git-sync(base=GitHub default/main) `ddac657`. 합본 #156 `1001b76`. 핀 `d6b96b8` (#158).
 P 개발 중=Problem만. P 완료 후=최우선 사용 케이스.
 GitSync 기준 브랜치: AUTO_WRITE_GIT_BASE_BRANCH 없으면 origin/HEAD → ls-remote HEAD → main.
 머지: draft면 자동머지 안 됨. Ready 후 gh pr merge --auto --squash.
