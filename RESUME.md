@@ -10,6 +10,7 @@
 
 **문서 작업:** KICXUP 챌린지 발표 진행(정본 v3). 항우연 STAR-Exploration **선정됨**(별도 트랙).
 사용자 지원 절차 정본=`user-bizdoc-playbook`. 기업 카드=`docs/clients/dobonevi_card.md`.
+신청 원장=`docs/clients/user_applications.md` (채팅으로만 답함. Google Docs 정리본 만들지 말 것).
 **엔진:** T-20260814-02 명세+실행지시+BPQ-00 감사+#150 측정기+#155 git-sync(기준 브랜치=GitHub default/`main`)+#156(웹앱 사양·계획 보강·STEP 3A)이 main에 있음. DOCX 정본=`core.docx.services`.
 **열린 PR:** 없음. 원격 = `main` + `backup/*` 2개.
 **머지 주의:** Cursor 클라우드 PR은 기본 draft. GitHub 자동머지는 draft에서 불가. 머지 요청 시 Ready for review 후 `gh pr merge --auto --squash`.
@@ -67,6 +68,7 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 |------|--------|
 | "문서 도와줘 / 뭘로 처리해" (의도 불명) | 스킬 `bizdoc-hub` 또는 `/bizdoc` |
 | "업무 절차 / 그대로 실행 / 도보네비 카드" | 스킬 `user-bizdoc-playbook` + `docs/clients/dobonevi_card.md` |
+| "뭐 신청했지 / 아이템별로" | `docs/clients/user_applications.md`를 읽고 **채팅으로만** 답함. Docs 정리본 금지 |
 | PC·폴더 어디서든 채움·진단 CLI | `py -3.11 app/auto_write_hub.py env\|diagnose\|fill …` |
 | 구 BizPlan Injector (JSON→DOCX) | `tools/injector/inject.py` / `run.sh` |
 | 상세 라우팅표 | `docs/BIZDOC_HUB_MAP.md` |

@@ -3,7 +3,7 @@
 > 정본. 다음 지원사업 채움·발표는 이 카드의 사실만 쓴다. 없는 값은 `[확인필요]`.
 > 근거: 2026 KICXUP 챌린지 지원신청서(박다솜). 갱신: 2026-08-20.
 > 절차: `.claude/skills/user-bizdoc-playbook/SKILL.md`
-> Drive 사본: https://docs.google.com/document/d/1dhwczlMVX1WPmWsHtGibKQuodcQeKpQ8gsL4iMqHqLU/edit
+> 신청 원장: `docs/clients/user_applications.md` (채팅 답변용. Docs 정리본 만들지 말 것)
 
 ## 식별
 

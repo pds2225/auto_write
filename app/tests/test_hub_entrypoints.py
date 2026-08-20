@@ -44,6 +44,9 @@ _REQUIRED_FILES = (
     "docs/BIZDOC_HUB_MAP.md",
     "RESUME.md",
     "app/auto_write_hub.py",
+    "docs/clients/dobonevi_card.md",
+    "docs/clients/user_applications.md",
+    ".claude/skills/user-bizdoc-playbook/SKILL.md",
 )
 
 
@@ -65,7 +68,7 @@ def test_hub_commands_present() -> None:
 
 def test_hub_map_and_cli_present() -> None:
     missing = [p for p in _REQUIRED_FILES if not (_REPO / p).is_file()]
-    assert not missing, f"허브 맵/CLI/RESUME 누락: {missing}"
+    assert not missing, f"허브 맵/CLI/RESUME/카드/원장 누락: {missing}"
 
 
 def test_auto_write_hub_subcommands() -> None:
