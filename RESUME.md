@@ -97,7 +97,7 @@ cd D:\auto_write
 git checkout main && git pull origin main
 # 테스트 (반드시 3.11 — PATH 기본 3.14 는 matplotlib 부재)
 cd app
-py -3.11 -m pytest tests/test_archived_commands_not_resurrected.py tests/test_hub_entrypoints.py -q
+py -3.11 -m pytest tests/test_archived_commands_not_resurrected.py tests/test_hub_entrypoints.py tests/test_skill_request_hooks.py -q
 py -3.11 auto_write_hub.py env
 ```
 
@@ -105,6 +105,7 @@ py -3.11 auto_write_hub.py env
 
 - 허브 맵: `docs/BIZDOC_HUB_MAP.md`
 - 기술 프레이밍 vs 보유기술: `.claude/skills/tech-framing-provenance/SKILL.md` · 위키 `tech-framing-provenance.md`
+- 스킬 훅=요청 원문 우선: `AGENTS.md` §7 · 위키 `skill-request-hooks.md`
 - autowrite 통합: `docs/REPO_DUPLICATION_CHECK.md`
 - HWPX 파리티(B 완결): `docs/RESUME_hwpx_parity.md`
 - 실사용 원장: `docs/REQUEST_LEDGER.md`
