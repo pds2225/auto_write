@@ -50,7 +50,7 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 
 | 날짜 | 내용 | 근거 |
 |------|------|------|
-| 2026-08-20 | 세션 마무리. K-Navi 홍보 배너 한글/영문 16:9 (금발 서양인, `01` 제거). 코드·테스트 없음 | Cursor artifact / 이 체크포인트 |
+| 2026-08-20 | 세션 마무리. K-Navi 홍보 배너 한글/영문 16:9 (금발 서양인, `01` 제거). 스킬 `promo-banner-localize` 수확 (GenerateImage 16:9≠픽셀 실측) | Cursor artifact / `.claude/skills/promo-banner-localize` |
 | 2026-08-18 | 세션 마무리. GitSyncService `master` 하드코딩 제거(#155 already on main). draft면 자동머지 불가 확인 | PR #155 `ddac657` / #158 `d6b96b8` |
 | 2026-08-16 | 열린 draft #149+#152+#153+#154 합본 #156 squash `1001b76`. #155는 `ddac657` | T-20260816-08 / PR #156 |
 | 2026-08-16 | #150 STEP 2 추출 Baseline 측정기 main 머지. 추출기 본체 아님 | PR #150 `0a8b262` |
@@ -76,7 +76,7 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 ## 남은 일 (우선순위)
 
 0. **STAR-Exploration (사용자 진행 중):** 최종발표 IR / 상위 2팀이면 사업자등록+견적+사용계획. 평가표·양식 경로 대기 (A6)
-0a. **K-Navi 배너:** 16:9 한글/영문 artifact 완료. 저장소 커밋·슬라이드 삽입은 사용자가 원할 때만
+0a. **K-Navi 배너:** 16:9 한글/영문 artifact 완료. 재작업은 스킬 `promo-banner-localize`. 저장소 커밋·슬라이드 삽입은 사용자가 원할 때만
 0b. **엔진 / STEP 2 추출기:** 실문서 D1–D3 HWP + `STEP2_EXTRACTION_GOLDEN_V1.json` 으로
    `python app/tools/step2_extraction_baseline.py --golden … --input-dir …`
    → `baseline_report`의 READ_MISS / STRUCTURED_EXTRACTION_MISSING / VALUE_ERROR / SOURCE_LOST 건수.
@@ -101,7 +101,7 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 
 ```text
 이어서: 항우연 STAR-Exploration. 메일에서 6팀인지 상위 2팀인지, 평가표·IR 양식·발표시간을 주면 발표자료부터.
-K-Navi: 16:9 한글/영문 배너는 Cursor artifact. 저장소에 넣을지는 사용자 확인.
+K-Navi: 16:9 한글/영문 배너는 Cursor artifact. 재생성은 스킬 `promo-banner-localize`. 저장소에 넣을지는 사용자 확인.
 엔진: T-20260814-02 + #150 측정기 + #155 git-sync(base=GitHub default/main) main `ddac657`. 합본 #156 squash `1001b76`. 핀 `d6b96b8` #158.
 P 개발 중=Problem만. P 완료 후=최우선 사용 케이스.
 GitSync 기준 브랜치: AUTO_WRITE_GIT_BASE_BRANCH 없으면 origin/HEAD → ls-remote HEAD → main.
@@ -126,6 +126,7 @@ py -3.11 auto_write_hub.py env
 - BPQ 정밀화 대기 지식: `docs/BPQ_PIPELINE_INSIGHTS_20260815.md`
 - 웹앱 실행 정본: `docs/AUTO_WRITE_웹앱_최종_요구사항_20260816.md`
 - 작업 규약: `CLAUDE.md` · `AGENTS.md`
+- 홍보 배너 한/영·16:9: `.claude/skills/promo-banner-localize/SKILL.md`
 
 ## 안전 불변
 
