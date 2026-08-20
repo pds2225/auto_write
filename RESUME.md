@@ -1,11 +1,11 @@
 # RESUME.md — auto_write 세션 체크포인트
 
 > 세션을 새로 시작하면 **이 파일을 먼저** 읽는다. 상세 트랙은 아래 링크.
-> 최종 갱신: **2026-08-18** (세션 마무리. main 핀 `fe4aa17` #157. GitSync #155 `ddac657`)
+> 최종 갱신: **2026-08-20** (세션 마무리. STAR 위성항법 출처 확인. main 핀 `d6b96b8` #158)
 
 ## 한 줄 상태
 
-`pds2225/auto_write` 단일 정본. `origin/main` @ `fe4aa17` (#157 핀, 기능 끝은 #156 `1001b76`).
+`pds2225/auto_write` 단일 정본. `origin/main` @ `d6b96b8` (#158 세션핀. 기능 끝은 #156 `1001b76`, GitSync #155 `ddac657`).
 에이전트 입구 = **bizdoc-hub** / CLI 입구 = **auto_write_hub.py**. 맵: `docs/BIZDOC_HUB_MAP.md`.
 
 **문서 작업:** 항우연 「2026 STAR-Exploration」 **선정됨**. 지원금은 최종발표 **상위 2팀만**. 공개 공고에 발표 배점표 없음 — 원장 A6.
@@ -28,14 +28,16 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 | 지원금 | 상위 2팀만. 재료비·외주용역비. **지원기간 내 개인/법인 사업자등록 필수** |
 | 발표평가 | 2026 공개 공고에 배점 숫자 없음. 공고 축 = 항공우주 기술 근거 · BM고도화 · 시장검증 · 시제품 구현 · IR · 창업일정 |
 | 코드/양식 | 저장소에 공고·양식 없음. IR·평가표·견적 양식은 사용자 메일 |
+| 위성항법 출처 (2026-08-20 확인) | **항우연 기술이전·논문 원문 없음.** 2026-06-29 마감 당일 도보네비(보행 길찾기)를 공고 분야③(항우연 보유기술 활용)에 맞춘 프레이밍. 위키 `star-exploration.md`. GNSS/SBAS/KASS/KPS/PNT/IMU/PDR은 공개지식 조립. 제품 실체는 스마트폰 GPS 게이팅. 같은 주 국방경진은 별도 특허(10-1974002 등)—STAR에 쓰지 말 것. 당일 저녁 사용자 지시로 「측위 공백」프레이밍 폐기·위성영상 주축으로 교체했으나 **제출 PDF 제목은 여전히 위성항법**. 문장은 이후 KICXUP(케이네비)에도 재사용 |
 
-**다음:** 운영사 메일(6팀인지 상위 2팀인지 + 평가표/IR 양식·발표시간)을 주면 슬라이드·사용계획서. 없으면 `jp@jptnr.com`에 평가표 요청.
+**다음:** 운영사 메일(6팀인지 상위 2팀인지 + 평가표/IR 양식·발표시간)을 주면 슬라이드·사용계획서. IR에서 위성항법을 **보유 항우연 기술처럼 단정하지 말 것**(연계·실증 추진만). 없으면 `jp@jptnr.com`에 평가표 요청.
 
 ## 최근 완료
 
 | 날짜 | 내용 | 근거 |
 |------|------|------|
-| 2026-08-18 | 세션 마무리. GitSyncService `master` 하드코딩 제거(#155 already on main). draft면 자동머지 불가 확인 | PR #155 `ddac657` / 이 체크포인트 |
+| 2026-08-20 | 세션 마무리. STAR 위성항법 내용은 도보네비↔공고 맞춤 프레이밍(원문 없음)으로 확인 | Drive 위키 `star-exploration.md` · 제출 PDF · 국방경진 신청서 · 이 체크포인트 |
+| 2026-08-18 | 세션 마무리. GitSyncService `master` 하드코딩 제거(#155 already on main). draft면 자동머지 불가 확인 | PR #155 `ddac657` / #158 |
 | 2026-08-16 | 열린 draft #149+#152+#153+#154 합본 #156 squash `1001b76`. #155는 `ddac657` | T-20260816-08 / PR #156 |
 | 2026-08-16 | #150 STEP 2 추출 Baseline 측정기 main 머지. 추출기 본체 아님 | PR #150 `0a8b262` |
 | 2026-08-16 | #146 BPQ-00 감사 main 머지. 원격은 main+backup 2개 | PR #146 `9efd78e` |
@@ -59,7 +61,7 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 
 ## 남은 일 (우선순위)
 
-0. **STAR-Exploration (사용자 진행 중):** 최종발표 IR / 상위 2팀이면 사업자등록+견적+사용계획. 평가표·양식 경로 대기 (A6)
+0. **STAR-Exploration (사용자 진행 중):** 최종발표 IR / 상위 2팀이면 사업자등록+견적+사용계획. 평가표·양식 경로 대기 (A6). IR 작성 시 위성항법=공고 맞춤 프레이밍(미보유 기술) — 과대포장 금지
 0b. **엔진 / STEP 2 추출기:** 실문서 D1–D3 HWP + `STEP2_EXTRACTION_GOLDEN_V1.json` 으로
    `python app/tools/step2_extraction_baseline.py --golden … --input-dir …`
    → `baseline_report`의 READ_MISS / STRUCTURED_EXTRACTION_MISSING / VALUE_ERROR / SOURCE_LOST 건수.
@@ -83,8 +85,8 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 ## 재개 명령
 
 ```text
-이어서: 항우연 STAR-Exploration. 메일에서 6팀인지 상위 2팀인지, 평가표·IR 양식·발표시간을 주면 발표자료부터.
-엔진: T-20260814-02 + #150 측정기 + #155 git-sync(base=GitHub default/main) main `ddac657`. 합본 #156 squash `1001b76`. 핀 `fe4aa17`.
+이어서: 항우연 STAR-Exploration. 메일에서 6팀인지 상위 2팀인지, 평가표·IR 양식·발표시간을 주면 발표자료부터. IR에 위성항법을 항우연 보유기술처럼 쓰지 말 것(2026-08-20 출처 확인).
+엔진: T-20260814-02 + #150 측정기 + #155 git-sync(base=GitHub default/main) main `ddac657`. 합본 #156 squash `1001b76`. 세션핀 `d6b96b8` #158.
 P 개발 중=Problem만. P 완료 후=최우선 사용 케이스.
 GitSync 기준 브랜치: AUTO_WRITE_GIT_BASE_BRANCH 없으면 origin/HEAD → ls-remote HEAD → main.
 머지: draft면 자동머지 안 됨. Ready 후 gh pr merge --auto --squash.
