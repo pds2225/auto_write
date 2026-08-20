@@ -7,6 +7,16 @@
         "hooks": [
           {
             "type": "command",
+            "command": "node \".claude/hooks/session_resume_hook.js\"",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
             "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\omc-auto-router\\scripts\\omc_prompt_router.py\""
           }
         ]
