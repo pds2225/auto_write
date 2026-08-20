@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \".claude/hooks/promo_banner_guard.js\"",
+            "command": "node \".claude/hooks/session_resume_hook.js\"",
             "timeout": 5
           }
         ]
@@ -32,16 +32,6 @@
       }
     ],
     "PostToolUse": [
-      {
-        "matcher": "GenerateImage",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \".claude/hooks/promo_banner_guard.js\"",
-            "timeout": 5
-          }
-        ]
-      },
       {
         "matcher": "Bash|Edit|Write|MultiEdit|NotebookEdit|Agent|Task",
         "hooks": [
