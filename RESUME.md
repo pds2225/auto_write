@@ -1,16 +1,19 @@
 # RESUME.md — auto_write 세션 체크포인트
 
 > 세션을 새로 시작하면 **이 파일을 먼저** 읽는다. 상세 트랙은 아래 링크.
-> 최종 갱신: **2026-08-18** (세션 마무리. main 핀 `fe4aa17` #157. GitSync #155 `ddac657`)
+> 최종 갱신: **2026-08-19** (밤샘 AW-001 가드 연결. 브랜치 `cursor/overnight-aw-001-2cb9`)
 
 ## 한 줄 상태
 
-`pds2225/auto_write` 단일 정본. `origin/main` @ `fe4aa17` (#157 핀, 기능 끝은 #156 `1001b76`).
+`pds2225/auto_write` 단일 정본. `origin/main` @ `d6b96b8` (#158 핀).
 에이전트 입구 = **bizdoc-hub** / CLI 입구 = **auto_write_hub.py**. 맵: `docs/BIZDOC_HUB_MAP.md`.
 
-**문서 작업:** 항우연 「2026 STAR-Exploration」 **선정됨**. 지원금은 최종발표 **상위 2팀만**. 공개 공고에 발표 배점표 없음 — 원장 A6.
+**밤샘 2026-08-19:** AW-001 ACTIVE(`[~]`). `run_to_final` + mechanized 가드(`build_lrule_guards`, unverifiable=0).
+judgment/gap은 REVIEW_REQUIRED → FINAL 차단 유지. 웹앱·BPQ-00 제품 코드는 승인 전 대기. 공고+양식 오기 전 초안 대기.
+
+**문서 작업:** 항우연 「2026 STAR-Exploration」 **6팀 멘토링 선정**. 지원금 상위 2팀은 **아직 미선정**. 공개 공고에 발표 배점표 없음 — 원장 A6.
 **엔진:** T-20260814-02 명세+실행지시+BPQ-00 감사+#150 측정기+#155 git-sync(기준 브랜치=GitHub default/`main`)+#156(웹앱 사양·계획 보강·STEP 3A)이 main에 있음. DOCX 정본=`core.docx.services`.
-**열린 PR:** 없음. 원격 = `main` + `backup/*` 2개.
+**열린 PR:** draft #161 (`cursor/overnight-aw-001-2cb9`). 원격 = `main` + 이 브랜치 + `backup/*`.
 **머지 주의:** Cursor 클라우드 PR은 기본 draft. GitHub 자동머지는 draft에서 불가. 머지 요청 시 Ready for review 후 `gh pr merge --auto --squash`.
 작업 시작 전: `git fetch` → `TASK.md` → 현재 구현 조사 → 그다음 작업.
 목표 흐름: `LLM → StageResult(JSON) → 검증 → 다음 Stage → 렌더 → Finalizer`. 한 번에 최종 DOCX 금지.
@@ -24,17 +27,18 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 |------|------|
 | 사업 | 한국항공우주연구원 「2026 STAR-Exploration」 예비창업자 트랙 (경기도 스타기업 **아님**) |
 | 운영 | 조슈아파트너스 `jp@jptnr.com` / **042-364-1002** |
-| 사용자 상태 | **선정됨** (6팀 멘토링 vs 상위 2팀 지원금인지는 메일 미확인) |
-| 지원금 | 상위 2팀만. 재료비·외주용역비. **지원기간 내 개인/법인 사업자등록 필수** |
+| 사용자 상태 | **6팀 멘토링 선정됨.** 상위 2팀(지원금)은 **아직 미선정** (2026-08-20 사용자) |
+| 지원금 | 상위 2팀만. 재료비·외주용역비. 뽑힌 뒤에 사업자등록+견적+사용계획. **지원기간 내 개인/법인 사업자등록 필수** |
 | 발표평가 | 2026 공개 공고에 배점 숫자 없음. 공고 축 = 항공우주 기술 근거 · BM고도화 · 시장검증 · 시제품 구현 · IR · 창업일정 |
 | 코드/양식 | 저장소에 공고·양식 없음. IR·평가표·견적 양식은 사용자 메일 |
 
-**다음:** 운영사 메일(6팀인지 상위 2팀인지 + 평가표/IR 양식·발표시간)을 주면 슬라이드·사용계획서. 없으면 `jp@jptnr.com`에 평가표 요청.
+**다음:** 평가표·IR 양식·발표시간을 주면 6팀 발표자료부터. 지원금 서류는 상위 2 발표 후. 없으면 `jp@jptnr.com`에 평가표 요청.
 
 ## 최근 완료
 
 | 날짜 | 내용 | 근거 |
 |------|------|------|
+| 2026-08-19 | 밤샘 AW-001: `run_to_final` + mechanized 가드 연결(unverifiable=0, L009 실 FAIL). LIST `[~]`, REQUEST_SOLVED=NO | 브랜치 `cursor/overnight-aw-001-2cb9` PR #161 |
 | 2026-08-18 | 세션 마무리. GitSyncService `master` 하드코딩 제거(#155 already on main). draft면 자동머지 불가 확인 | PR #155 `ddac657` / 이 체크포인트 |
 | 2026-08-16 | 열린 draft #149+#152+#153+#154 합본 #156 squash `1001b76`. #155는 `ddac657` | T-20260816-08 / PR #156 |
 | 2026-08-16 | #150 STEP 2 추출 Baseline 측정기 main 머지. 추출기 본체 아님 | PR #150 `0a8b262` |
@@ -59,7 +63,7 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 
 ## 남은 일 (우선순위)
 
-0. **STAR-Exploration (사용자 진행 중):** 최종발표 IR / 상위 2팀이면 사업자등록+견적+사용계획. 평가표·양식 경로 대기 (A6)
+0. **STAR-Exploration (A6):** 6팀 선정·상위2 미선정. 발표 IR/평가표 대기. 지원금 서류는 상위2 발표 후
 0b. **엔진 / STEP 2 추출기:** 실문서 D1–D3 HWP + `STEP2_EXTRACTION_GOLDEN_V1.json` 으로
    `python app/tools/step2_extraction_baseline.py --golden … --input-dir …`
    → `baseline_report`의 READ_MISS / STRUCTURED_EXTRACTION_MISSING / VALUE_ERROR / SOURCE_LOST 건수.
@@ -75,10 +79,10 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
    - HWPX: `py -3.11 app/hwpx_submit.py 양식.hwpx -o 결과.hwpx --identity identity.json`
    - DOCX 품질: `py -3.11 app/auto_write_autopilot.py 문서.docx --submit-clean --strict`
    - 인젝터: `cd tools/injector && python3 -m pytest tests/test_v2.py -q`
-3. **REQUEST_LEDGER** 실제출 확인 대기(A1~A5) + A6 평가표/IR 양식 — 경로/제출 여부는 사용자만 확인 가능
+3. **REQUEST_LEDGER** A1~A3 제출 여부(사용자). A4 이지비건 폴더 경로. A5 입주 지정서식 경로(주소는 원장에 기입값 있음). A6 평가표/IR
 4. **보류**: HWPX 세로 라벨(c) — 코퍼스 수요 극소(AC6)
 5. **보류**: SFT P3 후속·DOCX↔HWP 100% — 실사용에서 막힐 때
-6. **열린 draft:** 없음. 원격 = `main` + `backup/*` 2개. 닫힌 #139 충돌 표시는 무시.
+6. **열린 draft:** #161 (AW-001 게이트+가드). 원격 = `main` + 이 브랜치 + `backup/*`. 닫힌 #139 충돌 표시는 무시.
 
 ## 재개 명령
 

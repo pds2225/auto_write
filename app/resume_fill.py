@@ -94,6 +94,34 @@ def _cmd_fill(args: argparse.Namespace) -> int:
     filled_rows = sum(s["filled"] for s in report.sections)
     if filled_rows == 0 and not report.identity_filled:
         return 2  # 반복행·신상정보 모두 못 채움 = 매핑 실패
+
+    # AW-001: 채움 성공 뒤 DomainRouter → LRule → Finalizer. 제출 불가 시 _DRAFT.
+    try:
+        from auto_write.domains.pipeline_gate import run_to_final
+
+        gate = run_to_final(
+            out,
+            explicit_domain="consultant_application",
+            document_type="resume",
+            apply_draft_name=True,
+            avoid_path=form,
+        )
+        if gate.blocked_reason or (gate.finalizer and not gate.finalizer.submittable):
+            reason = gate.blocked_reason or (
+                gate.finalizer.blocked_reason if gate.finalizer else "LRule/Finalizer"
+            )
+            print(f"\nLRule/Finalizer: 제출명 불가 — {reason}")
+            if gate.renamed_path and gate.renamed_path != str(out):
+                print(f"저장: {gate.renamed_path}")
+    except Exception as exc:  # noqa: BLE001 — 게이트 실패를 채움 성공으로 위장하지 않음
+        from auto_write.services.usage_acceptance import force_draft_name
+
+        print(f"\nLRule/Finalizer 오류(fail-closed): {type(exc).__name__}: {exc}", file=sys.stderr)
+        new_path, err = force_draft_name(out, avoid=form)
+        if err:
+            print(f"_DRAFT 마킹 실패: {err}", file=sys.stderr)
+        elif new_path != out:
+            print(f"저장: {new_path}")
     return 0
 
 

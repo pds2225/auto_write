@@ -39,6 +39,7 @@ class DomainContext:
             "domain": self.domain.value,
             "confidence": round(self.domain_result.confidence, 3),
             "reason": self.domain_result.reason,
+            "ambiguous": self.domain_result.is_ambiguous(),
             "document_type": self.document_type,
             "project_id": self.project_id,
             "workspace_dir": str(self.workspace_dir) if self.workspace_dir else None,
