@@ -1,14 +1,14 @@
 # RESUME.md — auto_write 세션 체크포인트
 
 > 세션을 새로 시작하면 **이 파일을 먼저** 읽는다. 상세 트랙은 아래 링크.
-> 최종 갱신: **2026-08-20** (사용자 지원사업 절차·도보네비 카드 정본. 엔진 핀은 2026-08-18 `fe4aa17`)
+> 최종 갱신: **2026-08-23** (신청 원장: KICXUP 선정·온랩 접수·1인창조 취소·함서영 결과대기. 엔진 핀은 2026-08-18 `fe4aa17`)
 
 ## 한 줄 상태
 
 `pds2225/auto_write` 단일 정본. `origin/main` @ `fe4aa17` (#157 핀, 기능 끝은 #156 `1001b76`).
 에이전트 입구 = **bizdoc-hub** / CLI 입구 = **auto_write_hub.py**. 맵: `docs/BIZDOC_HUB_MAP.md`.
 
-**문서 작업:** KICXUP 챌린지 발표 진행(정본 v3). 항우연 STAR-Exploration **선정됨**(별도 트랙).
+**문서 작업:** 내비 KICXUP **선정**, STAR-Exploration **선정**(별도 트랙). 한난 온랩 **접수**. 1인창조 **취소**. 함서영 예술창업은 발표 끝·결과대기.
 사용자 지원 절차 정본=`user-bizdoc-playbook`. 기업 카드=`docs/clients/dobonevi_card.md`.
 신청 원장=`docs/clients/user_applications.md` (채팅으로만 답함. Google Docs 정리본 만들지 말 것).
 **엔진:** T-20260814-02 명세+실행지시+BPQ-00 감사+#150 측정기+#155 git-sync(기준 브랜치=GitHub default/`main`)+#156(웹앱 사양·계획 보강·STEP 3A)이 main에 있음. DOCX 정본=`core.docx.services`.
