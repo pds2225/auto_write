@@ -81,6 +81,7 @@ class TestLRuleEnforcer:
         assert report.domain
         assert report.timestamp
         assert report.registry_sha256
+        assert report.registry_path
         assert "total" in report.summary
         assert len(report.rules) > 0
 

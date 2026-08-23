@@ -38,3 +38,10 @@ class BusinessPlanPipeline:
     def run_bizplan_autopilot(self, docx_path: Path, **kwargs: Any) -> Any:
         from auto_write.services.bizplan_autopilot import run_bizplan_autopilot
         return run_bizplan_autopilot(docx_path, **kwargs)
+
+    def run_to_final(self, artifact_path: Path, **kwargs: Any) -> Any:
+        """DomainRouter → LRule → Hash → Finalizer. 산출물 제출 게이트."""
+        from auto_write.domains.pipeline_gate import run_to_final
+        kwargs.setdefault("explicit_domain", "business_plan")
+        kwargs.setdefault("document_type", "business_plan")
+        return run_to_final(artifact_path, **kwargs)

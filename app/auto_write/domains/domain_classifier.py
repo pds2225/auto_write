@@ -17,17 +17,26 @@ class Domain(str, Enum):
     OTHER = "other"
 
 
+# Keyword matches start at 0.7; OTHER is 0.3. Below this is REVIEW_REQUIRED.
+_AMBIGUOUS_CONFIDENCE = 0.5
+
+
 @dataclass
 class DomainResult:
     domain: Domain
     confidence: float
     reason: str
 
+    def is_ambiguous(self) -> bool:
+        """모호하면 FINAL 금지. OTHER 또는 신뢰도 부족."""
+        return self.domain == Domain.OTHER or self.confidence < _AMBIGUOUS_CONFIDENCE
+
     def as_dict(self) -> dict:
         return {
             "domain": self.domain.value,
             "confidence": round(self.confidence, 3),
             "reason": self.reason,
+            "ambiguous": self.is_ambiguous(),
         }
 
 

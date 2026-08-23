@@ -5,6 +5,74 @@
 
 ---
 
+## 2026-08-19 밤 사이클 2 — mechanized 가드를 실제 검사에 연결
+
+### 무엇을 고쳤나
+
+- **전에는:** 검사 경로는 한 함수(`run_to_final`)로 모였지만, L규칙 44개 mechanized 가드를 넘기지 않아 기계 검사 가능한 항목도 **UNVERIFIABLE** 로 남았습니다. `[확인필요]` 같은 실제 결함도 FAIL이 아니라 “검사 못 함”이었습니다.
+- **이제는:** 산출물이 있으면 `build_lrule_guards` 가 자동으로 붙습니다.
+  1. 문서에서 바로 볼 수 있는 규칙(마커 L009, 유색 L006/L022, 마스킹 L007, 안내문구 L012, NotebookLM 블록 L017 등)은 **진짜 PASS/FAIL**
+  2. 채움 시점·gitignore 같은 과정 규칙은 **과정 PASS**(문서만 보고 거짓 검사하지 않음)
+  3. 사람 판단이 필요한 규칙(judgment/gap)은 **그대로 REVIEW_REQUIRED** → 제출 이름(FINAL)은 계속 막힘
+- 자동다듬기(`run_autopilot`)는 수용검사 설정을 가드에 같이 넘깁니다.
+- HWPX 제출(`submit_hwpx`)은 **이번에도 안 바꿨습니다.** 그쪽은 수용검사 통과가 제출 이름 계약입니다.
+
+### 테스트 결과 (증거)
+
+- 가드·게이트·hub **58 passed** (신규 `test_lrule_guards.py` 포함).
+- 실행: `python3 -m pytest app/tests/test_lrule_guards.py app/tests/test_e2e_domain_pipeline.py app/tests/test_finalizer.py app/tests/test_lrule_enforcer.py app/tests/test_lrule_domain_gate.py app/tests/test_auto_write_apply.py::test_autopilot_imports_lrule_finalizer_from_canonical_services app/tests/test_auto_write_apply.py::test_autopilot_acceptance_gate_passes_clean_doc app/tests/test_auto_write_apply.py::test_autopilot_strict_acceptance_promotes_paren_warn_to_draft app/tests/test_auto_write_apply.py::test_autopilot_acceptance_gate_can_be_disabled app/tests/test_hub_entrypoints.py -q`
+- Python **3.12.3** (이 환경에 3.11 없음).
+- main 기존 실패(수용검사 monkeypatch가 re-export를 못 패치, HWPX 유색 ImportError 등)는 **만지지 않았습니다**.
+
+### 건너뛴 것 / 다음 후보
+
+- AW-001 LIST는 `[~]` 유지. REQUEST_SOLVED=NO — 사람 판단 규칙이 남아 FINAL이 열리지 않음(의도).
+- HWPX `submit_hwpx` 에 LRule을 붙일지 (수용검사 exit 0 계약과 충돌).
+- 웹앱·BPQ-00·공고 초안: 대기 유지.
+
+### 안전(불변)
+
+원본 덮어쓰기 없음 · 날조 0 · fail이면 `_DRAFT` · `*V2` 병렬 게이트 없음.
+
+---
+
+## 2026-08-19 밤 사이클 — TASK.md AW-001 (문서가 정해진 검사 경로를 거쳐 끝나게)
+
+### 무엇을 고쳤나
+
+- **전에는:** 사업계획서 자동다듬기(`run_autopilot`)가 도메인을 `classify_domain`으로만 보고 LRule·Finalizer를 **따로따로** 불렀습니다. 빈 칸/모호한 문서도 제출 이름으로 남을 여지가 있었고, 검사 후 파일이 바뀌거나 규칙표가 바뀌면 FINAL을 막는 해시 검사가 비어 있었습니다(`pass` 자리표시).
+- **이제는:** 모든 제출 판정이 **한 함수** `run_to_final` 로 모입니다.
+  1. 문서 종류를 DomainRouter가 판정
+  2. 애매하면(OTHER·신뢰도 낮음) 바로 `_DRAFT` — 제출 이름 금지
+  3. L규칙 전수 검사
+  4. 파일 해시·규칙표 해시가 검사 때와 다르면 FINAL 금지
+  5. 규칙 리포트가 없거나 같은 규칙 ID가 두 번 나와도 FINAL 금지
+  6. Finalizer가 FINAL 또는 `_DRAFT` 이름을 확정
+- **사업계획서 파이프라인**과 **컨설턴트 신청서 파이프라인**에 `run_to_final` 을 붙였습니다.
+- 이력서 채움 CLI(`resume_fill.py fill`)도 채운 뒤 같은 게이트를 탑니다. 제출 불가면 `_DRAFT`로 바꿉니다.
+- HWPX 제출(`submit_hwpx`)은 **일부러 안 바꿨습니다.** 그쪽은 이미 “수용검사 통과해야 제출 이름” 계약이 있고, L규칙을 붙이면 가드가 없어 **모든 한글 제출본이 `_DRAFT`가 됩니다.** 아침 판단 사항.
+
+### 테스트 결과 (증거)
+
+- 신규·보강 **52 passed** (도메인 E2E + Finalizer fail-closed + LRule + 게이트 잠금 + hub).
+- 실행: 저장소 루트에서 `python3 -m pytest app/tests/test_e2e_domain_pipeline.py app/tests/test_finalizer.py app/tests/test_lrule_enforcer.py app/tests/test_lrule_domain_gate.py app/tests/test_auto_write_apply.py::test_autopilot_imports_lrule_finalizer_from_canonical_services app/tests/test_auto_write_apply.py::test_autopilot_acceptance_gate_passes_clean_doc app/tests/test_auto_write_apply.py::test_autopilot_acceptance_gate_can_be_disabled app/tests/test_hub_entrypoints.py -q`
+- 이 환경에 Python 3.11이 없어 **3.12.3** 으로 돌렸습니다.
+- main에 원래 있던 실패(수용검사 monkeypatch가 re-export 모듈을 못 패치, `_RESIDUAL_RE` star-import, HWPX 유색 정규화 ImportError, `format_build_korean` 등)는 **만지지 않았습니다**(기존 baseline).
+
+### 건너뛴 것 / 다음 후보
+
+- L규칙 mechanized 가드를 autopilot이 실제로 넘기지 않음 → 실문서는 계속 `_DRAFT`(fail-closed 유지).
+- HWPX `submit_hwpx` 에 LRule을 붙일지 (수용검사 exit 0 계약과 충돌).
+- 웹앱(AW-003/004/009)·BPQ-00 제품 코드: TASK가 **승인 전 대기**.
+- 공고+빈 양식 초안: 파일 오기 전 대기.
+- T-20260816-03 로컬 PC 리모트 컨트롤: 이 클라우드 VM에서는 DONE 금지.
+
+### 안전(불변)
+
+원본 덮어쓰기 없음 · 날조 0 · fail이면 `_DRAFT` · `*V2` 병렬 게이트 없음.
+
+---
+
 ## 2026-07-02 밤 사이클 (추가 트랙 7 — 폴더 통째로 채울 때도 '양식별로 무엇이 남았는지' 콕 집어 줍니다)
 
 ### 여러 양식을 한 번에 채운 뒤, 양식마다 "확인 필요 칸(확정 명령)·빈칸"을 보여줍니다
