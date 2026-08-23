@@ -1,16 +1,17 @@
 # RESUME.md — auto_write 세션 체크포인트
 
 > 세션을 새로 시작하면 **이 파일을 먼저** 읽는다. 상세 트랙은 아래 링크.
-> 최종 갱신: **2026-08-20** (세션 마무리. STAR 위성항법 출처 확인. main 핀 `d6b96b8` #158)
+> 최종 갱신: **2026-08-23** (세션 마무리. 스킬 `tech-framing-provenance` 의미 확인. main 핀 `d6b96b8` #158)
 
 ## 한 줄 상태
 
 `pds2225/auto_write` 단일 정본. `origin/main` @ `d6b96b8` (#158 세션핀. 기능 끝은 #156 `1001b76`, GitSync #155 `ddac657`).
 에이전트 입구 = **bizdoc-hub** / CLI 입구 = **auto_write_hub.py**. 맵: `docs/BIZDOC_HUB_MAP.md`.
+**이 브랜치(미머지):** STAR 위성항법=프레이밍 확정 + 스킬 `tech-framing-provenance` + `AGENTS.md` §7(요청 원문=훅 우선).
 
 **문서 작업:** 항우연 「2026 STAR-Exploration」 **선정됨**. 지원금은 최종발표 **상위 2팀만**. 공개 공고에 발표 배점표 없음 — 원장 A6.
 **엔진:** T-20260814-02 명세+실행지시+BPQ-00 감사+#150 측정기+#155 git-sync(기준 브랜치=GitHub default/`main`)+#156(웹앱 사양·계획 보강·STEP 3A)이 main에 있음. DOCX 정본=`core.docx.services`.
-**열린 PR:** 없음. 원격 = `main` + `backup/*` 2개.
+**열린 작업:** 이 브랜치가 main보다 앞섬(STAR 스킬+§7 훅). Cursor 클라우드 PR은 기본 draft. 원격 `main` + `backup/*` 2개.
 **머지 주의:** Cursor 클라우드 PR은 기본 draft. GitHub 자동머지는 draft에서 불가. 머지 요청 시 Ready for review 후 `gh pr merge --auto --squash`.
 작업 시작 전: `git fetch` → `TASK.md` → 현재 구현 조사 → 그다음 작업.
 목표 흐름: `LLM → StageResult(JSON) → 검증 → 다음 Stage → 렌더 → Finalizer`. 한 번에 최종 DOCX 금지.
@@ -18,7 +19,18 @@
 P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금지. 파일 오면 초안 1건). **P 완료 후는 최우선 사용 케이스.** 사업자등록증은 첫 화면 필수 아님.
 웹앱 실행 정본=`웹앱 최종 요구사항_20260816`. 승인 전 웹앱 제품 코드 대기.
 
-## 지금 세션 — STAR-Exploration (A6)
+## 지금 세션 — 2026-08-23 마무리
+
+| 항목 | 내용 |
+|------|------|
+| 한 일 | `tech-framing-provenance`가 뭔지 확인. (공고에 맞춰 붙인 기술 문장 vs 보유·이전. IR에서 단정 금지.) 코드 추가 없음. |
+| 이미 이 브랜치에 있는 것 (08-20) | 위성항법 출처=프레이밍. 스킬 수확. `AGENTS.md` §7 훅=요청 원문 우선. 가드 테스트 8 passed |
+| 스킬 한 줄 | 도보네비는 보행 길찾기. STAR에 GNSS/KASS/KPS를 붙인 것은 공고 맞춤 말. 항우연 기술이전 원문 없음. |
+| 쓰지 말 것 | IR에서 위성항법을 보유·이전·라이선스처럼 단정. 국방경진 특허를 STAR 근거로 섞기. |
+
+이어서 아래 STAR 표. 평가표·IR 양식은 아직 메일 대기.
+
+## STAR-Exploration (A6)
 
 | 항목 | 내용 |
 |------|------|
@@ -36,7 +48,8 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 
 | 날짜 | 내용 | 근거 |
 |------|------|------|
-| 2026-08-20 | 세션 마무리. STAR 위성항법=프레이밍(원문 없음). 스킬수확 `tech-framing-provenance` + 위키 추가 | Drive 위키 · `.claude/skills/tech-framing-provenance` · 이 체크포인트 |
+| 2026-08-23 | 세션 마무리. 스킬 `tech-framing-provenance` 의미 확인(공고 맞춤 문장≠보유기술). 추가 구현 없음 | 이 체크포인트 · 위키 `session-2026-08-23.md` |
+| 2026-08-20 | 세션 마무리. STAR 위성항법=프레이밍(원문 없음). 스킬수확 `tech-framing-provenance` + 훅 규칙 §7 | Drive 위키 · `.claude/skills/tech-framing-provenance` · `AGENTS.md` §7 |
 | 2026-08-18 | 세션 마무리. GitSyncService `master` 하드코딩 제거(#155 already on main). draft면 자동머지 불가 확인 | PR #155 `ddac657` / #158 |
 | 2026-08-16 | 열린 draft #149+#152+#153+#154 합본 #156 squash `1001b76`. #155는 `ddac657` | T-20260816-08 / PR #156 |
 | 2026-08-16 | #150 STEP 2 추출 Baseline 측정기 main 머지. 추출기 본체 아님 | PR #150 `0a8b262` |
@@ -80,12 +93,14 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 3. **REQUEST_LEDGER** 실제출 확인 대기(A1~A5) + A6 평가표/IR 양식 — 경로/제출 여부는 사용자만 확인 가능
 4. **보류**: HWPX 세로 라벨(c) — 코퍼스 수요 극소(AC6)
 5. **보류**: SFT P3 후속·DOCX↔HWP 100% — 실사용에서 막힐 때
-6. **열린 draft:** 없음. 원격 = `main` + `backup/*` 2개. 닫힌 #139 충돌 표시는 무시.
+6. **원격 정리:** `main` + `backup/*` 2개. 이 브랜치의 STAR 스킬·§7은 아직 main 아님. 닫힌 #139 충돌 표시는 무시.
 
 ## 재개 명령
 
 ```text
-이어서: 항우연 STAR-Exploration. 메일에서 6팀인지 상위 2팀인지, 평가표·IR 양식·발표시간을 주면 발표자료부터. IR에 위성항법을 항우연 보유기술처럼 쓰지 말 것(2026-08-20 출처 확인).
+이어서: 항우연 STAR-Exploration. 메일에서 6팀인지 상위 2팀인지, 평가표·IR 양식·발표시간을 주면 발표자료부터.
+IR에 위성항법을 항우연 보유기술처럼 쓰지 말 것(스킬 `tech-framing-provenance`, 2026-08-20 출처).
+스킬 훅: 만들게 한 요청 원문을 description 맨 앞. 스킬명만 부르면 효용 감소 (`AGENTS.md` §7).
 엔진: T-20260814-02 + #150 측정기 + #155 git-sync(base=GitHub default/main) main `ddac657`. 합본 #156 squash `1001b76`. 세션핀 `d6b96b8` #158.
 P 개발 중=Problem만. P 완료 후=최우선 사용 케이스.
 GitSync 기준 브랜치: AUTO_WRITE_GIT_BASE_BRANCH 없으면 origin/HEAD → ls-remote HEAD → main.
@@ -106,6 +121,7 @@ py -3.11 auto_write_hub.py env
 - 허브 맵: `docs/BIZDOC_HUB_MAP.md`
 - 기술 프레이밍 vs 보유기술: `.claude/skills/tech-framing-provenance/SKILL.md` · 위키 `tech-framing-provenance.md`
 - 스킬 훅=요청 원문 우선: `AGENTS.md` §7 · 위키 `skill-request-hooks.md`
+- 이 세션 위키: `session-2026-08-23.md` (Drive)
 - autowrite 통합: `docs/REPO_DUPLICATION_CHECK.md`
 - HWPX 파리티(B 완결): `docs/RESUME_hwpx_parity.md`
 - 실사용 원장: `docs/REQUEST_LEDGER.md`
