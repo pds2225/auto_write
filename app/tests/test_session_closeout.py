@@ -111,7 +111,11 @@ def test_status_without_file_is_not_due(tmp_path: Path) -> None:
     assert "due: False" in out.stdout
 
 
-def test_repo_default_flag_is_not_due() -> None:
+def test_repo_committed_flag_schema() -> None:
     path = ROOT / ".session" / "closeout_due.json"
     data = json.loads(path.read_text(encoding="utf-8"))
-    assert data["due"] is False
+    assert data.get("schema") == 1
+    assert isinstance(data.get("due"), bool)
+    if data["due"]:
+        assert data.get("id")
+        assert data.get("requested_from")

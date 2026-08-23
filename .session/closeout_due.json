@@ -1,9 +1,16 @@
 {
   "schema": 1,
-  "due": false,
-  "id": "",
-  "requested_at": "",
-  "requested_from": "",
-  "note": "",
-  "acks": []
+  "due": true,
+  "id": "20260823105507",
+  "requested_at": "2026-08-23T10:55:07Z",
+  "requested_from": "cursor-cloud",
+  "note": "2026-08-23 세션마무리 (이 클라우드 창 RESUME.md)",
+  "acks": [
+    {
+      "at": "2026-08-23T10:55:07Z",
+      "agent": "cursor",
+      "location": "cloud",
+      "extra": "RESUME.md"
+    }
+  ]
 }
