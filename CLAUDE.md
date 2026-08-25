@@ -72,6 +72,7 @@ psst-structure-check · infographic-suggestion · document-quality-scoring ·
 backup-and-rollback · document-quality-inspection ·
 **docx-hwp-conversion**(DOCX↔HWP/HWPX 양방향 변환, 입출력단)
 **session-resume**(이어서/세션마무리/체크포인트. RESUME.md SSOT. 일회성 배너는 스킬 아님)
+**병행(문서 하네스 아님):** `k-navi-mvp-highlight` — KICXUP MVP 화면녹화 컷시트·하이라이트. `bizdoc-hub`로 라우팅하지 말 것.
 
 ### 커맨드 (`.claude/commands/`)
 
@@ -184,6 +185,7 @@ submission_orchestrator·image_apply). 신규 에이전트는 `cross-form-filler
 | 2026-08-02 | autowrite 잔여 고유자산 흡수 완료(run/docs/tests) + 통합 문서 정리; 원격 삭제는 owner 수동 | tools/injector/{run.bat,run.sh,docs/,tests/} · REPO_DUPLICATION_CHECK · ONBOARDING · run_auto_loop_15.bat | 사용자 요청: autowrite에만 있던 기능 가져오고 autowrite 삭제. 코어는 상위호환·인젝터 잔여 7파일 이전·원격 admin권한 없어 삭제 절차 문서화 |
 | 2026-08-11 | RESUME.md 신설 + 허브·중복 정리(A): BIZDOC_HUB_MAP·bizplan-orchestrator 스킬·/bizdoc·죽은 커맨드 참조 정리·입구 가드 테스트 | RESUME.md · docs/BIZDOC_HUB_MAP.md · .claude/skills/bizplan-orchestrator · .claude/commands/bizdoc.md · test_hub_entrypoints.py · HANDOFF/PROJECT_REPORT/CLAUDE/AGENTS | 사용자 요청 3·4순위. 입구 이중(에이전트 bizdoc-hub vs CLI auto_write_hub) 역할 분리 문서화. 문서가 가리키던 bizplan-orchestrator 스킬 부재 해소. 아카이브 커맨드(/auto-write-quality·finalize) 잔존 참조 제거 |
 | 2026-08-20 | session-resume 스킬 신설. 배너 스킬/후크는 일회성이라 철회 | 신규 `.claude/skills/session-resume/SKILL.md` · `.claude/hooks/session_resume_hook.js` · 삭제 promo-banner-localize | CLAUDE.md 가 session-resume 을 가리키는데 파일이 없음 = 매 세션 빈손. K-Navi 배너 한/영은 다음 요청 0회 예상이라 스킬·GenerateImage 후크 철회. 후크는 「세션마무리/이어서」만 |
+| 2026-08-20 | 케이네비 MVP 하이라이트 스킬 수확 + 위키 3페이지 | 신규 `.claude/skills/k-navi-mvp-highlight` · `.omc/wiki/k-navi-mvp-highlight-edit.md` · `k-navi-cloud-drive-ingest.md` · `session-2026-08-20-k-navi-mvp.md` · RESUME | KICXUP 실녹화 컷시트 재실행용. 클라우드=Windows 경로 불가, Drive MCP 10MB, gdown 후 공유 제한. 보이는 것만 주장(랜드마크/KASS 금지). bizdoc-hub 라우팅 아님. 엔진 코드 무변경 |
 
 > **이전 이력 35건은 [docs/CHANGELOG.md](docs/CHANGELOG.md) 로 옮겼다**(2026-07-20).
 > 이 표가 파일의 80%(42KB)를 차지했고, `CLAUDE.md` 는 매 세션 통째로 로드되기 때문이다.
