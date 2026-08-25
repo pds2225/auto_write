@@ -53,6 +53,7 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 |------|------|------|
 | 2026-08-23 | 세션 마무리. 스킬 `tech-framing-provenance` 의미 확인(공고 맞춤 문장≠보유기술). 추가 구현 없음 | 이 체크포인트 · 위키 `session-2026-08-23.md` |
 | 2026-08-23 | 원장 A1~A6 종료(사용자: 이미 제출). 웹앱은 승인 전 대기. AW-001 #161 main | 이 체크포인트 · `9851ab3` |
+| 2026-08-20 | K-Navi 배너 EN/KO 16:9 artifact(미커밋). `session-resume` 스킬 신설. `promo-banner-localize` 일회성이라 철회 | `.claude/skills/session-resume` |
 | 2026-08-20 | 세션 마무리. STAR 위성항법=프레이밍(원문 없음). 스킬수확 `tech-framing-provenance` + 훅 규칙 §7 | Drive 위키 · `.claude/skills/tech-framing-provenance` · `AGENTS.md` §7 |
 | 2026-08-18 | 세션 마무리. GitSyncService `master` 하드코딩 제거(#155 already on main). draft면 자동머지 불가 확인 | PR #155 `ddac657` / #158 |
 | 2026-08-16 | 열린 draft #149+#152+#153+#154 합본 #156 squash `1001b76`. #155는 `ddac657` | T-20260816-08 / PR #156 |
@@ -79,6 +80,7 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 ## 남은 일 (우선순위)
 
 0. **STAR-Exploration:** 원장 A1~A6 종료(이미 제출). 상위2 지원금·발표자료는 **새 요청이 있을 때만**. 그때 IR 위성항법=공고 맞춤 프레이밍(미보유 기술) — 과대포장 금지
+0a. **K-Navi 배너:** 16:9 한글/영문은 Cursor artifact. 재생성은 요청 시에만(스킬로 고정하지 않음). 저장소/슬라이드 삽입은 사용자가 원할 때만
 0b. **엔진 / STEP 2 추출기:** 실문서 D1–D3 HWP + `STEP2_EXTRACTION_GOLDEN_V1.json` 으로
    `python app/tools/step2_extraction_baseline.py --golden … --input-dir …`
    → `baseline_report`의 READ_MISS / STRUCTURED_EXTRACTION_MISSING / VALUE_ERROR / SOURCE_LOST 건수.
@@ -102,7 +104,8 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 ## 재개 명령
 
 ```text
-이어서: 원장 A는 종료. 발표 IR은 새 요청이 있을 때만. 그때 위성항법을 항우연 보유기술처럼 쓰지 말 것(스킬 `tech-framing-provenance`, 2026-08-20 출처).
+이어서: 스킬 `session-resume` + `RESUME.md`. 원장 A는 종료. 발표 IR은 새 요청이 있을 때만. 그때 위성항법을 항우연 보유기술처럼 쓰지 말 것(스킬 `tech-framing-provenance`, 2026-08-20 출처).
+K-Navi: 16:9 한글/영문 배너는 Cursor artifact. 저장소에 넣을지는 사용자 확인. 재생성 요청이 오기 전에 스킬화하지 말 것.
 스킬 훅: 만들게 한 요청 원문을 description 맨 앞. 스킬명만 부르면 효용 감소 (`AGENTS.md` §7).
 엔진: T-20260814-02 + #150 측정기 + #155 git-sync(base=GitHub default/main) + #161 생산 게이트. main `9851ab3`. 합본 #156 squash `1001b76`. 세션핀 #158 `d6b96b8`.
 P 개발 중=Problem만. P 완료 후=최우선 사용 케이스.
@@ -131,6 +134,7 @@ py -3.11 auto_write_hub.py env
 - BPQ 정밀화 대기 지식: `docs/BPQ_PIPELINE_INSIGHTS_20260815.md`
 - 웹앱 실행 정본: `docs/AUTO_WRITE_웹앱_최종_요구사항_20260816.md`
 - 작업 규약: `CLAUDE.md` · `AGENTS.md`
+- 세션 재개/마무리: `.claude/skills/session-resume/SKILL.md`
 
 ## 안전 불변
 

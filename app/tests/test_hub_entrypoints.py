@@ -33,6 +33,7 @@ _REQUIRED_SKILLS = (
     "docx-hwp-conversion/SKILL.md",
     "hwpx-doctor/SKILL.md",
     "tech-framing-provenance/SKILL.md",
+    "session-resume/SKILL.md",
 )
 _REQUIRED_COMMANDS = (
     "bizdoc.md",
