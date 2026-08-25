@@ -1,26 +1,7 @@
 {
   "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "startup|resume|clear|compact",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\omc-auto-router\\scripts\\omc_session_start.py\""
-          }
-        ]
-      }
-    ],
+    "SessionStart": [],
     "UserPromptSubmit": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\session-guard\\scripts\\guard_prompt.py\""
-          }
-        ]
-      },
       {
         "matcher": "",
         "hooks": [
@@ -35,8 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\omc-auto-router\\scripts\\absorb_skills_hook.py\" --if-stale",
-            "timeout": 120
+            "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\session-guard\\scripts\\guard_prompt.py\""
           }
         ]
       }
@@ -65,6 +45,15 @@
     ],
     "PreToolUse": [
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\omc-auto-router\\scripts\\omc_pregit_gsync.py\""
+          }
+        ]
+      },
+      {
         "matcher": "Edit|Write|MultiEdit|NotebookEdit",
         "hooks": [
           {
@@ -79,15 +68,6 @@
           {
             "type": "command",
             "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\session-guard\\scripts\\guard_pregit.py\""
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python \"C:\\Users\\ekth3\\.claude\\skills\\omc-auto-router\\scripts\\omc_pregit_gsync.py\""
           }
         ]
       }

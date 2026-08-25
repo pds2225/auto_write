@@ -98,3 +98,89 @@ class TestFinalizer:
             assert "_DRAFT" in result.final_path
         finally:
             Path(tmppath).unlink()
+
+
+def _sha256(path: Path) -> str:
+    import hashlib
+
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _passing_report(path: Path):
+    from auto_write.services.lrule_enforcer import LRuleEnforcer, LRuleReport
+
+    enforcer = LRuleEnforcer()
+    return LRuleReport(
+        domain="business_plan",
+        artifact_path=str(path),
+        artifact_sha256=_sha256(path),
+        registry_sha256=_sha256(enforcer.lessons_path),
+        registry_path=str(enforcer.lessons_path),
+        summary={
+            "total": 1,
+            "pass": 1,
+            "na": 0,
+            "fail": 0,
+            "review_required": 0,
+            "unverifiable": 0,
+            "user_override": 0,
+        },
+        rules=[{
+            "id": "L000",
+            "title": "ok",
+            "domain": "all",
+            "applicable": True,
+            "status": "PASS",
+            "phase": "mechanized",
+            "guard": "",
+            "evidence": "synthetic",
+            "reason": "",
+            "reviewer": "auto",
+        }],
+        can_finalize=True,
+    )
+
+
+class TestFinalizerFailClosed:
+    def test_clean_report_can_finalize(self, tmp_path):
+        """blocker가 0이면 FINAL(submittable)이어야 한다."""
+        p = tmp_path / "ok.docx"
+        p.write_bytes(b"ok")
+        result = finalize_artifact(p, _passing_report(p))
+        assert result.submittable
+        assert result.success
+        assert not result.is_draft
+
+    def test_missing_report_blocks_final(self, tmp_path):
+        p = tmp_path / "x.docx"
+        p.write_bytes(b"x")
+        result = finalize_artifact(p, lrule_report=None)
+        assert not result.submittable
+        assert "missing" in result.blocked_reason.lower()
+
+    def test_hash_mismatch_blocks_final(self, tmp_path):
+        p = tmp_path / "x.docx"
+        p.write_bytes(b"before")
+        report = _passing_report(p)
+        p.write_bytes(b"after-change")
+        result = finalize_artifact(p, report)
+        assert not result.submittable
+        assert "mismatch" in result.blocked_reason
+
+    def test_registry_mismatch_blocks_final(self, tmp_path):
+        p = tmp_path / "x.docx"
+        p.write_bytes(b"x")
+        report = _passing_report(p)
+        report.registry_sha256 = "0" * 64
+        result = finalize_artifact(p, report)
+        assert not result.submittable
+        assert "registry SHA256 mismatch" in result.blocked_reason
+
+    def test_duplicate_ids_block_final(self, tmp_path):
+        p = tmp_path / "x.docx"
+        p.write_bytes(b"x")
+        report = _passing_report(p)
+        report.rules.append(dict(report.rules[0]))
+        result = finalize_artifact(p, report)
+        assert not result.submittable
+        assert "duplicate" in result.blocked_reason.lower()

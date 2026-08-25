@@ -51,6 +51,12 @@ class TestE2EBusinessPlan:
         result = classify_domain(text="사업계획서 PSST 창업아이템 사업화 전략")
         assert result.domain == Domain.BUSINESS_PLAN
         assert result.confidence > 0.5
+        assert not result.is_ambiguous()
+
+    def test_other_domain_is_ambiguous(self):
+        result = classify_domain(text="안녕하세요")
+        assert result.domain == Domain.OTHER
+        assert result.is_ambiguous()
 
     def test_domain_routing(self):
         """DomainRouter가 business_plan 컨텍스트를 생성해야 한다."""
@@ -101,6 +107,49 @@ class TestE2EBusinessPlan:
         finally:
             Path(tmppath).unlink()
 
+    def test_lrule_sha256_consistency(self):
+        """같은 문서의 SHA256은 재계산 시 동일해야 한다."""
+        with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
+            _create_bp_docx(Path(f.name))
+            tmppath = f.name
+
+        try:
+            r1 = enforce_lrules(domain=Domain.BUSINESS_PLAN, artifact_path=tmppath)
+            r2 = enforce_lrules(domain=Domain.BUSINESS_PLAN, artifact_path=tmppath)
+            assert r1.artifact_sha256 == r2.artifact_sha256
+            assert len(r1.artifact_sha256) == 64
+        finally:
+            Path(tmppath).unlink()
+
+    def test_empty_doc_still_classifies(self):
+        """빈 문서도 domain classification은 동작해야 한다."""
+        with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
+            doc = Document()
+            doc.save(f.name)
+            tmppath = f.name
+
+        try:
+            report = enforce_lrules(domain=Domain.BUSINESS_PLAN, artifact_path=tmppath)
+            assert report.summary["total"] > 0
+        finally:
+            Path(tmppath).unlink()
+
+    def test_force_draft_flag(self):
+        """force_draft=True이면 무조건 DRAFT여야 한다."""
+        with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
+            _create_bp_docx(Path(f.name))
+            tmppath = f.name
+
+        try:
+            report = enforce_lrules(domain=Domain.BUSINESS_PLAN, artifact_path=tmppath)
+            result = finalize_artifact(
+                artifact_path=tmppath, lrule_report=report, force_draft=True
+            )
+            assert result.is_draft
+            assert not result.submittable
+        finally:
+            Path(tmppath).unlink()
+
 
 class TestE2EConsultantApplication:
     def test_domain_classification(self):
@@ -141,8 +190,133 @@ class TestE2EConsultantApplication:
 
     def test_no_fabrication(self):
         """consultant_application에서 임의 사실 생성이 없어야 한다."""
-        # This tests that the pipeline doesn't generate fake data
         result = classify_domain(text="이력서 경력 자격 컨설턴트")
         assert result.domain == Domain.CONSULTANT_APPLICATION
-        # The classification itself should not fabricate data
-        assert result.reason  # reason should be non-empty
+        assert result.reason
+
+    def test_ca_lrule_sha256_consistency(self):
+        """신청서의 SHA256은 재계산 시 동일해야 한다."""
+        with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
+            _create_ca_docx(Path(f.name))
+            tmppath = f.name
+
+        try:
+            r1 = enforce_lrules(domain=Domain.CONSULTANT_APPLICATION, artifact_path=tmppath)
+            r2 = enforce_lrules(domain=Domain.CONSULTANT_APPLICATION, artifact_path=tmppath)
+            assert r1.artifact_sha256 == r2.artifact_sha256
+            assert len(r1.artifact_sha256) == 64
+        finally:
+            Path(tmppath).unlink()
+
+    def test_ca_finalizer_produces_draft(self):
+        """신청서도 FAIL/REVIEW가 있으면 DRAFT여야 한다."""
+        with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
+            _create_ca_docx(Path(f.name))
+            tmppath = f.name
+
+        try:
+            report = enforce_lrules(domain=Domain.CONSULTANT_APPLICATION, artifact_path=tmppath)
+            result = finalize_artifact(artifact_path=tmppath, lrule_report=report)
+            assert result.is_draft
+            assert "_DRAFT" in result.final_path
+        finally:
+            Path(tmppath).unlink()
+
+    def test_ca_empty_doc_classification(self):
+        """빈 신청서도 domain classification은 consultant_application이어야 한다."""
+        with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
+            doc = Document()
+            doc.save(f.name)
+            tmppath = f.name
+
+        try:
+            result = classify_domain(text="신청서 이력서 경력")
+            assert result.domain == Domain.CONSULTANT_APPLICATION
+        finally:
+            Path(tmppath).unlink()
+
+    def test_cross_domain_na(self):
+        """BP 도메인에서 CA 규칙은 N/A여야 한다."""
+        with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
+            _create_bp_docx(Path(f.name))
+            tmppath = f.name
+
+        try:
+            report = enforce_lrules(domain=Domain.BUSINESS_PLAN, artifact_path=tmppath)
+            ca_rules = [r for r in report.rules if r["domain"] == "consultant_application"]
+            assert len(ca_rules) > 0
+            assert all(r["status"] == "N/A" for r in ca_rules)
+        finally:
+            Path(tmppath).unlink()
+
+
+class TestProductionPipelineGate:
+    def test_bp_pipeline_run_to_final(self, tmp_path):
+        from auto_write.domains.business_plan.pipeline import BusinessPlanPipeline
+
+        path = tmp_path / "bp.docx"
+        _create_bp_docx(path)
+        gate = BusinessPlanPipeline().run_to_final(path, apply_draft_name=True)
+        assert gate.domain == "business_plan"
+        assert not gate.ambiguous
+        assert gate.lrule_report is not None
+        assert gate.lrule_report.artifact_sha256
+        assert gate.finalizer is not None
+        assert not gate.finalizer.submittable  # judgment/gap → REVIEW_REQUIRED
+        assert gate.lrule_report.summary.get("unverifiable", 0) == 0
+        assert "_DRAFT" in Path(gate.renamed_path).name
+        assert Path(gate.renamed_path).exists()
+
+    def test_ca_pipeline_run_to_final(self, tmp_path):
+        from auto_write.domains.consultant_application.pipeline import (
+            ConsultantApplicationPipeline,
+        )
+
+        path = tmp_path / "ca.docx"
+        _create_ca_docx(path)
+        gate = ConsultantApplicationPipeline().run_to_final(path, apply_draft_name=True)
+        assert gate.domain == "consultant_application"
+        assert not gate.ambiguous
+        assert gate.lrule_report is not None
+        ca_rules = [r for r in gate.lrule_report.rules if r["domain"] == "consultant_application"]
+        assert all(r["applicable"] for r in ca_rules)
+        assert not gate.finalizer.submittable
+        assert "_DRAFT" in Path(gate.renamed_path).name
+
+    def test_ambiguous_domain_blocks_final(self, tmp_path):
+        from auto_write.domains.pipeline_gate import run_to_final
+
+        path = tmp_path / "blank.docx"
+        doc = Document()
+        doc.add_paragraph("안녕하세요.")
+        doc.save(str(path))
+        gate = run_to_final(path, apply_draft_name=True)
+        assert gate.ambiguous
+        assert gate.domain == "other"
+        assert not gate.finalizer.submittable
+        assert "ambiguous" in gate.blocked_reason
+        assert "_DRAFT" in Path(gate.renamed_path).name
+
+    def test_run_to_final_records_registry_hash(self, tmp_path):
+        from auto_write.domains.pipeline_gate import run_to_final
+
+        path = tmp_path / "bp.docx"
+        _create_bp_docx(path)
+        gate = run_to_final(
+            path,
+            explicit_domain="business_plan",
+            apply_draft_name=False,
+        )
+        assert gate.lrule_report.registry_sha256
+        assert len(gate.lrule_report.registry_sha256) == 64
+        assert gate.lrule_report.registry_path
+        assert Path(gate.lrule_report.registry_path).exists()
+
+    def test_pipeline_gate_is_single_module(self):
+        """AW-007: pipeline_gate V2 / 이중 정본 금지."""
+        import auto_write.domains.pipeline_gate as gate_mod
+
+        app_dir = Path(__file__).resolve().parents[1]
+        hits = [p for p in app_dir.rglob("pipeline_gate.py")]
+        assert len(hits) == 1
+        assert hits[0].resolve() == Path(gate_mod.__file__).resolve()

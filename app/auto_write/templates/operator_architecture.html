@@ -1,0 +1,9 @@
+{% extends "operator_base.html" %}
+{% block title %}시스템 아키텍처 · Auto Write{% endblock %}
+{% block eyebrow %}SYSTEM MAP{% endblock %}
+{% block page_title %}비개발자용 시스템 아키텍처{% endblock %}
+{% block content %}
+<div class="notice-box"><strong>읽는 법</strong><span>고정 그림이 아니라 실제 repo 파일 존재 여부와 핵심 심볼을 검사합니다. 각 박스 아래에는 실제 코드 경로와 연결된 L 규칙이 표시됩니다.</span></div>
+<section class="architecture-flow">{% for node in overview.nodes %}<article class="arch-node arch-{{ node.status|lower }}"><div class="arch-node-top"><span class="node-index">{{ "%02d"|format(loop.index) }}</span><span class="badge badge-{{ node.status|lower }}">{{ node.status }}</span></div><h2>{{ node.label }}</h2><p>{{ node.easy_description }}</p><code>{{ node.path }}</code><div class="rule-chips">{% for code in node.related_rules[:8] %}<a href="/console/lrules/{{ code }}">{{ code }}</a>{% endfor %}{% if not node.related_rules %}<small>직접 연결된 L 규칙 참조 없음</small>{% endif %}</div></article>{% if not loop.last %}<div class="flow-arrow">↓</div>{% endif %}{% endfor %}</section>
+<section class="summary-strip compact"><div><span>정상 노드</span><strong>{{ overview.normal }}</strong><small>파일 + 핵심 심볼 확인</small></div><div><span>경고</span><strong>{{ overview.warning }}</strong><small>파일은 있으나 심볼 미확인</small></div><div><span>미연결</span><strong>{{ overview.disconnected }}</strong><small>파일 자체 없음</small></div><div><span>Python 파일</span><strong>{{ overview.python_files }}</strong><small>app/ 실제 스캔</small></div></section>
+{% endblock %}

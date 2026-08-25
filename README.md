@@ -4,6 +4,7 @@
 
 - Windows 폴더 위치: `D:\auto_write`
 - 원격 저장소: https://github.com/pds2225/auto_write
+- 처음 받기: `git clone https://github.com/pds2225/auto_write.git D:\auto_write`
 
 ---
 
@@ -23,6 +24,20 @@
 
 ## 2. 처음 실행하는 법 (제일 쉬운 방법)
 
+### 2-0. GitHub에서 프로그램 받기 (처음 한 번)
+
+PC에 아직 `D:\auto_write` 폴더가 없으면, PowerShell 또는 명령 프롬프트에서 아래를 실행합니다.
+
+```powershell
+git clone https://github.com/pds2225/auto_write.git D:\auto_write
+```
+
+- Git이 없으면 https://git-scm.com/download/win 에서 설치합니다.
+- **이미 `D:\auto_write`가 있으면 다시 clone하지 마세요.** 기존 파일을 덮어쓰지 않습니다.
+- 다른 폴더에 깨끗한 복사본이 필요하면 `clone.bat D:\auto_write_copy` 또는 `py -3.11 app\clone_repo.py --dest D:\auto_write_copy` 를 씁니다.
+
+### 2-1. 설치·실행
+
 Windows 파일 탐색기에서 아래 파일을 **순서대로 더블클릭**하면 됩니다.
 
 | 순서 | 더블클릭할 파일 | 하는 일 |
@@ -36,6 +51,21 @@ Windows 파일 탐색기에서 아래 파일을 **순서대로 더블클릭**하
 
 ```
 http://127.0.0.1:8765
+```
+
+### 2-2. 로컬 PC 리모트 컨트롤
+
+clone이 끝난 뒤, **그 Windows PC에서** `D:\auto_write\remote_control.bat` 을 더블클릭합니다.
+
+- Cursor: `agent worker start --name auto-write-pc` (My Machines). 창을 닫지 마세요.
+- Claude Code가 있으면: `claude remote-control --name auto_write`
+- 이 클라우드 에이전트는 `D:\auto_write`에 직접 붙지 않습니다. PC가 켜져 있고 워커 창이 열려 있어야 원격 제어가 됩니다.
+
+설치가 필요하면 PowerShell에서:
+
+```powershell
+irm 'https://cursor.com/install?win32=true' | iex
+agent login
 ```
 
 ---
@@ -95,6 +125,7 @@ AI가 더 좋은 문안을 쓰게 하려면 API 키를 넣어주면 됩니다. (
 | 증상 | 해결 방법 |
 |------|-----------|
 | "Python을 찾을 수 없음" | Python 3.11 이상 설치 후 다시 실행 |
+| `git clone` 실패 / Git 없음 | Git for Windows 설치 후 다시 실행. 기존 `D:\auto_write`는 덮어쓰지 않음 |
 | 설치/패키지 오류 | `setup.bat` 다시 실행 |
 | 웹페이지 접속 안 됨 | `launch.bat` 창에 뜬 오류 메시지 확인 |
 | `http://127.0.0.1:8765` 안 열림 | 다른 프로그램이 같은 포트를 쓰는지 확인 |
@@ -133,7 +164,7 @@ python document_quality_orchestrator.py "C:\제출\사업계획서.docx"
 # 결과: results\ 폴더에 개선된 DOCX + 리포트(md/json), results\backup\ 에 원본 백업
 ```
 
-자세한 내부 구조·규칙은 `CLAUDE.md`, `HANDOFF.md`, `PROJECT_REPORT.md`, `PSST_CHECK_RULES.md`, `DOCUMENT_QUALITY_SCORE_RULES.md` 를 참고하세요.
+자세한 내부 구조·규칙은 `CLAUDE.md`, `docs/PROJECT_REPORT.md`, `docs/PSST_CHECK_RULES.md`, `docs/DOCUMENT_QUALITY_SCORE_RULES.md` 를 참고하세요.
 
 ---
 

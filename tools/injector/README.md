@@ -1,7 +1,7 @@
 # BizPlan Injector (통합 이전 자산)
 
 > 원래 `pds2225/autowrite` 레포의 **BizPlan Injector** — 사업계획서 DOCX 자동 주입 도구.
-> 레포 중복 통합(`REPO_DUPLICATION_CHECK.md` 참조)에 따라 `autowrite`의 고유 자산만
+> 레포 중복 통합(`docs/REPO_DUPLICATION_CHECK.md` 참조)에 따라 `autowrite`의 고유 자산만
 > 이곳으로 이전했다. `autowrite`의 `app/auto_write/` 웹 패키지는 `auto_write` 본체가
 > 상위호환이므로 이전하지 않았다(중복 제거).
 

@@ -1,0 +1,4554 @@
+# auto_write
+
+> 이 파일은 이 GitHub 레포의 유일한 AI 작업지시 기준이다.
+> Google Tasks와는 완전히 별개이며 Google Tasks의 항목을 조회·복사·동기화하지 않는다.
+
+---
+
+# 0. TASK LIST
+
+<!--
+비개발자가 이 부분만 보고도 현재 작업을 이해·수정·삭제할 수 있어야 한다.
+상태: 대기 / 진행 중 / 완료 / 막힘 / 취소 는 아래 기호만 사용한다.
+TASK 1개 = 반드시 1줄. LIST의 TASK_ID와 DETAILS의 TASK_ID는 반드시 1:1.
+사용자가 "삭제"하면 LIST + DETAILS 모두 삭제. "취소"하면 취소 상태로 보존 가능.
+REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
+-->
+
+[~] AW-001 | 문서 작성이 정해진 검사 경로를 거쳐 끝나게 한다
+[ ] AW-002 | GitHub와 작업 상태를 안전하게 주고받게 한다
+[ ] AW-003 | L 규칙을 한 화면에서 보고 고칠 수 있게 한다
+[ ] AW-004 | 문서 작성 진행 상태를 한 화면에서 보게 한다
+[ ] AW-005 | 새 작성과 기존 자료 작성을 한 흐름으로 단순화한다
+[ ] AW-006 | 루트 파일을 역할별로 정리한다
+[ ] AW-007 | 중복·미사용 코드를 찾아 정리한다
+[ ] AW-008 | 남은 L 규칙 빈칸을 실제 검사로 채운다
+[ ] AW-009 | 요구사항 문서로 운영 웹앱 P0를 만든다
+[x] T-20260814-01 | 기본 브랜치(main) 보호가 켜져 있고, 문서 머지는 docs-gate를 거친다
+[ ] T-20260814-02 | AIMY급 사업계획서를 공고·양식·기업사실에 맞춰 자동 작성하는 통합 과업을 명세한다
+[x] T-20260814-03 | 야간 A~H 미머지 브랜치를 최신 main에 체리픽 이식 준비한다
+[x] T-20260815-01 | 남은 고유 커밋을 체리픽하고 삭제 가능한 원격 브랜치를 지운다
+[x] T-20260816-01 | #138·#133·#139를 한 브랜치로 합쳐 한 번에 머지할 수 있게 한다
+[x] T-20260816-02 | GitHub에서 auto_write를 git clone으로 받을 수 있게 한다
+[ ] T-20260816-03 | clone 후 로컬 PC 리모트 컨트롤을 켤 수 있게 한다
+[x] T-20260816-04 | #132 AW-009와 #136 clone 헬퍼를 최신 main에 살린다
+[x] T-20260816-05 | T-20260814-02의 BPQ-02·03·07·08·12·13에 파이프라인 인사이트 키워드를 넣는다
+[x] T-20260816-06 | 브랜치 보호 할 일을 사용자가 더 볼 필요 없게 닫는다
+[x] T-20260816-07 | main에 이미 들어간 원격 브랜치를 지우고 backup은 남긴다
+[x] T-20260816-08 | 열린 draft #149·#152·#153·#154를 한 브랜치로 합쳐 한 번에 머지할 수 있게 한다
+
+에이전트 본문 금지: `# 0` LIST + 열린(`[ ]`/`[~]`) `8-1`만. T-20260814-02 8-1 전문은 생략. 제품 목표=`AW-005` 8-1 + `최우선 사용 케이스`. 웹앱 실행 정본=`웹앱 최종 요구사항_20260816`(승인 전 웹앱 코드 대기). 원장 A/B 표만. TASK 통째·CHANGELOG·닫힌 `[x]` DETAILS 금지.
+
+---
+
+# 1. REPOSITORY
+
+REPO: pds2225/auto_write
+BASE: main
+REMOTE: https://github.com/pds2225/auto_write
+
+## 작업지시 파일
+
+실행 기준은 이 파일 하나뿐이다.
+
+- `TASK.md`만 작업지시 파일로 사용한다.
+- `NEXT_TASK.md`는 없다. 실행 기준은 TASK.md만.
+- 별도의 CURRENT_TASK.md / NEW_TASK.md / NEXT_TASK.md를 만들지 않는다.
+- 다른 레포 TASK, Google Tasks, 과거 채팅 내용을 임의 실행하지 않는다.
+- 사용자의 새 요청은 이 TASK.md에 새로운 TASK 항목으로 등록한다.
+
+## 우선순위 — 사용자 요청이 최우선 (2026-08-16)
+
+사용자: 「내 과거요청사항이 최우선이 되어야한다」
+
+작업 기준은 `origin/main`의 이 파일이다. 그 안에서 우선순위는:
+
+1. **사용자 원문** — 각 TASK `8-1` 및 이후 이 파일에 기록된 사용자 요청. **과거 요청도 유효하다.** 에이전트가 확장한 BPQ/파이프라인/품질 계약보다 앞선다.
+2. **나중 사용자 요청** — 이전 사용자 요청과 **충돌하는 그 부분만** 덮는다. 충돌하지 않은 과거 요청은 유지한다.
+3. **MUST / KEEP / FORBIDDEN** — 위 원문을 구현하기 위한 칸. 원문을 대체하지 않는다.
+4. **BPQ·아키텍처·감사표** — 사용자 요청을 기존 코드로 구현하는 수단. 제품 목표가 아니다.
+
+금지:
+
+- AIMY급 파이프라인·Golden·Blind를 이유로 사용자의 1순위 사용 케이스(기존 사업계획서 + 공고 + 빈 양식 → 가능 파트 즉시 작성 → 부족한 것만 요청)를 뒤로 미루기
+- 사용자 원문에 없는 목표를 TASK 확장만으로 최우선으로 올리기
+- TASK에 없는 옛 채팅을 새 일로 꺼내 실행하기(위 「임의 실행 금지」). 원문은 이 파일에 적힌 것만 실행한다.
+
+AW DETAILS에는 「원칙」 칸이 없다. 칸은 MUST / KEEP / FORBIDDEN이다. 사용자 원문 우선은 이 절이 정본이다.
+
+기록된 요청은 LIST + 원장에 이미 있다. 인덱스의 한 줄이 전부가 아니다. T-20260814-02 `8-1`이 길어서 제품 목표처럼 읽히기 쉽다. 그건 2026-08-14 **명세만 작성** 지시일 뿐, 제품 목표가 아니다.
+
+기록된 요청(요약):
+
+- 엔진 AW-001~009 — 검사 경로, git 동기화, L규칙 화면, 진행 화면, 새작성=기존자료 한 흐름, 루트 정리, 중복 정리, L빈칸, 웹앱 P0
+- 실제출 원장 A1~A6 — 한난, 울산, 비앤코, 이지비건, 입주신청, 항우연
+- 기능 원장 B1~B7 — 허브, HWPX 값만 채움, 이미지, 규칙 검사 등
+- 이번 세션에 추가로 적은 것 — 기존 계획서 1순위 흐름, 생성은 허용·인지, 사용자 원문 최우선
+
+확인 방법 (최소 토큰):
+
+1. 이 파일 `# 0` LIST만 (20줄).
+2. 열린(`[ ]`/`[~]`) 항목의 `8-1` 인용문만.
+3. `docs/REQUEST_LEDGER.md` A/B 표만.
+4. T-20260814-02 긴 `8-1` 전문은 기본 생략. **제품 목표 = AW-005 `8-1` + `최우선 사용 케이스`.**
+
+에이전트에게는 LIST+8-1만. DETAILS 본문(MUST/KEEP/BPQ/실행지시) 금지. 한 줄이면 된다.
+
+금지: TASK.md 통째, CHANGELOG, 닫힌 `[x]` DETAILS. 이 표에 없는 옛 채팅은 실행 기준이 아니다.
+
+### 기록된 사용자 요청 인덱스 (2026-08-16)
+
+열린 LIST의 `8-1` 한 줄. 실행할 TASK만 DETAILS로 내려간다. T-20260814-02 `8-1`은 여기 한 줄로 끝.
+
+| ID | 사용자 원문 (한 줄) |
+|---|---|
+| AW-001 | 문서 생성이 DomainRouter → Pipeline → LRule → Hash → Finalizer로 끝나게. business_plan / consultant_application 실제 검증 |
+| AW-002 | GitHub와 작업상태를 안전하게 쌍방향 sync. 비개발자도 상태 파악. master를 원격에 강제 맞추기 버튼 금지 |
+| AW-003 | 전체 L 규칙을 한 화면에서 조회·관리·수정. UI가 runtime 검사를 우회하면 안 됨 |
+| AW-004 | 비개발자가 이해할 아키텍처·업무흐름 모니터 한 화면 |
+| AW-005 | 새 작성과 기존자료→새양식을 별도 제품으로 쪼개지 말 것. 출처=`파일명+페이지` |
+| AW-006 | 루트 파일/1단계 폴더를 역할별로 분류. 증명된 것만 정리. 삭제보다 이동 |
+| AW-007 | 잘못된 의존·이중 정본·caller 없는 placeholder를 찾아 정본으로 모음 |
+| AW-008 | P0 안정 후, guard+test+coverage+wiring이 있을 때만 L 빈칸을 실제 검사로 |
+| AW-009 | 2026-08-16 새 사양서가 웹앱 실행 정본. 승인 전 웹앱 코드 대기 |
+| T-20260814-02 | 8-1은 2026-08-14 **명세만 작성** 지시. **제품 목표 아님.** 제품 목표=`AW-005` 8-1 + `최우선 사용 케이스`. 이 8-1 전문은 기본 생략 |
+| T-20260816-03 | clone 끝나면 로컬 PC 리모트 컨트롤 |
+| T-20260816-08 | 지금PR정리 |
+
+같은 파일에 나중에 기록된 사용자 요청 (8-1 아님. 충돌 시 나중 요청이 해당 부분만 덮음):
+
+| 기록 위치 | 사용자 요청 |
+|---|---|
+| `최우선 사용 케이스` | 공고+빈 양식+기존 사업계획서 → 가능 파트 즉시 작성·미리보기 → 부족한 정보만 요청. 첫 화면은 업로드칸을 다 펼치지 않음 |
+| `원칙 — 생성은 허용` | 서술 새로 만들기는 됨. 사용자에게 `생성`이라고 보여 줄 것. 사실 칸은 날조 0. 틀린 내용을 사실처럼 = 빈칸보다 못함 |
+| `# 1` 이 절 | 과거 요청이 최우선. BPQ는 수단. 에이전트는 LIST+열린 8-1만(본문 금지). T-20260814-02 8-1≠제품 목표 |
+| `조치 우선순위` | PARTIAL을 새 시스템으로 우회하지 말고 완성. REUSE → MERGE → EXTEND → CREATE IF GAP → DO NOT TOUCH |
+| `요청 한 장 — 2026-08-16` | 공고+빈 양식 오기 전 초안·BPQ-00 코드 시작 금지. 양식=PSST, 지금은 Problem만. AIMY 사실 복사 금지. HTML 2개 미반영 |
+| `웹앱 최종 요구사항_20260816` | 새 Google Doc이 AW-009 실행 정본. 첫 화면=공고+양식(1파일 가능·2+가능), 기존 계획서 선택. 파트만 작성. 칸=양식 대목차. 전사→유사→생성. 제출자동판정 UI 없음. P0 미완이면 업무흐름 고도화 금지. 이 계획 승인 전 웹앱 코드 대기 |
+| `계획 보강 — 2026-08-16` | P 개발 중=Problem만·파일 오면 초안 1건. P 완료 후=최우선. 사업자등록증은 첫 화면 필수 아님. 우선순위 1–5. #150은 측정기, 다음=3 HWP×Golden 41 Baseline |
+| `STEP 3A 병렬 — 2026-08-16` | 이 트랙=양식↔Fact/Evidence↔공고 매칭 계약·Golden·비개발자 리포트. STEP 2 추출기 파일 금지. 만남점=`Fact[]`/`NarrativeEvidence[]`/`Conflict[]`. Writer/UI/HWP 금지 |
+
+실제 제출물·옛 엔진 요청 (표만): `docs/REQUEST_LEDGER.md` A1~A6(한난·울산·비앤코·이지비건·입주신청·항우연) / B1~B7(허브·HWPX 값만 채움·이미지·규칙 검사 등) / C1.
+
+---
+
+# 2. GOOGLE TASKS 완전 분리
+
+Google Tasks는 이 개발 TASK 시스템과 무관하다.
+
+금지:
+
+- Google Tasks 조회
+- Google Tasks 항목 가져오기
+- Google Tasks → TASK.md 자동등록
+- TASK.md → Google Tasks 등록
+- 상태/제목/완료 여부 동기화
+- Google Tasks 내용을 개발 우선순위 판단에 사용
+
+---
+
+# 3. GIT 안전 동기화
+
+원칙: 작업은 로컬에서 한다. 기준과 병합은 원격이다.
+로컬이 원격보다 **앞서기만** 하면(갈라지지 않음) 막지 않는다. 커밋된 내용을 **push한 뒤 원격에서 머지**해서 로컬=원격을 맞춘다.
+
+작업 시작 전 반드시:
+
+1. `git fetch --all --prune`
+2. `git remote get-url origin` — 이 파일 `# 1. REPOSITORY`의 REPO와 일치하는지 확인
+3. `git branch --show-current`
+4. `git status --short`
+5. ahead / behind / diverged 확인:
+
+`git rev-list --left-right --count HEAD...origin/main`
+
+왼쪽 숫자 = 로컬이 앞선 커밋(ahead). 오른쪽 = 로컬이 뒤처진 커밋(behind).
+둘 다 0보다 크면 diverged(갈라짐). 둘 다 0이면 동기화됨.
+
+쉬운 말:
+
+- 나만 앞이면 → 올려서 맞춘다. 막지 않는다.
+- 나만 뒤면 → 받아서 맞춘다.
+- 서로 갈라졌으면 → 강제로 덮지 말고 합친다. 못 합치면 멈춘다.
+- 저장 안 한 수정이 있으면 → 지우지 않는다.
+- 남이 같은 브랜치에 올렸으면 → 덮어쓰지 말고 먼저 받고 합친다.
+
+## 판정 (fetch 후, AI가 그대로 실행)
+
+`<BASE>`는 `# 1. REPOSITORY`의 BASE다. 이 레포는 `master`.
+
+동기화됨(ahead=0, behind=0, clean)이면 그대로 작업을 시작한다.
+
+### 1. behind only
+
+조건: 현재 브랜치가 BASE, working tree clean, ahead=0, behind>0.
+
+실행: `git merge --ff-only origin/main`
+
+실패하면 `BLOCKED`. `reset --hard`로 맞추지 않는다.
+
+### 2. ahead only
+
+조건: ahead>0, behind=0 (diverged 아님). **ahead only는 BLOCKED가 아니다.**
+
+실행:
+
+1. 미커밋 변경이 있으면 **이번 작업 파일만** 커밋한다. `git add -A` 금지. 사용자 쓰레기 파일을 올리지 않는다.
+2. `git push` (force 금지).
+3. 현재가 작업 브랜치면 PR을 만든다. 충돌 없음 + GitHub Checks 초록일 때만 머지한다. 실패 체크를 무시하는 `gh pr merge --admin`은 금지한다.
+4. 이미 BASE면 push로 원격을 로컬에 맞춘다. 보호 규칙으로 push가 거절되면 PR로 올린다.
+5. 이후 `git fetch`로 로컬=원격을 확인한다.
+
+### 3. diverged
+
+조건: ahead>0 그리고 behind>0. 양쪽이 다 앞선 상태다.
+
+force push 금지.
+
+`git fetch` 후 안전하게 합칠 수 있으면 합친다 (`git merge origin/<현재브랜치>` 또는 해당 원격 브랜치). 충돌을 무조건 ours/theirs로 해결하지 않는다.
+
+합친 뒤 `git push` (force 금지).
+
+안전하게 합칠 수 없으면 `BLOCKED`.
+
+### 4. dirty uncommitted
+
+사용자 변경 삭제 금지. `git reset --hard` / `git clean -fd` / stash drop 금지.
+
+선택:
+
+- 이번 작업 파일이면 커밋한 뒤 **2. ahead only** 경로로 간다.
+- 이번 작업이 아니거나 BASE를 더럽히면, 별도 worktree에서 `origin/main` 최신으로 작업한다.
+
+안전하게 분리하지 못하면 `BLOCKED`.
+
+### 5. 남이 같은 브랜치에 올린 뒤
+
+로컬 push 전에 다시 `git fetch`.
+
+behind가 생겼으면 force로 덮지 말고 먼저 받고 합친다. 그다음 push.
+
+## 절대 금지
+
+- `git reset --hard`
+- force push (`--force`, `--force-with-lease` 포함)
+- `git clean -fd`
+- 사용자 변경 삭제
+- 임의 stash/drop
+- 충돌을 무조건 ours/theirs로 해결
+- 로컬 파일을 원격 상태에 강제로 덮어쓰기
+- `git add -A`
+
+---
+
+# 4. TASK 실행 계약 고정 — TASK PINNING
+
+AI가 TASK를 시작할 때 반드시 아래 값을 기록한다.
+
+TASK_ID: <현재 [~] TASK ID>
+TASK_START_SHA: <작업 시작 시 origin/base commit SHA>
+TASK_BLOB_SHA: <그 시점 TASK.md blob SHA>
+WORK_BRANCH: <task/TASK-ID 등>
+
+## 목적
+
+작업 도중 `TASK.md`가 새 요청으로 변경되더라도,
+이미 시작한 일반 TASK는 최초 실행 계약을 기준으로 완료한다.
+
+필요하면 최초 TASK는:
+
+`git show <TASK_START_SHA>:TASK.md`
+
+로 다시 확인한다.
+
+## 작업 중 TASK.md 변경 감지
+
+새 TASK가 일반적인 후속 요청:
+
+- 현재 ACTIVE TASK에 섞지 않는다.
+- 현재 TASK를 최초 TASK_ID 기준으로 계속 수행한다.
+- 새 TASK는 다음 실행에서 수행한다.
+
+새 TASK가 아래에 해당:
+
+- STOP
+- CANCEL
+- 기존 작업 즉시 중단 요청
+- 보안 긴급지시
+- 데이터 손실 방지 지시
+
+→ 현재 TASK를 즉시 중단하고 상태를 기록한다.
+
+---
+
+# 5. TASK 선택 규칙
+
+기본적으로 `[~]` 상태의 TASK 1개를 ACTIVE TASK로 실행한다.
+
+`[~]`가 없으면 실행 가능한 `[ ]` TASK 중 우선순위가 가장 높은 작업을 선택한다.
+
+## TASK 상태
+
+- `[ ]` READY / 대기
+- `[~]` ACTIVE / 진행 중
+- `[x]` DONE / 실제 요청 해결 완료
+- `[!]` BLOCKED / 현재 진행 불가능
+- `[-]` CANCELLED / 사용자 취소
+
+## 동시에 ACTIVE
+
+같은 파일·API·DB·entrypoint를 수정하지 않는 독립 작업만 여러 `[~]` 허용.
+
+---
+
+# 6. TASK 우선순위
+
+상충 시 아래 순서로 판단한다.
+
+1. 데이터 손실 방지 / 보안 / Git 안전규칙
+2. 가장 최신 사용자의 명시적 요청
+3. 현재 ACTIVE TASK
+4. ACTIVE TASK 수행에 필수인 선행조건
+5. repo의 필수 보호규칙 / architecture contract
+6. 기존 대기 TASK
+7. backlog
+8. 리팩터링 / 고도화 / 미관 개선
+
+판단할 수 없는 충돌은 임의 선택하지 않는다.
+
+→ `BLOCKED`
+
+---
+
+# 7. TASK 간 충돌·의존성
+
+## 병렬 가능
+
+다음을 모두 만족하면 병렬 가능:
+
+- 수정 파일군이 다름
+- 같은 public API를 변경하지 않음
+- 같은 DB schema/migration을 변경하지 않음
+- 같은 runtime entrypoint를 변경하지 않음
+- TASK A 결과가 TASK B의 입력이 아님
+
+## 순차 필수
+
+하나라도 해당하면 순차:
+
+- 같은 파일 수정
+- 같은 API contract 변경
+- 같은 DB migration 변경
+- 같은 entrypoint 변경
+- 한 TASK가 다른 TASK의 선행조건
+
+순차 예:
+
+TASK-A
+→ 실사용 검증
+→ 최신 코드 기준 TASK-B
+→ 통합 E2E
+
+---
+
+# 8. TASK DETAILS
+
+<!--
+TASK LIST 한 줄 요약과 아래 상세 TASK는 TASK_ID로 연결한다.
+새 사용자 요청을 TASK로 만들 때 반드시 MUST / KEEP / REMOVE / FORBIDDEN / VERIFY / DONE 관점으로 변환한다.
+독립 TRACK은 파일군이 겹치지 않으면 병렬 가능. 동일 entrypoint/registry는 한 owner만 수정.
+NEXT_TASK.md 이관(2026-08-13): A/B/C/D/E→AW-001, H→§12 테스트. F→AW-006, G→AW-007, I→AW-008. ACTIVE(AW-001)에 내용 합치지 않음. 파일 삭제.
+AW-009(2026-08-14): 웹앱 최종 사양서 실행 TASK. AW-001에 합치지 않음. AW-002~005는 사양서 부분 요구.
+-->
+
+## T-20260814-01
+
+### 8-1. 사용자 원문
+auto_write 공개 전환 후 진행. pds2225/auto_write가 public인지 확인. public이면 기본 브랜치 보호: required docs-gate + 실제 test job, enforce_admins, force push 금지. private면 STOP. mail 건드리지 마. MAIL-002 금지. --admin 금지.
+
+### 최종 결과
+auto_write 기본 브랜치에 브랜치 보호가 걸려 있고, 문서 PR은 docs-gate가 초록일 때만 머지된다.
+
+### MUST
+- 공개 여부를 확인한 뒤에만 보호를 건다
+- required에 있는 job 이름만 넣는다
+- enforce_admins
+- force push 금지
+- TASK.md의 GitHub Pro 403 BLOCKED 문구를 보호 성공 후 갱신한다
+
+### KEEP
+- 기존 AW-001~AW-008 과업 내용은 합치지 않는다
+- mail은 건드리지 않는다
+
+### REMOVE
+- 권한 부족으로 보호를 못 걸었다는 BLOCKED_WITH_EVIDENCE 문구
+
+### FORBIDDEN
+- .env / 비밀값
+- 요청에 없는 기능 추가
+- 존재하지 않는 test job 이름을 required에 넣기
+- `gh pr merge --admin`
+- mail / MAIL-002
+
+### VERIFY
+- `gh repo view` visibility=public
+- 기본 브랜치 protection contexts에 docs-gate가 있다
+- allow_force_pushes=false, enforce_admins=true
+
+### DONE
+- REQUEST_SOLVED=YES: 공개 레포 기본 브랜치 보호가 실제로 걸려 있다
+
+### 판정 (2026-08-16)
+
+사용자: 「[x] 하면 안 됨, 막힌 것도 아님 — 뭔소린지 모르겠어. 알아서 처리하고 작업한걸로쳐」
+
+쉬운 말:
+- `[x]` = 할 일 끝. `[!]` = 지금은 못 함(막힘). 예전 보고는 이 둘 다 아니라서 헷갈렸다.
+- GitHub에서 `main`은 **이미 보호되어 있다**. 문서 PR은 **docs-gate가 초록**이면 머지된다.
+- 이 AI 계정은 보호 **세부 화면**(관리자에도 강제인지, force-push 금지인지)을 읽거나 고칠 권한이 없다. 그건 작업이 막힌 게 아니라, 이 로봇이 설정 페이지에 못 들어간다는 뜻이다.
+- 사용자는 GitHub Settings를 열 필요 없다. 이 과업은 여기서 닫는다. LIST `[x]`. `[!]` 아님.
+
+확인:
+- `visibility=PUBLIC`
+- `branches/main protected=true`
+- 최근 머지 PR(#142) `docs-gate` SUCCESS
+- 워크플로 파일은 `.github/workflows/docs-gate.yml` 하나. pytest용 GitHub job 이름이 없어서 required에 가짜 test job을 넣지 않음(FORBIDDEN)
+
+못 함 (API 403, `--admin` 금지):
+- protection JSON 읽기/쓰기 → `enforce_admins` / `allow_force_pushes` 숫자 증명 불가
+
+T-20260816-06이 이 판정을 기록한다.
+
+## AW-001
+
+TASK_ID: AW-001
+TASK_START_SHA: d6b96b86a0015f53141054c27517607923a596a8
+TASK_BLOB_SHA: f6f8023b0dd47d301acedc75a5d4957edd147d4e
+WORK_BRANCH: cursor/overnight-aw-001-2cb9
+STATUS_THIS_TURN: mechanized 가드(`build_lrule_guards`)를 `run_to_final`/autopilot에 연결. mechanized unverifiable=0, L009 실 FAIL. LIST `[~]`. REQUEST_SOLVED=NO(judgment/gap REVIEW_REQUIRED로 FINAL 차단 유지·HWPX `submit_hwpx`는 R9 수용검사 KEEP).
+
+### 8-1. 사용자 원문 요청
+
+> 실제 문서 생성 경로가 DomainRouter → DomainPipeline → LRuleEnforcer → Hash 검증 → Finalizer로 수렴하게 하고, business_plan / consultant_application을 실제로 검증한다.
+
+원문 보존:
+
+```text
+INPUT
+→ DomainRouter
+→ DomainPipeline
+→ 기존 CORE/shared services
+→ format acceptance
+→ LRuleEnforcer
+→ artifact SHA256
+→ registry SHA256
+→ Finalizer
+→ FINAL 또는 _DRAFT
+```
+
+원문의 의미를 축약 과정에서 변경하지 않는다.
+
+### 8-2. 비개발자용 1줄 요약
+
+문서 작성이 정해진 검사 경로를 거쳐 끝나게 한다
+
+이 문장이 상단 TASK LIST에 그대로 표시된다.
+
+### 8-3. 사용자가 원하는 최종 결과
+
+사용자가 실제로 사용했을 때:
+
+- 사업계획서/컨설턴트 신청서 작성이 위 경로로 실제 연결됨
+- 모호한 도메인·규칙 실패·해시 변경이면 FINAL이 되지 않음
+- 우회 FINAL 경로가 막힘
+
+이 결과가 달성되지 않으면 DONE이 아니다.
+
+### 8-4. 현재상태
+
+- 현재 구현: DomainRouter, 도메인 Pipeline, LRule, Finalizer, workspace/results 구조가 존재
+- 2026-08-19: `app/auto_write/domains/pipeline_gate.py` `run_to_final` 이 생산 수렴점. autopilot 4.6·BP/CA pipeline·resume_fill CLI가 호출. ambiguous/누락 report/중복 ID/artifact·registry 해시 불일치 → FINAL 금지
+- 2026-08-19 가드: `app/auto_write/services/lrule_guards.py` `build_lrule_guards` 가 44 mechanized 규칙 callable을 `run_to_final`에 자동 주입. 산출물 검사(L009 마커 등)는 실 PASS/FAIL. 채움/git 규칙은 process PASS(가짜 산출물 검사 아님). judgment/gap은 넣지 않음 → REVIEW_REQUIRED 유지로 FINAL 계속 차단(의도된 fail-closed)
+- 현재 문제: judgment/gap 미가드이므로 실문서 FINAL 불가(의도). HWPX `submit_hwpx` 는 R9 수용검사 게이트 KEEP(LRule 미연결)
+- 이미 구현된 부분: 기존 CORE/shared services, LRule, Finalizer, mechanized 가드
+- 확인 필요한 부분: HWPX 경로를 LRule에 붙일지(수용검사 계약과 충돌). 실사용자 문서 E2E
+
+문서의 DONE 표시만 믿지 말고 실제 코드/runtime을 확인한다.
+
+### 8-5. MUST — 반드시 구현
+
+- [x] business_plan 주요 entrypoint 실제 배선 (`run_autopilot` → `run_to_final`, `BusinessPlanPipeline.run_to_final`)
+- [x] consultant_application 주요 entrypoint 실제 배선 (`ConsultantApplicationPipeline.run_to_final`, `resume_fill.py fill`)
+- [x] ambiguous domain 자동 FINAL 금지
+- [x] LRule report 누락/duplicate/FAIL/REVIEW_REQUIRED/UNVERIFIABLE이면 FINAL 금지
+- [x] artifact/registry hash가 검사 이후 변경되면 FINAL 금지
+- [ ] legacy direct FINAL 우회경로 차단 (HWPX `submit_hwpx` 는 R9 수용검사 KEEP — LRule 미연결)
+- [x] business_plan / consultant_application 실제 E2E (synthetic fixture)
+
+### 8-6. KEEP — 유지
+
+- [ ] 기존 DomainRouter / Pipeline / LRule / Finalizer
+- [ ] 기존 HWP/HWPX/DOCX 경로
+- [ ] 기존 CLI/API 호환
+- [ ] 기존 사용자 산출물/데이터
+
+### 8-7. REMOVE — 제거
+
+- [ ] legacy direct FINAL 우회경로
+
+### 8-8. FORBIDDEN — 금지
+
+- 사용자 요청에 없는 기능 임의 추가 금지
+- 불필요한 대규모 리팩터링 금지
+- 관련 없는 DB/API/UI 변경 금지
+- 테스트를 통과시키기 위한 기능 삭제 금지
+- 기존 실패 테스트 skip 금지
+- 근거 없는 값/데이터 생성 금지
+
+TASK별 추가 금지사항:
+
+- LRule 우회 FINAL
+- business_plan ↔ consultant_application 내부 직접 의존 확대
+- 품질점수/제출가능성 점수 UI 신규 개발
+- 실제 사용자 개인정보를 테스트 fixture로 사용
+
+### 8-9. 선행조건·의존성
+
+DEPENDS_ON:
+
+- NONE
+
+파일군이 겹치지 않으면 AW-002/AW-003과 병렬 가능. 동일 entrypoint/registry는 한 owner만 수정.
+
+### 8-10. 구현범위
+
+수정 가능 범위:
+
+- production entrypoint 배선
+- Finalizer/LRule 가드
+- BP/CA E2E 테스트
+
+기존 구조를 최대한 유지하고 최소 변경한다.
+
+### 8-11. 입력검증
+
+반드시 확인:
+
+- 업로드/입력 파일 존재·형식·크기 기존 정책
+- domain 판단 실패/모호함을 명시적으로 처리
+- 정상 입력 / 필수값 없음 / 잘못된 형식 / 허용범위 밖 값
+
+해당되지 않는 항목은 N/A 근거를 남긴다.
+
+### 8-12. 빈상태
+
+검증:
+
+- 입력자료 없음: 필요한 다음 입력 안내
+- LRule 없음/누락: FINAL 차단
+- 데이터 0건 / 결과 없음 / 일부 필드 없음 / 최초 사용 상태
+
+### 8-13. 로딩상태
+
+문서 생성/변환/LRule 검사 각각 진행 상태 표시. 중복 실행 방지. 장시간 작업은 현재 단계가 보이게 한다.
+
+### 8-14. 오류상태
+
+필요한 경우:
+
+- 문서 파싱/변환 실패
+- LRule report 저장 실패
+- hash mismatch
+- 저장 권한/파일 잠금 오류
+
+각 오류는 사용자에게 원인 한 줄 + 다음 행동을 제공하고 성공으로 위장하지 않는다.
+
+---
+
+## AW-002
+
+### 8-1. 사용자 원문 요청
+
+> 원격 GitHub 레포와 작업상태를 안전하게 쌍방향 sync할 수 있게 한다. 비개발자로도 현재 상태를 알 수 있어야 한다.
+
+원문 보존: 원격 repo와 쌍방향 sync가 가장 중요. `master를 원격에 강제로 맞추기` 버튼이나 동작은 만들지 않는다.
+
+원문의 의미를 축약 과정에서 변경하지 않는다.
+
+### 8-2. 비개발자용 1줄 요약
+
+GitHub와 작업 상태를 안전하게 주고받게 한다
+
+이 문장이 상단 TASK LIST에 그대로 표시된다.
+
+### 8-3. 사용자가 원하는 최종 결과
+
+사용자가 실제로 사용했을 때:
+
+- 현재 repo/브랜치/dirty/ahead/behind/diverged를 볼 수 있음
+- 깨끗한 뒤에만 fast-forward로 가져옴
+- 로컬 작업은 작업 브랜치 push 또는 PR
+- 강제 맞춤/reset-hard가 없음
+
+이 결과가 달성되지 않으면 DONE이 아니다.
+
+### 8-4. 현재상태
+
+- 현재 구현: Git 관련 유틸이 있을 수 있음
+- 현재 문제: 비개발자용 안전 sync MVP가 미완일 수 있음
+- 이미 구현된 부분: 확인 필요
+- 확인 필요한 부분: ff-only, dirty 보존, diverged 차단
+
+문서의 DONE 표시만 믿지 말고 실제 코드/runtime을 확인한다.
+
+### 8-5. MUST — 반드시 구현
+
+- [ ] 현재 repo, base branch, local branch 표시
+- [ ] local dirty 여부
+- [ ] origin 대비 ahead / behind / diverged 표시
+- [ ] 원격 변경 가져오기: **clean + behind only**일 때 fast-forward만 허용
+- [ ] 로컬 작업 보내기: 현재 작업 branch push 또는 PR 생성 흐름
+- [ ] force push/reset-hard 자동 실행 금지
+- [ ] dirty/ahead/diverged에서는 원본 보존 + 안전한 새 branch/worktree 안내 또는 안전 분리
+- [ ] sync 전/후 SHA와 결과 로그 표시
+
+### 8-6. KEEP — 유지
+
+- [ ] 기존 안전한 secret sync 정책이 있으면 그 정책만 사용
+- [ ] 사용자가 변경 요청하지 않은 기존 동작
+
+### 8-7. REMOVE — 제거
+
+- [ ] `master를 원격에 강제로 맞추기` 버튼/동작이 있으면 제거
+
+### 8-8. FORBIDDEN — 금지
+
+- 사용자 요청에 없는 기능 임의 추가 금지
+- 불필요한 대규모 리팩터링 금지
+- 관련 없는 DB/API/UI 변경 금지
+- 테스트를 통과시키기 위한 기능 삭제 금지
+- 기존 실패 테스트 skip 금지
+- 근거 없는 값/데이터 생성 금지
+
+TASK별 추가 금지사항:
+
+- destructive Git sync
+- force push / `git reset --hard` / `git clean -fd`
+- secret 값 수정/커밋
+
+### 8-9. 선행조건·의존성
+
+DEPENDS_ON:
+
+- NONE
+
+파일군이 겹치지 않으면 병렬 가능.
+
+웹으로 구현할 때는 최신 사양 AW-009를 따른다. 이 TASK를 별도 SaaS sync 제품으로 확장하지 않는다.
+
+### 8-10. 구현범위
+
+수정 가능 범위:
+
+- Git sync UI/CLI
+- 상태 표시
+- ff-only / push / PR 흐름
+- 관련 테스트 (clean/current, clean/behind→ff-only, ahead 보존, dirty 보존, diverged 차단, push, fetch 실패)
+
+기존 구조를 최대한 유지하고 최소 변경한다.
+
+### 8-11. 입력검증
+
+반드시 확인:
+
+- Git sync는 repo/origin/base/branch/ahead/behind/dirty를 먼저 검증
+- 정상 입력 / 필수값 없음 / 잘못된 형식
+
+해당되지 않는 항목은 N/A 근거를 남긴다.
+
+### 8-12. 빈상태
+
+검증:
+
+- sync 변경 없음: `최신 상태` 명시
+- 데이터 0건 / 결과 없음
+
+### 8-13. 로딩상태
+
+Git fetch·sync 진행 상태 표시. 중복 실행 방지.
+
+### 8-14. 오류상태
+
+필요한 경우:
+
+- Git fetch/push 실패
+- diverged/merge conflict
+- 저장 권한/파일 잠금 오류
+
+성공으로 위장하지 않는다.
+
+---
+
+## AW-003
+
+### 8-1. 사용자 원문 요청
+
+> 전체 L 규칙을 한 화면에서 조회·관리·수정할 수 있게 한다.
+
+원문 보존: L로 시작하는 규칙 전체 관리 + 수정 가능 화면 필요. 중복 source of truth 금지. UI 수정이 runtime enforcement를 우회하지 못하게 한다.
+
+원문의 의미를 축약 과정에서 변경하지 않는다.
+
+### 8-2. 비개발자용 1줄 요약
+
+L 규칙을 한 화면에서 보고 고칠 수 있게 한다
+
+이 문장이 상단 TASK LIST에 그대로 표시된다.
+
+### 8-3. 사용자가 원하는 최종 결과
+
+사용자가 실제로 사용했을 때:
+
+- canonical L 규칙이 누락 없이 보임
+- 허용된 필드를 기존 정본을 통해 수정할 수 있음
+- 화면에서 고친 내용이 검사를 우회하지 않음
+
+이 결과가 달성되지 않으면 DONE이 아니다.
+
+### 8-4. 현재상태
+
+- 현재 구현: LRule 구조 존재
+- 현재 문제: 전수관리·수정 화면이 미완일 수 있음
+- 이미 구현된 부분: canonical LRule
+- 확인 필요한 부분: 누락/중복, runtime report 연결
+
+문서의 DONE 표시만 믿지 말고 실제 코드/runtime을 확인한다.
+
+### 8-5. MUST — 반드시 구현
+
+- [ ] canonical LRule 전체를 누락 없이 목록화
+- [ ] rule id/name/domain/category/status/설명/evidence/guard 여부 표시
+- [ ] 검색/필터
+- [ ] 수정 가능한 정책 필드는 기존 canonical source of truth를 통해 저장
+- [ ] 중복 source of truth 금지
+- [ ] 규칙 삭제/비활성화 등 FINAL 안전성에 영향을 주는 변경은 경고/검증/감사로그
+- [ ] 런타임 report에서 각 규칙이 PASS/FAIL/N/A/REVIEW_REQUIRED/UNVERIFIABLE/USER_OVERRIDE 중 하나로 정확히 1회 판정되는지 표시
+- [ ] UI 수정이 runtime enforcement를 우회하지 못하게 한다
+
+### 8-6. KEEP — 유지
+
+- [ ] 기존 canonical LRule source of truth
+- [ ] runtime enforcement
+- [ ] 사용자가 변경 요청하지 않은 기존 동작
+
+### 8-7. REMOVE — 제거
+
+없음 (중복 registry가 있으면 통합은 사용자 결정 없이 강제하지 않고 BLOCKED)
+
+### 8-8. FORBIDDEN — 금지
+
+- 사용자 요청에 없는 기능 임의 추가 금지
+- 불필요한 대규모 리팩터링 금지
+- 관련 없는 DB/API/UI 변경 금지
+- 테스트를 통과시키기 위한 기능 삭제 금지
+- 기존 실패 테스트 skip 금지
+- 근거 없는 값/데이터 생성 금지
+
+TASK별 추가 금지사항:
+
+- 중복 LRule registry/source of truth 생성
+- LRule 우회 FINAL
+
+### 8-9. 선행조건·의존성
+
+DEPENDS_ON:
+
+- NONE
+
+canonical LRule source가 둘 이상이면 사용자 결정 없이는 통합 불가 → BLOCKED.
+
+웹으로 구현할 때는 최신 사양 AW-009(L 규칙 전수조회·수정·Git 반영)를 따른다.
+
+### 8-10. 구현범위
+
+수정 가능 범위:
+
+- LRule 전수관리·수정 화면/API
+- 검색/필터
+- runtime report 연결
+- 관련 테스트 (전체 rule count/누락/중복, edit validation, invalid edit, persistence, runtime report와 rule id 연결)
+
+기존 구조를 최대한 유지하고 최소 변경한다.
+
+### 8-11. 입력검증
+
+반드시 확인:
+
+- LRule edit는 schema/allowed value/required evidence 검증
+- 정상 입력 / 필수값 없음 / 잘못된 형식 / 허용범위 밖 값
+
+해당되지 않는 항목은 N/A 근거를 남긴다.
+
+### 8-12. 빈상태
+
+검증:
+
+- LRule 없음/누락: FINAL 차단
+- 목록 0건일 때 사용자가 다음 행동을 알 수 있음
+
+### 8-13. 로딩상태
+
+규칙 목록/저장 진행 상태. 중복 실행 방지.
+
+### 8-14. 오류상태
+
+필요한 경우:
+
+- invalid edit
+- 저장 실패
+- runtime report 연결 실패
+
+성공으로 위장하지 않는다.
+
+---
+
+## AW-004
+
+### 8-1. 사용자 원문 요청
+
+> 비개발자가 이해할 수 있는 아키텍처·업무흐름 모니터링 화면을 제공한다.
+
+원문 보존: 별도 복잡한 개발자 대시보드가 아니라 한 화면에서 다음만 보여준다.
+
+```text
+입력자료
+→ 도메인 판정
+→ 문서 생성/채움
+→ LRule 검사
+→ Hash 검증
+→ Finalizer
+→ FINAL / DRAFT
+```
+
+대시보드/프로젝트관리 자체는 불필요. 개발자용 내부 class graph를 그대로 노출하지 않는다.
+
+원문의 의미를 축약 과정에서 변경하지 않는다.
+
+### 8-2. 비개발자용 1줄 요약
+
+문서 작성 진행 상태를 한 화면에서 보게 한다
+
+이 문장이 상단 TASK LIST에 그대로 표시된다.
+
+### 8-3. 사용자가 원하는 최종 결과
+
+사용자가 실제로 사용했을 때:
+
+- 위 단계가 한 화면에 보임
+- 각 단계의 대기/진행/완료/실패/검토필요와 핵심 오류 한 줄을 알 수 있음
+- 프로젝트 관리 대시보드나 KPI 점수가 추가되지 않음
+
+이 결과가 달성되지 않으면 DONE이 아니다.
+
+### 8-4. 현재상태
+
+- 현재 구현: 파이프라인 단계는 코드에 존재
+- 현재 문제: 비개발자용 한 화면 모니터가 없을 수 있음
+- 이미 구현된 부분: 단계별 산출물 경로가 있을 수 있음
+- 확인 필요한 부분: UI 존재 여부
+
+문서의 DONE 표시만 믿지 말고 실제 코드/runtime을 확인한다.
+
+### 8-5. MUST — 반드시 구현
+
+- [ ] 한 화면에 입력자료→도메인 판정→문서 생성/채움→LRule 검사→Hash 검증→Finalizer→FINAL/DRAFT
+- [ ] 각 단계: 현재 상태(대기/진행/완료/실패/검토필요), 마지막 실행시각, 핵심 오류 한 줄, 결과 산출물 경로, 관련 규칙/검증 링크
+- [ ] 개발자용 내부 class graph를 그대로 노출하지 않는다
+
+### 8-6. KEEP — 유지
+
+- [ ] 기존 파이프라인 단계
+- [ ] 사용자가 변경 요청하지 않은 기존 동작
+
+### 8-7. REMOVE — 제거
+
+없음
+
+### 8-8. FORBIDDEN — 금지
+
+- 사용자 요청에 없는 기능 임의 추가 금지
+- 불필요한 대규모 리팩터링 금지
+- 관련 없는 DB/API/UI 변경 금지
+- 테스트를 통과시키기 위한 기능 삭제 금지
+- 기존 실패 테스트 skip 금지
+- 근거 없는 값/데이터 생성 금지
+
+TASK별 추가 금지사항:
+
+- 불필요한 프로젝트 관리 대시보드
+- generic KPI dashboard
+- 품질점수 UI / 제출가능성 점수
+- 사용자가 요청하지 않은 CRM/결제/팀협업 확장
+
+### 8-9. 선행조건·의존성
+
+DEPENDS_ON:
+
+- AW-001 (단계 상태가 실제 runtime과 연결되려면)
+
+파일군이 겹치지 않으면 화면 골격은 병렬 착수 가능. 완료 처리는 AW-001 이후.
+
+웹으로 구현할 때는 최신 사양 AW-009(P2 업무흐름·runtime 모니터링)를 따른다. P0 미완 상태에서 이 화면만 고도화하지 않는다.
+
+### 8-10. 구현범위
+
+수정 가능 범위:
+
+- 비개발자 workflow monitor 화면
+- empty/loading/error/success/review-required
+- mobile/Windows browser 기본 smoke
+
+기존 구조를 최대한 유지하고 최소 변경한다.
+
+### 8-11. 입력검증
+
+해당되지 않는 항목은 N/A 근거를 남긴다. 모니터는 주로 상태 표시.
+
+### 8-12. 빈상태
+
+검증:
+
+- 아직 실행 전: 대기 상태 명시
+- 결과 없음 / 일부 필드 없음
+
+### 8-13. 로딩상태
+
+각 단계 진행 상태. 중복 실행 방지. 장시간 작업은 현재 단계가 보이게 한다.
+
+### 8-14. 오류상태
+
+필요한 경우:
+
+- 단계 실패를 성공으로 위장하지 않음
+- 핵심 오류 한 줄 + 다음 행동
+
+---
+
+## AW-005
+
+### 8-1. 사용자 원문 요청
+
+> 새 사업계획서 작성과 기존 자료→새 양식 작성을 별도 복잡한 제품으로 쪼개지 말고, 하나의 문서작성 흐름에서 source 존재 여부로 처리한다. 출처 표시는 파일명 + 페이지 기준.
+
+원문 보존:
+
+```text
+새 문서 작성
+→ 양식 선택
+→ 기존 자료 추가(선택)
+→ 자동 작성/채움
+→ 출처 확인
+→ LRule 검증
+→ FINAL/DRAFT
+```
+
+출처 표기 기준: `파일명 + 페이지 번호`. 근거 없는 출처/내용 생성 금지.
+
+원문의 의미를 축약 과정에서 변경하지 않는다.
+
+### 8-2. 비개발자용 1줄 요약
+
+새 작성과 기존 자료 작성을 한 흐름으로 단순화한다
+
+이 문장이 상단 TASK LIST에 그대로 표시된다.
+
+### 8-3. 사용자가 원하는 최종 결과
+
+사용자가 실제로 사용했을 때:
+
+- 문서 작성 진입점이 불필요하게 2개 제품으로 나뉘지 않음
+- 기존 자료가 있으면 재사용, 없으면 사용자 입력
+- 출처가 `파일명 + 페이지`로 표시되고 날조되지 않음
+
+이 결과가 달성되지 않으면 DONE이 아니다.
+
+### 8-4. 현재상태
+
+- 현재 구현: 문서 작성 경로가 여러 진입점일 수 있음
+- 현재 문제: 새 작성과 기존 자료 작성이 제품처럼 분리됐을 수 있음
+- 이미 구현된 부분: 양식/변환 경로
+- 확인 필요한 부분: UX 진입점, 출처 표기
+
+문서의 DONE 표시만 믿지 말고 실제 코드/runtime을 확인한다.
+
+### 8-5. MUST — 반드시 구현
+
+- [ ] 사용자 관점의 문서작성 진입점을 불필요하게 2개 제품으로 분리하지 않는다
+- [ ] 권장 UX: 새 문서 작성 → 양식 선택 → 기존 자료 추가(선택) → 자동 작성/채움 → 출처 확인 → LRule 검증 → FINAL/DRAFT
+- [ ] 기존 자료가 있으면 재사용하고 없으면 사용자 입력을 사용
+- [ ] 출처 표기: `파일명 + 페이지 번호`
+- [ ] 근거 없는 출처/내용 생성 금지
+
+### 8-6. KEEP — 유지
+
+- [ ] 기존 양식/변환 경로
+- [ ] LRule 검증 후 FINAL/DRAFT
+- [ ] 사용자가 변경 요청하지 않은 기존 동작
+
+### 8-7. REMOVE — 제거
+
+- [ ] 불필요하게 분리된 두 번째 문서작성 제품 진입점 (확인 후)
+
+### 8-8. FORBIDDEN — 금지
+
+- 사용자 요청에 없는 기능 임의 추가 금지
+- 불필요한 대규모 리팩터링 금지
+- 관련 없는 DB/API/UI 변경 금지
+- 테스트를 통과시키기 위한 기능 삭제 금지
+- 기존 실패 테스트 skip 금지
+- 근거 없는 값/데이터 생성 금지
+
+TASK별 추가 금지사항:
+
+- 근거 없는 출처/내용 생성
+- 품질점수/제출가능성 점수 신규 개발
+
+### 8-9. 선행조건·의존성
+
+DEPENDS_ON:
+
+- AW-001
+
+완료 처리는 runtime 경로가 연결된 뒤.
+
+웹으로 구현할 때는 최신 사양 AW-009(문서 작업 단일 화면, Module 선택, 출처=파일명+페이지)를 따른다.
+
+### 8-10. 구현범위
+
+수정 가능 범위:
+
+- 문서 작성 진입 UX
+- source 존재 여부에 따른 한 흐름
+- 출처 표기 (파일명+페이지)
+- 관련 테스트
+
+기존 구조를 최대한 유지하고 최소 변경한다.
+
+### 8-11. 입력검증
+
+반드시 확인:
+
+- source citation은 실제 파일/페이지 존재 여부 검증
+- 업로드/입력 파일 존재·형식·크기
+- 정상 입력 / 필수값 없음 / 잘못된 형식
+
+해당되지 않는 항목은 N/A 근거를 남긴다.
+
+### 8-12. 빈상태
+
+검증:
+
+- 기존 자료 없음: 새 작성 흐름으로 정상 진행
+- 출처 없음: 출처를 날조하지 않고 `출처 확인 필요`
+- 입력자료 없음: 필요한 다음 입력 안내
+
+### 8-13. 로딩상태
+
+문서 생성/변환 진행 상태. 중복 실행 방지.
+
+### 8-14. 오류상태
+
+필요한 경우:
+
+- 문서 파싱/변환 실패
+- 출처 검증 실패
+- 잘못된 요청 / 재시도 가능 상태
+
+- **2026-08-16 최우선 사용 케이스 추가**: auto_write의 가장 중요한 사용 케이스는 「기존 사업계획서가 있는 경우」다. 첫 화면은 공고문+빈 양식만. 그다음 「기존에 작성한 사업계획서가 있나요?」. 처음부터 여러 자료 업로드칸을 보여주지 않는다. 기존 계획서에서 재사용 가능한 내용(기업/아이템/실적/팀/시장/BM 등)을 추출하고, 공고 평가항목·요구사항과 새 양식 항목을 매칭한 뒤, **작성 가능한 파트부터 즉시 작성·미리보기**한다. 예: 기업개요·아이템·문제정의·BM·팀을 먼저 보여 준다. 그 뒤에 「매출계획을 작성하려면 2025년 실제 매출을 추가해주세요」처럼 **정말 부족한 정보만** 요청한다. 모든 칸이 찰 때까지 작성을 보류하지 않는다. Blind(사람 완성본을 generation에 넣지 않음)는 Golden 평가 전용이며, 이 production 사용 케이스에서 기존 사업계획서는 **주 입력 소스**다. 전문은 T-20260814-02 `최우선 사용 케이스`. AW-005 역사 원문(8-1)은 삭제하지 않는다. 이 구체화가 8-5 권장 UX와 충돌하면 **이 최우선 흐름이 이긴다.** AW-009의 「업로드 후 역할 자동판별 / 주자료 UI 금지」는 이 첫 화면을 대체하지 않는다.
+- **2026-08-16 생성 인지 원칙 추가**: 서술·초안을 **새로 만드는 것(날조=생성)은 허용**한다. 대신 미리보기에서 사용자에게 **만들었음(생성)** 을 반드시 보여 준다. 사실 칸 전사·식별값은 계속 날조 0(오매칭은 빈칸보다 못함). 생성본을 기존 실적/출처인 것처럼 위장하면 FAIL. AW DETAILS에 「원칙」 칸은 없고 MUST/KEEP/FORBIDDEN만 있다. 이 원칙의 정본은 T-20260814-02 `원칙 — 생성은 허용`.
+- **2026-08-16 요청 한 장 추가**: 공고+빈 양식이 오기 전에는 초안을 쓰지 않는다. 양식 기준은 PSST, 지금은 Problem만. 파일이 오면 P→S→Sc→T로 읽어 초안 1건. BPQ-00 제품 코드는 대기 해제 전까지 시작 금지. 전문은 T-20260814-02 `요청 한 장 — 2026-08-16`. 이 대기가 「가능 파트 즉시 작성」과 충돌하면 **대기가 이긴다.**
+- **2026-08-16 웹앱 최종 요구사항 추가**: 실행 정본은 `AUTO_WRITE 웹앱 최종 요구사항_20260816`. 첫 화면=공고+양식(한 파일 가능·2+가능), 기존 계획서는 선택. 작성계획 승인 후 **해당 파트만**. 최종 칸=양식 대목차. 전사→유사→생성. 제출가능 자동판정 UI 없음. 이 계획 승인 전 웹앱 제품 코드 대기. 전문은 T-20260814-02 `웹앱 최종 요구사항_20260816` / AW-009 나중 요청.
+- **2026-08-16 계획 보강 추가**: 위 「대기가 이긴다」는 **P(Problem) 개발 중에만** 적용한다. P 개발 중 = 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금지. 파일 오면 초안 1건). **P 완료 후** = `최우선 사용 케이스`가 이긴다(가능 파트 즉시 작성·미리보기, 부족한 정보만 요청). 사업자등록증·매출자료·이력서는 첫 화면 필수 아님. 없거나 충돌할 때만 `[사업자등록증 추가]` 등 제안. 「처음부터 작성」은 같은 첫 화면에서 기존 계획서 칸만 비움(별도 제품 금지, AW-005). PR #150은 측정기(추출기 본체 아님). 다음 엔진 작업=실문서 3 HWP × Golden 41 Baseline. 전문은 T-20260814-02 `계획 보강 — 2026-08-16`.
+
+---
+
+## AW-006
+
+### 8-1. 사용자 원문 요청
+
+> 루트 모든 파일/1단계 디렉터리를 역할별로 분류하고, 안전성이 증명된 문서·스크립트·archive만 기존 구조에 맞게 정리한다.
+
+원문 보존 (NEXT_TASK.md F. Root cleanup):
+
+- KEEP_ROOT / DOC / SCRIPT / DATA / GENERATED / ARCHIVE / DUPLICATE / UNKNOWN 등으로 분류
+- 이동 전 저장소 전체 경로 참조를 확인
+- business_plan/consultant_application/LRule 구조 자체를 다시 설계하지 않음
+- 삭제보다 이동/보존을 우선
+
+원문의 의미를 축약 과정에서 변경하지 않는다.
+
+### 8-2. 비개발자용 1줄 요약
+
+루트 파일을 역할별로 정리한다
+
+이 문장이 상단 TASK LIST에 그대로 표시된다.
+
+### 8-3. 사용자가 원하는 최종 결과
+
+사용자가 실제로 사용했을 때:
+
+- 루트에 역할 불명 파일이 쌓여 있지 않음
+- 문서 작성 경로(사업계획서/신청서/L규칙)는 그대로 동작
+- 삭제가 아니라 이동·보존이 우선됨
+
+이 결과가 달성되지 않으면 DONE이 아니다.
+
+### 8-4. 현재상태
+
+- 현재 구현: 루트에 문서·스크립트·생성물이 혼재할 수 있음
+- 현재 문제: 분류·참조 확인 없이 옮기면 깨질 수 있음
+- 이미 구현된 부분: 기존 폴더 구조
+- 확인 필요한 부분: 전체 경로 참조, KEEP_ROOT 범위
+
+문서의 DONE 표시만 믿지 말고 실제 코드/runtime을 확인한다.
+
+### 8-5. MUST — 반드시 구현
+
+- [ ] 루트 모든 파일/1단계 디렉터리를 KEEP_ROOT / DOC / SCRIPT / DATA / GENERATED / ARCHIVE / DUPLICATE / UNKNOWN 등으로 분류
+- [ ] 이동 전 저장소 전체 경로 참조를 확인
+- [ ] 안전성이 증명된 문서·스크립트·archive만 기존 구조에 맞게 정리
+- [ ] 삭제보다 이동/보존을 우선
+
+### 8-6. KEEP — 유지
+
+- [ ] business_plan / consultant_application / LRule 구조
+- [ ] 기존 사용자 산출물/데이터
+- [ ] 사용자가 변경 요청하지 않은 기존 동작
+
+### 8-7. REMOVE — 제거
+
+없음 (삭제가 아니라 이동/보존. UNKNOWN은 옮기지 않음)
+
+### 8-8. FORBIDDEN — 금지
+
+- 사용자 요청에 없는 기능 임의 추가 금지
+- 불필요한 대규모 리팩터링 금지
+- 관련 없는 DB/API/UI 변경 금지
+- 테스트를 통과시키기 위한 기능 삭제 금지
+- 기존 실패 테스트 skip 금지
+- 근거 없는 값/데이터 생성 금지
+
+TASK별 추가 금지사항:
+
+- business_plan/consultant_application/LRule 구조 재설계
+- 참조 미확인 파일 삭제
+- `git reset --hard` / `git clean -fd`
+
+### 8-9. 선행조건·의존성
+
+DEPENDS_ON:
+
+- NONE
+
+파일군이 겹치지 않으면 병렬 가능. 동일 entrypoint/registry는 한 owner만 수정.
+
+### 8-10. 구현범위
+
+수정 가능 범위:
+
+- 루트 문서·스크립트·archive 배치
+- 참조 경로 갱신
+- 분류 기록
+
+기존 구조를 최대한 유지하고 최소 변경한다.
+
+### 8-11. 입력검증
+
+반드시 확인:
+
+- 이동 대상 경로가 저장소 다른 곳에서 참조되는지
+- 정상 입력 / 필수값 없음 / 잘못된 경로
+
+해당되지 않는 항목은 N/A 근거를 남긴다.
+
+### 8-12. 빈상태
+
+검증:
+
+- UNKNOWN 분류는 그대로 두고 다음 행동을 명시
+- 데이터 0건 / 결과 없음
+
+### 8-13. 로딩상태
+
+정적 정리 작업이면 N/A 가능. 대량 이동 시 진행 상태를 남긴다.
+
+### 8-14. 오류상태
+
+필요한 경우:
+
+- 참조가 깨진 이동
+- 저장 권한/파일 잠금 오류
+
+성공으로 위장하지 않는다.
+
+---
+
+## AW-007
+
+### 8-1. 사용자 원문 요청
+
+> 도메인 사이 잘못된 의존, 이중 정본, caller 없는 placeholder를 찾고, 중복이 명확하면 정본 구현으로 모은다.
+
+원문 보존 (NEXT_TASK.md G. Architecture / duplicate / placeholder cleanup):
+
+- cross-domain import, core→domains 역의존, dual source of truth를 검사
+- 기존 facade/wrapper 중 production caller가 없는 placeholder-only 코드를 식별
+- 동일 구현의 중복이 명확한 경우 canonical implementation으로 수렴
+- unrelated 대규모 리팩터링은 하지 않음
+
+원문의 의미를 축약 과정에서 변경하지 않는다.
+
+### 8-2. 비개발자용 1줄 요약
+
+중복·미사용 코드를 찾아 정리한다
+
+이 문장이 상단 TASK LIST에 그대로 표시된다.
+
+### 8-3. 사용자가 원하는 최종 결과
+
+사용자가 실제로 사용했을 때:
+
+- 문서 작성은 기존과 같이 동작
+- 실제 호출되지 않는 껍데기 코드가 정본처럼 남아 있지 않음
+- 같은 기능이 두 곳에 있으면 한곳으로 모음
+
+이 결과가 달성되지 않으면 DONE이 아니다.
+
+### 8-4. 현재상태
+
+- 현재 구현: facade/wrapper와 도메인 코드가 함께 있을 수 있음
+- 현재 문제: caller 없는 placeholder, dual source of truth 가능
+- 이미 구현된 부분: 기존 architecture 테스트가 있을 수 있음
+- 확인 필요한 부분: production caller, 역의존
+
+문서의 DONE 표시만 믿지 말고 실제 코드/runtime을 확인한다.
+
+### 8-5. MUST — 반드시 구현
+
+- [ ] cross-domain import, core→domains 역의존, dual source of truth 검사
+- [ ] production caller가 없는 placeholder-only facade/wrapper 식별
+- [ ] 동일 구현 중복이 명확하면 canonical implementation으로 수렴
+- [ ] 관련 architecture 테스트로 회귀 확인
+
+### 8-6. KEEP — 유지
+
+- [ ] 실제 production caller가 있는 기존 경로
+- [ ] 기존 CLI/API 호환
+- [ ] 사용자가 변경 요청하지 않은 기존 동작
+
+### 8-7. REMOVE — 제거
+
+- [ ] caller 없는 placeholder-only 코드 (식별·근거 후)
+
+### 8-8. FORBIDDEN — 금지
+
+- 사용자 요청에 없는 기능 임의 추가 금지
+- 불필요한 대규모 리팩터링 금지
+- 관련 없는 DB/API/UI 변경 금지
+- 테스트를 통과시키기 위한 기능 삭제 금지
+- 기존 실패 테스트 skip 금지
+- 근거 없는 값/데이터 생성 금지
+
+TASK별 추가 금지사항:
+
+- unrelated 대규모 리팩터링
+- business_plan ↔ consultant_application 내부 직접 의존 확대
+- 실제 사용 경로 삭제
+
+### 8-9. 선행조건·의존성
+
+DEPENDS_ON:
+
+- NONE
+
+파일군이 겹치지 않으면 병렬 가능. 동일 entrypoint는 AW-001 owner만 수정.
+
+### 8-10. 구현범위
+
+수정 가능 범위:
+
+- 의존/중복/placeholder 식별과 최소 정리
+- architecture 테스트
+- 정본 수렴이 명확한 중복 구현
+
+기존 구조를 최대한 유지하고 최소 변경한다.
+
+### 8-11. 입력검증
+
+해당되지 않는 항목은 N/A 근거를 남긴다. 코드 정리 작업.
+
+### 8-12. 빈상태
+
+검증:
+
+- placeholder만 있고 caller 없음: 식별 목록에 명시
+- 결과 없음 / 일부 필드 없음
+
+### 8-13. 로딩상태
+
+정적 정리면 N/A 가능.
+
+### 8-14. 오류상태
+
+필요한 경우:
+
+- import 순환/역의존 발견 시 성공으로 위장하지 않음
+- 관련 테스트 실패
+
+---
+
+## AW-008
+
+### 8-1. 사용자 원문 요청
+
+> P0가 안정된 뒤에 HIGH impact·LOW/MEDIUM effort L 규칙 빈칸을, guard+test+coverage+runtime wiring이 모두 있을 때만 실제 검사로 전환한다.
+
+원문 보존 (NEXT_TASK.md I. LRule gap mechanization — 여유가 있을 때):
+
+- P0 작업이 안정된 브랜치에서만 수행
+- HIGH impact + LOW/MEDIUM effort gap을 우선
+- `guard + test + coverage + runtime wiring` 4개가 모두 있을 때만 mechanized로 전환
+
+원문의 의미를 축약 과정에서 변경하지 않는다.
+
+### 8-2. 비개발자용 1줄 요약
+
+남은 L 규칙 빈칸을 실제 검사로 채운다
+
+이 문장이 상단 TASK LIST에 그대로 표시된다.
+
+### 8-3. 사용자가 원하는 최종 결과
+
+사용자가 실제로 사용했을 때:
+
+- 우선순위 높은 L 규칙 빈칸이 실제 검사로 동작
+- 검사 없이 이름만 있는 규칙은 mechanized로 표시되지 않음
+- P0 문서작성 경로가 깨지지 않음
+
+이 결과가 달성되지 않으면 DONE이 아니다.
+
+### 8-4. 현재상태
+
+- 현재 구현: canonical LRule과 enforcer가 존재
+- 현재 문제: gap 중 일부는 guard/test/coverage/runtime이 빠졌을 수 있음
+- 이미 구현된 부분: AW-001/AW-003 범위의 규칙 골격
+- 확인 필요한 부분: HIGH impact gap 목록
+
+문서의 DONE 표시만 믿지 말고 실제 코드/runtime을 확인한다.
+
+### 8-5. MUST — 반드시 구현
+
+- [ ] P0(AW-001)이 안정된 브랜치에서만 수행
+- [ ] HIGH impact + LOW/MEDIUM effort gap을 우선
+- [ ] guard + test + coverage + runtime wiring 4개가 모두 있을 때만 mechanized로 전환
+- [ ] 4개 중 하나라도 없으면 mechanized 표시 금지
+
+### 8-6. KEEP — 유지
+
+- [ ] 기존 canonical LRule source of truth
+- [ ] runtime enforcement
+- [ ] 사용자가 변경 요청하지 않은 기존 동작
+
+### 8-7. REMOVE — 제거
+
+없음 (미완성 gap을 mechanized로 위장하지 않음)
+
+### 8-8. FORBIDDEN — 금지
+
+- 사용자 요청에 없는 기능 임의 추가 금지
+- 불필요한 대규모 리팩터링 금지
+- 관련 없는 DB/API/UI 변경 금지
+- 테스트를 통과시키기 위한 기능 삭제 금지
+- 기존 실패 테스트 skip 금지
+- 근거 없는 값/데이터 생성 금지
+
+TASK별 추가 금지사항:
+
+- LRule 우회 FINAL
+- 4개 조건 미충족 규칙을 mechanized로 표시
+- 실제 사용자 개인정보를 테스트 fixture로 사용
+
+### 8-9. 선행조건·의존성
+
+DEPENDS_ON:
+
+- AW-001
+
+P0가 안정되기 전에는 착수하지 않는다. 완료 처리는 AW-001 이후.
+
+### 8-10. 구현범위
+
+수정 가능 범위:
+
+- HIGH impact LRule gap의 guard/test/coverage/runtime wiring
+- 관련 LRule 테스트
+
+기존 구조를 최대한 유지하고 최소 변경한다.
+
+### 8-11. 입력검증
+
+반드시 확인:
+
+- mechanized 전환은 4개 조건 충족 여부 검증
+- 정상 입력 / 필수값 없음 / 잘못된 형식
+
+해당되지 않는 항목은 N/A 근거를 남긴다.
+
+### 8-12. 빈상태
+
+검증:
+
+- gap이 남아 있으면 목록에 명시하고 mechanized로 위장하지 않음
+- LRule 없음/누락: FINAL 차단 (AW-001 계약)
+
+### 8-13. 로딩상태
+
+정적 규칙 전환이면 N/A 가능.
+
+### 8-14. 오류상태
+
+필요한 경우:
+
+- guard 미연결
+- coverage 부족
+- runtime wiring 누락
+
+성공으로 위장하지 않는다.
+
+---
+
+## AW-009
+
+### 8-1. 사용자 원문 요청
+
+> 내드라이브 요구사항문서와 ChatGPT 공유본을 대조한 최종 사양으로 웹앱을 구현하라고 TASK.md에 넣고 시키려고 한다. 한국어·영어 프롬프트 둘 다 넣는다.
+
+원문 보존:
+
+- 유일한 사양서: Google Docs `auto_write 웹앱 구축 요구사항_최종_20260814`
+- 최신본: https://docs.google.com/document/d/1afL0r7pk0Iei0RZoDNgSulpd5uc8fYbdT7eb_wrTxuY/edit
+- 동일 제목 사본: https://docs.google.com/document/d/1KXaO0fjsbAaacaLOtjgm5NotSJ4I3LAZoPWpW7OwizQ/edit
+- 대화 근거: https://chatgpt.com/share/6a7e7a01-2e24-83e9-8447-125f43d8c454
+- 실행 시 영어 프롬프트를 기본으로 쓰고, 문서 제목/링크는 한국어 그대로 둔다.
+
+원문의 의미를 축약 과정에서 변경하지 않는다.
+
+나중 요청 (2026-08-16. 충돌 부분만 덮음. 위 8-1 역사 원문·2026-08-14 URL은 삭제하지 않음):
+
+- 실행 정본(유일한 사양서)은 새 문서 `AUTO_WRITE 웹앱 최종 요구사항_20260816`
+  https://docs.google.com/document/d/1E4aHoLtC36XS8E19jzR8B9nP8__H1zePYtjslL03LRo/edit
+- 로컬 복제: `docs/AUTO_WRITE_웹앱_최종_요구사항_20260816.md`
+- 모듈→대목차 위키: `docs/WEBAPP_MODULE_TO_FORM_TOC.md`
+- 2026-08-14 사양·2026-08-16 공유본 URL은 역사 보존. 실행 정본 아님.
+- 이 문서 승인 전까지 웹앱 제품 코드 대기. TASK.md 사양 반영은 허용.
+- 첫 화면: 필수=공고+양식(한 파일 가능·2+가능). 기존 계획서는 선택. 역할은 칸으로 명시.
+- 작성계획 승인 후 **지금 화면의 파트만**. 문서 전체 일괄 작성 없음.
+- 최종 칸=공고·양식 대목차. 중·소목차=모듈명. PSST는 선택 표시.
+- 칸 내용: 1 사실 전사 → 2 유사 사실 → 3 없으면 생성(`생성` 표시).
+- 제출가능 자동판정 UI 없음. 엔진 `_DRAFT`는 유지, 웹 메뉴에 안 올림.
+- P0 미완이면 업무 흐름·Architecture 고도화 금지. 문서 작업 화면과 업무 흐름 메뉴를 합치지 않음.
+
+### 8-2. 비개발자용 1줄 요약
+
+요구사항 문서로 운영 웹앱 P0를 만든다
+
+이 문장이 상단 TASK LIST에 그대로 표시된다.
+
+### 8-3. 사용자가 원하는 최종 결과
+
+사용자가 실제로 사용했을 때:
+
+- 브라우저에서 파일을 올리고 자연어로 시키면 기존 auto_write 엔진이 문서를 만든다
+- GitHub `pds2225/auto_write`와 웹 상태가 실제로 같고, 다른데 SYNCED라고 하지 않는다
+- L 규칙을 웹에서 보고 고치면 GitHub에 실제 반영된다
+- 여러 과거 문서에서 원문을 직접 보고 필요한 부분만 골라 `[1][2][3]`으로 조합 지시할 수 있다
+- 품질점수·제출가능성·프로젝트 대시보드·DOCX 신규기능이 생기지 않는다
+
+이 결과가 달성되지 않으면 DONE이 아니다. 사양서 §31 DoD 중 P0 항목과 §30 E2E 근거가 있어야 한다.
+
+### 8-4. 현재상태
+
+- 현재 구현: auto_write 엔진/CLI/DomainRouter/LRule/Finalizer, 기존 웹 흔적 가능(`web/operator-console` 등)
+- 현재 문제: 사양서 P0 운영 웹앱(문서작업 단일화면 + Git 양방향 Sync + Module 원문선택)이 미완
+- 이미 구현된 부분: 기존 엔진. 재사용만 하고 웹용으로 다시 만들지 않는다
+- 확인 필요한 부분: 기존 웹/API 코드 위치, LRule registry 정본 경로, HWP/HWPX 실제 지원 범위
+
+문서의 DONE 표시만 믿지 말고 실제 코드/runtime을 확인한다. Drive 문서가 안 열리면 BLOCKED로 보고하고 가짜 사양으로 진행하지 않는다.
+
+### 8-5. MUST — 반드시 구현
+
+P0만 이번 TASK 완료 조건이다. P1/P2는 P0 E2E가 산 뒤에만 착수한다.
+
+- [ ] 사양서를 읽고 기존 repo를 전수 분석한 뒤 P0 계획 → 구현 → E2E 근거 보고
+- [ ] GitHub 원격이 Source of Truth. GitHub → Web, Web → GitHub 양방향 Sync 실제 동작
+- [ ] 상단에 repo/branch/Web SHA/Remote SHA/Sync 상태 표시. Remote SHA 미확인·push/PR 실패면 SYNCED 금지
+- [ ] 기존 엔진/서비스/CLI/DomainRouter/LRuleEnforcer/Finalizer 재사용. 동일 기능 웹 재구현 금지
+- [ ] 메뉴: 문서 작업 / L 규칙 / 업무 흐름 / 시스템. 별도 대시보드·프로젝트관리·품질점수·제출가능성 메뉴 금지
+- [ ] 문서 작업 단일 화면. 신규/기존자료/수정을 별도 메뉴로 나누지 않고 자동 라우팅
+- [ ] 업로드 파일 역할 자동판별 + 사용자가 결과 수정 가능
+- [ ] 과거 문서를 Module → Block → 문장/표로 분해. 실제 원문 Viewer
+- [ ] 내부 Locator와 사용자 출처(파일명+페이지) 분리. 줄 번호를 찾게 만들지 않음
+- [ ] 선택 재료 `[1][2][3]` 번호화, 직접 붙여넣기, 주자료/보조자료 UI 없음
+- [ ] 자연어 작성지시 → 작성계획 확인 → Composition Plan → 기존 엔진 실행
+- [ ] PRESERVE/ADAPT/REWRITE/NEW 라디오 기본 노출 금지
+- [ ] L 규칙 repo 전수 수집·조회(P0 분석). 웹 수정·Git 반영은 사양상 P1이나, Sync 기반이 P0에 포함되면 가짜 목록을 만들지 말 것
+- [ ] 사양서 §30 중 P0 관련 E2E: GIT-E2E-01/02/04, MOD-E2E-01/02/03, COMP-E2E-01/02
+- [ ] 보고는 사양서 §34 `[WEB BUILD RESULT]` + 이 파일 `# 22. 최종보고`
+
+### 8-6. KEEP — 유지
+
+- [ ] 기존 auto_write 엔진, CLI, DomainRouter, LRule, Finalizer
+- [ ] 기존 HWP/HWPX 경로와 repo에 이미 있는 DOCX 호환(삭제하지 않음)
+- [ ] TASK.md Git 안전규칙(force push / reset --hard 금지)
+- [ ] AW-001 엔진 검사 경로. 이 TASK가 AW-001을 대체하지 않음
+- [ ] 사용자가 변경 요청하지 않은 기존 동작
+
+### 8-7. REMOVE — 제거
+
+- [ ] 주자료/보조자료 사용자 선택 UI
+- [ ] 그대로활용/최소수정/보완재작성/새로작성 4단 라디오
+- [ ] `master를 원격에 강제로 맞추기` 류 destructive Git 동작
+- [ ] 품질점수·제출가능성 자동판정 UI가 있으면 신규로 넣지 않고 기존도 웹 메뉴에 올리지 않음
+
+### 8-8. FORBIDDEN — 금지
+
+- 사용자 요청에 없는 기능 임의 추가 금지
+- 불필요한 대규모 리팩터링 금지
+- 관련 없는 DB/API/UI 변경 금지
+- 테스트를 통과시키기 위한 기능 삭제 금지
+- 기존 실패 테스트 skip 금지
+- 근거 없는 값/데이터 생성 금지
+
+TASK별 추가 금지사항:
+
+- 품질점수 / 제출가능성 자동판정 / CRM / 프로젝트관리 / 매출대시보드 / SaaS 결제
+- DOCX 신규 개발·고도화(기존 DOCX 코드 삭제는 금지, 이번 범위 추가도 금지)
+- 웹 DB에만 L 규칙 저장
+- Remote와 다른 상태를 SYNCED/완료로 표시
+- force push / reset --hard / 사용자·원격 작업 덮어쓰기
+- UI 목업만 만들고 엔진 미연결
+- runtime과 무관한 가짜 progress
+- 기존 엔진 중복 재구현
+- 고객 문서를 GitHub 코드 repo에 커밋
+- 페이지 번호만 주고 몇 번째 줄인지 찾게 하는 UX
+- AW-001 ACTIVE 내용에 이 요청을 합치지 않음
+- 사양서 없이 기억만으로 기능 추가
+
+### 8-9. 선행조건·의존성
+
+DEPENDS_ON:
+
+- NONE (P0 웹 골격+엔진 호출은 착수 가능)
+- 엔진 FINAL 경로 강화는 AW-001 owner. 웹은 기존 엔진을 호출만 한다
+
+나중 요청 (2026-08-16): 최종계획(`웹앱 최종 요구사항_20260816`) 승인 전까지 웹앱 제품 코드 착수 금지. 위 NONE은 승인 후.
+
+관련 대기 TASK (별도 제품으로 다시 만들지 말 것):
+
+- AW-002 = 사양서 Git Sync
+- AW-003 = 사양서 L 규칙 화면 (P1)
+- AW-004 = 사양서 업무흐름·모니터링 (P2)
+- AW-005 = 사양서 문서 작업 단일 진입
+
+같은 web entrypoint를 동시에 고치지 않는다. AW-001과 파일군이 겹치면 순차.
+
+### 8-10. 구현범위
+
+수정 가능 범위:
+
+- 운영 웹앱(문서 작업 P0 화면, Git Sync 상태, 기존 엔진 연결 API)
+- Module/Block/Locator/작성계획/Composition Plan
+- 사양서 P0 E2E 테스트
+- 새 브랜치 + PR
+
+P0 완료 전 금지:
+
+- P1/P2 UI 고도화만 하기
+- 디자인 시스템 과투자
+
+기존 구조를 최대한 유지하고 최소 변경한다.
+
+### 8-11. 입력검증
+
+반드시 확인:
+
+- 업로드 파일 존재·형식은 repo가 실제로 지원하는 범위만 표시
+- 지원하지 않는 포맷을 지원한다고 표시하지 않음
+- 파일 역할 자동판별 오판은 사용자가 고칠 수 있어야 함
+- 출처는 실제 파일/페이지가 있을 때만 표시. 없으면 날조하지 않음
+
+해당되지 않는 항목은 N/A 근거를 남긴다.
+
+### 8-12. 빈상태
+
+검증:
+
+- 파일 없음: 다음 입력 안내
+- 선택 재료 없음: 새로 작성 지시로 진행 가능, 출처 날조 금지
+- Git 변경 없음: 최신/SYNCED는 SHA 확인 후에만
+- L 규칙 0건: 하드코딩 목록으로 채우지 않음
+
+### 8-13. 로딩상태
+
+문서 분석·Module 분해·작성계획·엔진 실행·Git fetch/push 각각 실제 runtime 상태. 가짜 timer 금지. 중복 실행 방지.
+
+### 8-14. 오류상태
+
+필요한 경우:
+
+- 파싱/변환 실패
+- Git fetch/push/PR 실패
+- Sync 충돌
+- 엔진 호출 실패
+- 사양서/Drive 문서 읽기 실패
+
+각 오류는 원인 한 줄 + 다음 행동. 성공으로 위장하지 않는다. 막히면 `BLOCKED`.
+
+### 8-15. 에이전트 실행 프롬프트 (이 블록을 그대로 사용)
+
+영어를 기본 입력으로 쓴다. 사양서 제목·링크는 그대로 둔다. 불확실하면 멈추고 묻고, 엔진을 지어내거나 SYNCED를 위장하지 않는다.
+
+#### English (default)
+
+```text
+Use Google Doc “auto_write 웹앱 구축 요구사항_최종_20260814”
+(https://docs.google.com/document/d/1afL0r7pk0Iei0RZoDNgSulpd5uc8fYbdT7eb_wrTxuY/edit)
+as the ONLY spec. Build a production web app on top of GitHub repo `pds2225/auto_write`.
+
+This TASK.md item is AW-009. Do not merge it into AW-001.
+
+Rules:
+1) Implement P0 only first. Do not polish UI or start P1/P2 before P0 works end-to-end.
+2) Reuse existing auto_write engines/services/CLI/DomainRouter/LRuleEnforcer/Finalizer. Do NOT reimplement the same logic for the web.
+3) GitHub remote is Source of Truth. Bidirectional GitHub ↔ Web sync must actually work. Never show SYNCED/complete without verifying Remote SHA. Never mark push/PR failure as success. No force-push.
+4) Explicitly out of scope: quality scoring, auto submit-readiness judgment, CRM, project management, dashboards, SaaS billing, any new/enhanced DOCX development.
+5) Core UX: one “Document Work” screen. Upload → auto role detection → decompose into Module/Block/sentence/table with real source text → user selects materials numbered [1][2][3] (allow paste-in) → natural-language compose instructions → show structured writing plan → Composition Plan → run existing engines. No primary/secondary material UI. Do not expose PRESERVE/ADAPT/REWRITE/NEW radios.
+6) User-facing citation = filename + page. Internals use precise Locators. Never force users to hunt “which line on page N”.
+7) L-rules: full inventory from repo, search, edit, Git history/rollback. Do not store canonical rules only in a web DB.
+8) Non-dev Flow / live runtime monitoring / Architecture are P2. No fake progress animations.
+9) Work on a new branch and open a PR. Done means spec §30 E2E + §31 DoD with evidence. Mock-only is FAIL.
+10) Final report must follow spec §34 [WEB BUILD RESULT] and TASK.md §22. If blocked, say BLOCKED with cause—do not hide failures.
+
+If unsure, stop and ask; do not invent engines or fake SYNCED.
+
+First analyze the remote repo + the spec, then propose a P0 plan, implement it, and report with real E2E evidence.
+```
+
+#### 한국어
+
+```text
+Google Docs 「auto_write 웹앱 구축 요구사항_최종_20260814」
+(https://docs.google.com/document/d/1afL0r7pk0Iei0RZoDNgSulpd5uc8fYbdT7eb_wrTxuY/edit)
+를 유일한 사양서로 삼아, GitHub `pds2225/auto_write` 위에 운영용 웹앱을 구현하라.
+
+이 항목은 AW-009다. AW-001에 합치지 마라.
+
+규칙:
+1) 사양서 P0만 먼저 구현. P0 미완이면 P1/P2·UI 고도화 금지.
+2) 기존 auto_write 엔진/서비스/CLI/DomainRouter/LRuleEnforcer/Finalizer를 재사용할 것. 동일 기능 웹용 중복 구현 금지.
+3) GitHub 원격이 Source of Truth. GitHub↔Web 양방향 Sync 실제 동작 필수. Remote SHA 미확인·push/PR 실패 시 SYNCED/완료 표시 금지. force push 금지.
+4) 금지: 품질점수, 제출가능성 자동판정, CRM, 프로젝트관리, 대시보드, SaaS 결제, DOCX 신규 개발/고도화.
+5) UX 핵심: ‘문서 작업’ 단일 화면. 업로드 → 파일역할 자동판별 → Module/Block/문장·표 원문 보기·선택 → 선택재료 [1][2][3] 번호화(+직접붙여넣기) → 자연어 작성지시 → AI 작성계획 확인 → Composition Plan → 기존 엔진 실행. 주자료/보조자료 UI 금지. PRESERVE/ADAPT/REWRITE/NEW 라디오 노출 금지.
+6) 출처 표시는 파일명+페이지. 내부는 정확한 Locator. 페이지 번호만 주고 줄을 찾게 만들지 말 것.
+7) L 규칙은 repo 전수 수집·조회·수정·Git history/rollback. 웹 DB에만 저장 금지.
+8) 비개발자용 업무 Flow / 실시간 runtime 모니터링 / Architecture는 P2. 가짜 progress 금지.
+9) 새 브랜치에서 작업 후 PR. 완료 판정은 사양서 §30 E2E + §31 DoD만. 목업만으로 PASS 금지.
+10) 보고는 사양서 §34 [WEB BUILD RESULT]와 TASK.md §22. BLOCKED는 숨기지 말 것.
+
+불확실하면 멈추고 물어라. 엔진을 지어내거나 SYNCED를 위장하지 마라.
+
+먼저 원격 repo와 사양서를 분석한 뒤, P0 구현 계획 → 구현 → E2E 근거와 함께 보고하라.
+```
+
+나중 요청이 덮음 (2026-08-16): 구현 세션의 유일한 사양서는 위 2026-08-14 URL이 아니라 `AUTO_WRITE 웹앱 최종 요구사항_20260816` (https://docs.google.com/document/d/1E4aHoLtC36XS8E19jzR8B9nP8__H1zePYtjslL03LRo/edit) 이다. 영어/한국어 프롬프트의 2026-08-14 링크는 역사. **승인 전 웹앱 코드 시작 금지.**
+
+---
+
+## T-20260814-02
+
+REPO: pds2225/auto_write
+BASE: main
+TASK_ID: T-20260814-02
+WORK_BRANCH: docs/task-T-20260814-02-on-main
+STATUS_THIS_TURN: 명세만 등록 (`[ ]`). 구현 시작 아님. 제품 코드 0줄.
+2026-08-16: `docs/BPQ_PIPELINE_INSIGHTS_20260815.md` 키워드를 BPQ-02/03/07/08/12/13에만 추가 (T-20260816-05). 8-1 원문·기존 워크스트림 본문은 덮어쓰지 않음. LIST는 `[ ]` 유지. 구현 시작 아님.
+2026-08-16 충돌해소: #139 인사이트(PR #141 합본 + PR #144 키워드)와 실행지시(PR #143)가 TASK.md에서 겹침. BPQ-02/03/07/08/12/13은 `실행지시 추가`와 `키워드(2026-08-16)`를 **둘 다 유지**. 한쪽 삭제·V2 우회 금지. 닫힌 #139의 GitHub CONFLICTING 표시는 무시(재머지 금지).
+2026-08-16 최우선 사용 케이스: 기존 사업계획서가 있는 경우(공고+빈 양식+기존 계획서 → 가능한 파트 즉시 작성 → 부족한 정보만 요청). 전문은 아래 `최우선 사용 케이스`. 새 Epic 아님. AW-005를 이 흐름으로 구체화. LIST는 `[ ]` 유지.
+2026-08-16 요청 한 장: 공고+빈 양식 오기 전 초안 금지. BPQ-00 제품 코드도 대기 해제 전까지 시작 금지. 양식=PSST, 지금은 Problem만. 전문은 아래 `요청 한 장 — 2026-08-16`. 새 Epic 아님. LIST는 `[ ]` 유지. 피흡수 `user_requests_from_md_20260816.md` 는 Drive 검색 0건.
+2026-08-16 웹앱 최종 요구사항: 새 Google Doc이 AW-009 실행 정본. 승인 전 웹앱 제품 코드 대기. 전문은 아래 `웹앱 최종 요구사항_20260816`. 새 Epic 아님. LIST는 `[ ]` 유지.
+2026-08-16 계획 보강: P 개발 중에는 요청 한 장(Problem만). P 완료 후 최우선. 증빙은 막힐 때만. 다음 엔진=3 HWP Baseline(#150 측정기 닫힘). 전문은 아래 `계획 보강 — 2026-08-16`. 새 Epic 아님. LIST는 `[ ]` 유지.
+
+관계: AW-001~AW-008과 **합치지 않는다**. 본 TASK는 사업계획서 **작성 품질 파이프라인** Epic이다. 구현 시 AW-001의 DomainRouter → LRuleEnforcer → Finalizer 경로를 **KEEP**로 통과해야 한다. AW-001이 `[~]`여도 본 LIST는 `[ ]`로 둔다(이번 턴은 구현 시작이 아님).
+
+ID 채번 메모: 같은 날 LIST에 `[~] T-20260814-01`(기본 브랜치 보호)이 이미 있으므로 본 Epic은 `T-20260814-02`. 기존 T-20260814-01 DETAILS에 내용을 섞지 않는다. GitHub 기본 브랜치는 `main`이며 `master` 브랜치는 원격에 없다(위키의 auto_write BASE=master는 구버전). 이 등록은 실제 default `main`의 루트 TASK.md에 한다.
+
+---
+
+### 8-1. 사용자 원문
+
+이 8-1은 2026-08-14 **명세 작성** 지시. **제품 목표 아님.** 기본 생략. 제품 목표=`AW-005` 8-1 + `최우선 사용 케이스`.
+
+아래는 2026-08-14 채팅 요청 전문이다. 축약하지 않는다.
+
+```text
+대상 저장소: auto_write
+
+이번 작업의 목적은 코드를 구현하는 것이 아니라, 앞으로 여러 AI 코딩 에이전트가 TASK.md 하나만 읽고 동일한 방향으로 개발할 수 있도록 구현 가능한 수준의 통합 과업 명세를 작성하는 것이다.
+
+## 0. 절대 운영 규칙
+우리 저장소는 Wiki에 정의된 방식대로 운영한다.
+* 모든 개발 과업의 단일 기준은 main 브랜치 루트의 TASK.md
+* 별도의 NEXT_TASK.md, 임시 task 파일, 개인 메모 파일을 새로운 작업 기준으로 만들지 말 것
+* 먼저 Wiki의 TASK 운영 규칙을 읽고 그대로 준수할 것
+* TASK.md에 이미 진행 중이거나 미완료인 과업이 있다면 임의 삭제·축약·덮어쓰기 금지
+* 기존 과업과 이번 과업의 관계를 확인한 뒤 Wiki 규칙에 맞는 위치에 추가/통합할 것
+* main 브랜치가 존재하지 않거나 Wiki 규칙과 실제 저장소 상태가 충돌하면 임의 판단하지 말고 BLOCKED로 보고할 것
+* 이번 요청에서는 구현 금지
+* 소스코드 수정 금지 / 리팩터링 금지 / 마이그레이션 금지 / 실제 사업계획서 생성 금지 / 테스트 코드 구현 금지
+* 이번 턴의 산출물은 TASK.md 갱신과 현재 구조 분석 보고뿐이다.
+
+# 1. 먼저 저장소 전체를 조사하라
+1. 현재 브랜치, git status, remote, origin/main 상태 확인
+2. 저장소 Wiki 및 TASK 운영 규칙 확인
+3. 루트 TASK.md 전체 읽기
+4. README, architecture 관련 문서, docs 전체에서 사업계획서 자동작성 관련 설계 확인
+5. 기존 사업계획서 관련 코드 전수 검색
+6. 개념/모듈 존재 여부: DomainRouter, LRuleEnforcer, Finalizer, bizplan, cross-form autofill/rewrite, document ingest, HWP/HWPX/DOCX parser, template parser, renderer, fact/source/provenance, QA/quality
+7. 구현됨 / 부분 / 미구현 / 중복 을 표로 정리
+8. 재사용 vs 신규 분리. 제안 클래스명을 그대로 만들지 말 것. 중복 시스템 금지.
+
+# 2. 최종 제품 목표
+단순한 LLM 문안 생성기가 아니다.
+Pipeline: 공고문 + 빈 양식 + 기업 자료 + 기존/과거 사업계획서 + 우수 Benchmark
+→ 공고 요구 분석 → 양식 구조 분석 → 기업 사실 추출·통합 → 사실 충돌 검출
+→ 평가항목별 작성전략 → 우수본 구조적 품질규칙 → 섹션별 문안·표·도식·증빙 계획
+→ 원본 HWP/HWPX/DOCX 양식 렌더 → 사실·수치·분량·누락·양식·증빙 QA → 최종 사업계획서
+장기: 사람이 처음부터 쓰지 않아도 AIMY 수준의 구조적 완성도에 접근.
+AIMY 내용/숫자 복제 금지. 작성 품질 구조만 일반화. STYLE/QUALITY RULE != FACT.
+
+# 3. Benchmark 자료 (추측 금지)
+1. ★AIMY-대한안전보건-사업계획서-분석결과-역추정.txt
+2. AI 화상교육 솔루션 AIMY_대한안전보건교육원_본선 제출용 20250919.hwp
+3. 동일 계열 PDF
+4. 저장소 사업계획서 생성/툴 문서
+5. Golden/완성본, 양식 역추정, L Rule
+PDF는 레이아웃·표·이미지·강조·증빙 배치까지. 없으면 BLOCKED.
+
+# 4. AIMY에서 가져갈 것 / 가져가면 안 되는 것
+가져갈 것(Quality Pattern): 표지 압축, 표지↔본문 동일 Source, Problem→Solution→Scale-up→Team, 주장 직후 근거, 표·불릿 우선, 현황→손실→사례→규제→필요성, 사용자/구매자 이원, AS-IS/TO-BE, 기능표, 개발단계, IP, 경쟁비교, BM, 고객·성과·검증, 일정, 자금, 팀, 증빙 별첨, 표지/본문 계층, 정량·시점 밀도, 평가자 익숙 용어.
+가져가면 안 됨: AIMY 회사 고유 사실, 시장규모, 고객 1.1만, 매출, 특허, 정확도, 투자계획, MOU, 사업분야 고유 정책용어.
+오류 복제 방지 테스트: 97.9 vs 97.5, 1.1만 기존 vs 목표, 특허 건수, 400억 vs 연차 합, 2025.11.31, MOU 완료 vs 추진중.
+
+# 5. 목표 아키텍처 책임 (명칭은 예시, 기존 재사용)
+A Company Master / Fact Graph (fact_id, field, value, unit, as_of, actual/plan/estimate/hypothesis, source, location, confidence, verification)
+B Claim Provenance
+C Conflict Detector (VERIFIED/CONFLICT/MISSING/ESTIMATE/PLAN/INFERENCE — 임의 선택 금지)
+D Canonical Bizplan Schema (COMPANY/ITEM/PROBLEM/SOLUTION/MARKET/CUSTOMER/DIFFERENTIATION/TECHNOLOGY/TRACTION/BUSINESS_MODEL/GO_TO_MARKET/SCALE_UP/TEAM/FINANCE/FUNDING/SCHEDULE/IP/CERTIFICATION/ESG/EVIDENCE)
+E Program / Form Compiler → ProgramSpec/FormSpec (코드 복붙 없이)
+F Benchmark / Quality Profile (AIMY 종속 금지, 복수 프로필)
+G Content Planner (자료→평가전략→결론→Claim→Evidence→표/이미지→분량→문장)
+H Renderer (기존 HWP/HWPX/DOCX 재사용)
+I QA (누락, unsupported claim, 숫자/날짜, Actual/Plan, source 없는 Claim, KPI 불일치, 분량, 양식 훼손, 표/증빙/공고 제약)
+
+# 6. 4층 데이터 모델 분리
+CompanyMaster / ProgramSpec / QualityProfile / DocumentPlan
+CompanyMaster + ProgramSpec + QualityProfile → DocumentPlan → Generated Document
+현재 코드 대응을 TASK에 명시.
+
+# 7. L Rule 계층
+기존 전수 후 깨지 않는 범위에서 L0 Integrity / L1 Universal / L2 Program Family / L3 Program/Form / L4 Benchmark.
+권장 우선순위 후보: Integrity > Program/Form > Program Family > Universal Quality > Benchmark Style.
+충돌 시 새 파일로 쪼개지 말고 기존 lessons/resume-l-rules/lrule_gate에 통합.
+
+# 8. MarketGate = Golden Case #1
+MarketGate 실제 사실만. AIMY 사실 복사 금지. 근거 없는 수치 생성 금지.
+
+# 9. Cross-form 자동재작성 실험
+전사(cross_form_autofill)와 서술 재작성은 다른 경로. 기존 전사 KEEP.
+1차 corpus 후보 6유형×5=30. 실제 보유 파일로 확정. 없으면 가정 테스트셋 금지.
+
+# 10. Blind / Hold-out
+사람 완성본을 generation context에 넣지 않음. 공고+빈양식+당시 기업자료만. 생성 후 사람본과 비교.
+
+# 11. 품질 검증 지표 (개발/회귀용, UI 점수 아님)
+Coverage>=98%, Source연결>=95%, Unsupported=0, Numeric inconsistency=0, Actual/Plan 오류=0, 양식보존>=99%, 전문 재작성 비율<=20%, 검토시간 >=70% 감소.
+측정 불가면 측정 TASK를 따로. 근거 없이 성공 판정 금지.
+
+# 12. 이미지 3종
+Evidence / Data viz / Generated illustration. 생성형을 증빙으로 쓰는 QA 금지.
+
+# 13. Workstream BPQ-00 ~ BPQ-13
+00 Baseline Audit / 01 Benchmark Corpus / 02 Canonical Schema / 03 Fact Provenance / 04 Conflict / 05 Program-Form Compiler / 06 Quality Profile / 07 Content Planner / 08 MarketGate Golden / 09 Cross-form Harness / 10 L Rule Mining / 11 Renderer / 12 QA / 13 Regression 100.
+각 항목: 목적, 선행, 현재구현, 재사용, 신규, 변경파일, 산출물, 테스트, 수치 DONE, 실패/BLOCKED, 의존.
+
+# 14. TASK 공통 형식
+Wiki 우선. 큰 과업마다 목표/현재상태/구현범위/금지/입력검증/빈·로딩·오류/테스트/회귀/문서동기화/Git/DONE·BLOCKED/최종보고.
+
+# 15. 금지 14개
+1 AIMY 숫자/사실을 다른 계획서에 전이 금지
+2 출처 없는 숫자 생성 금지
+3 Actual과 Plan 혼합 금지
+4 LLM이 충돌 사실을 임의 선택 금지
+5 신규 양식마다 Python 복붙 금지
+6 양식별 하드코딩을 기본 전략으로 사용 금지
+7 기존 DomainRouter/LRule/Finalizer/cross-form 구조 무시 금지
+8 동일 역할 모듈 중복 생성 금지
+9 사람 완성본을 generation 입력에 넣은 뒤 Blind Test라고 부르는 것 금지
+10 렌더링 성공만으로 품질 성공 판정 금지
+11 생성형 이미지를 증빙으로 사용 금지
+12 Benchmark 점수를 위해 원문 정답을 generation context에 노출 금지
+13 테스트 실패를 삭제/skip하여 DONE 처리 금지
+14 원본 HWP/PDF Benchmark 자료 수정 금지
+
+# 16. 이번 턴 수행 = 구현 없이 TASK.md 작성
+# 17. 자체검수 YES 14문항
+# 18. Git: TASK.md만, dirty 보존, force/reset 금지
+# 19. 보고 형식 STATUS/BASELINE/WIKI/EXISTING/GAP/CHANGED/ORDER/BLOCKERS/CODE CHANGES=없음/NEXT
+이번 단계에서는 TASK.md 작성까지만 수행하고 구현을 시작하지 마라.
+```
+
+운영 주석(원문과 위키 충돌): 사용자 원문과 GitHub default는 `main`. 스킬·위키는 auto_write BASE=`master`이나 **원격 `master` 브랜치는 없다**. master를 되살리지 않고 **실제 기본 브랜치 main**의 루트 TASK.md에 등록한다. 위키 불일치는 BLOCKERS로 남긴다.
+
+---
+
+### 최종 결과
+
+다음 AI가 `원격 기본브랜치 최신화하고 TASK.md만 읽고 적힌 과업만 실행해.` 한 줄만 받아도, AIMY **사실 복제 없이** 품질 구조만 일반화한 사업계획서 자동작성 파이프라인을 **기존 모듈 재사용·확장**으로 BPQ-00부터 구현할 수 있는 실행 명세가 `TASK.md`에 남아 있다. 이번 턴의 사용자 요청 해결 = **명세 등록**. 사업계획서 파일이 생기는 것이 이번 턴 DONE이 아니다.
+
+---
+
+### MUST
+
+- [ ] LIST에 본 ID 1줄 + DETAILS 본 ID 1블록 (기존 AW-* 삭제·축약·혼합 금지)
+- [ ] `STYLE/QUALITY RULE != FACT`. AIMY 숫자·고유사실을 Quality Profile에 넣지 않음
+- [ ] 4층 분리: CompanyMaster / ProgramSpec / QualityProfile / DocumentPlan
+- [ ] 책임 A–I를 **기존 경로 재사용**으로 매핑하고, 갭만 신규. 제안 클래스명(`DomainRouter2` 등) 신설 금지
+- [ ] L0–L4를 새 파일로 쪼개지 말고 `lessons` + `lrule_enforcer` + `lrule_gate` + `resume-l-rules`에 계층 태그로 통합. 충돌 시 **기존 L 번호·가드 우선**
+- [ ] cross_form **전사**는 KEEP. **서술 재작성**은 별 경로. 혼동 금지
+- [ ] MarketGate Golden Case #1: MarketGate 근거만. AIMY 사실 전이 금지
+- [ ] Blind/Hold-out: 사람 완성본을 generation context에 넣지 않음
+- [ ] 이미지 Evidence / Data viz / Generated illustration 분리 + 생성형 증빙 QA 금지
+- [ ] AIMY 내부 충돌 6종을 detector 회귀 케이스로 등록 (복제 금지)
+- [ ] 30개 층화는 **실제 보유 파일 조사 후**. 부족하면 N건 + 수집 선행. 가짜 30셋 금지
+- [ ] 구현 시 진입: DomainRouter → (본 파이프라인) → LRuleEnforcer → Finalizer. `_DRAFT` 우회 금지
+- [ ] 테스트: `py -3.11 -m pytest` (기본 3.14 금지)
+- [ ] 원본 HWP/PDF Benchmark 수정 금지. 원본 덮어쓰기 금지
+
+---
+
+### KEEP
+
+- DomainRouter (`app/auto_write/domains/domain_router.py`)
+- LRuleEnforcer (`app/auto_write/services/lrule_enforcer.py`) + `app/lrule_gate.py` + `app/tests/lessons_coverage.json` (151)
+- Finalizer (`app/auto_write/services/finalizer.py`)
+- cross_form_autofill 전사 (`app/auto_write/services/cross_form_autofill.py`). 날조0, 실값/마스킹 보존, 보이는 빈칸만
+- company_extract / company_master CLI (식별 필드 마스터 + 파일 간 conflict)
+- announcement_analyzer + evaluation_service.parse_announcement
+- form_analyzer + analysis.docx_template + document_ingest (HWP/HWPX/PDF/DOCX)
+- RenderService + hwpx_fill / hwp_fill / hwp_com_fill / hwpx_submit / hwpx_doctor
+- usage_acceptance + self_diagnose + document_quality_orchestrator (서식 점수 ≠ 제출가능)
+- bizplan_ai_writer / psst_fill 의 `[확인필요]`·출처 병기 정책
+- answers_provenance.json 계측 훅 (project_service)
+- bizplan-orchestrator / announcement-form-analysis / cross-form-submission / document-quality-orchestrator / resume-l-rules 스킬 입구
+- AW-001~AW-008 미완료 과업 전부
+
+---
+
+### REMOVE
+
+- 해당 없음 (이번 Epic은 기존 기능을 지우지 않는다)
+- 구현 단계에서 salvage 중복·미사용 복제본을 건드릴 경우 AW-007과 조율. 본 TASK가 기존 정상 경로를 삭제하지 말 것
+
+---
+
+### FORBIDDEN
+
+공통:
+
+- `.env` / 비밀값 커밋·출력
+- 요청에 없는 기능 추가
+- `git add -A`, force push, `reset --hard`, 사용자 dirty 삭제
+- Google Tasks 조회·동기화
+- `NEXT_TASK.md` / CURRENT_TASK.md / 임시 task 파일을 실행 기준으로 만들기
+- 기본 3.14로 pytest
+
+사용자 §15 14개 (구현 전 구간에도 적용):
+
+1. AIMY의 숫자/기업사실을 다른 사업계획서에 전이 금지
+2. 출처 없는 숫자 생성 금지
+3. Actual과 Plan 혼합 금지
+4. LLM이 충돌 사실을 임의 선택 금지
+5. 신규 양식마다 Python 코드 복붙 금지
+6. 양식별 하드코딩을 기본 전략으로 사용 금지
+7. 기존 DomainRouter / LRule / Finalizer / cross-form 구조 무시 금지
+8. 기존 구현과 동일 역할 모듈 중복 생성 금지
+9. 사람 완성본을 generation 입력에 넣은 뒤 Blind Test라고 부르는 것 금지
+10. 렌더링 성공만으로 사업계획서 품질 성공 판정 금지
+11. 생성형 이미지를 증빙으로 사용 금지
+12. Benchmark 점수를 높이기 위해 원문 정답을 generation context에 노출 금지
+13. 테스트 실패를 삭제/skip하여 DONE 처리 금지
+14. 원본 HWP/PDF Benchmark 자료 수정 금지
+
+추가:
+
+- 제안 클래스명(`FactGraphService`, `LRuleEnforcerV2` 등)을 이유로 병렬 시스템 신설 금지
+- MarketGate 테스트셋에 AIMY KPI를 채워 넣는 것 금지
+- 비전으로 AIMY 이미지 50장을 Read 하는 것 금지 (connection abort). 파일명+추출문+기존 역추정 md 사용
+- 이 TASK 구현을 이번 명세 턴에서 시작 금지
+
+---
+
+### VERIFY
+
+명세 턴 (이번, 이미 수행 대상):
+
+- [ ] origin/main `TASK.md`에 T-20260814-02 LIST 1줄 + DETAILS 1블록
+- [ ] AW-001~008 원문·MUST가 그대로
+- [ ] diff = TASK.md only
+- [ ] 제품 코드 0줄
+
+구현 턴 (이후, BPQ 완료 시):
+
+- [ ] 공고+빈양식+기업자료+과거계획(+품질프로필) → 원본 양식 렌더 → QA
+- [ ] AIMY 사실이 출력에 없으면 PASS (MarketGate 등 타 기업)
+- [ ] unsupported factual claim = 0, numeric inconsistency = 0, actual/plan 혼동 = 0
+- [ ] 양식 구조 보존, fail이면 `_DRAFT`
+- [ ] Blind: 사람 완성본 미입력
+- [ ] `py -3.11 -m pytest` 관련 신규+회귀
+- [ ] REQUEST_SOLVED는 **사용자가 실제로 그 사업계획서를 제출 검토할 수 있을 때**. 테스트 PASS만으로 DONE 금지
+
+---
+
+### DONE
+
+이번 턴(명세) REQUEST_SOLVED=YES 조건:
+
+- master 루트 TASK.md에 본 Epic이 올라갔고, 다음 AI가 BPQ-00부터 구현 가능
+- 코드 구현은 하지 않음
+
+전체 Epic REQUEST_SOLVED=YES (미래, `[x]` 조건):
+
+- MarketGate Golden Case가 MarketGate 근거만으로 AIMY **구조 패턴**을 적용한 제출 검토본을 만들고
+- Blind 비교가 사람본을 컨텍스트에 넣지 않으며
+- 내용 QA(사실·숫자·Actual/Plan·증빙유형) + 서식/수용검사 이중 게이트를 통과
+- 30개 층화가 **실제 보유 N건**으로 정직하게 돌아가고, 부족분은 수집 전까지 가짜 30으로 DONE하지 않음
+- 사람이 처음부터 다시 쓰지 않아도 되는 수준(전문 재작성 비율 측정 가능할 때 <=20% 목표). 측정기 없으면 그 지표로 DONE 주장 금지
+
+---
+
+## 조사 스냅샷 (2026-08-14, 구현 금지 턴)
+
+### Git (명세 작성 시점)
+
+- 로컬 `D:\auto_write`: 로컬 브랜치명 `master`는 stale, HEAD `aadb500`, dirty 있음 (`.claude/settings.json`, `resume-l-rules/SKILL.md`, `.gitignore`, `REQUEST_LEDGER.md`, `RESUME.md` 등). **삭제·add -A 금지**. 이 TASK는 worktree에서만 수정.
+- GitHub default: `main` @ `c9ef152`. LIST=AW-001~008 + `[~] T-20260814-01`. 이 파일 `# 1. REPOSITORY` BASE=`main`.
+- 원격 `master` 브랜치: **없음**. Wiki BASE=master와 충돌 → BLOCKERS. master를 재생성하지 않음.
+- 원격: `https://github.com/pds2225/auto_write.git`
+
+### 개념 존재 여부
+
+| 개념 | 상태 | 현재 경로 | 비고 |
+|---|---|---|---|
+| DomainRouter | 구현됨 | `app/auto_write/domains/domain_router.py` | KEEP. 재구현 금지 |
+| LRuleEnforcer | 구현됨 | `app/auto_write/services/lrule_enforcer.py` | 151 canonical. fail-closed FINAL |
+| Finalizer | 구현됨 | `app/auto_write/services/finalizer.py` | FAIL/REVIEW/UNVERIFIABLE → _DRAFT |
+| lrule_gate | 구현됨 | `app/lrule_gate.py` | HWPX CLI |
+| bizplan 패키지 | 부분(래퍼) | `app/bizplan/services/*` → `auto_write.services` | 정본은 auto_write.services. 래퍼 복제 확장 금지 |
+| core/docx 복제 | 중복 | `app/core/docx/services/cross_form_autofill.py` 등 | AW-007 대상. BPQ가 세 벌을 동시에 수정하지 말 것. **정본=`auto_write.services`** |
+| salvage 복제 | 중복 | `salvage/cross-form-pdf/` | 실행 경로 아님 |
+| cross-form 전사 | 구현됨 | `cross_form_autofill.py` | KEEP |
+| cross-form **재작성** | 미구현 | 없음 | 신규 경로. 전사와 파일/함수 분리 |
+| document_ingest | 구현됨 | `app/auto_write/document_ingest.py` | HWP/HWPX/PDF→텍스트/DOCX |
+| template parser | 구현됨 | `analysis/docx_template.py` + `form_analyzer.py` | 섹션/표/이미지슬롯. Canonical schema 없음 |
+| renderer | 구현됨 | `render_service.py`, hwpx_fill, hwp_fill, hwp_com_fill | 원본 복사 후 칸 채움 |
+| CompanyMaster 식별필드 | 부분 | `company_extract.py` (기업명·대표자 등 12필드) | fact graph(unit/as_of/actual-plan) 없음 |
+| Claim provenance | 부분 | `answers_provenance.json` (user/docx_seed/psst/ai/fallback) | page/as_of/actual-plan 없음 |
+| Conflict detector | 부분 | company_extract `Conflict` (식별값 파일 간 불일치) | KPI·날짜·Actual/Plan 충돌 없음 |
+| ProgramSpec | 부분 | `announcement_analyzer.AnnouncementReport` | 평가항목·마감·서류. FormSpec(자수/삭제금지/섹션중요도) 약함 |
+| QualityProfile | 미구현 | 없음. `quality_rules.BizplanRulesConfig`는 서식 프리셋 | AIMY 문체 규칙 아님 |
+| DocumentPlan (내용) | 부분 | `plan_builder.build_fill_plan` = identity/overview/row_rewrites | evaluator_should_conclude 없음 |
+| Content planner | 미구현 | `bizplan_ai_writer`는 PSST 약점 영역에 LLM 문단 직접 작성 | 계획 없이 생성 |
+| QA 서식/제출 | 구현됨 | doc_quality_score, usage_acceptance, self_diagnose | 내용 일관성 약함 |
+| QA 내용(숫자/Actual) | 부분 | `check_unverified_claims`(옵트인), `check_recruit_date_conflict` | AIMY형 KPI 충돌 미구현 |
+| PSST | 구현됨 | psst_check / psst_fill | 구조 4영역. 품질프로필 아님 |
+| 이미지 3종 | 미구현 | L017 NotebookLM 프롬프트, image_apply | Evidence/viz/illustration 미분류 |
+
+### 4층 데이터 모델 ↔ 현재 코드
+
+| 목표 층 | 질문 | 현재 대응 | 갭 |
+|---|---|---|---|
+| CompanyMaster | 이 기업은 무엇인가? | `company_extract.CompanyMaster` + CLI `app/bizplan/cli/company_master.py` (`app/company_master.py` 호환). 필드=기업명/대표자/사업자등록번호/설립일/업종/주소/연락처/이메일/홈페이지/직원수/자본금/팩스. confidence high/medium/conflict. confirmed=false 기본 | 아이템·KPI·IP·매출·일정·증빙 fact_id 그래프 없음. unit/as_of/actual\|plan\|estimate\|hypothesis 없음 |
+| ProgramSpec | 이번 지원사업은 무엇을 요구하는가? | `announcement_analyzer` + `evaluation_service.EvalCriterion` + `form_analyzer.FormReport` | 단일 ProgramSpec/FormSpec 산출물 없음. 글자/페이지 한도·삭제금지·섹션 중요도·표/이미지 요구 미구조화. 양식마다 코드 복붙할 유혹 → 금지 |
+| QualityProfile | 잘 쓴 계획서는 어떻게 표현하는가? | `quality_rules.PRESETS` (bizplan/report/minimal/off) = 색/pt/공란 등 **서식**. `document_type_classifier` 유형 코드 | AIMY_HIGH_DENSITY 같은 **작성 품질 프로필 없음**. 역추정 md는 자료일 뿐 런타임 아님 |
+| DocumentPlan | 이번 기업×이번 사업에 무엇을 어디에 어떻게 쓸 것인가? | `plan_builder` fill_plan + ProjectService.answers | 평가전략·Claim·Evidence·표/시각/분량 계획이 없음. LLM이 자료에서 바로 문단 생성 |
+
+공식: `CompanyMaster + ProgramSpec + QualityProfile → DocumentPlan → Renderer → QA`. 층을 한 JSON에 섞지 말 것.
+
+### 책임 A–I 매핑 (갭만 신규)
+
+| 책임 | 재사용 | 신규(확장) | 만들지 말 것 |
+|---|---|---|---|
+| A Fact graph | company_extract, doc_text_extract, document_ingest | fact 레코드 확장(동일 모듈 또는 `company_extract` 인접). 식별 12필드는 하위호환 | 별도 CompanyMaster2 |
+| B Claim provenance | answers_provenance, bizplan_ai_writer evidence_used | claim→source file/page/as_of/status 연결 | 병렬 provenance DB |
+| C Conflict detector | company_extract.Conflict | 동일 normalized field의 값/상태 충돌. LLM 자동해소 금지 | 새 Enforcer 클래스 |
+| D Canonical schema | form_analyzer.classify_field_kind, cross_form 동의어, PSST 키워드 | 양식 라벨→스키마 키 매핑 테이블 (데이터). 코드 하드코딩 양식 금지 | 양식마다 Parser 클래스 |
+| E Program/Form compiler | announcement_analyzer, form_analyzer, folder_analyzer, notice_pipeline | 두 리포트를 ProgramSpec+FormSpec으로 정규화 | 공고 종류별 파이썬 복붙 |
+| F Quality profile | quality_rules 서식 프리셋은 **서식층으로 유지** | 작성품질 프로필 JSON. AIMY 역추정에서 **패턴만** | AIMY 문장 템플릿 창고 |
+| G Content planner | evaluation_service 약점 섹션, psst_check | SectionPlan 생성 후 문장. `bizplan_ai_writer`는 planner **이후** 호출로 재배선 | writer를 두 개 |
+| H Renderer | RenderService, hwpx_*, hwp_*, conversion | planner 출력을 기존 fill/render에 연결 | 새 DOCX 엔진 |
+| I QA | usage_acceptance, doc_quality_score, self_diagnose, conversion_fidelity | 내용 QA 체크를 usage_acceptance 또는 인접 모듈에 **가드 추가** (LRule 기계화와 동일 패턴). 점수 UI 신설 금지 | 별도 QualityGate 앱 |
+
+### L Rule 통합 설계 (쪼개지 않음)
+
+현재:
+
+- 정본 교훈: `D:\.omc\agent-learning\lessons.md` (문서작성 섹션)
+- 커버리지 SSOT: `app/tests/lessons_coverage.json` — total **151**, mechanized 44 / gap 21 / judgment 86
+- 런타임: LRuleEnforcer → Finalizer
+- 이력서 체크리스트 스킬: `.claude/skills/resume-l-rules/SKILL.md` (L009 날조0, L011 서식보존, L019 점수≠제출 등). 이력서 전용 L038–L044, L060은 사업계획서 n/a
+- AW-003 = L 규칙 한 화면 관리. AW-008 = gap 기계화. **BPQ-10은 이 둘과 파일군이 겹침 → 순차, 레지스트리 owner는 기존 lessons/enforcer**
+
+통합 방안 (새 L0.py~L4.py **금지**):
+
+- 기존 L 항목에 optional `layer` 태그: `integrity` / `program_form` / `program_family` / `universal_quality` / `benchmark_style`
+- 충돌 시 **기존 규칙 우선**. 새 품질규칙은 다음 빈 L 번호로 레지스트리 추가 + guard+test+coverage+runtime 4점 충족 전에는 mechanized 표시 금지 (AW-008과 동일)
+- 권장 우선순위는 **태그 해석용**: Integrity > Program/Form > Program Family > Universal Quality > Benchmark Style. 기존 L009(날조0)·L011(서식)·L019(DRAFT)와 모순되면 기존이 이김
+- 매핑 예: L009→integrity, L011→program_form, L018 분량→program_form, 표지↔본문 KPI 동일 소스→universal_quality, AIMY 표우선·이원표→benchmark_style (사실값 없이)
+
+### Benchmark 자료 실측
+
+| 요청 자료 | 결과 |
+|---|---|
+| `★AIMY-대한안전보건-사업계획서-분석결과-역추정.txt` | **없음** (다솜/바탕화면/`D:\auto_write`/`D:\v_up` `*.txt` 검색 0). 추측 대체 금지. **BLOCKED 항목**. 동등 산출은 아래 md |
+| AIMY 본선 HWP 20250919 | **있음** `C:\Users\ekth3\OneDrive\바탕 화면\다솜\경영지도사 개인\02. 밸류업파트너스\2025년\20250919 대한보건교육원\AI 화상교육 솔루션 AIMY_대한안전보건교육원_본선 제출용 20250919.hwp` (21,028,864 bytes). **원본 수정 금지** |
+| 동일 계열 PDF | **있음** 같은 폴더 `…본선 제출용 20250919.pdf` (2,006,623 bytes). 레이아웃 분석은 이번 세션 역추정 md + 추출문 사용. 이미지 50장 비전 Read 금지 |
+| 저장소 역추정 | **있음** `D:\auto_write\results\aimy_form_rules\AIMY_대한안전보건교육원_본선제출_역추정.md` + `extracted_fulltext.txt` + `images/` (png 54, 파일 107) + `_report_parts/` + `_work/` |
+| 도보네비 역추정 | **있음** `D:\auto_write\results\dobonevi_form_rules\KICXUP_킥스업_박다솜_최종본_문체섹션_사실매핑.md` 등. **품질 패턴 보조만**. AIMY/MarketGate 사실 전이 금지 |
+| MarketGate | **있음 (레포 밖 개인폴더 + 레포 예시 1)** OneDrive `…\2026 AI수출지원공통\` 아래 마켓게이트 HWP/PDF/DOCX 다수, `…\_이화여대_사업계획서_초안\` 초안·검수 md. 레포: `tools/injector/examples/content_marketgate.json`. **근거 없는 수치로 테스트셋 만들지 말 것**. 사실팩 미구축이면 BPQ-08 BLOCKED |
+| `templates/` | 저장소에 **디렉터리 없음** |
+
+AIMY에서 **규칙으로 승격할 패턴** (사실 제외): 표지=본문 축약, 동일 블록 재사용, 표·불릿 우선, 관리자/이용자 이원, AS-IS/TO-BE, 주장 직후 표/이미지, 별첨=증빙, 무실적=`해당없음`, PSST 한글+영문 병기.
+
+AIMY에서 **절대 승격 금지**: 97.9/97.5, 1.1만, 400억, 특허 건수, 5.6조/89조/1000조, 대한안전보건교육원·임주원·AIMY 제품명 등.
+
+### 보유 공고+양식 (30개 미달 — 정직)
+
+확인된 **구분 가능한 완성/역추정 계열** (가정 셋 아님):
+
+1. 창업 사업화 — 도전 K-스타트업 2025 부처통합본선 (AIMY 제출본 + 같은 폴더 공고/서식 혼재)
+2. 지역·특화/산단 — KICXUP 챌린지 (도보네비 역추정)
+3. 수출·판로/AI수출 — MarketGate 관련 공고·초안·HWP 다수 (동일 프로그램 버전 반복이 많음. 5개 독립 양식으로 세면 안 됨)
+
+`6유형×5=30`은 **현재 미달**. BPQ-09 DONE을 30으로 주장 금지. 선행: 공고+빈양식 쌍을 실제 경로로 목록화. 지금 숫자: **독립 프로그램 계열 약 3**, 파일 개체는 더 많으나 버전 중복. 부족분 수집이 BPQ-09 선행.
+
+문서유형 분류기 코드(`business_plan`, `rnd_plan`, `export_report` 등)는 **제출문서 유형**이지 30개 양식 corpus가 아니다.
+
+---
+
+## 목표 파이프라인 (구현 시)
+
+```text
+공고 + 빈양식 + 기업자료 + 과거계획서 + QualityProfile(벤치마크 패턴)
+→ announcement_analyzer / form_analyzer  (E)
+→ company_extract 확장 fact graph     (A)
+→ conflict detector                   (C)
+→ ProgramSpec + FormSpec              (E)
+→ DocumentPlan / Content planner      (G)  ← 사람완성본 입력 금지(Blind)
+→ bizplan_ai_writer (계획된 Claim만)
+→ RenderService / hwpx|hwp fill       (H)
+→ usage_acceptance + 내용 QA + LRule + Finalizer  (I)
+→ FINAL 또는 _DRAFT
+```
+
+단계 계약 (2026-08-16, 위 흐름을 대체하지 않고 계약만 보강):
+
+`LLM → StageResult JSON → 검증 → 다음 Stage → 원본 양식 렌더 → LRule+Hash+Finalizer`
+
+금지: `LLM → 최종 DOCX`. 점수 루프에서 문서 전체를 다시 쓰지 않는다. 실패한 Stage만 재실행한다.
+
+StageResult 누적(S0–S8, 신규 Epic 아님): S0 프로젝트 → S1 공고/양식 → S2 사실추출 → S3 사실감사 → S4 작성전략 → S5 DocumentPlan → S6 섹션 Structured Draft → S7 원본 양식 렌더 → S8 LRule+Hash+Finalizer. 다음 Stage는 직전 StageResult 객체만 소비한다.
+
+경로 주의: DOCX 엔진 다수는 `app/core/docx/services/*`에 있다. `auto_write.services`는 3줄 re-export인 경우가 많다. KEEP의 정본=`auto_write.services`를 맹목적으로 덮어쓰지 말 것. BPQ-00 감사에서 확인한다.
+
+---
+
+## Workstream BPQ-00 ~ BPQ-13
+
+공통(모든 BPQ에 적용, 반복 생략):
+
+- **금지**: 위 FORBIDDEN 14 + 원본 덮어쓰기 + 비밀 커밋 + 기존 AW 과업 삭제
+- **입력검증**: 경로 존재, 지원 확장자, 빈 입력, 사람완성본이 generation 플래그로 들어오면 거부
+- **빈상태**: 사실 0건·공고 파싱 0건이면 빈 DocumentPlan + `[확인필요]` / needs_confirm. 가짜 숫자 채우지 않음
+- **로딩상태**: 장시간 ingest/LLM 시 중복 제출 방지. 키가 없으면 결정론 경로(기존과 동일)
+- **오류상태**: 파싱 실패·충돌 미해소·양식 격자 깨짐 → 성공 위장 금지, `_DRAFT` 또는 BLOCKED
+- **회귀**: `py -3.11 -m pytest tests/ -q` 관련 스위트. 실패 skip 금지
+- **문서동기화** (이번 명세 턴에는 **수정하지 않음**. 구현 시만): `AUTO_WRITE_DOMAIN_MAP.md`, `docs/BIZDOC_HUB_MAP.md`, `CLAUDE.md` 변경이력, 해당 스킬 SKILL.md. architecture를 구현 전에 다시 쓰지 말 것
+- **Git**: 작업 브랜치에 TASK_ID, `git add`는 해당 구현 파일만, force 금지, dirty 사용자 파일 보존
+- **최종보고**: TASK.md §22 형식 + REQUEST_SOLVED
+
+구현 순서(조사 후 확정):
+
+`00 → 01 → 02 → 03 → 04 → 06 → 05 → 07 → 11 → 12 → 08 → 09 → 10 → 13`
+
+이유: 스키마(02) 없이 fact(03) 키를 정하지 않음. 품질프로필(06)은 AIMY 역추정(01)만으로 가능(공고 컴파일러보다 앞). Planner(07)는 Spec+Profile+Fact 필요. Renderer(11)·내용QA(12)가 있어야 Golden(08)을 측정. 30 corpus(09)는 파일 수집 선행. L 승격(10)은 실패 패턴 이후. 100건(13)은 마지막.
+
+병렬 가능: 01의 파일 등록과 00 확인 커밋; 06과 05는 파일군이 다르면 병렬 가능하나 02 스키마 키를 둘 다 쓰므로 02 이후.
+
+---
+
+### BPQ-00 Baseline & Architecture Audit
+
+- **목적**: 위 매핑표를 구현 시작 SHA에 고정. 중복 모듈 정본=`auto_write.services`
+- **선행**: 없음. 본 DETAILS가 초안
+- **현재**: 본 턴에서 코드 전수 조사 완료. 구현 턴은 origin/main HEAD에서 경로 존재만 재확인
+- **재사용**: AUTO_WRITE_DOMAIN_MAP.md, AGENTS.md, BIZDOC_HUB_MAP.md (읽기)
+- **신규**: 코드 없음이 기본. 경로가 사라진 경우만 TASK BLOCKED
+- **변경 예상 파일**: 없음(확인만). 문서 수정은 문서동기화 목록에만 남김
+- **산출물**: 이 DETAILS 매핑이 유효하다는 구현 로그 한 줄
+- **테스트**: import 스모크 선택. 대규모 리팩터 금지
+- **수치 DONE**: 표의 핵심 경로 파일이 HEAD에 존재. 정본 1곳
+- **실패/BLOCKED**: DomainRouter/LRule/Finalizer/cross_form가 삭제됨
+- **의존**: 없음
+- **구현범위**: 감사만. 새 클래스 금지
+- **목표/현재상태**: 위 표와 동일
+- **2026-08-16 실행지시 추가**: 다음 **구현** 세션에서 전수 Baseline Audit 표를 작성한다 (존재: IMPLEMENTED/PARTIAL/PLACEHOLDER/DUPLICATED/NOT_IMPLEMENTED × 조치: REUSE/EXTEND/CREATE ONLY IF GAP/DELETE·MERGE/DO NOT TOUCH). 코드 파일 존재만으로 IMPLEMENTED가 아니다. 각 책임은 `definition → production caller → runtime path → failure blocking → production test` 로 증명. 정본 경로를 HEAD에서 재확인한다(`auto_write.services` 가 re-export이면 실구현 `core.docx.services` 1곳만 수정). `*V2` 병렬 시스템 금지. **이 TASK.md 반영 세션에서는 Audit을 실행하지 않는다.** 전문은 같은 TASK의 `최신 실행지시 (2026-08-16 implementation update)`.
+- **2026-08-16 조치 우선순위 추가**: Audit 후 최우선은 PARTIAL → IMPLEMENTED. 작업순서: PARTIAL 완성 → PLACEHOLDER는 production wiring 또는 제거 → DUPLICATED는 canonical로 통합 → NOT_IMPLEMENTED는 필수 GAP만 CREATE. 조치 판단 순서(충돌 시 이 순서가 이김): 1 REUSE 2 DELETE/MERGE 3 EXTEND 4 CREATE ONLY IF GAP 5 DO NOT TOUCH. PARTIAL을 방치하고 같은 목적의 새 시스템으로 우회 금지. 선행이 완전 NOT_IMPLEMENTED일 때만 그 GAP을 먼저 최소 구현. IMPLEMENTED는 결함 없으면 REUSE/DO NOT TOUCH. 근거 없는 삭제 금지. 전문은 같은 TASK의 `조치 우선순위 — 매우 중요`.
+
+#### BPQ-00 실측 로그 (2026-08-16, SHA `95a0f63`)
+
+한 줄: KEEP 핵심(DomainRouter / LRuleEnforcer / Finalizer / cross_form 전사)은 HEAD에 있다. DOCX 엔진 정본은 `app/core/docx/services`( `auto_write.services` 39개가 3줄 re-export). ProgramSpec / FormSpec / QualityProfile / FactState / SectionContextPack / StageResult / 내용 DocumentPlan / cross-form 재작성은 코드에 없다. `*V2` 신설 없음. BLOCKED 아님.
+
+PINNING: `origin/main` `95a0f63c398a2c250b0cd2cf1639b92116fa5846` (#143 머지 후). WORK_BRANCH=`cursor/bpq-00-baseline-audit-2036`. import 스모크 19/19 OK. 제품 코드 0줄.
+
+정본 규칙 (이후 BPQ가 이김):
+
+| 종류 | 수정 위치 | 만지지 말 것 |
+|---|---|---|
+| DOCX/HWP 엔진 (cross_form, psst_*, quality_*, render, fill, autopilot, evaluation, usage_acceptance, openai_client, label_utils, …) | `app/core/docx/services/<module>.py` | `auto_write.services` re-export, `bizplan/services` 복사본, salvage |
+| LRule / Finalizer / company_extract / announcement_analyzer / form_analyzer / plan_builder / project_service / generation_store / domains | `app/auto_write/services/` 또는 `domains/` | `*V2`, core에 없는 모듈을 core로 복제 |
+| ingest / docx_template | 지금은 twin (바이트 동일). 호출은 `auto_write.document_ingest` / `auto_write.analysis.docx_template` | 한쪽만 고치고 다른 쪽 방치 (AW-007) |
+
+| 항목 | 정본 경로 | 존재 | 조치 | 증명 / 갭 |
+|---|---|---|---|---|
+| DomainRouter | `app/auto_write/domains/domain_router.py` | IMPLEMENTED | REUSE | definition+test(`test_e2e_domain_pipeline`) OK. CLI autopilot은 `classify_domain`만 쓰고 `resolve()` 미호출 |
+| DomainPipeline 타입 | 없음 | NOT_IMPLEMENTED | DO NOT TOUCH | 클래스명 없음. 만들지 말 것 |
+| BusinessPlanPipeline | `app/auto_write/domains/business_plan/pipeline.py` | PARTIAL | EXTEND | facade만. StageResult 오케스트레이션 없음. CLI는 서비스 직접 호출 |
+| ConsultantApplicationPipeline | `app/auto_write/domains/consultant_application/pipeline.py` | PARTIAL | EXTEND | 동일 facade |
+| LRuleEnforcer | `app/auto_write/services/lrule_enforcer.py` | IMPLEMENTED | REUSE | `autopilot_pipeline.enforce_lrules` production. tests `test_lrule_enforcer` |
+| lessons_coverage | `app/tests/lessons_coverage.json` | IMPLEMENTED | REUSE | counts total=151 mechanized=44 gap=21 judgment=86 |
+| lrule_gate | `app/lrule_gate.py` | IMPLEMENTED | REUSE | HWPX diagnose 래퍼. Enforcer CLI 아님 |
+| Finalizer | `app/auto_write/services/finalizer.py` | IMPLEMENTED | REUSE | `finalize_artifact` production. fail→_DRAFT |
+| CompanyMaster | `app/auto_write/services/company_extract.py` | PARTIAL | EXTEND | 식별 12필드. fact_id/unit/as_of/Actual·Plan 없음 |
+| announcement_analyzer | `app/auto_write/services/announcement_analyzer.py` | IMPLEMENTED | EXTEND | AnnouncementReport. ProgramSpec 아님. caller `analyze_docs.py` |
+| form_analyzer | `app/auto_write/services/form_analyzer.py` | IMPLEMENTED | EXTEND | FormReport. FormSpec 아님 |
+| ProgramSpec | 없음 | NOT_IMPLEMENTED | CREATE ONLY IF GAP | 선행 GAP. 새 파일보다 analyzer 정규화 우선 |
+| FormSpec | 없음 | NOT_IMPLEMENTED | CREATE ONLY IF GAP | 동일 |
+| QualityProfile (작성전략) | 없음 | NOT_IMPLEMENTED | CREATE ONLY IF GAP | `quality_rules.PRESETS`는 서식층. 섞지 말 것 |
+| quality_rules PRESETS | `core.docx.services.quality_rules` | IMPLEMENTED | REUSE | 서식만 |
+| plan_builder | `app/auto_write/services/plan_builder.py` | PARTIAL | EXTEND | fill 좌표. 내용 DocumentPlan/Claim 없음 |
+| Content planner | 없음 | NOT_IMPLEMENTED | CREATE ONLY IF GAP | writer가 계획 없이 문단 작성 |
+| answers_provenance | `project_service` + `generation_store.py` | PARTIAL | EXTEND | 출처 태그만. `core…/openai_client`가 `.generation_store` import → core에 파일 없음, fail-soft no-op |
+| document_ingest | `auto_write/document_ingest.py` ≡ `core/docx/document_ingest.py` | DUPLICATED | DELETE/MERGE | sha256 동일 twin |
+| docx_template | `auto_write/analysis/docx_template.py` ≡ `core/docx/docx_template.py` | DUPLICATED | DELETE/MERGE | sha256 동일 twin |
+| bizplan_ai_writer | `core.docx.services.bizplan_ai_writer` | IMPLEMENTED | EXTEND | 직접 LLM 문단. planner 후단 재배선 필요 |
+| bizplan_autopilot | `core.docx.services.bizplan_autopilot` | IMPLEMENTED | EXTEND | 전문 재작성 루프. Stage retry 아님 |
+| autopilot_pipeline | `core.docx.services.autopilot_pipeline` | IMPLEMENTED | REUSE | LRule+Finalizer 배선됨. BPQ StageResult 아님 |
+| psst_check / psst_fill | `core.docx.services.psst_*` | IMPLEMENTED | REUSE | 구조 4영역 |
+| cross_form 전사 | `core.docx.services.cross_form_autofill` | IMPLEMENTED | REUSE | KEEP. 날조0 |
+| cross_form 재작성 | 없음 | NOT_IMPLEMENTED | CREATE ONLY IF GAP | 전사 함수와 파일/시그니처 분리 |
+| evaluation_service | `core.docx.services.evaluation_service` | IMPLEMENTED | EXTEND | 평가항목 ≠ ProgramSpec |
+| eval_loop_runner | `auto_write.services.eval_loop_runner` | IMPLEMENTED | REUSE | 약점 섹션 재생성. Stage 머신 아님 |
+| document_quality_orchestrator | `core.docx.services.document_quality_orchestrator` | IMPLEMENTED | REUSE | 서식 100점 ≠ 내용 QA |
+| render / hwpx_fill / hwp_fill / hwp_com_fill | `core.docx.services.*` | IMPLEMENTED | REUSE | 원본 양식 채움 |
+| usage_acceptance / self_diagnose | core usage_acceptance + `app/self_diagnose.py` | IMPLEMENTED | EXTEND | 내용 KPI 가드는 약함 (BPQ-12) |
+| operator console | `operator_main.py` + `lrule_console_service.py` | IMPLEMENTED | REUSE | FastAPI. DomainRouter 여기선 호출 |
+| FactState / SectionContextPack / StageResult | 없음 (TASK/문서만) | NOT_IMPLEMENTED | CREATE ONLY IF GAP | 제안 클래스명으로 병렬 시스템 금지. 기존 DTO 확장 |
+| bizplan/resume 복사본 | `app/bizplan/services/*` 일부 impl 복사 | DUPLICATED | DELETE/MERGE | cross_form_autofill 1943줄 등. 정본 아님 |
+| salvage | `docs/archive/salvage/` | DUPLICATED | DO NOT TOUCH | 실행 경로 아님 |
+
+다음 구현 순서(감사 후, 조치 우선순위 적용): CompanyMaster EXTEND (BPQ-02/03 선행) → announcement/form → ProgramSpec/FormSpec GAP → plan_builder EXTEND → QualityProfile GAP. IMPLEMENTED KEEP는 결함 없으면 손대지 않음. twin/bizplan 복제는 AW-007과 조율, BPQ가 세 벌 동시 수정 금지.
+
+---
+
+### BPQ-01 Benchmark Corpus
+
+- **목적**: AIMY HWP/PDF/역추정 md를 **읽기 전용 벤치마크**로 등록. 구조 규칙만 추출
+- **선행**: BPQ-00
+- **현재**: 역추정 md·추출문·images 존재. 요청 txt **없음**
+- **재사용**: `results/aimy_form_rules/*`, document_ingest (읽기)
+- **신규**: corpus 매니페스트(경로, sha256, 역할=benchmark, 사실사용=false). 품질 패턴 목록은 md에서 복사하지 말고 일반화 문장만
+- **변경 예상 파일**: `app/tests/fixtures/` 또는 `app/auto_write/data/` 매니페스트. **원본 HWP/PDF를 레포에 대량 커밋하지 말 것**(용량·개인문서). 경로+해시+추출문만
+- **산출물**: `aimy_benchmark_manifest.json` + 일반화 패턴 리스트 (숫자 없음)
+- **테스트**: 매니페스트 경로 존재 또는 skip-if-missing; 패턴 JSON에 AIMY 고유 숫자 정규식 금지
+- **수치 DONE**: 매니페스트 1, 패턴≥10, AIMY KPI 문자열이 패턴 파일에 0
+- **실패/BLOCKED**: 원본 HWP 삭제/이동; txt 없음은 **대체 md로 진행 가능**하되 txt 미발견을 보고서에 유지
+- **의존**: 00
+- **2026-08-16 실행지시 추가**: AIMY는 Quality Pattern benchmark만이며 사실 source가 아니다. MarketGate 생성 컨텍스트·프로필·픽스처에 AIMY 고유 사실(시장규모/매출/고객/특허/MOU/정확도/투자계획 등) 전이는 0건. 사람 완성본을 generation context에 넣으면 Blind가 아니다.
+
+---
+
+### BPQ-02 Canonical Bizplan Schema
+
+- **목적**: 양식 라벨 이형을 공통 키로
+- **선행**: 00. 01의 섹션 이름은 예시로만
+- **현재**: classify_field_kind fact/narrative, PSST 4키, cross_form 동의어. 스키마 enum 없음
+- **재사용**: `form_analyzer.py`, `cross_form_autofill` 동의어, `psst_patterns`
+- **신규**: 스키마 키 테이블(데이터). 매퍼 함수는 기존 label_utils 확장
+- **변경 예상 파일**: `app/auto_write/services/label_utils.py` 또는 인접 schema 모듈 **하나**. tests
+- **산출물**: COMPANY…EVIDENCE 키 + 동의어. 예: 개발배경/추진배경/사업필요성 → PROBLEM
+- **테스트**: 동일 의미 3라벨 → 한 키; 이력서 전용 라벨은 n/a
+- **수치 DONE**: 최소 키 19종 정의, 픽스처 라벨→키 정확도 측정 가능
+- **실패/BLOCKED**: 양식마다 if filename== 분기
+- **의존**: 00
+- **키워드(2026-08-16)**: FactState. 출처 우선순위(source precedence)를 코드화. Actual / Plan / Unknown / Conflict를 `""`로 합치지 않음. 공란도 상태값이다.
+- **2026-08-16 실행지시 추가**: Fact 모델을 직교로 둔다. Verification/Resolution (CONFIRMED/INFERRED/UNKNOWN/CONFLICT/NOT_APPLICABLE) 과 Semantic/Time (ACTUAL/PLAN/ESTIMATE/HYPOTHESIS) 을 한 enum에 섞지 않는다. `0` / `NONE` / `UNKNOWN` / `CONFLICT` / `PLAN` / `NOT_APPLICABLE` 을 빈 문자열 `""` 하나로 표현하지 않는다. 기존 명칭이 있으면 호환 매핑을 우선한다.
+
+---
+
+### BPQ-03 Fact / Claim Provenance
+
+- **목적**: 사실 레코드 + 생성 Claim의 출처
+- **선행**: 02 (field 키)
+- **현재**: CompanyMaster 12필드 + answers_provenance
+- **재사용**: company_extract, document_ingest, project_service provenance 훅
+- **신규**: value/unit/as_of/status(actual|plan|estimate|hypothesis)/source/page/confidence/verification. Claim 연결
+- **변경 예상 파일**: `company_extract.py` 확장 우선. provenance writer. tests `test_company_extract.py`
+- **산출물**: 확장 master JSON (기존 12필드 하위호환)
+- **테스트**: 숫자 보존(기존 P3 불변), 페이지 없으면 location=unknown (날조 금지)
+- **수치 DONE**: 신규 fact에 source 필드 100%. 식별 12필드 회귀 0
+- **실패/BLOCKED**: 출처 없이 시장규모 생성
+- **의존**: 02
+- **키워드(2026-08-16)**: SectionContextPack(섹션별 팩만 공급, CompanyMaster+ProgramSpec+QualityProfile+DocumentPlan 통째 주입 금지). 의존 그래프. STALE 전파.
+- **2026-08-16 실행지시 추가**: 기존 `company_extract` / CompanyMaster / provenance를 확장한다. 병렬 FactGraph 정본을 만들지 않는다. 최소 필드: fact_id, canonical_field, value, unit, as_of, verification_state, semantic_state, source_id, source_file, source_location, source_type, confidence, updated_at. 실제 페이지를 모르면 가짜 `p.N` 금지 → `PAGE_UNKNOWN`(또는 equivalent). 가능하면 created_by / supersedes_fact_id / verification_note.
+
+---
+
+### BPQ-04 Conflict Detection
+
+- **목적**: 같은 사실 다른 값/상태면 CONFLICT. LLM 선택 금지
+- **선행**: 03
+- **현재**: 식별필드 conflict만
+- **재사용**: company_extract.Conflict
+- **신규**: KPI/날짜/Actual-Plan 혼동 검출. 상태 VERIFIED/CONFLICT/MISSING/ESTIMATE/PLAN/INFERENCE
+- **변경 예상 파일**: company_extract 또는 인접 detector + usage_acceptance 가드 + tests
+- **산출물**: conflicts[]. 해소는 needs_confirm
+- **테스트**: AIMY 오류 6종을 **익명 픽스처**로 (97.9 vs 97.5 등 값을 일반 키 `metric_x`로). AIMY 사명 불필요
+- **수치 DONE**: 6종 픽스처 검출 6/6. 자동 해소 0
+- **실패/BLOCKED**: 한쪽 값을 조용히 채택
+- **의존**: 03
+- **2026-08-16 실행지시 추가**: Source resolution은 절대 winner table이 아니다 (authority, directness, recency, semantic compatibility, verification, 명시적 사용자 확인). AI inference는 CONFIRMED를 덮어쓸 수 없다. CONFLICT quiet winner 선택=FAIL. 사용자 확정 후에도 candidate를 삭제하지 않고 resolution provenance를 남긴다. 기존 review/needs_confirm/operator에 conflict queue를 통합. 테스트 D/I.
+
+---
+
+### BPQ-05 Program / Form Compiler
+
+- **목적**: 신규 공고+양식 → ProgramSpec/FormSpec. 코드 복붙 없이
+- **선행**: 02
+- **현재**: AnnouncementReport + FormReport 분리
+- **재사용**: announcement_analyzer, form_analyzer, evaluation_service, folder_analyzer
+- **신규**: 두 리포트 병합 스키마. 글자/페이지 한도·표/이미지 요구·삭제금지·필수증빙·섹션 중요도 필드
+- **변경 예상 파일**: announcement_analyzer/form_analyzer 확장 또는 얇은 compile 함수 1개
+- **산출물**: program_spec.json, form_spec.json
+- **테스트**: AIMY 양식(K-스타트업 본선) 섹션 22개가 키로 매핑되는지만. 내용 숫자 단언 금지
+- **수치 DONE**: 샘플 1개 공고+양식에서 criteria≥1 또는 notes에 한계 명시. 양식 전용 .py 0
+- **실패/BLOCKED**: 공고 종류별 하드코딩 파서
+- **의존**: 02 (06과 파일 안 겹치면 병렬 가능)
+- **2026-08-16 실행지시 추가**: ProgramSpec/FormSpec에 evaluation·page/char·evidence·table/image·section constraints를 담는다. 공고 종류별 하드코딩 파서 금지. 기존 announcement_analyzer / form_analyzer 확장 또는 얇은 compile 1개.
+- **2026-08-16 최우선 흐름 추가**: 공고문에서 평가항목·요구사항을 뽑아 새 양식 항목과 매칭한다. 이 매칭이 1순위 사용 케이스의 중간 단계다. 공고 없이 기존 계획서만으로 새 양식 전체를 채우지 않는다.
+
+---
+
+### BPQ-06 Quality Profile
+
+- **목적**: AIMY 작성방법을 일반 규칙으로. 복수 프로필 슬롯
+- **선행**: 01
+- **현재**: BizplanRulesConfig 서식 프리셋만
+- **재사용**: quality_rules는 **서식층으로 유지**(이름 충돌 주의). 새 프로필은 별 키
+- **신규**: 프로필 JSON: 표지압축, 표우선, 이원 이해관계자, 주장→근거, 표지↔본문 동일 source, 별첨=evidence 등. 값 없음
+- **변경 예상 파일**: `quality_rules.py`에 작성프로필을 섞지 말고 인접 `quality_profile` 데이터 + 로더. 또는 quality_rules에 namespace 분리. **중복 프리셋 금지**
+- **산출물**: `AIMY_HIGH_DENSITY` 슬롯 + 빈 슬롯 PSST_STARTUP/RND_TECHNICAL/DATA_VOUCHER/EXPORT_MARKET_ENTRY (구현은 슬롯만, 내용 강제 금지)
+- **테스트**: 프로필 파일에 금지 숫자 패턴 0; 표우선 플래그가 planner에 전달
+- **수치 DONE**: 일반화 규칙 ≥10, AIMY 고유명사 0
+- **실패/BLOCKED**: AIMY 문장을 템플릿으로 저장
+- **의존**: 01, 02(키 이름)
+- **2026-08-16 실행지시 추가**: `LRule ≠ QualityProfile ≠ PromptTemplate`. PromptTemplate 수정으로 LRule/Fact/Provenance/Finalizer를 우회할 수 없어야 한다. QualityProfile은 작성 전략이며 AIMY 사실값을 저장하지 않는다. version/hash로 재현. AIMY_HIGH_DENSITY는 일반화 패턴만.
+
+---
+
+### BPQ-07 Content Planner
+
+- **목적**: 문장 생성 전 SectionPlan
+- **선행**: 02, 03, 05, 06
+- **현재**: plan_builder=채움좌표. bizplan_ai_writer=직접 문단
+- **재사용**: evaluation_service 약점, psst_check, bizplan_ai_writer를 **후단**으로
+- **신규**: SectionPlan 필드: evaluator_should_conclude, claims, evidence, missing_evidence, quantitative_points, table_plan, visual_plan, target_length, source_constraints
+- **변경 예상 파일**: plan_builder 확장 **또는** 인접 content_planner에서 fill_plan과 병합. writer 시그니처에 plan 필수
+- **산출물**: document_plan.json
+- **테스트**: 충돌 fact가 있으면 해당 claim 생성 안 함; 사람완성본 경로 주입 시 거부
+- **수치 DONE**: 섹션마다 plan 없이 writer 호출 불가(가드). missing_evidence는 빈칸/[확인필요]
+- **실패/BLOCKED**: writer가 기업 원문을 그대로 장문 생성
+- **의존**: 02, 03, 05, 06
+- **키워드(2026-08-16)**: 섹션 입력 계약. required/forbidden facts. evidence. QualityProfile vs LRule vs PromptTemplate 분리(LRule=절대규칙, QualityProfile=작성전략, PromptTemplate=실행 템플릿이며 LRule 정본이 되면 안 됨). prompt template version.
+- **2026-08-16 실행지시 추가**: 섹션마다 전체 4층을 dump하지 않고 projection한다 (개념명 SectionContextPack: required/allowed/forbidden facts, allowed numbers, conflicts, unknowns, related previous sections, dependency_ids). 기존 DocumentPlan / planner / writer 경로에 넣는다. 병렬 writer pipeline 금지. `bizplan_autopilot` 전문 재작성 루프가 아니라 실패 Stage만 재실행.
+- **2026-08-16 최우선 흐름 추가**: 작성 가능한 파트부터 즉시 작성·파트별 미리보기. 기업개요·아이템·문제정의·BM·팀처럼 기존 계획서로 쓸 수 있는 섹션을, 매출/실적 등 부족 정보가 다 모일 때까지 보류하지 않는다.
+
+---
+
+### BPQ-08 MarketGate Golden Case #1
+
+- **목적**: MarketGate 사실만으로 품질 패턴 적용 생성
+- **선행**: 03, 06, 07, 11, 12. 자료 경로 확인
+- **현재**: 개인폴더에 HWP/PDF/DOCX·검수 md, 레포 example json. **통합 fact 그래프 없음**
+- **재사용**: ingest, renderer, QA
+- **신규**: MarketGate fact 추출(있는 것만). 없는 수치 생성 금지
+- **변경 예상 파일**: tests/golden 매니페스트 (경로 로컬). 제품 코드는 기존 파이프라인 호출
+- **산출물**: 생성본(워크스페이스 results, gitignore 준수). 사람본과 Blind 비교 리포트
+- **테스트**: 출력에 AIMY 고유 문자열 0; 출처 없는 신규 숫자 0
+- **수치 DONE**: Golden 1회 파이프라인 통과(또는 _DRAFT+결함 목록). AIMY 전이 0
+- **실패/BLOCKED**: MarketGate 근거 파일 부재·접근 불가 시 가정 데이터 금지, BLOCKED
+- **의존**: 03, 06, 07, 11, 12
+- **키워드(2026-08-16)**: Stage 단위 expected fixture(CompanyMaster / ProgramSpec / DocumentPlan / section context / Draft / QA). Golden을 최종 DOCX 바이트만으로 판정하지 않음.
+- **2026-08-16 실행지시 추가**: Golden은 최종파일 byte-equality만으로 판정하지 않는다. 단계별 expected fixture/invariant (CompanyMaster states → ProgramSpec → conflicts/unknowns → DocumentPlan → section context allowed/forbidden fact IDs → claim+provenance → QA → format). AIMY leakage=0. Blind: 사람 완성본은 생성 완료 후 평가만. 테스트 J.
+
+---
+
+### BPQ-09 Cross-form Test Harness
+
+- **목적**: 양식만 바꿔 재작성 가능한지. **전사가 아님**
+- **선행**: 05, 07, 12. **실제 파일 목록**
+- **현재**: cross_form_autofill E2E는 전사. 재작성 하네스 없음. 30개 미달
+- **재사용**: cross_form_fill CLI는 전사 KEEP. 재작성은 새 서브커맨드/함수
+- **신규**: harness: 입력=공고+빈양식+기업자료(사람본 제외). 층화 유형 태그
+- **변경 예상 파일**: tests/harness, CLI 얇은 엔트리. autofill 함수 시그니처 파괴 금지
+- **산출물**: N건 매트릭스. N=실제 보유
+- **테스트**: Blind 플래그 기본 on
+- **수치 DONE**: **현재 N건 실행**. 30은 수집 후. N<30이면 PARTIAL이지 30 DONE 아님
+- **실패/BLOCKED**: 가짜 30 생성; 전사 성공을 재작성 성공으로 보고
+- **의존**: 05, 07, 12, 파일 수집
+- **2026-08-16 실행지시 추가**: `cross_form_autofill` 전사는 KEEP. 재작성은 planner+writer+renderer. 전사 성공을 재작성 성공으로 보고하지 않는다. Blind 기본. [19] 다음 양식 테스트는 이 harness로 확대한다.
+- **2026-08-16 최우선 흐름 추가**: production 1순위 입력은 공고+빈 양식+**기존 사업계획서**다. Blind(사람 완성본 미입력)는 Golden 평가 전용. 이 사용 케이스에서 기존 계획서를 generation 소스에서 빼면 요구를 깨뜨린다. 전사 DONE ≠ 이 흐름 DONE.
+
+---
+
+### BPQ-10 L Rule Mining / Integration
+
+- **목적**: 08/09/12 실패를 기존 L 레지스트리에 승격
+- **선행**: 12, AW-008 계약(4점 충족). AW-003과 파일 충돌 시 순차
+- **현재**: 151 규칙, gap 21
+- **재사용**: lessons_coverage, LRuleEnforcer, resume-l-rules (사업계획 규칙은 n/a 표시 유지)
+- **신규**: layer 태그 + 새 L 번호. 파일 분할 금지
+- **변경 예상 파일**: lessons_coverage.json, lrule_enforcer 가드, tests
+- **산출물**: 내용 QA 관련 L이 guard+test+coverage+runtime
+- **테스트**: AW-008과 동일 4점
+- **수치 DONE**: 신규 내용규칙 중 HIGH는 4점 충족 건수만 mechanized
+- **실패/BLOCKED**: L0.md~L4.md 신설; 미기계화 규칙을 mechanized로 표시
+- **의존**: 12, AW-008 정책
+- **2026-08-16 실행지시 추가**: 실제 Acceptance([17])에서 나온 오류를 원인 분류 후 기존 L 레지스트리로 승격 (Hard Rule). AW-003/AW-008과 파일 충돌 시 순차. L0.md~L4.md 신설 금지. 미기계화 규칙을 mechanized로 위장 금지.
+
+---
+
+### BPQ-11 Renderer Integration
+
+- **목적**: DocumentPlan을 원본 양식에. 구조 보존
+- **선행**: 07 (연결). 엔진 자체는 기존
+- **현재**: RenderService DOCX, hwpx_fill, hwp_com, hwpx_doctor 격자
+- **재사용**: 위 전부 + conversion_fidelity
+- **신규**: plan→answers/fill_plan 어댑터만
+- **변경 예상 파일**: render_service 또는 pipeline 배선. 새 렌더러 금지
+- **산출물**: 양식 보존 렌더
+- **테스트**: 원본 표 수/필수 라벨 보존; 격자 repair
+- **수치 DONE**: 구조 보존 목표 99%는 **측정기 구현 후**. 측정 전 렌더 성공만으로 DONE 금지
+- **실패/BLOCKED**: 빈 DOCX를 새로 만들어 양식을 버림
+- **의존**: 07
+- **2026-08-16 실행지시 추가**: schema 불일치 SectionDraft를 renderer에 직접 전달 금지 (repair 후 revalidate 또는 FAILED/REVIEW_REQUIRED). 렌더 후 artifact-level QA (layout/format/hash/final LRule) 후 Finalizer. 빈 DOCX로 양식을 버리지 않는다. 테스트 L.
+
+---
+
+### BPQ-12 QA / Benchmark
+
+- **목적**: 사실·숫자·분량·양식·증빙 유형 검사. UI 점수판 아님
+- **선행**: 03, 04, 07
+- **현재**: 서식 100점 + 수용검사. 내용 KPI 충돌 약함
+- **재사용**: usage_acceptance, doc_quality_score, self_diagnose
+- **신규**: 체크: unsupported claim, numeric inconsistency, actual/plan, 이미지 유형 오용, 표지↔본문 KPI
+- **변경 예상 파일**: usage_acceptance.py 가드 추가 우선 + tests
+- **산출물**: 내용 QA 리포트. 기존 fail→_DRAFT 유지
+- **테스트**: AIMY 익명 6종 + 생성형 이미지를 evidence로 넣으면 fail
+- **수치 DONE**: 측정 가능한 것부터: unsupported=0, numeric=0, actual/plan=0 을 **픽스처에서**. Coverage 98% 등은 측정기 없으면 별 이슈로 남김 (근거 없이 달성 주장 금지)
+- **실패/BLOCKED**: 서식 90점을 내용 성공으로 보고
+- **의존**: 03, 04, 11(렌더 산출)
+- **키워드(2026-08-16)**: Writer self-check → schema → factual/numeric → LRule → layout → Finalizer (결정론 QA 체인). LLM 점수는 게이트가 아님. 숫자는 deterministic engine(LLM이 TAM/CAGR 등을 계산하지 않음). Review Queue는 필드 단위(`field_id` / MISSING / BLOCKING). 점수 루프로 문장을 메우지 않음.
+- **2026-08-16 실행지시 추가**: Writer Self Check는 비권위 1차 진단이며 FactState/source를 변경하지 않는다. 권위는 deterministic QA chain (schema → program constraint → fact/numeric/date/Actual·Plan → conflict/unknown misuse → provenance → claim↔evidence → PSST → LRule → format → artifact/hash → Finalizer). LLM score 하나로 대체 금지. fail-closed. 측정 불가면 PASS가 아니라 MEASUREMENT_NOT_IMPLEMENTED. blocking UNKNOWN/CONFLICT/STALE/REVIEW_REQUIRED/UNVERIFIABLE 이 있으면 clean FINAL 금지.
+
+---
+
+### BPQ-13 Regression Corpus
+
+- **목적**: 검증 양식 100건+ 확대
+- **선행**: 09가 실제 N으로 안정
+- **현재**: 100건 없음
+- **재사용**: 09 harness
+- **신규**: 수집 절차만. 합성 공고 금지
+- **변경 예상 파일**: corpus 목록
+- **산출물**: N→100 로드맵. 100 미달이면 DONE 아님
+- **테스트**: 회귀 스위트가 N건에서 깨지지 않음
+- **수치 DONE**: 실제 파일 100건. 없으면 PARTIAL/BLOCKED
+- **실패/BLOCKED**: 복제·합성으로 100 채우기
+- **의존**: 09
+- **키워드(2026-08-16)**: 상류 fact 변경 → STALE → 재생성 → 숫자 정합. 구결과를 최신처럼 쓰지 않음. 승인 전 FINAL 금지.
+- **2026-08-16 실행지시 추가**: STALE은 선택적 무효화(관련 downstream만). blocking STALE section이 FINAL에 포함되면 FAIL. 테스트 G/H/I. [18] Acceptance 오류는 원인 분류 후 fixture+regression으로 환류하고 같은 문서를 재생성한다. 합성 공고로 100건 채우기 금지.
+
+---
+
+## MarketGate Golden Case 실행 제약
+
+- 입력: MarketGate 기업자료 + 해당 공고 + 빈 양식 + QualityProfile(일반 패턴)
+- 금지: AIMY 매출/고객/정확도/특허/MOU
+- 패턴만: Problem 사슬, E2E 솔루션, AS-IS/TO-BE, 기능표, 실제 개발상태, 있는 DB/IP만, BM/GTM/일정/팀/증빙
+- 없는 값은 `[확인필요]` 또는 공란
+
+---
+
+## Cross-form 재작성 vs 전사
+
+| | 전사 (KEEP) | 재작성 (신규) |
+|---|---|---|
+| 모듈 | cross_form_autofill | planner + writer + renderer |
+| 동작 | 사실 칸 복사, 서술 칸은 `[작성 필요]` | 평가논리·양식에 맞춰 서술 재구성 |
+| Blind | 해당 없음 | 사람본 숨김 |
+| 성공 | 라벨 매칭 recall | 내용 QA + 양식 보존. 전사 recall로 대체 금지 |
+
+---
+
+## 이미지 3종
+
+| 유형 | 정의 | QA |
+|---|---|---|
+| Evidence | 특허증·계약·구매의향·실화면 | 원본 파일 필수. 생성형 이면 fail |
+| Data viz | 소스 수치 그래프 | fact_id 연결. 없는 수치면 fail |
+| Generated illustration | 구조도·프로세스 | 설명용만. 실적 칸 삽입 금지 |
+
+기존 L017 NotebookLM 프롬프트는 illustration 후보. 증빙 슬롯에 넣으면 I QA fail.
+
+---
+
+## AIMY 오류 → detector 회귀 (복제 금지)
+
+익명 픽스처로만. 출력 문서에 AIMY 사명/제품을 넣지 않음.
+
+| ID | 현상 | 검출 |
+|---|---|---|
+| C1 | 같은 정확도 97.9 vs 97.5 | numeric inconsistency |
+| C2 | 1.1만을 기존 고객 vs 확보 목표 | actual vs plan |
+| C3 | 특허 1+3 vs 핵심 4건 | count conflict |
+| C4 | 총 400억 vs 연차 합 불일치 | sum mismatch |
+| C5 | 2025.11.31 | invalid date |
+| C6 | MOU 추진 중 vs 완료 단정 | status conflict |
+
+---
+
+## 자체검수 (명세 턴)
+
+| 질문 | 답 |
+|---|---|
+| 다른 AI가 TASK.md만 읽고 왜 만드는지 이해? | YES |
+| AIMY 사실과 작성 품질 분리? | YES |
+| 기존 코드 재사용? | YES |
+| 신규 양식 하드코딩 금지? | YES |
+| MarketGate Golden 포함? | YES |
+| 30 Cross-form Blind? | YES (N 정직, 30 미달 명시) |
+| 100 Regression 확장? | YES (후속, 합성 금지) |
+| Claim provenance 방향? | YES |
+| 숫자 충돌 검출? | YES (BPQ-04) |
+| 실제/계획/추정 구분? | YES |
+| 원본 양식 보존 QA? | YES (BPQ-11/12) |
+| 표/도식/증빙까지? | YES |
+| DONE 정량? | YES (측정 불가는 별도, 거짓 달성 금지) |
+| 이번 턴 코드 미변경? | YES (이 블록 등록 후 제품 코드 0) |
+
+---
+
+### 8-11. 입력검증
+
+- 공고/양식/기업자료 경로 필수. 없으면 진행 중단 + 빈상태 안내
+- generation 입력에 `human_final`/`golden_text` 키가 있으면 거부
+- MarketGate 실행인데 AIMY 추출문이 컨텍스트에 있으면 거부
+
+### 8-12. 빈상태
+
+- 사실 0: 빈 칸 + `[확인필요]`. 벤치마크 문장으로 채우지 않음
+- corpus N=0: harness 스킵이 아니라 BLOCKED/PARTIAL
+
+### 8-13. 로딩상태
+
+- ingest/LLM 중 중복 실행 방지 (기존 autopilot 패턴 재사용)
+- API 키 없음: 결정론 경로, 성공 위장 금지
+
+### 8-14. 오류상태
+
+- 충돌 미해소 → 해당 필드 미기입 + CONFLICT 리포트
+- 한글 격자 깨짐 → hwpx_doctor, 열리지 않으면 제출 성공 금지
+- 측정기 없는 지표로 PASS 로그 금지
+
+---
+
+## Git 규칙 (본 TASK)
+
+- BASE=`main` (GitHub default). 위키의 master는 원격 브랜치 부재로 사용 불가. master 재생성 금지
+- 구현 브랜치 예: `feat/bpq-00-audit`, 커밋에 `T-20260814-02` + `BPQ-NN`
+- 로컬 dirty 금지 조작. worktree 권장
+- 문서-only PR은 기존 CI 빨강이 **이번 diff와 무관**하면 머지 가능 (intake 관례)
+
+---
+
+## 이번 턴 범위
+
+구현하지 않음. 테스트 추가하지 않음. 사업계획서 생성하지 않음. architecture 문서 수정하지 않음. 다음 실행 한 줄은 채팅 보고 NEXT에만.
+
+---
+
+## 최신 실행지시 (2026-08-16 implementation update)
+
+> 이 블록은 **2026-08-14 명세 턴의 역사 기록을 삭제·수정하지 않는다.** 위 `8-1. 사용자 원문`, `STATUS_THIS_TURN: 명세만 등록`, `이번 턴 범위(구현하지 않음)` 는 당시 요청의 기록으로 **보존**한다.
+> 이번 최신 사용자 요청은: **기존 T-20260814-02 명세를 실제 production implementation으로 진행하라.** 새 Epic/`T-20260815-*`/`T-20260816-*` 병렬 복제 금지. BPQ-00~13 폐기·복제 금지.
+
+### 최우선 사용 케이스 (2026-08-16. auto_write의 가장 중요한 핵심)
+
+> 이 블록은 위 역사 명세를 삭제하지 않는다. **제품의 1순위 사용 케이스**를 확정한다. 새 Epic 금지. UX 홈은 AW-005를 EXTEND. 작성 엔진은 기존 T-20260814-02 / BPQ-00~13. 독립 앱·새 업로드 대시보드 금지.
+> 파일 맨 위 `# 1` 「우선순위 — 사용자 요청이 최우선」이 이 Epic의 BPQ 표보다 앞선다. 사용자 과거 요청(AW-001~009 8-1, 본 Epic 8-1, 이후 기록된 사용 케이스·생성 인지)을 BPQ가 덮어쓰지 않는다.
+
+**판정 (반영 여부):** 기존 계획은 「공고+양식+기업자료+기존 계획서」를 파이프라인 입력으로 나열하고, AW-005는 「기존 자료 있으면 재사용」만 있다. **아래 1순위 플로우·첫 화면·가능한 파트 즉시 작성·부족한 것만 요청은 최우선 사용 케이스로 잡혀 있지 않았다.** 이 블록이 그 공백을 채운다. 충돌 시 이 블록이 이긴다.
+
+#### 1순위 — 기존 사업계획서가 있는 경우
+
+```
+공고문
++
+이번 지원사업 빈 양식
++
+기존 사업계획서
+        ↓
+기존 사업계획서에서 기업/아이템/실적/팀/시장/BM 등 재사용 가능한 내용 추출
+        ↓
+공고문에서 평가항목·요구사항 추출
+        ↓
+새 양식의 각 항목과 매칭
+        ↓
+작성 가능한 파트부터 즉시 작성
+        ↓
+파트별 미리보기
+        ↓
+부족한 정보만 사용자에게 추가 요청
+```
+
+이게 auto_write의 가장 중요한 사용 케이스로 잡혀야 한다.
+
+예를 들어 기존 사업계획서만으로 기업개요, 아이템, 문제정의, BM, 팀을 쓸 수 있다면 먼저 전부 작성한다.
+
+그 뒤에:
+
+「매출계획을 작성하려면 2025년 실제 매출을 추가해주세요.」
+
+처럼 정말 부족한 정보만 요청한다.
+
+#### 사용자가 보는 흐름
+
+처음부터 여러 자료 업로드칸을 보여주지 않는다.
+
+처음
+
+```
+새 지원사업 사업계획서 작성
+
+공고문과 작성할 양식을 넣어주세요.
+
+[공고문 첨부]
+[빈 양식 첨부]
+
+기존에 작성한 사업계획서가 있나요?
+
+[기존 사업계획서 첨부]
+```
+
+이게 메인이다.
+
+#### 첫 화면 구체화 (2026-08-16 나중. 충돌 부분만)
+
+필수=공고+양식. 한 파일에 공고와 양식이 같이 있을 수 있고, 파일이 2개 이상일 수 있다.
+기존 사업계획서는 선택 첨부. 회사소개·재무·메모 칸은 첫 화면에 다 펼치지 않음.
+세 역할은 칸으로 명시. 한 파일이 공고+양식이면 사용자가 그렇게 표시.
+웹 작성은 작성계획 승인 후 **지금 화면의 파트만**. 문서 전체 일괄 작성 없음.
+최종 칸=공고·양식 대목차. 중·소목차=모듈명. PSST는 선택 표시. 정본=`docs/WEBAPP_MODULE_TO_FORM_TOC.md`.
+칸 내용: 1 사실 전사 → 2 유사 사실 → 3 없으면 생성(+`생성` 표시).
+제출가능 자동판정 UI 없음. 엔진 `_DRAFT`는 유지, 웹 메뉴에 안 올림.
+P0=문서작업+GitHub바+L규칙 조회. P2=업무흐름 메뉴. 섞지 않음. P0 미완이면 고도화 금지.
+웹앱 제품 코드는 `AUTO_WRITE 웹앱 최종 요구사항_20260816` 승인 전까지 시작 금지.
+
+그러면 바로
+
+```
+기업 개요
+밸류업파트너스는 …
+
+창업아이템 개요
+MarketGate는 …
+
+문제정의
+국내 K-뷰티 중소기업은 …
+```
+
+처럼 작성 가능한 파트부터 보여준다.
+
+#### 원칙 — 생성은 허용, 출처 위장은 금지 (2026-08-16 최신)
+
+사용자: 「날조(새로만드는것)는 괜찮음 대신 만들었다고 사용자에게 인지시켜줘」
+
+역사 문구 `날조 0` / `오매칭은 빈칸보다 나쁨` 은 **삭제하지 않는다.** 적용 범위를 나눈다. 이 최신이 포괄 `날조 금지`와 충돌하면 **이 절이 이긴다.**
+
+1. **사실 칸 전사·식별값** (회사명, 실적 숫자, 특허 건수처럼 소스에 있는 것처럼 기입하는 값): 계속 `날조 0`. 오매칭은 빈칸보다 못하다. 소스에 없는 값을 출처 있는 사실처럼 넣으면 FAIL.
+2. **새로 만드는 서술·초안** (문제정의 문장, BM 서술, 목표 계획 초안 등): **허용.** 미리보기/화면/리포트에서 사용자가 **이 부분은 새로 작성됨(생성)** 을 반드시 보게 한다. 기존 사업계획서에서 가져온 부분과 한눈에 구분한다.
+3. 틀린 내용을 사실인 것처럼 보여 주는 것은 빈칸보다 못하다. 생성본을 기존 실적인 것처럼 표시하면 FAIL.
+
+표시 예: `출처: 기존 사업계획서` vs `생성: 새로 작성 (소스에 없음)`. 출처를 꾸며 넣지 않는다.
+
+AW TASK를 수행할 때 각 AW DETAILS에는 **「원칙」이라는 칸이 없다.** 칸은 8-5 MUST / 8-6 KEEP / 8-8 FORBIDDEN 이다. 이 생성-인지 원칙은 여기와 AW-005 additive에 둔다. 새 Epic 아님.
+
+#### 계약 (구현 시)
+
+- 필수 입력 2개: 공고문, 이번 지원사업 빈 양식. 기존 사업계획서는 1순위 선택 입력이지만, 있으면 주 소스다.
+- 기존 계획서로 쓸 수 있는 파트는 **정보 수집이 끝날 때까지 기다리지 않고** 즉시 작성·미리보기.
+- 내부 상태는 UNKNOWN/CONFLICT를 유지한다. 사용자에게는 설문 전체를 먼저 띄우지 않고, **그 파트 작성에 실제로 막히는 부족한 정보만** 한 줄로 요청한다.
+- 소스에 없는 **식별 사실**(실적 숫자 등)을 출처 있는 값처럼 칸에 넣지 않는다. 생성된 서술·계획 초안은 허용하되 미리보기에 `생성` 표시. 위 「원칙 — 생성은 허용」이 포괄 `날조 금지`보다 이긴다.
+- `cross_form_autofill` 전사는 사실 칸 KEEP(날조 0·오매칭<빈칸). 서술 파트는 재작성(planner+writer) 가능, 생성 인지 필수. 전사 성공을 이 사용 케이스 DONE으로 치지 않는다.
+- **Blind/Hold-out ≠ 이 사용 케이스.** Blind는 Golden 평가에서 사람 완성본을 생성 입력에 넣지 말라는 뜻이다. production 1순위는 사용자의 **기존 사업계획서를 generation 소스에 넣는 것**이 맞다. AIMY 고유 사실 전이는 계속 0.
+- AW-009 P0 「한 화면에 파일 쏟아 넣고 역할 자동판별」은 이 첫 화면을 대체하지 않는다. 세 파일의 역할은 명시한다(공고/빈 양식/기존 계획서). 자동판별은 보조.
+- AW-004 화면은 파이프라인 단계만이 아니라 **파트별 미리보기 + 부족한 정보 요청**을 기존 console에 EXTEND. 새 dashboard 금지.
+- 구현 우선: PARTIAL CompanyMaster/planner/writer를 EXTEND해서 이 흐름의 production caller를 연결. 새 작성 마법사 앱 금지.
+
+### 요청 한 장 — 2026-08-16 (나중 사용자 요청. 충돌 부분만 덮음)
+
+> 이 블록은 위 역사 명세·`최우선 사용 케이스`·`원칙 — 생성은 허용`·실행지시·조치 우선순위를 **삭제하지 않는다.**
+> `# 1` 규칙: 나중 요청이 **충돌하는 그 부분만** 덮는다. 새 Epic/`T-20260816-*` 복제 금지. 제품 코드 0줄.
+>
+> 덮는 충돌:
+> 1. 「가능 파트 즉시 작성」 vs 「공고+빈 양식 오기 전 초안 쓰지 말고 대기」 → **대기가 이긴다.** 파일이 오면 초안 1건(Problem부터).
+> 2. 「다음 구현 세션 첫 작업 = BPQ-00」 vs 「AIMY급 자동작성(BPQ-00)도 대기를 풀 때까지 코드 시작 금지」 → **대기가 이긴다.** 이미 main에 있는 BPQ-00 감사 표는 유지. 제품 코드 시작 금지.
+> 3. 양식 기준은 PSST. 지금은 Problem만. Problem 끝나기 전 S/Sc/T 금지.
+> 4. 사실 칸 `날조 0`은 유지. 서술 `생성` 표시는 유지.
+>
+> 피흡수: Drive `user_requests_from_md_20260816.md`(id `1PbxQ3vqqFNI_7dsj-K7NJJAx48YLHs2r`)는 아래 한 장에 흡수됨. 사용자 지시로 피흡수 삭제. Drive 제목 정확 검색 0건.
+> 한 장 `user_requests_정리_20260816.md`(id `1cqEQ8AKLAeXP-cVjURzUdDEK3pkLKdBJ`)는 이 TASK.md에 흡수한 뒤 휴지통 이동. Drive 제목 검색 0건. 실행 정본은 이 TASK.md. 헤더의 「원본 from_md는 그대로」「이 장에 안 넣음」은 위 나중 지시가 덮음.
+
+```text
+# 요청 한 장 — 2026-08-16
+
+로컬 md만. 원본 `user_requests_from_md_20260816.md` 는 그대로. 로컬 TASK.md 없음. 원격 main에 TASK 있음(이 장에 안 넣음).
+
+## 지금 할 일
+
+- [ ] 공고·빈 양식 오기 전 **초안 쓰지 말고 대기.** AIMY급 자동작성(BPQ-00)도 대기를 풀 때까지 코드 시작 금지.
+- [ ] 기준 양식은 **PSST.** 칸은 1 Problem → 2 Solution → 3 Scale → 4 Team **하나씩 완성.** 지금은 Problem. 끝나기 전 S/Sc/T 금지.
+- [ ] AIMY 수치·고유명사(`facts_aimy.json`)를 다음 아이템에 **복사하지 말 것.**
+- [ ] HTML 2개(`상권분석.html`, `배달앱 마케팅 전략 작성.html`) **아직 미반영.** 요청할 때만 Problem에.
+- [ ] 신청 남은 손작업(사용자): 한난 온랩 구글폼 제출 여부, 울산 상담위원 메일 발송, 수출바우처(비앤코) 사진·날인일·기존 HWP 글자 6곳.
+- [ ] 한글 2022 형인본이 열리는지는 사용자가 확인. (`프로필…v10_2022형인.hwpx`, `STAR…_2022형인.hwpx`)
+
+## 파일 오면 할 일
+
+- [ ] **공고 + 빈 양식** → 모듈을 P→S→Sc→T로 읽어 **초안 1건만.** 그 전에 엔진 연결·킥스업/KAMCO 쪼개기·더미 공고 연습 금지.
+- [ ] **이지비건 자료 폴더** → 수출바우처를 그 회사용으로. 경로 오기 전 임의 탐색 금지.
+- [ ] **여성 1인 창조기업(마켓게이트) 빈 양식** → 신청서. 예비창업 vs 법인·주소 확인 필요.
+- [ ] 이력서 자동작성·이미지 실제 삽입(B5)·자가학습 2차는 플랜/착수 전. 공고·양식과 섞지 말 것.
+
+## 상시 규칙
+
+- [ ] 원본 덮어쓰기 금지 · 날조 0 · 출력≠입력. 양식 서식은 그대로, 내용만 채움. 최종본 형식=원본(.hwp면 .hwp).
+- [ ] 교차양식 = **사실 전사.** 서술 재작성과 섞지 말 것.
+- [ ] 파란 예시 → 검정. 본문 10pt. 예비창업자면 기업정보 공란(대표자 개인정보는 기입).
+- [ ] 그림은 NotebookLM 프롬프트. 직접 생성 금지. 대량 HWP 이미지는 파일명+추출문으로(비전으로 열지 말 것).
+- [ ] GitHub 기본 = **main.** 경로는 물어보고 Downloads/Desktop 광역 스캔 금지. 공고 수집 시 교육·컨설팅 제외.
+- [ ] 이력서 소스 = `01. 경영지도사 이력서` 최신본. 작성본 v1/v2, 이전은 구버전(삭제 금지).
+- [ ] 제출 가능은 점수와 별개. fail 1개면 `_DRAFT`. 실사용 제출은 HWPX/HWP 직접.
+
+## 끝난 일
+
+- [V] KICXUP 1~3(추천·케이블텔레콤·신청서/동의서) **종료(미접수). 다시 작성하지 말 것.**
+- [V] 킥스업 문체·라벨 대조표, AIMY 본선 역추정, PSST 모듈 팩+AUDIT PASS(기록만, 코드 미수정).
+- [V] 작업지시 원격 등록(T-20260814-02 명세만). 구현은 안 함.
+- [V] 입구 정리(`/bizdoc`), autowrite 흡수(원격 삭제는 owner 수동).
+- [V] 단일 진입점·제출 게이트(`_DRAFT`)·반복실수 자동검사 — 원장에 완료로 적힘.
+```
+
+나중 요청이 덮음 (2026-08-16 웹앱 최종계획): BPQ-00 제품 코드 대기와 같이, **운영 웹앱(AW-009) 제품 코드도 이 최종계획 승인 전까지 시작 금지.** 엔진 초안은 공고+양식 온 뒤에도 작성계획 승인 전·해당 파트 외에는 쓰지 않음. 「지금은 Problem만」은 파일 오기 전 제출 초안 1건 규칙으로 유지. **웹앱 UX의 최종 칸**은 PSST가 아니라 공고·양식 대목차(PSST는 선택 표시).
+
+### 웹앱 최종 요구사항_20260816 (나중 사용자 요청. 충돌 부분만 덮음)
+
+> 이 블록은 위 역사 명세·`최우선 사용 케이스`·`요청 한 장`을 **삭제하지 않는다.** 웹 UX 충돌 부분만 덮는다. 새 Epic 금지. 제품 코드 0줄.
+>
+> 실행 정본: https://docs.google.com/document/d/1E4aHoLtC36XS8E19jzR8B9nP8__H1zePYtjslL03LRo/edit
+> 로컬 복제: `docs/AUTO_WRITE_웹앱_최종_요구사항_20260816.md`
+> 모듈→대목차: `docs/WEBAPP_MODULE_TO_FORM_TOC.md`
+> 2026-08-14 사양·2026-08-16 공유본은 역사. 옛 문서는 휴지통에 넣지 않음(사용자가 지우라고 하지 않음).
+
+덮는 충돌:
+
+1. 첫 화면 필수=공고+양식. 한 파일에 둘 다 있을 수 있음. 파일 2+ 가능. 기존 계획서는 선택. 추가 자료 칸은 첫 화면에 다 펼치지 않음.
+2. 파일 필요. 작성계획 확인→승인 후에만 초안. **지금 화면의 파트만.** 문서 전체 일괄 작성 없음.
+3. 과거 자료는 모듈로 나누고, 최종 칸=이번 공고·양식 대목차. 중·소목차·제목=모듈명. PSST는 선택 표시, 최종 나누기 기준 아님.
+4. 칸 내용: 1 사실 전사 → 2 유사 사실 → 3 없으면 생성(`생성` 표시). 사실 위장 금지.
+5. 제출가능/품질점수 자동판정 UI 없음. 엔진 `_DRAFT`는 끄지 않음. 웹 메뉴에 안 올림.
+6. P0 미완이면 고도화 금지. P0=문서 작업+GitHub 상태바+L규칙 조회. P2=업무 흐름 메뉴. 문서 작업 화면과 업무 흐름 메뉴를 합치지 않음.
+7. 이 최종계획 승인 전까지 웹앱 제품 코드 대기.
+
+아직 고를 것(S1~S9)은 사양서에 기본 제안이 있다. 사용자가 바꾸기 전까지 그 기본값으로 본다.
+
+### 계획 보강 — 2026-08-16 (나중 사용자 요청. 충돌 부분만 덮음)
+
+> 이 블록은 위 역사 명세·`최우선 사용 케이스`·`원칙 — 생성은 허용`·`요청 한 장 — 2026-08-16`·실행지시·조치 우선순위를 **삭제하지 않는다.**
+> `# 1` 규칙: 나중 요청이 **충돌하는 그 부분만** 덮는다. 새 Epic/`T-20260816-*` 복제 금지.
+>
+> 덮는 충돌:
+> 1. 「요청 한 장: 지금은 Problem만 / 대기가 이긴다」 vs 「최우선: 가능 파트 즉시 작성」
+>    - **P(Problem) 개발 중**: 요청 한 장이 이긴다. 지금은 Problem만. 끝나기 전 S/Sc/T 금지. 공고+빈 양식이 오면 초안 1건. **공고+양식 오기 전 초안 금지는 유지.**
+>    - **P 완료 후**: 최우선 사용 케이스가 이긴다. 작성 가능한 파트(기업개요·아이템·문제정의·BM·팀)부터 즉시 작성·미리보기. 부족한 정보만 요청.
+> 2. 사업자등록증·매출자료·이력서는 첫 화면 필수 입력이 아니다. 기존 계획서에 기업명/대표자/주소/설립일이 있으면 그걸 쓴다. 없거나 충돌할 때만 `[사업자등록증 추가]` 제안. 매출·이력서도 그 파트가 막힐 때만.
+> 3. 「처음부터 작성」(기존 계획서 없음)을 별도 제품으로 쪼개지 않는다(AW-005). 같은 첫 화면에서 기존 계획서 칸만 비운다.
+> 4. PR #150은 **측정기**다(STEP 2 추출기 본체 아님). CLOSED/MERGED. 다음 엔진 작업은 CompanyMaster EXTEND가 아니라 **실문서 3 HWP × Golden 41 Baseline**.
+
+#### 증빙 UX (첫 화면 게이트 아님)
+
+첫 화면 필수 = 공고문 + 이번 지원사업 빈 양식. 「기존에 작성한 사업계획서가 있나요?」는 선택.
+
+사업자등록증은 첫 화면에 올리지 않는다. 기존 계획서에서 기업명·대표자·주소·설립일을 추출해 쓴다. 그 값이 없거나 문서끼리 충돌할 때만 `[사업자등록증 추가]`를 제안한다. 증빙이지 게이트가 아니다.
+
+매출자료·이력서도 같다. 해당 파트 작성이 실제로 막힐 때만 요청한다. 모든 칸이 찰 때까지 작성을 보류하지 않는다.
+
+#### 전체 우선순위 1–5
+
+1. 공고+빈 양식+기존 사업계획서 재작성 ← **최우선 사용 케이스**
+2. 현재 자료만으로 파트별 즉시 미리보기
+3. 부족한 정보만 요청
+4. 필요할 때 사업자등록증·매출자료·이력서
+5. 기존 계획서가 **없는** 신규 작성 = 같은 첫 화면에서 기존 계획서 칸만 비움. 두 번째 제품으로 쪼개지 말 것(AW-005)
+
+#### 엔진 파이프라인 vs 첫 화면
+
+역사 파이프라인 입력 `공고문 + 빈 양식 + 기업 자료 + 과거/기존 사업계획서` 는 **엔진이 쓸 수 있는 입력**을 나열한 것이다. UX 첫 화면 필수 = 공고+빈 양식. 기존 계획서는 1순위 선택. 「기업 자료」(사업자등록증 등)는 4순위 증빙이지 첫 화면 동등 입력이 아니다.
+
+AIMY 사실 복사 0. 서술 생성은 허용하되 `생성` 표시. 사실 칸 날조 0. 이 세 규칙은 유지.
+
+#### PR #150 / STEP 2 다음 과업
+
+PR #150 (`feat(step2): add extraction baseline runner`)은 2026-08-16 병합 완료. 상태 CLOSED/MERGED. `main` SHA `0a8b262c…`. 목적 = 읽기전용 측정기.
+
+현재 측정 경로:
+
+```
+기존 HWP
+↓
+원문을 제대로 읽었나?
+↓
+기존 Company parser가 뭘 뽑나?
+↓
+Golden과 비교
+↓
+어디가 미구현/오류인지 한글로 보고
+```
+
+이 PR이 **완성하지 않은 것**(STEP 2 본체에서 개발): ITEM / PROBLEM / SOLUTION / BM / TEAM / FINANCE 구조화, ACTUAL/PLAN 판정, Conflict 판정, source page/section 보존.
+
+GitHub CI `docs-gate` 성공 ≠ pytest 전체 ≠ 실문서 3×41 실행. 합성 단위테스트는 측정기를 가드할 뿐 Golden 41을 대체하지 않는다.
+
+Precision/Recall을 추출기 없이 87%/92%처럼 채우지 말 것(`MEASUREMENT_NOT_IMPLEMENTED`). Golden 41 assertion을 추측으로 재구성하지 말 것.
+
+**다음 엔진 작업 (PR #150을 더 만지지 말 것):**
+
+```
+현재 main
++
+실제 HWP 3개
++
+Golden 41개
+↓
+최초 baseline_report
+↓
+READ_MISS / STRUCTURED_EXTRACTION_MISSING / VALUE_ERROR / SOURCE_LOST 건수
+↓
+그 결과를 기준으로 STEP 2 추출기 개발
+```
+
+실측 문서 파일명 (커밋 금지. `*.hwp` / `results/` gitignore):
+
+- D1 희망리턴 4/14: `2026년 희망리턴패키지 재기사업화(재창업)_AI수출서비스_사업계획서 20260414 최종본.hwp`
+- D2 여성창업 4/16: `여성창업경진대회 참가신청서_마켓게이트 20260416 최종본.hwp`
+- D3 재도전성공 5/7: `재도전(추경)성공패키지 사업계획서_마켓게이트 20260507 1600 제출이후.hwp`
+- Golden: `STEP2_EXTRACTION_GOLDEN_V1.json` (로컬 Windows. 개인정보 가능. GitHub/Drive/Gmail 제목 검색 0이면 재구성 금지 → Baseline 비교는 BLOCKED)
+
+이 세션 Drive 실측 (2026-08-16. 파일 내용은 커밋하지 않음):
+
+- D1 HWP 제목 일치. Drive id `1Bo6fc9PDRfU0kKJW4-JZkKciJLqR-sA1`
+- D2 HWP 제목 일치. Drive id `1dRiF02OhYTIm_qbZzaXt9nb__zXdv9jR`
+- D3 제목 정확 검색 0. `재도전(추경)` 폴더에는 접수증·초안만. 가까운 3/4 제출본을 D3로 바꿔 쓰지 말 것.
+- Golden 제목 정확 검색 0 (Drive·Gmail). 없으면 41건을 지어내지 말 것.
+- D1/D2를 이 Linux VM에서 `extract_text` ingest smoke: `unhwp` 표 구조 복원, `PARTIAL_INGEST` 아님. 현재 company parser가 비어있지 않게 뽑은 키만: D1=`대표자`(1), D2=`설립일`·`이메일`·`대표자`(3). **값 대조·41건 카운트는 Golden 없어 BLOCKED.**
+
+실행:
+
+```
+python app/tools/step2_extraction_baseline.py --golden <local.json> --input-dir <dir-with-named-docs>
+```
+
+산출: `results/step2_extraction_baseline/baseline_report.json` · `.md`. 실 HWP/Golden/리포트 원문은 커밋하지 않는다. 익명 건수 요약만 커밋 가능.
+
+Linux Cloud에서는 HWP가 PrvText만이면 `PARTIAL_INGEST` — 전체 Baseline을 성공으로 치지 말 것. 전문 추출이 필요하면 Windows `D:\auto_write`.
+
+### STEP 3A 병렬 — 2026-08-16 (나중 사용자 요청. 충돌 부분만 덮음)
+
+> 이 블록은 위 역사 명세·`최우선 사용 케이스`·`원칙 — 생성은 허용`·`요청 한 장`·`계획 보강` 본문을 **삭제·재작성하지 않는다.**
+> `# 1` 규칙: 나중 요청이 **충돌하는 그 부분만** 덮는다. 새 Epic/`T-20260816-*` 복제 금지.
+>
+> 덮는 충돌: 「다음 엔진 작업 = 실문서 3 HWP × Golden 41만」을 **이 세션이 STEP 2 추출기를 구현해야 한다**로 읽지 말 것.
+> STEP 2 추출기(ITEM/PROBLEM/SOLUTION/BM/TEAM/FINANCE, ACTUAL/PLAN, Conflict, source 위치)는 **다른 세션**이 한다.
+> 이 트랙은 STEP 3A만 한다. #150 측정기(`app/tools/step2_extraction_baseline.py`)는 만지지 않는다.
+
+제품 목표(최우선 사용 케이스)의 「작성 가능한 파트부터 작성」을 **Writer 없이** 여기서 구현한다. 하는 일:
+
+```
+공고 요구사항 + 빈 양식 구조 + [가짜/합성 STEP2 결과]
+        ↓
+Section Matching
+        ↓
+사용할 Fact / 사용할 Evidence / 부족정보 / Conflict / 작성 가능 여부
+        ↓
+Matching Golden Test
+```
+
+만남점 **딱 하나** — 다른 세션이 최종 반환하는:
+
+- `Fact[]`
+- `NarrativeEvidence[]`
+- `Conflict[]`
+
+를 matcher 입력 형식과 맞춘다. 계약 코드: `app/auto_write/services/step2_output_contract.py`.
+matcher는 이미 있으면 EXTEND (`app/auto_write/services/section_matcher.py`). FactGraphV2 신설 금지.
+
+Golden (합성 fixture. 실 HWP/Golden 41 재구성 금지):
+
+| 테스트 | 기대 결과 |
+|---|---|
+| Problem 근거 충분 | Problem과 매칭 |
+| BM 근거를 Problem에 넣음 | FAIL |
+| PLAN 매출을 실제매출로 사용 | FAIL |
+| CONFLICT Fact를 자동 선택 | FAIL |
+| 없는 Fact를 생성 | FAIL |
+| 일부 근거만 있음 | writable 가능 + missing 표시 |
+| 출처 없는 근거 | 사용 불가 |
+| 같은 Fact 여러 출처 | provenance 유지 |
+
+비개발자 리포트 형식(초안 문장 아님):
+
+```
+문제인식 — 작성 가능
+사용 가능한 근거 4개
+부족한 정보 1개: 고객 인터뷰 결과
+```
+
+금지: Writer, 파트별 Preview UI, HWP 렌더, STEP 2 추출기 파일 수정, Golden 41 추측 생성.
+
+이후 순서(이 트랙 이후): STEP 3B 실제 공고+양식 Golden → STEP 4 Writer+Preview → STEP 5 부족정보 질문 → 전체 QA/HWP 렌더.
+
+---
+
+### 이 반영 세션의 범위 ([1]~[3]만)
+
+이번 `TASK.md` 반영 세션에서 수행한 것 / 하지 않은 것:
+
+```
+[1] 요구사항 문서 확인          ← 이 블록
+[2] 최신 원격 기본 브랜치 + TASK.md 조사  ← 이 블록 등록 전 수행
+[3] 기존 T-20260814-02 / BPQ-00~13에 최신 실행지시 반영  ← 이 블록
+[4] Baseline Audit              ← 다음 구현 세션. 이번 세션 금지
+[5] 이후 코드 구현·테스트·E2E   ← 다음 구현 세션. 이번 세션 금지
+```
+
+이번 `TASK.md` 반영 세션에서 금지: production 코드 수정, 기능 구현, 테스트 코드 수정, E2E, 새 클래스/서비스/schema, 새 Epic/TASK, 기존 historical instruction 삭제. 허용 변경 = 루트 `TASK.md` 하나.
+
+### TASK PINNING (이 TASK.md 반영 세션)
+
+```
+TASK_ID: T-20260814-02
+TASK_START_SHA: c28be6d3f6ccdedba488d989fad3430e09be37c0
+TASK_BLOB_SHA: 244ec6b81ae6d0bb62db0a7504b588e2839abc35
+WORK_BRANCH: cursor/t20260814-02-impl-instruction-2036
+BASE: origin/main
+```
+
+현재 LIST의 `[~]` ACTIVE는 `T-20260816-01`(열린 draft를 한 브랜치로 합침). 본 변경은 **T-20260814-02 DETAILS만** 추가한다. `T-20260816-01`에 섞지 않는다. `T-20260814-02` LIST는 `[ ]` 유지(이 세션은 구현 시작이 아님). 구현 세션이 BPQ-00을 시작할 때 PINNING을 그 세션 HEAD로 다시 기록한다.
+
+BPQ-00 실측 PINNING (2026-08-16 구현 세션, Audit 실행함):
+
+```
+TASK_ID: T-20260814-02 / BPQ-00
+TASK_START_SHA: 95a0f63c398a2c250b0cd2cf1639b92116fa5846
+WORK_BRANCH: cursor/bpq-00-baseline-audit-2036
+BASE: origin/main
+```
+
+표는 위 `#### BPQ-00 실측 로그` 에 있다. 이 세션은 Audit만. 제품 코드 0줄. T-20260814-02 LIST는 `[ ]` 유지.
+
+`T-20260816-01` KEEP의 「T-20260814-02 DETAILS 키워드 삽입하지 않음」은 **그 합치기 TASK의 범위**다. 이번 사용자 명시 요청(최신 우선순위)이 T-20260814-02에 실행지시를 넣으라고 하므로, 합치기 TASK 본문은 건드리지 않고 여기만 추가한다.
+
+### 최종 목표 (한 문장)
+
+좋은 문장을 생성하는 것보다, **사업계획서 전체에서 사실·숫자·출처·Actual/Plan·평가요구사항·섹션 간 논리가 서로 모순되지 않고, 상위 사실이 변경되면 영향을 받은 결과가 자동으로 무효화되며, 검증되지 않은 결과가 FINAL이 되지 않는 구조**를 만든다.
+
+판정 순서: `REUSE → EXTEND → ONLY-IF-GAP CREATE`. 조사 없이 새 클래스부터 만들지 않는다. 제안 개념명(`SectionContextPack`, `SectionDraft`, `FactGraph` 등)은 책임 설명용이다. 기존 타입/DTO가 있으면 그것을 확장한다.
+
+→ **최신(같은 날 후속 요청)이 이 3단계와 충돌하면 아래 「조치 우선순위 — 매우 중요」가 이긴다:** `REUSE → DELETE/MERGE → EXTEND → CREATE ONLY IF GAP → DO NOT TOUCH`. 최우선 목표는 PARTIAL을 새 시스템으로 우회하지 않고 IMPLEMENTED로 완성하는 것이다.
+
+---
+
+### 향후 전체 개발 절차 (참고. 이번 세션은 [1]~[3]만)
+
+```
+[1] 요구사항/실행지시 전달
+[2] 최신 main + TASK.md 조사
+[3] 기존 T-20260814-02에 실행지시 반영     ← 지금 여기까지
+[4] Baseline Audit (IMPLEMENTED / PARTIAL / GAP / DUPLICATED + production caller)
+[5] 기존 BPQ-00~13 안에서 실제 코드 구현
+[6] 단위/통합/회귀 테스트
+[7] MarketGate Golden E2E
+[8] 구현 에이전트 최종보고 (아래 §34 형식)
+[9] 그 최종보고를 사용자에게 그대로 전달
+[10] 사용자가 GitHub 원본을 직접 독립 검수
+     - 보고한 코드가 진짜 있는가
+     - production caller가 연결됐는가
+     - 테스트가 실제 의미 있는가
+     - TASK 요구를 빠뜨리지 않았는가
+     - 새 병렬 시스템을 만들지 않았는가
+     대조: 에이전트 주장 ↔ TASK.md ↔ 실제 코드 ↔ production caller ↔ 실제 테스트
+     코드 파일이 생겼다고 구현 완료로 인정하지 않는다.
+     definition → production caller → runtime path → failure blocking → production test
+[11] 문제 있으면 사용자 수정지시
+[12] 수정
+[13] 결과 전달
+[14] 재검수 (문제 없을 때까지 반복)
+[15] main 병합
+[16] 병합된 main 기준 전체 regression
+[17] 실제 사업계획서 파일로 사용자 Acceptance Test
+     예: MarketGate 기업자료 + 실제 공고문 + 실제 빈 HWP/HWPX 양식 → auto_write 실행
+     사람이 본다: 문항 이해 / 기업 사실 오류 / 계획을 실적으로 씀 / 숫자 불일치 /
+     출처 / 빈칸 이유 / 양식 훼손 / 제출 가능 문장 품질
+[18] 발견된 오류 → 원인 분류 → LRule 또는 deterministic QA 또는 QualityProfile 또는 fixture 추가
+     → regression test 추가 → 수정 → 같은 문서 재생성 (수동 수정하고 끝내지 않음)
+[19] 다음 양식 테스트
+```
+
+테스트 숫자가 최종 목적이 아니다. 실제 지원사업 양식을 제대로 작성하는 것이 목적이다. [17]~[18] 루프가 쌓여야 품질이 오른다.
+
+---
+
+### 유지할 production contract (우회 금지)
+
+```
+DomainRouter
+→ 기존 Domain Pipeline
+→ document generation/render
+→ LRuleEnforcer
+→ artifact/hash 검증
+→ Finalizer
+```
+
+- LRule 우회 금지. Finalizer 우회 금지.
+- legacy direct FINAL이 있으면 AW-001 규칙에 따라 차단.
+- FAIL / REVIEW_REQUIRED / UNVERIFIABLE 이 FINAL로 승격되지 않게 한다.
+- artifact/hash 검증을 약화하지 않는다.
+- `cross_form_autofill` 안전철학 유지: 오매칭은 빈칸보다 나쁨, high confidence만 자동전사, 날조 0, 원본 미수정. **적용 범위=사실 칸 전사.** 서술 생성은 허용하되 사용자에게 `생성` 인지 필수(아래 `원칙 — 생성은 허용`). 생성본을 소스 사실처럼 표시 금지.
+- HWP/HWPX/DOCX 기존 renderer/fill 우선 재사용.
+- 이번 작업은 위 architecture **앞단의 작성 품질 파이프라인과 중간산출물 계약을 강화**하는 것이다. 독립 business-plan application을 하나 더 만들지 않는다.
+- Prompt 수정으로 LRule / Fact / Provenance / Finalizer를 우회할 수 없어야 한다.
+- API key: HTML/JS hardcode, browser 노출, repo commit, project JSON export, log, QA report, replay metadata 금지. `.env` 정책 유지.
+- canonical project state를 Browser LocalStorage에 두지 않는다. UI cache만 가능. 정본은 기존 project/workspace persistence.
+
+---
+
+### 목표 production pipeline (자료 → LLM → 최종 문서 금지)
+
+```
+공고문 + 빈 양식 + 기업 자료 + 과거/기존 사업계획서 + Quality Benchmark
+        ↓
+공고 요구 분석 / 양식 구조 분석 / 기업 사실 추출 / Source·Provenance 추출
+        ↓
+CompanyMaster + ProgramSpec/FormSpec + QualityProfile
+        ↓
+Conflict / Missing / Semantic Audit
+        ↓
+DocumentPlan
+        ↓
+Section별 Context Projection (개념명: SectionContextPack)
+        ↓
+Structured SectionDraft
+        ↓
+Writer Self Check [비권위적 1차 검사]
+        ↓
+Schema / Output Contract Validation
+        ↓
+Deterministic QA
+  Fact / Numeric / Date / Actual·Plan / Provenance /
+  Program·Form constraints / PSST / LRule / Format
+        ↓
+Human Review / Edit / Approval
+        ↓
+Human edit 후 동일 QA 재실행
+        ↓
+Dependency / STALE Check
+        ↓
+HWP / HWPX / DOCX 원본 양식 렌더링
+        ↓
+Artifact-level QA (layout / format / hash / final LRule)
+        ↓
+Finalizer
+        ↓
+FINAL 또는 _DRAFT
+```
+
+`bizplan_autopilot`의 「점수 낮으면 전문 재작성」 루프는 목표 계약이 아니다. 실패한 **해당 Stage만 재실행**한다.
+
+나중 요청(`계획 보강 — 2026-08-16`)이 덮음: 위 입력 나열의 「기업 자료」는 첫 화면 필수 칸이 아니다. UX 필수=공고+빈 양식. 기존 계획서=1순위 선택. 사업자등록증·매출·이력서는 그 파트가 막힐 때만.
+
+---
+
+### 구현 전 Baseline Audit (다음 구현 세션. 이번 세션 실행 금지)
+
+코드 수정 전에 저장소 전체를 조사한다. 코드가 존재한다는 이유만으로 IMPLEMENTED가 아니다. production caller가 실제로 연결되어 있는지 확인한다.
+
+최소 대상: TASK.md, DomainRouter, DomainPipeline, LRuleEnforcer, lrule_gate, Finalizer, lessons/canonical L, CompanyMaster, company_extract, announcement_analyzer, form_analyzer, ProgramSpec 대응, FormSpec 대응, QualityProfile/benchmark, DocumentPlan/planner, provenance, answers_provenance, project_service, document_ingest, bizplan_ai_writer, bizplan_autopilot, psst_fill, PSST checker, cross_form_autofill, evaluation_service, eval_loop_runner, document_quality_orchestrator, renderer, HWP/HWPX/DOCX fill, usage_acceptance, operator console, 현재 E2E 및 regression tests.
+
+각 항목 표:
+
+| 존재 판정 | 조치 판정 |
+|---|---|
+| IMPLEMENTED | REUSE |
+| PARTIAL | EXTEND |
+| PLACEHOLDER | CREATE ONLY IF GAP |
+| DUPLICATED | DELETE/MERGE CANDIDATE |
+| NOT_IMPLEMENTED | DO NOT TOUCH (해당 시) |
+
+정본 경로는 HEAD에서 재확인한다. KEEP 표의 `auto_write.services` 경로가 re-export이고 실구현이 `core.docx.services`이면 **실구현 1곳만** 수정한다. 세 벌을 동시에 수정하지 않는다. `*V2` 병렬 시스템 금지.
+
+각 신규/확장 책임의 IMPLEMENTED 증명:
+
+```
+definition exists
+→ production caller exists
+→ runtime path reaches it
+→ failure path blocks correctly
+→ test reaches production path
+```
+
+caller 없는 helper를 구현하고 DONE 처리하지 않는다.
+
+위 2열 표(PLACEHOLDER→CREATE ONLY IF GAP, NOT_IMPLEMENTED→DO NOT TOUCH)는 초기 초안이다. **아래 블록과 충돌하면 아래가 이긴다.** 이 TASK.md 반영 세션에서는 Audit을 실행하지 않는다.
+
+---
+
+### 조치 우선순위 — 매우 중요 (2026-08-16 후속. Baseline Audit 이후 구현 판단)
+
+> 이 블록은 위 역사 명세·2026-08-16 implementation update 원문을 삭제하지 않는다. Audit 이후 **무엇을 먼저 손댈지**와 **REUSE/MERGE/EXTEND/CREATE/DO NOT TOUCH 판단식**만 확정한다. 새 Epic/`T-20260815-*`/`T-20260816-*` 병렬 복제 금지. BPQ-00~13 폐기·복제 금지. 제품 코드는 이 블록 등록만으로 수정하지 않는다.
+
+이번 작업의 최우선 목표는 **PARTIAL 상태의 기존 기능을 IMPLEMENTED 상태로 완성하는 것**이다.
+
+Baseline Audit 후 작업순서는 원칙적으로 다음과 한다.
+
+```
+PARTIAL → IMPLEMENTED
+→ PLACEHOLDER → production wiring 또는 제거
+→ DUPLICATED → canonical implementation으로 통합
+→ NOT_IMPLEMENTED → 필수 GAP에 한해서만 신규 구현
+```
+
+이미 IMPLEMENTED인 기능은 특별한 결함이 없으면 REUSE 또는 DO NOT TOUCH한다.
+
+새 모듈을 만드는 것보다 기존 부분구현을 production-ready로 완성하는 것을 우선한다.
+
+단, 어떤 PARTIAL을 완성하기 위해 필수 선행기능이 완전히 NOT_IMPLEMENTED인 경우에만 그 선행 GAP을 먼저 최소 구현할 수 있다.
+
+PARTIAL을 방치한 채 같은 목적의 새 시스템을 만들어 문제를 우회하는 것은 금지한다.
+
+#### 조치 우선순위 (반드시 이 순서로 판단)
+
+Baseline Audit 이후 각 기능의 조치는 반드시 다음 우선순위로 판단한다.
+
+1. REUSE
+2. DELETE / MERGE
+3. EXTEND
+4. CREATE ONLY IF GAP
+5. DO NOT TOUCH
+
+의미:
+
+**1) REUSE**
+기존 production 구현으로 요구사항을 충족할 수 있다면 그대로 재사용한다.
+같은 목적의 신규 구현을 만들지 않는다.
+
+**2) DELETE / MERGE**
+같은 책임을 가진 구현이 둘 이상이면 신규 기능을 추가하기 전에 먼저 canonical implementation을 정한다.
+production caller, runtime wiring, 테스트, 호환성을 확인한 뒤 중복·placeholder·dual source of truth를 제거하거나 통합한다.
+근거 없는 삭제는 금지한다.
+
+**3) EXTEND**
+canonical implementation이 존재하지만 PARTIAL인 경우 해당 구현을 확장하여 IMPLEMENTED 상태로 완성한다.
+새로운 V2/New/Next 계열 구현을 만드는 것보다 PARTIAL → IMPLEMENTED를 우선한다.
+
+**4) CREATE ONLY IF GAP**
+REUSE, MERGE, EXTEND로 해결할 수 없고 필수 책임 자체가 존재하지 않을 때만 최소 신규 구현을 허용한다.
+
+**5) DO NOT TOUCH**
+이미 IMPLEMENTED이며 이번 요구사항을 충족하는 안정적인 코드는 특별한 결함이 없으면 수정하지 않는다.
+
+따라서 기본 판단식은:
+
+```
+REUSE 가능한가?
+→ YES: REUSE
+
+NO라면 중복 구현이 있는가?
+→ YES: DELETE / MERGE하여 정본 확정
+
+정본이 있지만 부족한가?
+→ YES: EXTEND하여 IMPLEMENTED로 완성
+
+그래도 필수 기능이 존재하지 않는가?
+→ YES: CREATE ONLY IF GAP
+
+이미 충분히 구현되어 있고 변경 필요가 없는가?
+→ DO NOT TOUCH
+```
+
+| 현재 상태 | 우선 조치 |
+|---|---|
+| `IMPLEMENTED` | **REUSE** |
+| `DUPLICATED` | **DELETE / MERGE** |
+| `PARTIAL` | **EXTEND → IMPLEMENTED** |
+| `PLACEHOLDER` | MERGE/DELETE 우선, 필요하면 EXTEND |
+| `NOT_IMPLEMENTED` | 마지막에만 CREATE |
+
+금지 예: PARTIAL `company_extract`를 두고 같은 목적의 `FactGraphV2`를 새로 만들어 우회. DUPLICATED `auto_write.services` / `core.docx.services` / `bizplan.services` 삼벌을 동시에 확장. PLACEHOLDER를 근거 없이 삭제하거나, caller·테스트 확인 없이 삭제. IMPLEMENTED DomainRouter/LRule/Finalizer를 특별한 결함 없이 재작성.
+
+---
+
+### P0 — Fact 모델을 직교 상태로 정리
+
+`PLAN`을 `CONFIRMED/UNKNOWN/CONFLICT`와 같은 하나의 enum에 섞지 않는다.
+
+#### A. Verification / Resolution State
+
+CONFIRMED / INFERRED / UNKNOWN / CONFLICT / NOT_APPLICABLE.
+
+기존 명칭이 VERIFIED / MISSING / ESTIMATE / INFERENCE 등이면 기존 호환성을 우선하되 의미 손실 없이 매핑한다.
+
+#### B. Semantic / Time Status (별도 필드)
+
+ACTUAL / PLAN / ESTIMATE / HYPOTHESIS. 필요하면 기존 enum 재사용.
+
+아래는 서로 구분되어야 하며 빈 문자열 `""` 하나로 모두 표현하지 않는다: `0` / `NONE` / `UNKNOWN` / `CONFLICT` / `PLAN` / `NOT_APPLICABLE`.
+
+예:
+
+- 2025년 실제 매출 = 300,000,000원 → verification=CONFIRMED, semantic=ACTUAL
+- 2027년 목표 매출 = 1,000,000,000원 → verification=CONFIRMED, semantic=PLAN
+- 특허 건수 자료 없음 → verification=UNKNOWN
+- A자료 특허 2건, B자료 특허 3건 → verification=CONFLICT
+- 해당 사업은 특허 보유가 적용되지 않음 → verification=NOT_APPLICABLE
+
+LLM은 UNKNOWN을 임의로 채우지 않는다. LLM은 CONFLICT winner를 임의 선택하지 않는다.
+
+---
+
+### P0 — Fact 최소 provenance contract
+
+기존 `CompanyMaster`, `company_extract`, provenance를 우선 확장한다. 새 FactGraph 정본을 병렬 생성하지 않는다.
+
+중요 fact 최소 필드:
+
+```
+fact_id
+canonical_field
+value
+unit
+as_of
+verification_state
+semantic_state
+source_id
+source_file
+source_location
+source_type
+confidence
+updated_at
+```
+
+가능하면 (기존 구조와 충돌하지 않는 범위): `created_by`, `supersedes_fact_id`, `verification_note`.
+
+Source location 원칙은 `파일명 + 페이지`. **실제 페이지를 알 수 없는 원천에 가짜 페이지를 만들지 않는다.** HWP/HWPX/DOCX에서 안정적 페이지를 추출할 수 없으면 logical section / table·cell / paragraph anchor / source location unknown 등 기존 표현을 쓰고 `PAGE_UNKNOWN` 또는 equivalent로 남긴다. 페이지가 없는데 `p.3`을 만들면 FAIL.
+
+---
+
+### P0 — Source Resolution Policy
+
+단순한 하나의 숫자 precedence만으로 모든 conflict를 자동 해결하지 않는다.
+
+고려 요소: (1) authority/증빙력 (2) directness/원천성 (3) recency (4) semantic compatibility (5) verification status (6) 명시적 사용자 확인 여부.
+
+기본 신뢰 방향 예 (절대 자동 winner table이 아님):
+
+```
+공식 원본 증빙
+기업 공식 원장/공식자료
+사용자가 직접 확인·승인한 사실
+검증된 기존 기업자료
+검증된 과거 사업계획서
+공신력 있는 외부 공개자료
+AI inference
+```
+
+2024 공식 회사소개서와 2026 대표가 직접 확인한 최신 매출이 다르면 「공식문서가 위이므로 2024 승리」가 아니다. `as_of`, recency, semantic type을 함께 본다.
+
+정책:
+
+- 명백히 더 최신이고 동일 의미이며 신뢰 가능하면 supersede 가능. supersede 기록을 남긴다.
+- 동일 시점·동일 권위·동일 의미인데 값이 다르면 CONFLICT.
+- AI inference는 CONFIRMED fact를 덮어쓸 수 없음.
+- CONFLICT는 조용히 winner 선택 금지.
+- 사용자 확인으로 해결해도 기존 conflicting fact를 삭제하지 말고 resolution provenance를 남긴다.
+
+---
+
+### P0 — Conflict Queue / Review
+
+기존 review/needs_confirm/operator 구조를 조사해서 통합한다. CONFLICT 또는 UNKNOWN 중 blocking field는 사람 검토 대상.
+
+최소 표시: `canonical_field`, candidate values, source, source date/as_of, source location, reason, affected sections, blocking 여부.
+
+「더 그럴듯해 보이는 3억원을 선택했습니다」 같은 AI 결정은 FAIL.
+
+---
+
+### P0 — Section Context Projection
+
+전체 자료를 모든 LLM 호출에 매번 넣지 않는다. CompanyMaster + ProgramSpec + QualityProfile + DocumentPlan에서 현재 섹션에 필요한 데이터만 projection한다.
+
+개념 contract:
+
+```
+section_id
+section_title
+program_requirement
+evaluation_requirement
+required_length
+format_constraints
+required_facts
+available_facts
+allowed_numbers
+required_evidence
+source_refs
+quality_rules
+forbidden_facts
+conflicts
+unknowns
+related_claims
+related_previous_sections
+dependency_ids
+```
+
+예: TEAM 작성에 시장 전체 통계·불필요 고객 segment를 넣지 않는다. PROBLEM 작성에 대표자 학력·인력채용 계획이 불필요하면 제외한다.
+
+목표: hallucination 감소, context pollution 감소, token 절감, 숫자 변형 감소, 동일 fact의 섹션별 변조 방지, 출처 추적, selective regeneration.
+
+기존 DocumentPlan / Content Planner / writer 경로 안에 넣는다. 새 writer pipeline을 병렬로 만들지 않는다.
+
+---
+
+### P0 — Dependency Graph와 STALE (핵심)
+
+Fact 또는 상위 planning artifact가 바뀌었는데 과거 SectionDraft가 최신인 것처럼 FINAL되는 것을 막는다.
+
+예: 목표매출 500,000,000 → 800,000,000. 영향 가능: 매출계획, KPI, SOM, 자금계획, Scale-up, 표지 요약, 재무표.
+
+```
+Fact update → dependency lookup → affected claim/section/table/document-plan node
+→ STALE → regenerate 또는 human review → deterministic QA → STALE clear
+```
+
+`STALE`은 단순 UI 문자열이 아니다. 가능하면 기존 hash/provenance로 dependency fingerprint:
+
+```
+section_input_hash = hash(
+  relevant_fact_versions
+  + ProgramSpec version
+  + QualityProfile version
+  + DocumentPlan slice
+  + PromptTemplate version
+)
+```
+
+생성 당시 input signature와 현재가 다르면 STALE 후보. 정확한 방식은 기존 코드 조사 후 최소 변경.
+
+- irrelevant fact 변경으로 모든 문서를 STALE 처리하지 않는다.
+- 영향을 받는 downstream만 invalidate.
+- STALE인 blocking section이 하나라도 남으면 FINAL 금지.
+- 「그대로 사용 승인」이 있으면 approval provenance 필수.
+- approval했다고 Fact/Numeric/LRule 검사가 면제되지 않는다.
+
+---
+
+### P0 — Structured Writer Output
+
+LLM 자유문장을 즉시 DOCX/HWP에 삽입하지 않는다. 기존 Pydantic model/schema/parser가 있으면 확장한다.
+
+```
+LLM → Structured SectionDraft → parse → schema validate
+→ repair 가능하면 제한적 repair → revalidate → deterministic QA → renderer
+```
+
+SectionDraft 최소: `section_id`, `claims[]`, `paragraphs[]`, `tables[]`, `fact_refs[]`, `evidence_refs[]`, `citation_refs[]`, `numbers_used[]`, `unknowns[]`, `conflicts[]`, `self_check`.
+
+JSON 강제 아님. 핵심은 model output이 기계적으로 검증 가능한 계약을 갖는 것. 기존 타입과 충돌하면 기존 타입을 확장한다.
+
+---
+
+### P0 — Writer Self Check의 권한 제한
+
+Self Check는 신뢰 경계가 아니다. 1차 진단만:
+
+- 입력자료에 없는 사실/숫자 생성
+- Actual/Plan 혼동
+- source가 필요한 claim의 provenance
+- 일반론만으로 채움
+- 프로그램 문항 누락
+- section constraints 누락
+- conflict 사용
+- unknown을 fact처럼 표현
+- QualityProfile 위반 가능성
+
+`Self Check = PASS`라고 LLM이 말해도 권한 없음. 반드시 이후 deterministic QA. Self Check는 diagnostics / repair hints / review metadata. Self Check가 FactState나 source를 변경해서는 안 된다.
+
+---
+
+### P0 — Deterministic QA chain
+
+LLM score 하나로 대체 금지. 기존 검사 재사용. 최소 동등 보장:
+
+```
+Schema validation
+→ Required field / Program constraint
+→ Fact validation
+→ Numeric consistency
+→ Date consistency
+→ Actual / Plan consistency
+→ Conflict / Unknown misuse
+→ Source / Provenance validation
+→ Claim ↔ Evidence consistency
+→ PSST / business-plan structure QA
+→ LRule
+→ Format / template acceptance
+→ Artifact/hash checks
+→ Finalizer
+```
+
+숫자는 가능한 한 deterministic calculation. 기존 계산 모듈이 있으면 재사용. 대상 예: TAM/SAM/SOM, CAGR, YoY, 매출=단가×수량, 고객 수×전환율, 인건비 합계, 정부지원금+자부담, 연차 총 사업비, KPI 합계, 퍼널 conversion, 월/연도 합계, 인력계획 합계, 손익, 날짜/기간. LLM은 계산 결과를 해석·문장화. 계산식 provenance를 남길 수 있으면 남긴다. 동일 수치가 여러 표/본문에서 달라지면 FAIL.
+
+---
+
+### P1 — Hard Rule / QualityProfile / PromptTemplate 완전 분리
+
+```
+PromptTemplate != Source of Truth
+QualityProfile != Fact
+LRule != Prompt
+```
+
+사용자가 PromptTemplate을 수정해도 LRule enforcement가 변경되지 않는다.
+
+**LRule / Hard Constraint (runtime enforcement):** 출처 없는 핵심 숫자 금지, Actual↔Plan 혼용 금지, unresolved conflict 사용 금지, 사실 없는 실적 주장 금지, 양식 훼손 금지, 증빙 없는 완료성과 주장 금지.
+
+**QualityProfile (작성 전략, 사실값 저장 금지):**
+
+- Problem: 현황 → 손실/문제 → 실제 사례 → 제도/환경 → 필요성
+- Solution: AS-IS → TO-BE → 기능 → 고객효과 → 개발단계
+- Scale: 시장 → BM → 고객획득 → KPI → 매출계획
+- Team: 핵심역량 → 수행실적 → 역할 → 부족역량 보완
+
+AIMY는 Quality Pattern 추출용 benchmark일 뿐 사실 source가 아니다.
+
+**PromptTemplate:** Fact + ProgramSpec + QualityProfile을 모델에게 전달하는 실행 템플릿. version/hash로 재현.
+
+---
+
+### P1 — Human Review lifecycle
+
+기존 상태 모델을 조사한 뒤 최소 의미: GENERATED / REVIEW_REQUIRED / APPROVED / LOCKED / STALE / FAILED. 기존 명칭이 있으면 재사용.
+
+Human Approval과 QA status는 같은 개념이 아니다. `human_status=APPROVED` 이고 `qa_status=FAIL` 이면 FINAL 불가.
+
+사람 수정 provenance: `generated_by=model`, `edited_by=human`, `approved_by=human` 등 추적.
+
+Human edit 후 최소 재실행: fact, numeric, Actual/Plan, source/provenance, conflict, LRule. `Human edit = QA bypass` 이면 FAIL.
+
+---
+
+### P1 — Project Replay / Reproducibility
+
+최소 추적: input file hashes, source versions, CompanyMaster/ProgramSpec/FormSpec/QualityProfile/DocumentPlan version·hash, PromptTemplate version/hash, model/provider, Section context input signature, intermediate structured outputs, human edits, approval metadata, QA reports, LRule registry hash, generation timestamp, final artifact hash.
+
+금지: API key, token, secret, `.env` dump, 필요 이상 민감정보 Git 커밋. SectionContextPack에 민감정보가 있으면 기존 workspace 보안 정책. Git fixture는 최소 익명/합성 데이터만.
+
+---
+
+### P1 — Golden Case #1 = MarketGate / Blind / 단계별 fixture
+
+MarketGate를 Golden Case #1로 유지. AIMY는 Quality Pattern만.
+
+MarketGate generation context에 AIMY 고유 사실 전이 금지 (하나라도 있으면 FAIL): 시장규모, 고객 수, 매출, 특허, MOU, 정확도, 투자계획, 조직·고객사, AIMY 고유 정책/사업내용.
+
+Golden Test는 최종파일 byte 비교만 하지 않는다. 단계별 expected fixture / invariant:
+
+```
+Input Corpus
+→ expected CompanyMaster facts/states
+→ expected ProgramSpec constraints
+→ expected conflicts/unknowns
+→ expected DocumentPlan requirements
+→ expected Section Context invariants (allowed/forbidden fact IDs)
+→ generated Claim invariants + source/provenance requirements
+→ expected QA result
+→ final format/layout requirements
+```
+
+검사 예: MarketGate 특허 fact=X 인데 AIMY 특허 fact 등장=0. PLAN fact를 ACTUAL claim으로 사용=0. source 없는 numeric factual claim=0. unresolved CONFLICT 사용=0.
+
+Blind/Hold-out: 사람 완성본을 generation context에 넣으면 Blind가 아니다. 입력은 공고+빈 양식+당시 기업자료+허용된 QualityProfile. 사람 완성본은 생성 완료 후 평가만. Benchmark leakage 검사 필수.
+
+---
+
+### cross_form_autofill 경계
+
+```
+cross_form_autofill = 기존에 존재하는 값을 다른 양식 위치로 보수적으로 전사
+AI Writer = 공고/문항 요구에 맞게 허용된 fact를 사용하여 서술 생성
+```
+
+전사 원칙을 AI Writer에도 확장한다. 불확실하면 `UNKNOWN / REVIEW_REQUIRED`이지 임의 생성이 아니다.
+
+---
+
+### Operator Console
+
+별도 dashboard 프로젝트를 만들지 않는다. 기존 operator console을 최소 확장. 비개발자가 최소로 볼 것: 현재 단계, 완료, 진행, 실패, REVIEW_REQUIRED, CONFLICT, UNKNOWN, STALE, 사용된 source, source location, 사용된 Fact, LRule 결과, FINAL 가능/불가능, 불가능 이유, 다음 행동.
+
+품질점수/제출확률 같은 임의 숫자는 추가하지 않는다. 단계 완료 판정은 「내용이 존재한다」가 아니라 실제 runtime validation 결과. AW-004 LIST/DETAILS 원문은 합치지 않는다. 구현 시 기존 console 경로를 EXTEND.
+
+---
+
+### FAIL-CLOSED
+
+다음 중 하나라도 있으면 clean FINAL 금지:
+
+- blocking UNKNOWN
+- unresolved CONFLICT
+- unsupported factual claim
+- unresolved numeric mismatch
+- Actual/Plan mismatch
+- required source missing
+- invalid SectionDraft schema
+- blocking STALE dependency
+- required LRule FAIL
+- REVIEW_REQUIRED
+- UNVERIFIABLE
+- format/required-field failure
+- artifact/hash mismatch
+- QA 실행 실패로 판정 불가
+
+판정 불능을 PASS로 처리하지 않는다.
+
+기존 T-20260814-02 수치 DONE 기준을 완화하지 않는다: Coverage>=98%, Source연결>=95%, Unsupported=0, Numeric inconsistency=0, Actual/Plan 오류=0, 양식보존>=99% (측정 불가면 PASS가 아니라 MEASUREMENT_NOT_IMPLEMENTED 또는 기존 BLOCKED. 먼저 측정기).
+
+---
+
+### 필수 테스트 시나리오 (구현 세션. 이번 세션 테스트 코드 금지)
+
+- **A. ACTUAL** 2025 매출=3억원 → verification=CONFIRMED, semantic=ACTUAL
+- **B. PLAN** 2027 목표매출=10억원 → semantic=PLAN. 「2027년 매출은 10억원이다」 실적 확정형이면 FAIL
+- **C. UNKNOWN** 어느 source에도 특허 수 없음 → UNKNOWN. AI가 「특허 2건 보유」면 FAIL
+- **D. CONFLICT** Source A 특허 2건 / B 3건 → CONFLICT. AI auto winner=FAIL
+- **E. NOT_APPLICABLE** 명시 비적용을 UNKNOWN과 구분
+- **F. Source** 「시장규모 500억원」 factual claim인데 source 없음 → FAIL 또는 기존 정책 REVIEW_REQUIRED. FINAL 금지
+- **G. STALE** 목표매출 5억 문서 생성 후 8억 수정 → KPI/매출계획/성장전략/재무/표지 요약 등 실제 dependency STALE. 관련 없는 Team biography까지 무조건 STALE이면 과잉 invalidation 점검. STALE blocking artifact가 FINAL이면 FAIL
+- **H. Human Edit** 사람 숫자 수정 → dependency 재평가 + numeric/fact/source QA 재실행. Human approval만으로 FINAL이면 FAIL
+- **I. Conflict Resolution** 사람이 하나를 최신 사실로 확정 → resolution provenance, 과거 candidate 삭제 금지, downstream invalidation, 재검증
+- **J. Benchmark Leakage** MarketGate Golden에 AIMY 고유 시장규모/매출/고객/특허/MOU/정확도/투자계획 하나라도 있으면 FAIL
+- **K. Source Page Unknown** 확인 불가 source에 임의 page 번호 → FAIL
+- **L. Structured Output Failure** schema 불일치 → renderer 직접 전달 금지. repair 후 revalidate 또는 FAILED/REVIEW_REQUIRED
+
+테스트 실행 명령의 source of truth는 이 파일: `py -3.11 -m pytest`. skip/xfail 남발/assertion 약화/production check 삭제/fake fixture로 숫자 채우기 금지. 관련 테스트만 통과시키고 전체 regression 생략한 채 DONE 금지.
+
+---
+
+### 구현 순서 (다음 구현 세션. 기존 BPQ dependency가 충돌하면 기존 TASK dependency 우선)
+
+역사 블록의 순서 `00 → 01 → 02 → 03 → 04 → 06 → 05 → 07 → 11 → 12 → 08 → 09 → 10 → 13` 을 폐기하지 않는다. 아래는 그 안에서 강화 작업을 끼워 넣는 권장 흐름이다.
+
+```
+1. Git/TASK/Baseline 조사
+2. (본 블록) 최신 실행지시를 기존 T-20260814-02에 통합  ← 이번 세션에서 수행
+3. 기존 테스트 baseline 실행
+4. BPQ-02 Fact semantics/schema
+5. BPQ-03 Provenance/version
+6. BPQ-04 Source resolution/conflict
+7. BPQ-05 Program/Form constraints
+8. BPQ-06 QualityProfile 분리/확인
+9. BPQ-07 Section context projection
+10. Dependency/STALE wiring
+11. Structured writer output
+12. Writer Self Check
+13. BPQ-12 deterministic QA wiring
+14. Human review lifecycle
+15. Replay/version tracking
+16. BPQ-11 renderer wiring
+17. BPQ-08 MarketGate Golden staged fixture
+18. E2E
+19. BPQ-13 regression
+20. Finalizer fail-closed 검증
+21. docs sync
+```
+
+각 단계: `red test → minimum implementation → target tests → related regression`.
+
+무작정 여러 agent가 동시에 모든 파일을 수정하지 않는다.
+
+---
+
+### E2E DONE contract (구현 세션)
+
+실제 production entrypoint:
+
+```
+공고문 + 빈 사업계획서 양식 + MarketGate 기업자료 + 허용된 기존 참고자료 + QualityProfile
+→ ProgramSpec / FormSpec
+→ CompanyMaster + Fact semantic + provenance + conflict detection
+→ DocumentPlan
+→ Section-specific context
+→ Structured section generation
+→ Writer Self Check
+→ Deterministic QA
+→ Human Review 가능한 상태
+→ HWP/HWPX/DOCX 원본 양식 render
+→ Artifact QA + LRule
+→ Finalizer
+→ FINAL 또는 _DRAFT
+```
+
+Golden 최소 invariant: unsupported factual claim=0, numeric inconsistency=0, Actual/Plan 오류=0, AI conflict auto-resolution=0, source 없는 숫자를 confirmed fact처럼 사용=0, blocking STALE section의 FINAL 포함=0, AIMY 고유 사실 leakage=0, 가짜 source page=0.
+
+---
+
+### Git 안전 (본 파일 §3 절대 우선)
+
+금지: `git add -A`, `git reset --hard`, `git clean -fd`, force push(`--force`, `--force-with-lease`), `gh pr merge --admin`, 사용자 dirty 삭제, 임의 stash drop. 무관 dirty 금지. push 전 다시 fetch로 divergence 확인.
+
+---
+
+### 작업 중 보고 / 최종 보고
+
+중간 보고는 단계가 바뀔 때만:
+
+```
+STATUS
+ACTIVE TASK — TASK_ID, branch, current BPQ
+BASELINE — 재사용 / 부분 / GAP / 중복
+CURRENT CHANGE — 무엇을 연결 중인지
+TEST — 실행, PASS/FAIL
+BLOCKER — 있으면 구체적으로
+```
+
+구현 세션 최종 보고는 반드시:
+
+```
+STATUS
+TASK — 어떤 기존 TASK에 통합했는지 / TASK.md 변경사항 / historical instruction 보존 여부
+BASELINE — IMPLEMENTED / PARTIAL / PLACEHOLDER / DUPLICATED / NOT_IMPLEMENTED
+ARCHITECTURE — REUSED / EXTENDED / CREATED / REMOVED/MERGED / 왜 신규 시스템이 아닌지
+FACT MODEL — verification / semantic / 0·missing·unknown·conflict·not-applicable
+SOURCE — resolution policy / provenance / page·location
+CONTEXT — section context projection / production caller
+DEPENDENCY — tracking / STALE / selective invalidation
+WRITER — structured output / self-check / schema validation
+HUMAN REVIEW — generated/edit/approval / QA 재실행
+QA — fact numeric date Actual/Plan source conflict PSST LRule format Finalizer
+REPLAY — version/hash / intermediate trace
+GOLDEN CASE — MarketGate input / 단계별 expected / AIMY leakage
+E2E — 실제 production path
+TEST — 신규 수 / 관련 / 전체 regression / 실패·skipped
+METRICS — Coverage / Source 연결 / Unsupported / Numeric / Actual-Plan / Format / 측정 불가
+BLOCKERS
+CHANGED FILES
+GIT — base branch commit PR checks merge 여부
+REQUEST_SOLVED — YES/NO + 사용자 요구사항별 근거
+```
+
+최종 판단 3가지: (1) 기존 architecture를 버리고 새 시스템을 만들지 않는다. (2) 문장 품질보다 Fact/Numeric/Source/Actual·Plan/Conflict/Program requirement/Cross-section consistency. (3) 상위 입력이 변경되었는데 과거 산출물이 최신인 것처럼 FINAL되는 것을 구조적으로 불가능하게 한다.
+
+---
+
+### 이 블록 등록 세션의 DONE
+
+REQUEST_SOLVED(이번 TASK.md 반영 세션)= 이 실행지시가 `origin/main` 계열 루트 `TASK.md`의 T-20260814-02 아래에 있고, 관련 BPQ에 중복 없이 배치되었으며, 역사 원문·AW/T LIST가 보존되고, 제품 코드 0줄. **BPQ-00 구현·E2E·FINAL 산출은 이번 세션 DONE이 아니다.**
+
+다음 구현 세션 첫 작업: `origin/main` 재fetch 후 **BPQ-00 Baseline Audit** (표 작성 + production caller 확인). 새 클래스부터 만들지 말 것.
+
+나중 요청(`요청 한 장 — 2026-08-16`)이 덮음: 공고+빈 양식이 오기 전, 대기 해제 전까지 BPQ-00 **제품 코드** 시작 금지. 이미 기록된 BPQ-00 감사 표는 유지. 재감사를 이유로 대기를 풀지 말 것.
+
+더 나중 요청(`계획 보강 — 2026-08-16`)이 덮음: P 개발 중에는 Problem만(요청 한 장). P 완료 후 최우선. 다음 엔진 작업은 PR #150을 더 만지는 것이 아니라 실문서 3 HWP × Golden 41 Baseline. CompanyMaster EXTEND를 다음으로 두지 말 것.
+
+---
+
+### 현재 위치 (이 TASK.md 반영 세션이 끝난 뒤의 개발 위치)
+
+```
+설계/요구사항 도출                 완료 (2026-08-14 T-20260814-02 명세)
+implementation prompt 작성         완료 (사용자, 2026-08-16)
+TASK.md 반영 ([1]~[3])             ← 이 세션. 코드 구현 아님
+──────────────────────────────────
+다음 구현 세션부터:
+[4] Baseline Audit
+[5] 기존 BPQ-00~13 안 코드 구현
+[6] 단위/통합/회귀 테스트
+[7] MarketGate Golden E2E
+[8] 구현 에이전트 최종보고 전체
+[9] 그 최종보고를 사용자에게 그대로 전달 (축약 금지)
+[10] 사용자 GitHub 독립 검수 (아래 대조표)
+[11]~[14] 수정지시 → 수정 → 재전달 → 재검수 반복
+[15] main 병합
+[16] 병합된 main 기준 전체 regression
+[17] 실제 사업계획서 파일 사용자 Acceptance Test
+[18] 오류 → LRule / deterministic QA / QualityProfile / fixture + regression → 같은 문서 재생성
+[19] 다음 양식 테스트
+```
+
+나중 요청(`요청 한 장 — 2026-08-16`)이 덮음: 위 `[4]`~`[5]` 제품 코드는 공고+빈 양식이 오기 전·대기 해제 전까지 시작 금지. 파일 온 뒤에는 Problem 모듈부터 초안 1건. 이미 기록된 BPQ-00 감사 표는 유지.
+
+더 나중 요청(`계획 보강 — 2026-08-16`)이 덮음: 위 「파일 온 뒤에는 Problem 모듈부터」는 **P 개발 중**에만 해당. P 완료 후에는 최우선(가능 파트 즉시 작성). 공고+양식 오기 전 초안 금지는 유지. 다음 엔진 작업의 첫 실측은 3 HWP × Golden 41 Baseline.
+
+auto_write의 최종 목적은 테스트 숫자가 아니라 **실제 지원사업 양식을 제대로 작성하는 것**이다. 코드 검수를 통과해도 [17]~[18] 없이 끝내지 않는다.
+
+---
+
+### 사용자 GitHub 독립 검수 대조표 ([10]. 구현 세션 이후)
+
+구현 에이전트 보고를 신뢰 평가의 근거로 쓰지 않는다. 사용자가 `@GitHub auto_write` 원본을 직접 보고 다음을 대조한다.
+
+```
+에이전트 주장
+    ↕
+TASK.md 요구사항 (본 T-20260814-02 + 해당 BPQ)
+    ↕
+실제 GitHub 코드
+    ↕
+production caller
+    ↕
+실제 테스트
+```
+
+검수 질문 (하나라도 NO면 구현 완료가 아니다):
+
+- 보고한 코드가 진짜 있는가 (파일·심볼·커밋이 GitHub에 있는가)
+- production caller가 연결됐는가 (helper만 추가하고 호출 경로가 없으면 미완)
+- 테스트가 실제 의미 있는가 (production path에 도달하는가. skip/xfail/assertion 약화/가짜 fixture로 숫자 채우기 금지)
+- TASK 요구를 빠뜨리지 않았는가
+- 새 병렬 시스템을 만들지 않았는가 (`*V2`, 별도 business-plan app, 별도 dashboard, 별도 FactGraph 정본)
+
+코드 파일이 생겼다고 구현 완료로 인정하지 않는다. 증명 사슬:
+
+```
+definition exists
+→ production caller exists
+→ runtime path reaches it
+→ failure path blocks correctly
+→ test reaches production path
+```
+
+구현 세션이 끝나면 최종보고 **전체**를 사용자에게 그대로 전달한다. 중간에서 세세하게 개입하지 않되, 첫 구현 답변에서 반드시 확인할 것: **새 시스템을 만들지 말고, 기존 production architecture를 조사한 뒤 REUSE → EXTEND → ONLY-IF-GAP CREATE로 진행. T-20260814-02 / BPQ-00~13 안에서 작업.**
+
+---
+
+### 실제 파일 Acceptance Test + 오류 환류 ([17]~[18]. main 병합 이후)
+
+코드 검수 통과 ≠ 종료. 마지막에는 진짜 파일로 시험한다.
+
+예시 테스트 1:
+
+```
+MarketGate 기업자료
++ 실제 지원사업 공고문
++ 실제 빈 HWP/HWPX 양식
+        ↓
+auto_write 실행
+        ↓
+완성 사업계획서
+```
+
+사람이 결과물을 보면서 확인:
+
+- 문항을 제대로 이해했나?
+- 기업 사실을 틀리게 썼나?
+- 계획을 실적으로 썼나?
+- 숫자가 서로 맞나?
+- 출처가 맞나?
+- 빈칸은 왜 비었나?
+- 양식을 망가뜨렸나?
+- 문장 품질이 실제 제출 가능한가?
+
+여기에서 발견된 오류를 수동 수정하고 끝내지 않는다.
+
+```
+실제 오류 발견
+→ 원인 분류
+→ LRule 또는 deterministic QA 또는 QualityProfile 또는 fixture 추가
+→ regression test 추가
+→ 수정
+→ 같은 문서 재생성
+```
+
+이 루프가 쌓여야 auto_write가 실제로 좋아진다. 환류 위치: 내용 Hard Rule → BPQ-10/AW-008 LRule, 결정론 검사 → BPQ-12, 작성 전략 → BPQ-06, 재현 fixture → BPQ-08/BPQ-13. 새 Epic을 만들지 않는다.
+
+---
+
+### BPQ-00~13 배치표 (전문은 위 블록. 아래 표는 중복 없는 위치 안내)
+
+역사 블록의 기존 BPQ 불릿은 삭제하지 않는다. 각 BPQ DETAILS 끝에 `2026-08-16 실행지시 추가` 한 줄을 붙인다. 본 표와 그 한 줄은 위 전문을 대체하지 않는다.
+
+| 항목 | 이 실행지시에서 추가로 맡는 것 | 하지 않는 것 |
+|---|---|---|
+| BPQ-00 | 다음 구현 세션 Baseline Audit 표 + production caller + 정본 경로 재확인 | 이 TASK.md 반영 세션에서 Audit 실행 |
+| BPQ-01 | AIMY는 Quality Pattern benchmark만. 사실 source 금지 | AIMY 고유 사실을 Golden/생성 컨텍스트에 넣기 |
+| BPQ-02 | Verification vs Semantic 직교. `0`/`NONE`/`UNKNOWN`/`CONFLICT`/`PLAN`/`NOT_APPLICABLE` 을 `""` 하나로 표현 금지 | PLAN을 CONFIRMED와 한 enum에 섞기 |
+| BPQ-03 | fact_id 계약, PAGE_UNKNOWN, 가짜 페이지 금지. `company_extract` 확장 | 병렬 FactGraph 정본 |
+| BPQ-04 | Source resolution(절대 winner table 아님), conflict queue, AI auto-resolution=0, candidate 보존 + resolution provenance | LLM이 CONFLICT winner 선택 |
+| BPQ-05 | evaluation/page/char/evidence/table-image/section constraints를 ProgramSpec/FormSpec에 | 공고 종류별 하드코딩 파서 |
+| BPQ-06 | LRule ≠ QualityProfile ≠ PromptTemplate. 프로필에 AIMY 사실값 금지. version/hash | Prompt 수정으로 LRule 우회 |
+| BPQ-07 | SectionContextPack projection (required/allowed/forbidden facts, deps). 기존 planner/writer 경로 | 병렬 writer pipeline |
+| BPQ-08 | 단계별 fixture (byte 동등만으로 Golden 판정 금지). AIMY leakage=0. Blind=생성 컨텍스트에 사람 완성본 금지 | 최종 DOCX byte-equality만 |
+| BPQ-09 | 전사(`cross_form_autofill` KEEP) vs 재작성 분리. Blind | 전사 성공을 재작성 성공으로 보고 |
+| BPQ-10 | [18] 오류를 기존 L 레지스트리로 승격. AW-003/AW-008과 파일 충돌 시 순차 | L0.md~L4.md 신설 |
+| BPQ-11 | schema 검증된 structured draft만 renderer. render 후 artifact QA | 빈 DOCX를 새로 만들어 양식 버림 |
+| BPQ-12 | Self-check 비권위. deterministic QA chain. fail-closed. 측정 불가면 MEASUREMENT_NOT_IMPLEMENTED | LLM score 하나로 QA 대체 |
+| BPQ-13 | STALE 선택적 무효화 회귀(테스트 G/H/I). Acceptance 오류 → fixture | 합성 공고로 100건 채우기 |
+| AW-005 | 1순위 UX: 공고+빈 양식 먼저, 기존 계획서 선택, 가능 파트 즉시 미리보기, 부족한 정보만 요청. 서술 생성 허용+`생성` 인지. **파일 오기 전 초안 금지. P 개발 중에는 Problem만(요청 한 장). P 완료 후는 최우선이 이긴다. 사업자등록증은 첫 화면 필수 아님.** 웹 첫 화면=공고+양식(1파일 가능), 파트만 작성, 칸=양식 대목차 | 첫 화면에 자료 업로드칸 다 펼치기, 설문 먼저, 생성본을 출처 사실처럼 표시, 공고·양식 없이 초안/BPQ-00·웹앱 코드 시작, 사업자등록증을 첫 화면 게이트로 쓰기, 신규 작성을 별도 제품으로 쪼개기 |
+| AW-009 | 실행 정본=`웹앱 최종 요구사항_20260816`. 승인 전 웹앱 코드 대기 | 2026-08-14 사양만으로 웹앱 코딩, P0 미완에 업무흐름 고도화, 제출가능 자동판정 UI |
+| AW-004 | 기존 operator console EXTEND | 새 dashboard, AW-004 LIST/DETAILS 원문 합치기 |
+| AW-001 | DomainRouter → LRule → Finalizer KEEP 통과 | 우회 FINAL |
+
+구현 순서 권장 흐름이 역사 의존 `00 → 01 → 02 → 03 → 04 → 06 → 05 → 07 → 11 → 12 → 08 → 09 → 10 → 13` 과 충돌하면 **기존 TASK dependency가 이긴다.**
+
+Audit 이후 기능별 조치는 위 BPQ 순서와 별개로 **조치 우선순위**를 따른다: `REUSE → DELETE/MERGE → EXTEND → CREATE ONLY IF GAP → DO NOT TOUCH`. 최우선은 PARTIAL → IMPLEMENTED. PLACEHOLDER는 MERGE/DELETE 우선. NOT_IMPLEMENTED CREATE는 필수 GAP만. PARTIAL 우회용 신규 시스템 금지.
+
+## T-20260814-03
+
+TASK_ID: T-20260814-03
+WORK_BRANCH: cursor/cherry-pick-overnight-lanes-2036
+BASE: origin/main
+STATUS_THIS_TURN: 이식 준비. main 머지 금지.
+
+### 8-1. 사용자 원문
+체리픽 이식 준비만해. 최신 origin/main 기준으로 다시 이식 준비만.
+
+### MUST
+- [x] 최신 origin/main에서 작업 브랜치 생성
+- [x] `9f61718` runtime-wiring 체리픽
+- [x] `16a60b0` E2E 확장 체리픽
+- [x] `7840896` 스킵 (16a60b0과 동일 patch-id)
+- [x] `c9f4503` 스킵 (`from app.resume_fill` 은 pythonpath=app 에서 역의존을 고치지 않음)
+- [x] 깨진 `from .lrule_enforcer` 를 `auto_write.services` 정본 import 로 교정
+- [ ] main 머지 하지 않음 (준비만)
+
+### KEEP
+- AW-001~AW-008, T-20260814-01, T-20260814-02 내용 합치지 않음
+- 기존 origin/main baseline 실패(L001 래퍼 파일 검사, resume_extract `__all__` 등)를 이 PR에서 고치지 않음
+
+### FORBIDDEN
+- main 머지
+- force push / reset --hard
+- `git add -A`
+- 동일 패치 이중 체리픽
+
+### VERIFY
+- [x] 브랜치가 origin/main 위에 있음
+- [x] autopilot 이 `auto_write.services.lrule_enforcer` / `finalizer` 를 import
+- [x] E2E 15 + LRule + Finalizer + 이번 변경 관련 autopilot 테스트 통과
+- [x] draft PR, MAIN_MERGED=NO
+
+### DONE
+REQUEST_SOLVED=YES(이번 턴): 최신 main 기준 이식 브랜치 + draft PR. 머지와 AW-001 실사용 E2E는 다음 턴.
+
+## T-20260815-01
+
+TASK_ID: T-20260815-01
+WORK_BRANCH: cursor/absorb-stale-branches-2036
+BASE: origin/main
+TASK_START_SHA: 9cffb2459532acc1fc5f8aba125219850f3fe654
+TASK_BLOB_SHA: 665c4ddc8dfca8147cb2bc03e927fd6fad5a0973
+STATUS_THIS_TURN: 고유 커밋 체리픽 + 삭제 가능 원격 정리. main 머지 금지.
+
+### 8-1. 사용자 원문
+체리픽하고 지울수있믄것 작업해
+
+### MUST
+- [x] 최신 origin/main(`9cffb24`)에서 작업 브랜치 생성
+- [x] `d5980f38` git-sync push 검증/롤백 체리픽 (PR #131은 `web/operator-console-20260811`에만 머지되어 main에 없음)
+- [x] `dcccff67` OO/◈·붙임1 스킵 (정본 `core.docx.services.cross_form_autofill` / hwpx_form_extract 테스트가 이미 main)
+- [x] `1ac2cac5` M4 스킵 (generate_missing / m4 CLI 테스트가 이미 main)
+- [x] leftover squash SHA(`refactor/*`, `ci/merge-gate-20260813`, `docs/task-T-20260814-02`) 재체리픽 금지
+- [x] 삭제 가능 원격 브랜치 삭제 (open PR head·`backup/*` 제외) — 21개
+- [x] main 머지 하지 않음
+
+### KEEP
+- 열린 PR 브랜치: #138 #136 #133 #132 #139
+- `backup/WIN-K20QOC29TOB`, `backup/omc-lessons-md`
+- AW-001~AW-008, T-20260814-01, T-20260814-02 내용 합치지 않음
+
+### FORBIDDEN
+- main 머지
+- force push / reset --hard / `git add -A`
+- open PR head 삭제
+- backup 브랜치 삭제
+- TASK.md 를 옛 `docs/task-T-20260814-02` 내용으로 덮어쓰기
+
+### VERIFY
+- [x] `git_sync_service.py` 에 `_push_branch_verified` / `_remote_branch_matches`
+- [x] `test_operator_console.py` 19 passed
+- [x] 삭제 대상 원격이 없고, open PR·backup 은 유지
+- [x] draft PR #140, MAIN_MERGED=NO
+
+### DONE
+REQUEST_SOLVED=YES(이번 턴): 고유 커밋은 이식 브랜치에 있고, 이미 main에 흡수된 원격은 삭제됨. git-sync PR 머지는 다음 턴.
+
+## T-20260816-01
+
+TASK_ID: T-20260816-01
+WORK_BRANCH: cursor/combine-open-drafts-2036
+BASE: origin/main
+TASK_START_SHA: 7a2dc5aea1e3d06a204f265408ea20daf2e563fc
+TASK_BLOB_SHA: 1d01442d6ba52adbb4a333079fda0e3b9beacdfa
+STATUS_THIS_TURN: 추천 3PR을 한 브랜치로 합침. 머지 금지.
+
+### 8-1. 사용자 원문
+추천대로. 근데머지 여러번에 하지말고 한번에 하게 일단 고치기만해
+
+### MUST
+- [x] 최신 origin/main(`7a2dc5a`)에서 작업 브랜치 생성
+- [x] #138 gitignore + L154~L156 스킬 흡수
+- [x] #139 BPQ 인사이트 문서 흡수 (`RESUME.md` SHA를 현재 main 기준으로 맞춤)
+- [x] #133 원장 A6 + STAR-Exploration을 같은 `RESUME.md`에 합침 (두 PR이 앞부분을 덮지 않게)
+- [x] #132 AW-009 · #136 clone 헬퍼는 넣지 않음 (TASK ID/충돌)
+- [x] `backup/*` 유지
+- [x] 한 번 머지: PR #141 squash `c28be6d` (2026-08-16T05:19:25Z). MAIN_MERGED=YES
+
+### KEEP
+- AW-001~AW-008, T-20260814-01, T-20260814-02 본문 합치지 않음
+- T-20260814-02 DETAILS 키워드 삽입하지 않음
+- 기존 draft #132 #136 닫지 않음
+
+### FORBIDDEN
+- 여러 PR을 따로 머지
+- 이번 턴 main 머지
+- force push / reset --hard / `git add -A`
+- #132/#136을 충돌 상태로 합치기
+- backup 브랜치 삭제
+
+### VERIFY
+- [x] 한 브랜치에 #138+#133+#139 고유 내용이 있음
+- [x] `RESUME.md`에 STAR-Exploration과 BPQ 포인터가 함께 있음
+- [x] draft PR #141 squash-merged `c28be6d`, MAIN_MERGED=YES
+
+### DONE
+REQUEST_SOLVED=YES: #138+#133+#139 합본이 origin/main `c28be6d`에 있다.
+
+## T-20260816-02
+
+TASK_ID: T-20260816-02
+WORK_BRANCH: cursor/revive-open-drafts-2036
+BASE: origin/main
+STATUS_THIS_TURN: #136 clone 헬퍼를 새 ID로 이식. 옛 T-20260814-03(야간 A~H)과 충돌 없음.
+
+### 8-1. 사용자 원문
+git clone
+
+### 최종 결과
+비개발자가 GitHub `pds2225/auto_write` 를 기존 폴더를 덮어쓰지 않고 받을 수 있다.
+
+### MUST
+- clone URL: `https://github.com/pds2225/auto_write.git`
+- Windows 기본 대상: `D:\auto_write`
+- 대상이 이미 같은 저장소면 재clone하지 않고 안내
+- 대상이 비어 있지 않거나 다른 저장소면 중단. 삭제·덮어쓰기 금지
+- README에 처음 받는 명령이 있다
+
+### KEEP
+- 기존 Git sync / force-push 금지 규칙
+- 기존 `T-20260814-03` (야간 A~H 체리픽) ID를 덮어쓰지 않음
+
+### FORBIDDEN
+- `git reset --hard` / force push / `git clean -fd`
+- 기존 `D:\auto_write` 삭제
+- secret / .env 출력
+
+### VERIFY
+- 로컬 clone 테스트
+- 같은 저장소 재실행 = already_present
+- 비어 있지 않은 폴더 / 다른 저장소 = CloneError
+
+### DONE
+REQUEST_SOLVED=YES: clone 도구가 동작하고 기존 폴더를 덮어쓰지 않는다. (코드+단위테스트)
+
+## T-20260816-03
+
+TASK_ID: T-20260816-03
+WORK_BRANCH: cursor/revive-open-drafts-2036
+BASE: origin/main
+
+### 8-1. 사용자 원문
+다되면 로컬-pc리모트컨트롤
+
+### 최종 결과
+git clone이 끝난 뒤 Windows 로컬 PC에서 더블클릭 한 번으로 Cursor My Machines 또는 Claude Code Remote Control이 켜진다.
+
+### MUST
+- clone이 끝난 `D:\auto_write` 에서만 시작
+- 기존 폴더 덮어쓰기·삭제 금지
+- Cursor `agent worker start --name auto-write-pc` 우선, 없으면 `claude remote-control`
+- 클라우드 VM에서 D:\ 에 붙지 못하면 정직하게 안내
+- operator console 을 외부에 열지 않음
+
+### KEEP
+- T-20260816-02 clone 도구
+- Git force-push 금지
+
+### FORBIDDEN
+- 로컬 PC에 무단 원격 접속 도구 설치
+- API key / .env 출력
+- operator console 원격 바인딩
+
+### VERIFY
+- checkout 없으면 시작 거부
+- mock runner로 실제 워커 미기동
+
+### DONE
+REQUEST_SOLVED=YES는 PC에서 `remote_control.bat` 가 실제로 켜졌을 때만. 클라우드만으로는 YES 금지. LIST는 `[ ]`.
+
+## T-20260816-04
+
+TASK_ID: T-20260816-04
+WORK_BRANCH: cursor/revive-open-drafts-2036
+BASE: origin/main
+TASK_START_SHA: c28be6d3f6ccdedba488d989fad3430e09be37c0
+TASK_BLOB_SHA: 244ec6b81ae6d0bb62db0a7504b588e2839abc35
+STATUS_THIS_TURN: 132/136 살림 + TASK/RESUME 정합. T-20260814-02 본문 미수정. 머지 금지.
+
+### 8-1. 사용자 원문
+132 리베이스해서 살려 / 136 ID 고쳐서 살려 / 지우지 않음 / TASK 체크랑 RESUME만 고쳐 / 보호 설정 확인해 [x] 할지 막아인지 보고 / T-20260814-02 TASK에 반영하기전에 나한테 내용보고해
+
+### MUST
+- [x] #132 AW-009를 현재 TASK.md에 충돌 없이 이식
+- [x] #136 clone/remote를 T-20260816-02/03으로 이식 (T-20260814-03 야간 ID 유지)
+- [x] `backup/*` 삭제 금지
+- [x] T-20260816-01 LIST `[x]`, #141 머지 SHA 기록
+- [x] RESUME.md를 `c28be6d` / #141 완료로 고침
+- [x] 브랜치 보호는 증명되는 범위만 보고. 거짓 `[x]` 금지
+- [x] T-20260814-02 DETAILS에 BPQ 키워드를 넣지 않음 (채팅 보고만)
+- [ ] 이번 턴 main 머지 금지
+
+### KEEP
+- T-20260814-01 `[~]` (보호 API 403으로 enforce_admins 미증명)
+- T-20260814-02 본문
+- 기존 draft #132 #136 브랜치 (force-push로 덮지 않음)
+
+### FORBIDDEN
+- force push / reset --hard / `git add -A`
+- backup 삭제
+- T-20260814-02 본문 키워드 삽입
+- T-20260814-01을 증거 없이 `[x]`
+
+### VERIFY
+- [x] clone 단위테스트 통과 (24 passed)
+- [x] draft PR #142, 이후 squash-merge `d6d530e`. MAIN_MERGED=YES
+
+### DONE
+REQUEST_SOLVED=YES: 132/136 내용이 #142로 origin/main `d6d530e`에 들어갔다.
+
+## T-20260816-05
+
+TASK_ID: T-20260816-05
+WORK_BRANCH: cursor/t20260814-02-bpq-keywords-2036
+BASE: origin/main
+TASK_START_SHA: d6d530e60d002808cb320a74dd2fd82546803b84
+TASK_BLOB_SHA: 042b3cd904116bf5524d01a3ffad3990bd5c12f8
+STATUS_THIS_TURN: T-20260814-02 기존 6개 워크스트림에 키워드만 추가. 구현·머지 금지. LIST `[~]`.
+
+### 8-1. 사용자 원문
+task에 반영해
+
+(직전 채팅에서 보고한 내용만. 새 Epic / 제품코드 / 테스트 / #143 797줄 덤프는 아님.)
+
+### MUST
+- [x] T-20260814-02 LIST는 `[ ]` 유지 (명세 보강이지 구현 시작 아님)
+- [x] 목표 파이프라인에 단계 계약 한 줄 추가. 기존 ASCII 흐름은 삭제하지 않음
+- [x] BPQ-02: FactState, source precedence, Actual/Plan/Unknown/Conflict를 `""`로 합치지 않음
+- [x] BPQ-03: SectionContextPack, 의존 그래프, STALE 전파
+- [x] BPQ-07: 섹션 입력 계약, required/forbidden facts, evidence, QualityProfile vs LRule vs PromptTemplate, prompt template version
+- [x] BPQ-08: Stage 단위 expected fixture. Golden을 최종 DOCX 바이트만으로 판정하지 않음
+- [x] BPQ-12: Writer self-check → schema → factual/numeric → LRule → layout → Finalizer. LLM 점수는 게이트 아님
+- [x] BPQ-13: 상류 fact 변경 → STALE → 재생성 → 숫자 정합
+- [x] 8-1 원문·AW-001~009 원문 미수정
+- [ ] 이번 턴 main 머지 금지
+
+### KEEP
+- T-20260814-02 역사적 명세(8-1, MUST 14, BPQ-00~13 기존 불릿)
+- T-20260814-01 `[~]`
+- draft #143 (`cursor/t20260814-02-impl-instruction-2036`) — 본 TASK가 그 PR을 머지·대체하지 않음
+
+### FORBIDDEN
+- 새 Epic / `*V2` 클래스 / 제품 코드 / 테스트 코드
+- AIMY 기업 사실·숫자, HTML API 키를 TASK에 넣기
+- BPQ-00~01, 04~06, 09~11에 키워드 삽입(이번 승인 범위 밖)
+- T-20260814-02 LIST를 `[x]` 또는 `[~]`로 바꾸기
+- #143 squash-merge
+- force push / reset --hard / `git add -A`
+
+### VERIFY
+- diff = TASK.md only
+- T-20260814-02 LIST 줄이 `[ ]` 로 남아 있음
+- `### 8-1. 사용자 원문` 아래 2026-08-14 원문 블록이 그대로
+
+### DONE
+REQUEST_SOLVED=YES(이번 턴): 보고한 키워드가 T-20260814-02 DETAILS의 해당 6개 워크스트림에 들어가 있다. 이후 `병합해`로 #144 squash-merge (`e8ac939`). MAIN_MERGED=YES.
+
+## T-20260816-06
+
+TASK_ID: T-20260816-06
+WORK_BRANCH: cursor/t20260814-02-bpq-keywords-2036
+BASE: origin/main
+TASK_START_SHA: d6d530e60d002808cb320a74dd2fd82546803b84
+STATUS_THIS_TURN: T-20260814-01을 사용자 지시로 닫음. 설정 화면 확인 요청 없음.
+
+### 8-1. 사용자 원문
+5. 보호 설정 — [x] 하면 안 됨, 막힌 것도 아님 ㅇㅣ건 뭔소린지 모르겠어 알아서 처리하고 작업한걸로쳐
+
+### MUST
+- [x] 보호 상태를 다시 확인 (public, protected, docs-gate, API 권한)
+- [x] T-20260814-01 LIST를 `[x]`로 바꾸고, 비개발자가 읽게 한 줄로 고침
+- [x] `[!]`(막힘)으로 표시하지 않음
+- [x] 사용자에게 GitHub Settings 확인을 다시 시키지 않음
+- [x] TASK.md §17의 증명 안 된 `enforce_admins=true` 문장을 고침
+- [ ] 이번 턴 main 머지 금지 (`병합해` 전까지)
+
+### KEEP
+- T-20260814-01 8-1 원문
+- `--admin` 금지, mail 금지
+- T-20260814-02 LIST `[ ]`
+
+### FORBIDDEN
+- 없는 test job 이름을 required에 넣기
+- `gh pr merge --admin`
+- force push / `git add -A`
+- 보호 API 403을 `[!]`로 올려 사용자에게 설정 숙제를 남기기
+
+### VERIFY
+- `gh repo view` visibility=PUBLIC
+- `branches/main` protected=true
+- `GET/PUT .../protection` → 403
+- LIST `T-20260814-01` 이 `[x]`
+
+### DONE
+REQUEST_SOLVED=YES: 보호 할 일은 확인된 범위까지 처리했고 LIST에서 끝냈다. 사용자는 더 할 일 없음. 이후 `병합해`로 #144 머지. MAIN_MERGED=YES.
+
+## T-20260816-07
+
+TASK_ID: T-20260816-07
+WORK_BRANCH: cursor/bpq-00-baseline-audit-2036
+BASE: origin/main
+TASK_START_SHA: 95a0f63c398a2c250b0cd2cf1639b92116fa5846
+STATUS_THIS_TURN: 흡수된 원격 브랜치 삭제. backup 유지. #146(BPQ-00 감사)은 고유 내용이라 유지.
+
+### 8-1. 사용자 원문
+남은 브랜치 정리
+
+### MUST
+- [x] `backup/*` 삭제 금지
+- [x] #145 고유 1줄(#139/#143 충돌해소 메모)을 #146 브랜치 TASK.md에 흡수
+- [x] 중복 draft #145 닫기
+- [x] 흡수된 `cursor/t20260814-02-impl-instruction-2036` 원격 삭제
+- [x] 로컬 gone 브랜치 삭제
+- [x] #146 BPQ-00 감사 브랜치는 지우지 않음 (main에 아직 없음) → 이후 타세션이 #146을 `9efd78e`로 머지. 원격 브랜치는 GitHub가 삭제
+- [x] 이번 턴 이후 main 머지는 타세션 #146으로 완료
+
+### KEEP
+- `origin/main`
+- `origin/backup/WIN-K20QOC29TOB`
+- `origin/backup/omc-lessons-md`
+
+### FORBIDDEN
+- backup 삭제
+- force push / `git add -A` / `reset --hard`
+- 고유 미머지 커밋이 있는 브랜치를 확인 없이 삭제
+- 닫힌 #139 재오픈·재머지
+
+### VERIFY
+- [x] 원격 목록 = main + backup 2개
+- [x] #145 CLOSED
+- [x] #146 MERGED `9efd78e`
+- [x] #139 재머지 없음
+
+### DONE
+REQUEST_SOLVED=YES: 흡수된 원격은 지웠고, BPQ-00 감사는 #146으로 origin/main `9efd78e`에 있다. MAIN_MERGED=YES. backup 유지.
+
+## T-20260816-08
+
+TASK_ID: T-20260816-08
+WORK_BRANCH: cursor/combine-open-drafts-c7c0
+BASE: origin/main
+TASK_START_SHA: 0a8b262c6afd626dd8b083caa28012a063205c28
+STATUS_THIS_TURN: #156 squash `1001b76`. #155는 이미 main `ddac657`. MAIN_MERGED=YES.
+
+### 8-1. 사용자 원문
+지금PR정리
+
+나중 요청: 병합
+
+### MUST
+- [x] 최신 origin/main(`0a8b262`)에서 작업 브랜치 생성
+- [x] #149 AW-009 웹앱 최종 사양서 흡수
+- [x] #152 계획 보강(P개발중 vs 최우선, 증빙 UX, 3 HWP Baseline) 흡수
+- [x] #153 STEP 3A matcher 2파일 흡수
+- [x] #154 STEP2 출력 계약·Golden·비개발자 리포트 흡수
+- [x] TASK.md 충돌은 양쪽 고유 문단을 모두 유지
+- [x] 낡은 #151(RESUME `fd5269a` 체크포인트) 닫기
+- [x] 흡수된 #149 #152 #153 #154 닫고 합본 PR로 안내
+- [x] #155 GitSyncService는 이 세션이 머지하지 않음 → 타세션이 `ddac657`로 main 머지
+- [x] `backup/*` 유지
+- [x] origin/main(`ddac657`, #155)을 합본 브랜치에 합침 (충돌 0)
+- [x] #156 squash `--auto` `1001b76` (Checks 초록, `--admin` 없음)
+
+### KEEP
+- AW-001~AW-008, T-20260814-02 본문 합치지 않음
+- `origin/backup/WIN-K20QOC29TOB`, `origin/backup/omc-lessons-md`
+- 웹앱 제품 코드 대기(승인 전)
+
+### FORBIDDEN
+- #155를 이 세션에서 다시 머지
+- force push / reset --hard / `git add -A`
+- `gh pr merge --admin`
+- backup 브랜치 삭제
+- Golden 41 추측 재구성 / Writer·HWP 렌더 추가
+
+### VERIFY
+- [x] 한 브랜치에 #149+#152+#153+#154 고유 내용이 있음
+- [x] #151 CLOSED (낡은 RESUME)
+- [x] #149 #152 #153 #154 CLOSED
+- [x] #155 MERGED `ddac657` (타세션)
+- [x] matcher/contract/golden 테스트 PASS (33 passed)
+- [x] 합본 PR #156 squash `1001b76`, MAIN_MERGED=YES
+
+### DONE
+REQUEST_SOLVED=YES: 합본이 origin/main `1001b76`에 있다. #155는 `ddac657`. 열린 PR 0. backup 유지. MAIN_MERGED=YES.
+
+# 9. 실제사용 시나리오
+
+TASK 완료 전에 반드시 실제 사용자 관점으로 검증한다.
+
+해당 TASK DETAILS의 최종 결과·구현범위와 함께 적용한다.
+
+## USER FLOW
+
+사용자 시작점:
+화면 / CLI / 이메일 / API / 파일 등 실제 진입점
+
+사용자 행동:
+1. 사용자가 실제로 하는 행동
+2. 다음 행동
+3. 다음 행동
+
+시스템 처리:
+실제 production 경로 (mock-only로 대체하지 않음)
+
+사용자 최종 결과:
+사용자가 실제 보게 되는 것
+
+## 핵심 질문
+
+`이 결과가 사용자의 최초 요청을 실제로 해결했는가?`
+
+YES가 아니면 DONE 금지.
+
+---
+
+# 10. VERIFY — 해결 여부 검증
+
+사용자 요청과 결과를 1:1로 대조한다.
+
+| 사용자 요구 | 실제 결과 | 판정 |
+|---|---|---|
+| DETAILS의 MUST 항목 | 실제 결과 | PASS/FAIL |
+
+하나라도 필수 요구가 FAIL이면:
+
+`REQUEST_SOLVED = NO`
+
+---
+
+# 11. 실사용 E2E
+
+최소 1개의 실제 사용자 흐름을 처음부터 끝까지 실행한다.
+
+원칙:
+
+- 단위 테스트만으로 대체 금지
+- mock-only 검증만으로 DONE 금지
+- 가능한 실제 runtime/production entrypoint 사용
+- 실제 외부 유료 호출이나 위험 작업은 안전한 staging/dry-run/preview 사용
+
+E2E 결과:
+
+USER_E2E: PASS | FAIL | BLOCKED
+
+근거:
+명령 / 화면 / 산출물 / preview / API 결과
+
+---
+
+# 12. 테스트
+
+실사용 검증을 보조하는 테스트를 수행한다.
+
+최소:
+
+- 정상경로
+- 주요 경계값
+- 입력검증
+- 빈상태
+- 주요 오류
+- 변경한 기능 단위 테스트
+- 관련 integration test
+
+테스트 PASS만으로 DONE 처리하지 않는다.
+
+---
+
+# 13. 회귀검증
+
+이번 변경 때문에 기존 핵심 기능이 깨지지 않았는지 확인한다.
+
+- [ ] 기존 핵심 사용자 흐름
+- [ ] 관련 API
+- [ ] 인증/권한
+- [ ] DB 계약
+- [ ] 기존 사용자 데이터
+- [ ] 기존 자동화
+- [ ] 기존 주요 테스트
+
+관련 없는 전체 제품 고도화는 하지 않는다.
+
+---
+
+# 14. 문서동기화
+
+실제 구현과 문서가 달라진 경우에만 최소 수정:
+
+- README
+- TASK 관련 문서
+- ARCHITECTURE
+- 운영문서
+- 테스트/사용법 문서
+
+거짓 DONE 기록을 남기지 않는다.
+
+---
+
+# 15. DONE 기준 — 실제 사용자 요청 해결 기준
+
+## 절대 원칙
+
+다음은 단독으로 DONE 근거가 아니다.
+
+- 코드 작성 완료
+- 테스트 PASS
+- build PASS
+- 오류 없음
+- commit 존재
+- PR 생성
+- 화면이 열림
+
+## DONE
+
+다음을 모두 만족해야 한다.
+
+- [ ] 사용자의 필수 요청사항 전부 해결
+- [ ] `REQUEST_SOLVED = YES`
+- [ ] 실제 사용자 E2E PASS
+- [ ] 사용자가 원하는 최종 결과 확인
+- [ ] 필요한 입력/빈/로딩/오류상태 사용 가능
+- [ ] 기존 핵심 기능 회귀 없음
+- [ ] 금지사항 위반 없음
+- [ ] 필요한 문서 동기화
+- [ ] commit 완료
+- [ ] push 완료
+
+## ALREADY_DONE
+
+새 코드를 만들지 않아도 이미 요청사항이 해결되어 있고
+실제사용 E2E로 이를 확인한 경우.
+
+## PARTIAL
+
+일부 구현했지만:
+
+`REQUEST_SOLVED = NO`
+
+인 경우.
+
+작업량이 많아도 DONE 금지.
+
+## BLOCKED
+
+외부 의존성/권한/정책/Git 충돌/검증환경 때문에
+안전하게 사용자의 요청을 해결할 수 없는 경우.
+
+## FAIL
+
+구현을 시도했으나 사용자 요청 해결에 실패한 경우.
+
+---
+
+# 16. 작업 종료 전 Git 최신 상태 재확인
+
+작업 완료 직전 다시:
+
+1. `git fetch --all --prune`
+2. 현재 `origin/main` 확인
+3. `TASK_START_SHA`와 최신 base 비교
+
+## base가 작업 중 변경된 경우
+
+코드를 최신 base와 안전하게 통합한다.
+
+필요하면:
+
+- conflict 해결
+- 관련 test 재실행
+- USER E2E 재실행
+- regression 재실행
+
+단:
+
+최신 TASK.md의 새로운 일반 작업을 현재 ACTIVE TASK에 섞지 않는다.
+
+코드는 최신화할 수 있지만,
+ACTIVE TASK의 목적과 DONE 조건은 최초 TASK snapshot을 유지한다.
+
+---
+
+# 17. 작업 완료 후 Git 동기화
+
+TASK 구현 완료:
+
+1. 변경 파일 확인
+2. 필요한 파일만 stage (`git add -A` 금지)
+3. commit
+4. remote work branch에 push
+
+확인:
+
+WORK_BRANCH_PUSHED: YES | NO
+
+## PR/merge가 TASK 범위인 경우
+
+- 필요한 검사 통과
+- PR
+- merge
+
+머지는 이 TASK가 허용한 경우만 한다. 명시가 없으면 기본 브랜치 병합 금지.
+
+조건:
+
+- 충돌 없음
+- GitHub Checks 초록
+
+실패면 merge 명령 실행 금지.
+
+문제: 머지 규칙이 TASK 글뿐이라 `gh pr merge`로 문서 PR을 Checks 빨강인데도 머지할 수 있었다. 예외 머지는 폐지한다.
+
+머지는 GitHub Checks가 초록일 때만 한다. 문서만(`TASK.md`, `*.md`, `docs/**`) 바뀌면 무거운 테스트 대신 `docs-gate`가 초록이면 된다. `gh pr merge --admin` 및 실패 체크를 무시하는 머지는 금지한다.
+
+브랜치 보호: 기본 브랜치 `main`은 `protected=true`. 문서 PR은 `docs-gate`가 초록이면 머지한다(제품 test workflow 파일 없음). 이 에이전트 토큰은 protection JSON을 읽거나 쓰지 못한다(HTTP 403). `enforce_admins`/`allow_force_pushes`를 증명된 값으로 적지 않는다. 이 한계는 `[!]`(막힘)이 아니며 T-20260814-01은 사용자 지시로 `[x]` 종료.
+
+
+merge 후:
+
+1. `git fetch`
+2. local base clean 확인
+3. `git merge --ff-only origin/main`
+4. local base와 remote base 일치 확인
+
+절대 reset --hard로 맞추지 않는다.
+
+---
+
+# 18. TASK LIST 상태 갱신 규칙
+
+TASK LIST의 상태는 실제 결과와 반드시 일치한다.
+
+### `[x]`
+
+다음일 때만:
+
+`REQUEST_SOLVED = YES`
+
+### `[~]`
+
+현재 실행 중.
+
+### `[!]`
+
+BLOCKED.
+
+### `[-]`
+
+사용자가 취소.
+
+### `[ ]`
+
+아직 시작하지 않음.
+
+LIST와 DETAILS가 불일치하면 TASK 파일 오류로 간주한다.
+
+---
+
+# 19. TASK 수정/삭제 규칙
+
+## 사용자가 TASK 설명을 수정
+
+TASK LIST 1줄 요약과 해당 DETAILS를 함께 수정한다.
+
+## 사용자가 "삭제"
+
+- TASK LIST 행 삭제
+- TASK DETAILS 전체 삭제
+
+## 사용자가 "취소"
+
+- LIST를 `[-]`로 변경
+- 상세에는 취소 이유 최소 기록 가능
+
+## 완료 TASK
+
+사용자가 목록에서 완료 TASK도 계속 보고 싶다면 `[x]` 유지.
+
+별도 요청으로 정리할 때만 제거한다.
+
+---
+
+# 20. 새 사용자 요청 등록 규칙
+
+새 요청:
+
+1. 기존 TASK와 동일한 요청인지 확인
+2. 이미 해결됐으면 중복 생성 금지
+3. 새 TASK_ID 발급
+4. 사용자 원문 보존
+5. 비개발자용 1줄 요약 생성
+6. TASK LIST에 `[ ]` 추가
+7. TASK DETAILS 생성
+8. MUST/KEEP/REMOVE/FORBIDDEN/VERIFY/DONE 변환
+9. 기존 TASK와 dependency/충돌 검사
+10. 실행 순서 결정
+
+기존 ACTIVE TASK에 새 요청을 임의 합치지 않는다.
+
+---
+
+# 21. TASK 완료 후 다음 TASK
+
+현재 TASK가 DONE된 후:
+
+- TASK LIST에서 다음 READY 작업 확인
+- dependency가 해결된 작업 우선
+- 독립 작업은 병렬 가능
+- BLOCKED 작업은 건너뛰되 이유 유지
+
+새 TASK가 없으면:
+
+`NO_ACTIVE_TASK`
+
+를 보고하고 개발을 중단한다.
+
+---
+
+# 22. 최종보고
+
+반드시 아래 형식으로 보고한다.
+
+REPO:
+TASK_ID:
+
+USER_REQUEST:
+REQUEST_SOLVED: YES | NO
+
+TASK_START_SHA:
+TASK_BLOB_SHA:
+WORK_BRANCH:
+
+USER_E2E: PASS | FAIL | BLOCKED
+USER_RESULT:
+VERIFY_RESULT:
+
+TEST:
+REGRESSION:
+
+COMMIT:
+WORK_BRANCH_PUSHED: YES | NO
+
+PR:
+MAIN_MERGED: YES | NO | N/A
+
+REMOTE_BASE_SYNC:
+LOCAL_BASE_SYNC:
+
+TASK_STATUS:
+DONE | ALREADY_DONE | PARTIAL | BLOCKED | FAIL
+
+NEXT_READY_TASK:
+PENDING_TASKS:
+
+---
+
+# 23. 최종 STOP 조건
+
+아래 중 하나면 임의 개발을 계속하지 않는다.
+
+- ACTIVE TASK 없음
+- 사용자 요청과 TASK 내용이 명백하게 불일치
+- repo/origin 불일치
+- 안전한 Git 작업공간 확보 불가
+- 사용자 데이터를 잃을 위험
+- 최신 CANCEL/STOP 지시 발견
+- 해결방법 선택이 제품정책을 바꾸며 사용자의 결정이 반드시 필요함
+
+상태를 `BLOCKED` 또는 `NO_ACTIVE_TASK`로 보고한다.

@@ -1,0 +1,8 @@
+{% extends "operator_base.html" %}
+{% block title %}업무 플로우 · Auto Write{% endblock %}
+{% block eyebrow %}BUSINESS FLOW{% endblock %}
+{% block page_title %}업무 플로우{% endblock %}
+{% block content %}
+<div class="notice-box"><strong>운영자가 보는 실제 처리 지도</strong><span>문서 작업이 어느 기존 서비스로 연결되는지 단계별로 보여줍니다. 실행 상태는 실행 모니터링에서 runtime event로 별도 확인합니다.</span></div>
+<div class="workflow-stack">{% for flow in workflows %}<section class="panel-card"><div class="panel-head"><div><p class="eyebrow">FLOW {{ "%02d"|format(loop.index) }}</p><h2>{{ flow.label }}</h2></div><a class="text-link" href="/console/monitor">실행 기록 보기 →</a></div><p>{{ flow.description }}</p><div class="horizontal-flow">{% for step in flow.steps %}<article class="flow-step"><span>{{ "%02d"|format(loop.index) }}</span><strong>{{ step.label }}</strong><small>{{ step.service }}</small></article>{% if not loop.last %}<div class="right-arrow">→</div>{% endif %}{% endfor %}</div></section>{% endfor %}</div>
+{% endblock %}

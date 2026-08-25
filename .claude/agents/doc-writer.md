@@ -42,7 +42,7 @@ model: opus
 - HANDOFF.md: 현재 상태, 남은 작업, 주의사항(원본 보호, 인코딩 주의 등), 재개 명령.
 
 ## 사용 가능 파일 범위
-- 읽기: 인접 에이전트 산출물, `RESUME.md`, `HANDOFF.md`, `PROJECT_REPORT.md`, `CLAUDE.md`.
+- 읽기: 인접 에이전트 산출물, `RESUME.md`, `HANDOFF.md`, `docs/PROJECT_REPORT.md`, `CLAUDE.md`.
 - 쓰기: 문서 파일(리포트 md/json, HANDOFF.md, 가이드)만. 서비스 코드·테스트 수정 금지.
 
 ## 완료 기준

@@ -24,7 +24,7 @@
 - `agents/` 12개, `skills/` 11개 평면 + `skills/document-quality-orchestrator/SKILL.md`(허브), `commands/` 6개, `workflows/document-quality-harness.md`
 
 **루트 문서**
-- `HARNESS_AUDIT.md` · `AUTO_WRITE_DOMAIN_MAP.md` · `DOCUMENT_TYPE_RULES.md` · `PSST_CHECK_RULES.md` · `DOCUMENT_QUALITY_SCORE_RULES.md` · `BACKUP_ROLLBACK_RULES.md` · `HARNESS_TEAM_DESIGN.md` · `CLAUDE.md` · `AGENTS.md` · `HANDOFF.md` · `PROJECT_REPORT.md`
+- `docs/HARNESS_AUDIT.md` · `docs/AUTO_WRITE_DOMAIN_MAP.md` · `docs/DOCUMENT_TYPE_RULES.md` · `docs/PSST_CHECK_RULES.md` · `docs/DOCUMENT_QUALITY_SCORE_RULES.md` · `docs/BACKUP_ROLLBACK_RULES.md` · `docs/HARNESS_TEAM_DESIGN.md` · `CLAUDE.md` · `AGENTS.md` · `docs/PROJECT_REPORT.md`
 
 ## 수정한 파일
 
@@ -33,7 +33,7 @@
 
 ## 생성한 Agent (12)
 
-> ⚠️ 본 보고서는 2026-06-06 구축 시점 기록이다. 이후 **2026-06-07 에이전트를 12→6종으로 슬림화**했다(doc-architect, doc-safety-guard, doc-analyzer, doc-postprocessor, doc-quality-gate, doc-writer). 현재 기준 목록은 `CLAUDE.md`·`AGENTS.md`·`HARNESS_TEAM_DESIGN.md` 참조. 아래는 구축 당시 12종 원본 기록.
+> ⚠️ 본 보고서는 2026-06-06 구축 시점 기록이다. 이후 **2026-06-07 에이전트를 12→6종으로 슬림화**했다(doc-architect, doc-safety-guard, doc-analyzer, doc-postprocessor, doc-quality-gate, doc-writer). 현재 기준 목록은 `CLAUDE.md`·`AGENTS.md`·`docs/HARNESS_TEAM_DESIGN.md` 참조. 아래는 구축 당시 12종 원본 기록.
 
 document-architect, template-cleanup-agent, formatting-normalizer, content-emphasis-agent, document-type-classifier, psst-review-agent, infographic-suggestion-agent, quality-gate-agent, backup-rollback-agent, qa-document-agent, security-agent, documentation-agent (전원 `model: opus`, 팀 통신 프로토콜·재호출 섹션 포함)
 

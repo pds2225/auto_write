@@ -37,3 +37,10 @@ class ConsultantApplicationPipeline:
     def autofill_cross_form(self, source_doc: Any, target_doc: Any, **kwargs: Any) -> Any:
         from auto_write.services.cross_form_autofill import autofill_from_source
         return autofill_from_source(source_doc, target_doc, **kwargs)
+
+    def run_to_final(self, artifact_path: Path, **kwargs: Any) -> Any:
+        """DomainRouter → LRule → Hash → Finalizer. 산출물 제출 게이트."""
+        from auto_write.domains.pipeline_gate import run_to_final
+        kwargs.setdefault("explicit_domain", "consultant_application")
+        kwargs.setdefault("document_type", "resume")
+        return run_to_final(artifact_path, **kwargs)

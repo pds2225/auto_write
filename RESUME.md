@@ -1,122 +1,118 @@
-# RESUME.md — 세션 재시작 시 이어하기 진입점
+# RESUME.md — auto_write 세션 체크포인트
 
-> 새 세션을 시작하면 이 파일을 가장 먼저 읽어라. (최종 갱신: 2026-08-16 23:07)
+> 세션을 새로 시작하면 **이 파일을 먼저** 읽는다. 상세 트랙은 아래 링크.
+> 최종 갱신: **2026-08-19** (밤샘 AW-001 가드 연결. 브랜치 `cursor/overnight-aw-001-2cb9`)
 
-## 0. 30초 컨텍스트
-도보네비 사업계획서. 기준 양식은 PSST. AIMY 본선본을 모듈 팩으로 잘랐고 1단계 검수는 PASS. **지금은 정지.** 공고+빈 양식이 오면 초안 1건만 쓴다. AIMY급 자동작성(BPQ-00)은 사용자가 대기라 시작하지 않는다.
+## 한 줄 상태
 
-## 1. 빠른 재개 (복붙용)
-```powershell
-cd D:\auto_write
-# 공고+빈양식이 오면: 모듈 팩을 읽고 초안 1건 (원본 덮어쓰기 금지)
-# 모듈: results\aimy_form_rules\modules\
-# 테스트는 py -3.11 (기본 3.14 는 matplotlib 부재)
+`pds2225/auto_write` 단일 정본. `origin/main` @ `d6b96b8` (#158 핀).
+에이전트 입구 = **bizdoc-hub** / CLI 입구 = **auto_write_hub.py**. 맵: `docs/BIZDOC_HUB_MAP.md`.
+
+**밤샘 2026-08-19:** AW-001 ACTIVE(`[~]`). `run_to_final` + mechanized 가드(`build_lrule_guards`, unverifiable=0).
+judgment/gap은 REVIEW_REQUIRED → FINAL 차단 유지. 웹앱·BPQ-00 제품 코드는 승인 전 대기. 공고+양식 오기 전 초안 대기.
+
+**문서 작업:** 원장 A1~A6 **종료**(사용자 2026-08-23: 이미 제출). 항우연은 6팀 멘토링 선정·상위2 지원금은 별도. 새 요청 없으면 문서 트랙 닫음.
+**엔진:** T-20260814-02 명세+실행지시+BPQ-00 감사+#150 측정기+#155 git-sync(기준 브랜치=GitHub default/`main`)+#156(웹앱 사양·계획 보강·STEP 3A)이 main에 있음. DOCX 정본=`core.docx.services`.
+**열린 PR:** draft #161 (`cursor/overnight-aw-001-2cb9`). 원격 = `main` + 이 브랜치 + `backup/*`.
+**머지 주의:** Cursor 클라우드 PR은 기본 draft. GitHub 자동머지는 draft에서 불가. 머지 요청 시 Ready for review 후 `gh pr merge --auto --squash`.
+작업 시작 전: `git fetch` → `TASK.md` → 현재 구현 조사 → 그다음 작업.
+목표 흐름: `LLM → StageResult(JSON) → 검증 → 다음 Stage → 렌더 → Finalizer`. 한 번에 최종 DOCX 금지.
+
+P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금지. 파일 오면 초안 1건). **P 완료 후는 최우선 사용 케이스.** 사업자등록증은 첫 화면 필수 아님.
+웹앱 실행 정본=`웹앱 최종 요구사항_20260816`. 승인 전 웹앱 제품 코드 대기.
+
+## 지금 세션 — STAR-Exploration (A6)
+
+| 항목 | 내용 |
+|------|------|
+| 사업 | 한국항공우주연구원 「2026 STAR-Exploration」 예비창업자 트랙 (경기도 스타기업 **아님**) |
+| 운영 | 조슈아파트너스 `jp@jptnr.com` / **042-364-1002** |
+| 사용자 상태 | **6팀 멘토링 선정됨.** 상위 2팀(지원금)은 **아직 미선정** (2026-08-20 사용자) |
+| 지원금 | 상위 2팀만. 재료비·외주용역비. 뽑힌 뒤에 사업자등록+견적+사용계획. **지원기간 내 개인/법인 사업자등록 필수** |
+| 발표평가 | 2026 공개 공고에 배점 숫자 없음. 공고 축 = 항공우주 기술 근거 · BM고도화 · 시장검증 · 시제품 구현 · IR · 창업일정 |
+| 코드/양식 | 저장소에 공고·양식 없음. IR·평가표·견적 양식은 사용자 메일 |
+
+**다음:** 원장 A 종료(이미 제출). 발표·지원금은 새 요청이 있을 때만.
+
+## 최근 완료
+
+| 날짜 | 내용 | 근거 |
+|------|------|------|
+| 2026-08-23 | 원장 A1~A6 종료(사용자: 이미 제출). 웹앱은 승인 전 대기. PR #161 CI docs-gate 통과 | 이 체크포인트 |
+| 2026-08-18 | 세션 마무리. GitSyncService `master` 하드코딩 제거(#155 already on main). draft면 자동머지 불가 확인 | PR #155 `ddac657` / 이 체크포인트 |
+| 2026-08-16 | 열린 draft #149+#152+#153+#154 합본 #156 squash `1001b76`. #155는 `ddac657` | T-20260816-08 / PR #156 |
+| 2026-08-16 | #150 STEP 2 추출 Baseline 측정기 main 머지. 추출기 본체 아님 | PR #150 `0a8b262` |
+| 2026-08-16 | #146 BPQ-00 감사 main 머지. 원격은 main+backup 2개 | PR #146 `9efd78e` |
+| 2026-08-16 | #138+#133+#139 합본 main 머지 (gitignore, L154–L156, A6, BPQ 노트, 합친 RESUME) | PR #141 |
+| 2026-08-16 | git-sync push 검증/롤백 main 머지 | PR #140 |
+| 2026-08-15 | overnight A–H 체리픽 (LRule+Finalizer wiring, E2E 15) | PR #137 |
+| 2026-08-15 | 배달앱+상권분석 단계형 파이프라인 인사이트 저장 (구현 대기) | `docs/BPQ_PIPELINE_INSIGHTS_20260815.md` |
+| 2026-08-14 | 항우연 STAR-Exploration 선정 후 할 일·발표평가축 정리 (배점 미공개) | 원장 A6 |
+| 2026-08-11 | RESUME.md 신설 + 허브 맵·bizplan-orchestrator 스킬·죽은 커맨드 참조 정리 | 이 체크포인트 원본 |
+| 2026-08-09~ | 도메인 리팩터(CORE/BIZPLAN/RESUME)·P0 배선·E2E | PR #114~#119 |
+| 2026-08-02 | autowrite 잔여 자산 흡수 → `tools/injector/` | PR #100 merged |
+
+## 입구 (헷갈리면 여기만)
+
+| 상황 | 쓸 것 |
+|------|--------|
+| "문서 도와줘 / 뭘로 처리해" (의도 불명) | 스킬 `bizdoc-hub` 또는 `/bizdoc` |
+| PC·폴더 어디서든 채움·진단 CLI | `py -3.11 app/auto_write_hub.py env\|diagnose\|fill …` |
+| 구 BizPlan Injector (JSON→DOCX) | `tools/injector/inject.py` / `run.sh` |
+| 상세 라우팅표 | `docs/BIZDOC_HUB_MAP.md` |
+
+## 남은 일 (우선순위)
+
+0. **STAR-Exploration:** 원장 A1~A6 종료(이미 제출). 상위2 지원금·발표자료는 **새 요청이 있을 때만**
+0b. **엔진 / STEP 2 추출기:** 실문서 D1–D3 HWP + `STEP2_EXTRACTION_GOLDEN_V1.json` 으로
+   `python app/tools/step2_extraction_baseline.py --golden … --input-dir …`
+   → `baseline_report`의 READ_MISS / STRUCTURED_EXTRACTION_MISSING / VALUE_ERROR / SOURCE_LOST 건수.
+   Golden·HWP는 커밋 금지. Golden이 없으면 비교는 BLOCKED(41건 재구성 금지).
+   D1·D2 Drive 제목 일치 확보, Linux `unhwp` ingest는 PARTIAL 아님. D3·Golden 없음 → 41건 카운트 BLOCKED.
+   출력 JSON은 `Fact[]` / `NarrativeEvidence[]` / `Conflict[]` 계약에 맞출 것.
+0c. **STEP 3A (합본에 포함, 합성 fixture):** matcher Golden + 한글 리포트.
+   `python3 -m pytest app/tests/test_section_matcher.py app/tests/test_step2_output_contract.py app/tests/test_step3a_golden.py -q`
+   다음이 아님: Writer, Preview UI, HWP 렌더, STEP 3B 실공고 Golden.
+1. **owner 수동**: `pds2225/autowrite` GitHub Delete (이미 archived, admin 토큰 없음)
+   → https://github.com/pds2225/autowrite/settings
+2. **실측 1건** (추천 시나리오 중 하나):
+   - HWPX: `py -3.11 app/hwpx_submit.py 양식.hwpx -o 결과.hwpx --identity identity.json`
+   - DOCX 품질: `py -3.11 app/auto_write_autopilot.py 문서.docx --submit-clean --strict`
+   - 인젝터: `cd tools/injector && python3 -m pytest tests/test_v2.py -q`
+3. **REQUEST_LEDGER A:** 종료(2026-08-23 이미 제출). 웹앱은 최종계획 승인 전 코드 대기
+4. **보류**: HWPX 세로 라벨(c) — 코퍼스 수요 극소(AC6)
+5. **보류**: SFT P3 후속·DOCX↔HWP 100% — 실사용에서 막힐 때
+6. **열린 PR:** #161 (AW-001). docs-gate SUCCESS. 사용자: 통과 시 머지
+
+## 재개 명령
+
+```text
+이어서: 원장 A는 종료. 엔진은 AW-001 PR #161(통과 시 머지). 웹앱은 최종계획 승인 전 대기.
+엔진: T-20260814-02 + #150 측정기 + #155 git-sync(base=GitHub default/main) main `ddac657`. 합본 #156 squash `1001b76`. 핀 `fe4aa17`.
+P 개발 중=Problem만. P 완료 후=최우선 사용 케이스.
+GitSync 기준 브랜치: AUTO_WRITE_GIT_BASE_BRANCH 없으면 origin/HEAD → ls-remote HEAD → main.
+머지: draft면 자동머지 안 됨. Ready 후 gh pr merge --auto --squash.
 ```
 
-## 2. 완료된 작업 ✅
-- [x] KICXUP 1~3 종료(미접수)
-- [x] 킥스업 문체·라벨 대조표
-- [x] AIMY 본선 역추정 보고서
-- [x] PSST 모듈 팩 + AUDIT PASS (이슈 2건은 기록만, 코드 미수정)
-- [x] 작업지시서 원격 등록(T-20260814-02 명세). 구현 안 함
+```powershell
+cd D:\auto_write
+git checkout main && git pull origin main
+# 테스트 (반드시 3.11 — PATH 기본 3.14 는 matplotlib 부재)
+cd app
+py -3.11 -m pytest tests/test_archived_commands_not_resurrected.py tests/test_hub_entrypoints.py -q
+py -3.11 auto_write_hub.py env
+```
 
-## 3. 남은 작업 ⬜ (다음 세션에서 이어서)
-- [ ] **공고 + 빈 양식이 오면** 모듈을 P→S→Sc→T 순으로 읽어 초안 1건
-- [ ] 그 1건에서 칸 갭이 숫자로 나온 뒤에만 엔진 연결·킥스업/KAMCO 쪼개기
-- [ ] BPQ-00 / T-20260814-02 구현 — **시작하지 않음** (사용자 대기)
+## 관련 문서
 
-## 4. 핵심 결정·제약 (되돌리지 말 것)
-- `facts_aimy.json` 수치·고유명사를 **다음 아이템 기본값으로 쓰지 말 것**
-- 교차양식 = 사실 전사. 서술 재작성과 섞지 말 것
-- GitHub default = `main`. TASK.md 도 main. master 는 구버전
-- 원본 미수정 · 날조 0 · 출력≠입력 · 더미 공고 없음
-- 대량 HWP 이미지는 비전으로 열지 말고 추출문+파일명으로 보고
+- 허브 맵: `docs/BIZDOC_HUB_MAP.md`
+- autowrite 통합: `docs/REPO_DUPLICATION_CHECK.md`
+- HWPX 파리티(B 완결): `docs/RESUME_hwpx_parity.md`
+- 실사용 원장: `docs/REQUEST_LEDGER.md`
+- BPQ 정밀화 대기 지식: `docs/BPQ_PIPELINE_INSIGHTS_20260815.md`
+- 웹앱 실행 정본: `docs/AUTO_WRITE_웹앱_최종_요구사항_20260816.md`
+- 작업 규약: `CLAUDE.md` · `AGENTS.md`
 
-## 5. 핵심 파일 인덱스 (어디에 뭐가 있나)
-| 알고 싶은 것 | 파일 |
-|---|---|
-| 모듈 팩 | `results/aimy_form_rules/modules/` |
-| 검수 | `results/aimy_form_rules/modules/AUDIT.md` |
-| AIMY 역추정 | `results/aimy_form_rules/AIMY_대한안전보건교육원_본선제출_역추정.md` |
-| 플랜 | `.omc/plans/2026-08-15-psst-modules-next.md` |
-| 운영 위키 | `.omc/wiki/psst.md` |
-| 최근 신청서 | `WORKS/KAMCO_TechBlaze/KAMCO_신청서_도보네비_박다솜_v4.1.hwp` |
+## 안전 불변
 
-## 6. 검증된 사실 (재확인 불필요)
-- 모듈 1단계 검수 PASS. 엔진은 `modules/` 를 아직 안 읽음
-- 양식 「해결방안」 vs 코드 「실현 가능성」, Team 헤더 정규식 = 알려진 갭(코드 미수정)
-- KICXUP 추천·케이블텔레콤·신청서/동의서 = 종료(미접수)
-
-## 7. 재개 시 첫 행동
-1. 이 파일을 읽는다.
-2. 공고+빈 양식이 **있으면** 초안 1건. **없으면** 기다린다. BPQ-00 구현을 시작하지 않는다.
-3. AIMY 숫자를 새 초안에 복사하지 않는다.
-
-## 8. 현재 세션 상태 (2026-08-16)
-- [x] 사용자 요청: 로그아웃/세션 종료. Codex 전역 설정 오류 수정은 보류
-- [x] Codex 시작 로그 진단: `cockpit-collector.toml`, `mail-acc-coverage-sentinel.toml`의 description 안 Windows 경로 백슬래시 때문에 TOML 파싱 실패
-- [x] 코드·프로젝트 파일 수정 없음. 해당 에이전트 2개만 이번 세션에서 로드되지 않음
-- [ ] 다음 액션: 사용자 요청 시 두 TOML의 백슬래시를 TOML 문법에 맞게 수정하고 `codex` 재시작으로 로드 여부 확인
-- [ ] MCP 초기화 중단(`context7`, `filesystem`, `github` 등)은 별도 연결/플러그인 점검 대상
-
-## 9. 다른 AI 작업 상태 점검 (2026-08-16)
-- [x] 로컬 `TASK.md`, 루트 dirty 파일, Git worktree·stash·브랜치·실행 프로세스를 읽기 전용 점검
-- [x] 확정된 코드 dirty 작업: `D:\tmp\wt-auto_write-m4-generate-prep`의 이미지 자동화 4개 수정 + 테스트 1개 추가(마지막 파일 수정 2026-08-10)
-- [x] `rusalka-fill-task`는 추적 파일 변경 없이 HWPX 점검용 임시 파일만 남아 있고, 나머지는 문서 브랜치 또는 clean 상태
-- [x] 루트 `master`는 로컬 `origin/master`보다 61커밋 뒤이며 `.claude/*`, `.gitignore`, `REQUEST_LEDGER.md`, `RESUME.md`가 dirty; 삭제·정리하지 않음
-- [x] GitHub live PR 확인 완료: draft PR #149, #151~#154 확인
-
-## 10. 원격 인증 진단 (2026-08-16)
-- [x] 기본 Git HTTPS(Schannel)는 `SEC_E_NO_CREDENTIALS`로 실패
-- [x] 같은 원격에 `git -c http.sslBackend=openssl ls-remote origin HEAD`는 성공하여 원격/네트워크 자체는 접근 가능
-- [x] Git 전역 `http.sslBackend=openssl` 적용 및 `git ls-remote origin HEAD` 성공
-- [x] 기존 무효 pds2225 GitHub 인증정보 로그아웃 완료
-- [x] 브라우저 인증 완료 후 `gh auth status`·`gh auth setup-git`·Git 원격 조회·열린 PR 조회 성공
-- [x] live origin은 `HEAD`/`main`=`0a8b262c...`이며 `master` ref는 조회되지 않음. 로컬 `origin/master`는 stale 추적 ref
-
-## 11. 다음 프롬프트 고스트 스킬 (2026-08-16)
-- [x] 중복 스킬 대신 기존 `run-next-suggestion`을 확장: 실질 작업 종료 시 `👉 다음 프롬프트:` 한 개를 생성하고, 선택 시 기존 실행 매핑을 유지
-- [x] Claude 정본 스킬과 Codex·Claude·Cursor trigger pack에 `다음프롬프트 고스트`·`고스트 프롬프트`·`다음 프롬프트 스킬` 추가
-- [x] `PYTHONUTF8=1 python ... quick_validate.py` 통과 및 `codex debug prompt-input`에서 loader 노출 확인
-- [ ] 이미 열린 세션의 UI/캐시는 새 Codex 세션 또는 재시작 후 최종 반영 확인
-
-## 12. 압축 후 복원 상태 (2026-08-16)
-- [x] 대화 압축 후 `RESUME.md` 체크포인트 갱신
-- [x] 사용자 확인 후 `session-closeout` 저장 절차 시작
-- [x] agent-self-learning: 자가학습 감시견 정상, 최근 평가 표본 부족 상태 확인
-- [x] skill-harvester: 기존 `run-next-suggestion` 확장으로 중복 생성 없음
-- [x] wiki-session-capture: 인증 우회법·고스트 프롬프트 지식 저장, broken refs 0
-- [x] session-recap: `D:\auto_write\SESSION_RECAP.md`에 최신 회고 누적
-- [x] session-resume: 이 체크포인트 최종 갱신
-- [x] 새 Codex CLI 세션에서 고스트 프롬프트 응답 노출 확인
-- [ ] 저장 완료 후 사용자가 `/clear` 실행
-
-## 13. 현재 확인 작업 (2026-08-16)
-- [x] `run-next-suggestion` 규칙과 Codex trigger pack에 `다음프롬프트 고스트`가 포함된 것을 읽기 전용 확인
-- [x] `codex debug prompt-input "다음프롬프트 고스트"`에서 해당 트리거가 로더 입력에 노출됨을 확인
-- [x] 별도 새 `codex exec` 세션에서 동일 문구를 입력하고 실제 `👉 다음 프롬프트:` 응답 확인
-- [x] 최신 새 `codex.cmd exec` 세션(`01a00ae4-abe1-7500-9ec4-583c9d4e694e`)에서도 동일 응답 재현
-- [ ] Codex Desktop의 회색 입력 제안 UI 자체는 현재 도구에서 시각 확인 불가
-
-## 14. 원격 PR/실행 위치 점검 (2026-08-17)
-- [x] 원격 `main` fetch 완료: `origin/main=0a8b262c`; GitHub default branch=`main`; 원격 `main:TASK.md` 존재
-- [x] PR 직접 대조: #152→#153→#154 stacked; 모두 OPEN/DRAFT/mergeable clean
-- [x] #152=TASK/RESUME 문서, #153=matcher 정본+테스트, #154=STEP2 output contract·matcher 연결·CLI·fixture·테스트
-- [x] D3 HWP·`STEP2_EXTRACTION_GOLDEN_V1.json` 부재로 실제 3 HWP×41 baseline은 BLOCKED; 합성 fixture로 대체 금지
-- 결정: 명령은 `D:\auto_write`에서 실행하되 최신 기준은 로컬 `master`가 아닌 원격 `main`; dirty root에서 코드 작업·병합 금지
-- 다음: 입력이 오면 별도 worktree에서 baseline 먼저 실행. 그 전에는 PR stack 병합·BPQ-00 구현·야간 자동개발 실행 금지
-- [x] 고스트 요청: 다음 실행 프롬프트는 D3 HWP·Golden 경로 확인 후 baseline 실행으로 고정
-- [x] 2026-08-17 새 `codex.cmd exec --ephemeral --sandbox read-only` 세션에서 실제 `👉 다음 프롬프트:` 출력 재현(session `01a00cd0-aa2b-7020-8634-7bda79273d2f`)
-- [x] 사용자 요청: 동일한 읽기 전용 Codex 세션에서 고스트 출력 재현 완료 — 실제 `👉 다음 프롬프트:` 출력 확인(session `01a00cd8-aae3-7fc1-bb45-f521b07a435b`)
-- [x] Codex 전역 AGENTS·Claude CLAUDE·Cursor rule·`run-next-suggestion` 스킬의 고스트 규칙 존재 확인
-- [ ] Codex Desktop 회색 입력 제안 UI는 시각 확인 불가; 별도 agent TOML 2개는 백슬래시 파싱 경고가 남아 있음
-
-## 15. 현재 세션 (2026-08-17)
-- [x] `RESUME.md`를 통해 새 Codex 세션으로 복원됨
-- [x] 사용자에게 새 세션임을 안내할 준비 완료
-- [ ] 사용자 확인 후, 입력이 있을 때만 다음 작업 진행
-
-## 16. 현재 안내 (2026-08-17)
-- [x] 실행 위치 안내 요청(`ㅇㄷㅁㅎ`) 확인
-- 결정: 작업 명령은 `D:\auto_write`에서 실행하고, 공고·빈 양식이 오기 전에는 코드 작업을 시작하지 않음
-- 다음: PowerShell에서 입력 파일 존재 여부와 모듈 팩 경로만 확인
+원본 미수정 · 날조 0 · fail 시 `_DRAFT` · 경로 광역 스캔 금지 · 테스트 `py -3.11`.
