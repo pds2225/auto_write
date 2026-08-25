@@ -43,3 +43,4 @@ py -3.11 bizplan_autopilot.py "<초안.docx>" --brief-file 브리프.txt --annou
 ## 불변
 
 원본 백업 · 출력≠입력 · 날조 0 · `_DRAFT` = 제출 금지 · 테스트 `py -3.11`.
+공고 맞춤 기술 문장(GPS→GNSS/KPS 등)은 보유·이전이 아님 — IR 단정 금지(`tech-framing-provenance`).
