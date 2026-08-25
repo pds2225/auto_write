@@ -4221,7 +4221,7 @@ REQUEST_SOLVED=YES: 합본이 origin/main `1001b76`에 있다. #155는 `ddac657`
 - `_SUGGESTION_RULES` star-import 누락 재export — CLI 테스트 수집 가능
 - stash@{0}는 현재 SKILL/원장에 없는 L규칙·D절이라 적용하지 않고 보존
 - HTML 2개 미반영 유지
-- `py -3.11 -m pytest tests/test_generate_missing.py tests/test_run_business_plan_images_m4.py tests/test_image_pipeline.py -q` → 16 passed
+- `py -3.11 -m pytest tests/test_generate_missing.py tests/test_run_business_plan_images_m4.py tests/test_image_pipeline.py tests/test_image_provider_gpt.py -q` → 20 passed
 
 # 9. 실제사용 시나리오
 
