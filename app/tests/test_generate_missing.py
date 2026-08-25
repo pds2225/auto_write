@@ -4,9 +4,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
-from auto_write.image_automation.generate_missing import (
+from auto_write.services.image_providers import (
     GPT_IMAGE_MODEL,
+    build_missing_gpt_writer,
+    generate_missing_gpt_image,
+)
+from auto_write.image_automation.generate_missing import (
     generate_missing_assets,
     missing_anchors,
 )
@@ -137,3 +142,69 @@ def test_budget_zero_writes_receipt_and_skips(tmp_path: Path):
     assert receipt["use_mock"] is True
     assert receipt["openai_calls_real"] == 0
     assert receipt["mock_calls"] == 0
+
+
+def test_paid_path_without_key_is_no_writer(tmp_path: Path):
+    anchors = _anchors(1)
+    decisions = [MatchDecision(anchor_id="a1", action=MatchAction.SKIP)]
+    result = generate_missing_assets(
+        anchors,
+        decisions,
+        out_dir=tmp_path,
+        enabled=True,
+        missing_only=True,
+        max_paid_calls=1,
+        use_mock=False,
+        settings=SimpleNamespace(has_openai=False),
+        openai_service=None,
+    )
+    assert result.generated == []
+    assert result.extras.get("reason") == "no_writer"
+    assert result.gemini_calls == 0
+    assert result.openai_calls == 0
+
+
+def test_writer_oserror_skips_anchor(tmp_path: Path):
+    anchors = _anchors(1)
+    decisions = [MatchDecision(anchor_id="a1", action=MatchAction.SKIP)]
+
+    def boom(prompt: str, out_path: Path, *, model: str = GPT_IMAGE_MODEL) -> None:
+        raise OSError("generation failed")
+
+    result = generate_missing_assets(
+        anchors,
+        decisions,
+        out_dir=tmp_path,
+        enabled=True,
+        missing_only=True,
+        max_paid_calls=1,
+        use_mock=False,
+        writer=boom,
+    )
+    assert result.generated == []
+    assert result.skipped == ["a1"]
+    assert result.gemini_calls == 0
+
+
+def test_generate_missing_gpt_image_requires_openai_key(tmp_path: Path):
+    out = tmp_path / "x.png"
+    assert generate_missing_gpt_image(None, None, "prompt", out) is False
+    assert generate_missing_gpt_image(
+        SimpleNamespace(has_openai=False), None, "prompt", out
+    ) is False
+    assert not out.exists()
+
+
+def test_generate_missing_gpt_image_rejects_other_models(tmp_path: Path):
+    settings = SimpleNamespace(has_openai=True, openai_image_model="gpt-image-1")
+    assert (
+        generate_missing_gpt_image(
+            settings, SimpleNamespace(), "prompt", tmp_path / "x.png", model="dall-e-3"
+        )
+        is False
+    )
+
+
+def test_build_missing_gpt_writer_none_without_key():
+    assert build_missing_gpt_writer(None, None) is None
+    assert build_missing_gpt_writer(SimpleNamespace(has_openai=False), None) is None
