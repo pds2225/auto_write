@@ -15,7 +15,7 @@ TASK 1개 = 반드시 1줄. LIST의 TASK_ID와 DETAILS의 TASK_ID는 반드시 1
 REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 -->
 
-[ ] AW-001 | 문서 작성이 정해진 검사 경로를 거쳐 끝나게 한다
+[~] AW-001 | 문서 작성이 정해진 검사 경로를 거쳐 끝나게 한다
 [ ] AW-002 | GitHub와 작업 상태를 안전하게 주고받게 한다
 [ ] AW-003 | L 규칙을 한 화면에서 보고 고칠 수 있게 한다
 [ ] AW-004 | 문서 작성 진행 상태를 한 화면에서 보게 한다
@@ -421,6 +421,12 @@ T-20260816-06이 이 판정을 기록한다.
 
 ## AW-001
 
+TASK_ID: AW-001
+TASK_START_SHA: d6b96b86a0015f53141054c27517607923a596a8
+TASK_BLOB_SHA: f6f8023b0dd47d301acedc75a5d4957edd147d4e
+WORK_BRANCH: cursor/overnight-aw-001-2cb9
+STATUS_THIS_TURN: mechanized 가드(`build_lrule_guards`)를 `run_to_final`/autopilot에 연결. mechanized unverifiable=0, L009 실 FAIL. LIST `[~]`. REQUEST_SOLVED=NO(judgment/gap REVIEW_REQUIRED로 FINAL 차단 유지·HWPX `submit_hwpx`는 R9 수용검사 KEEP).
+
 ### 8-1. 사용자 원문 요청
 
 > 실제 문서 생성 경로가 DomainRouter → DomainPipeline → LRuleEnforcer → Hash 검증 → Finalizer로 수렴하게 하고, business_plan / consultant_application을 실제로 검증한다.
@@ -461,21 +467,23 @@ INPUT
 ### 8-4. 현재상태
 
 - 현재 구현: DomainRouter, 도메인 Pipeline, LRule, Finalizer, workspace/results 구조가 존재
-- 현재 문제: production caller 배선/FINAL 우회 차단/실제 E2E가 미완료일 수 있음
-- 이미 구현된 부분: 기존 CORE/shared services, LRule, Finalizer
-- 확인 필요한 부분: 주요 entrypoint 실제 배선
+- 2026-08-19: `app/auto_write/domains/pipeline_gate.py` `run_to_final` 이 생산 수렴점. autopilot 4.6·BP/CA pipeline·resume_fill CLI가 호출. ambiguous/누락 report/중복 ID/artifact·registry 해시 불일치 → FINAL 금지
+- 2026-08-19 가드: `app/auto_write/services/lrule_guards.py` `build_lrule_guards` 가 44 mechanized 규칙 callable을 `run_to_final`에 자동 주입. 산출물 검사(L009 마커 등)는 실 PASS/FAIL. 채움/git 규칙은 process PASS(가짜 산출물 검사 아님). judgment/gap은 넣지 않음 → REVIEW_REQUIRED 유지로 FINAL 계속 차단(의도된 fail-closed)
+- 현재 문제: judgment/gap 미가드이므로 실문서 FINAL 불가(의도). HWPX `submit_hwpx` 는 R9 수용검사 게이트 KEEP(LRule 미연결)
+- 이미 구현된 부분: 기존 CORE/shared services, LRule, Finalizer, mechanized 가드
+- 확인 필요한 부분: HWPX 경로를 LRule에 붙일지(수용검사 계약과 충돌). 실사용자 문서 E2E
 
 문서의 DONE 표시만 믿지 말고 실제 코드/runtime을 확인한다.
 
 ### 8-5. MUST — 반드시 구현
 
-- [ ] business_plan 주요 entrypoint 실제 배선
-- [ ] consultant_application 주요 entrypoint 실제 배선
-- [ ] ambiguous domain 자동 FINAL 금지
-- [ ] LRule report 누락/duplicate/FAIL/REVIEW_REQUIRED/UNVERIFIABLE이면 FINAL 금지
-- [ ] artifact/registry hash가 검사 이후 변경되면 FINAL 금지
-- [ ] legacy direct FINAL 우회경로 차단
-- [ ] business_plan / consultant_application 실제 E2E
+- [x] business_plan 주요 entrypoint 실제 배선 (`run_autopilot` → `run_to_final`, `BusinessPlanPipeline.run_to_final`)
+- [x] consultant_application 주요 entrypoint 실제 배선 (`ConsultantApplicationPipeline.run_to_final`, `resume_fill.py fill`)
+- [x] ambiguous domain 자동 FINAL 금지
+- [x] LRule report 누락/duplicate/FAIL/REVIEW_REQUIRED/UNVERIFIABLE이면 FINAL 금지
+- [x] artifact/registry hash가 검사 이후 변경되면 FINAL 금지
+- [ ] legacy direct FINAL 우회경로 차단 (HWPX `submit_hwpx` 는 R9 수용검사 KEEP — LRule 미연결)
+- [x] business_plan / consultant_application 실제 E2E (synthetic fixture)
 
 ### 8-6. KEEP — 유지
 

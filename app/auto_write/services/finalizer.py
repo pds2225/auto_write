@@ -56,18 +56,20 @@ class Finalizer:
     def finalize(
         self,
         artifact_path: str | Path,
-        lrule_report: LRuleReport,
+        lrule_report: Optional[LRuleReport] = None,
         output_path: str | Path = None,
         force_draft: bool = False,
     ) -> FinalizerResult:
         """Artifact를 FINAL 또는 DRAFT로 판정한다.
 
         조건:
+        - LRule report 존재·비어 있지 않음
+        - 규칙 ID 중복 없음
         - FAIL = 0
         - REVIEW_REQUIRED = 0
         - UNVERIFIABLE = 0
-        - artifact hash 일치
-        - registry hash 일치
+        - artifact hash 일치 (검사 이후 변경 금지)
+        - registry hash 일치 (검사 이후 변경 금지)
 
         불충족 시:
         - _DRAFT 유지
@@ -77,15 +79,12 @@ class Finalizer:
         artifact = Path(artifact_path)
         result = FinalizerResult()
 
-        # Compute artifact SHA256
         if artifact.exists():
             result.artifact_sha256 = self._sha256(artifact)
 
-        # Check LRule report
-        summary = lrule_report.summary
-        result.lrule_summary = summary
+        if lrule_report is not None:
+            result.lrule_summary = lrule_report.summary
 
-        # Force draft if requested
         if force_draft:
             result.is_draft = True
             result.submittable = False
@@ -93,35 +92,60 @@ class Finalizer:
             result.final_path = str(self._ensure_draft_name(artifact))
             return result
 
-        # Check finalization conditions
         can_finalize = True
-        reasons = []
+        reasons: list[str] = []
 
-        if summary.get("fail", 0) > 0:
+        if lrule_report is None or not lrule_report.rules:
             can_finalize = False
-            reasons.append(f"{summary['fail']} FAIL")
+            reasons.append("LRule report missing")
+        else:
+            summary = lrule_report.summary
+            ids = [r.get("id", "") for r in lrule_report.rules]
+            if len(ids) != len(set(ids)):
+                can_finalize = False
+                reasons.append("duplicate LRule ids")
 
-        if summary.get("review_required", 0) > 0:
-            can_finalize = False
-            reasons.append(f"{summary['review_required']} REVIEW_REQUIRED")
+            if summary.get("fail", 0) > 0:
+                can_finalize = False
+                reasons.append(f"{summary['fail']} FAIL")
 
-        if summary.get("unverifiable", 0) > 0:
-            can_finalize = False
-            reasons.append(f"{summary['unverifiable']} UNVERIFIABLE")
+            if summary.get("review_required", 0) > 0:
+                can_finalize = False
+                reasons.append(f"{summary['review_required']} REVIEW_REQUIRED")
 
-        # Artifact hash verification
-        if lrule_report.artifact_sha256 and result.artifact_sha256:
-            if lrule_report.artifact_sha256 != result.artifact_sha256:
+            if summary.get("unverifiable", 0) > 0:
+                can_finalize = False
+                reasons.append(f"{summary['unverifiable']} UNVERIFIABLE")
+
+            if not artifact.exists():
+                can_finalize = False
+                reasons.append("artifact missing")
+            elif not lrule_report.artifact_sha256:
+                can_finalize = False
+                reasons.append("artifact SHA256 missing")
+            elif result.artifact_sha256 != lrule_report.artifact_sha256:
                 can_finalize = False
                 reasons.append("artifact SHA256 mismatch")
 
-        if not lrule_report.can_finalize:
-            can_finalize = False
-            if lrule_report.finalization_blocked_reason:
-                reasons.append(lrule_report.finalization_blocked_reason)
+            if lrule_report.registry_sha256:
+                registry_path = (
+                    Path(lrule_report.registry_path)
+                    if lrule_report.registry_path
+                    else Path(__file__).parent.parent.parent / "tests" / "lessons_coverage.json"
+                )
+                if not registry_path.exists():
+                    can_finalize = False
+                    reasons.append("registry missing")
+                elif self._sha256(registry_path) != lrule_report.registry_sha256:
+                    can_finalize = False
+                    reasons.append("registry SHA256 mismatch")
+
+            if not lrule_report.can_finalize:
+                can_finalize = False
+                if lrule_report.finalization_blocked_reason:
+                    reasons.append(lrule_report.finalization_blocked_reason)
 
         if can_finalize:
-            # SUCCESS — produce FINAL
             result.success = True
             result.is_draft = False
             result.submittable = True
@@ -131,7 +155,6 @@ class Finalizer:
                 final = self._remove_draft_suffix(artifact)
             result.final_path = str(final)
         else:
-            # BLOCKED — keep DRAFT
             result.success = False
             result.is_draft = True
             result.submittable = False
@@ -163,7 +186,7 @@ class Finalizer:
 
 def finalize_artifact(
     artifact_path: str | Path,
-    lrule_report: LRuleReport,
+    lrule_report: Optional[LRuleReport] = None,
     output_path: str | Path = None,
     force_draft: bool = False,
     settings: Any = None,

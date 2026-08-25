@@ -20,6 +20,7 @@ argument-hint: "[의도 한 줄] 또는 파일 경로"
 |-----------|------|
 | 공고/양식 분석 | `announcement-form-analysis` / `/auto-write-analyze` |
 | 처음부터 작성 | `bizplan-orchestrator` / `/auto-write-bizplan` |
+| 기술 출처 / 어디서 가져온거지 | `tech-framing-provenance` |
 | A→B 전사·양식 채움 | `cross-form-submission` 또는 `auto_write_hub.py fill` |
 | DOCX 다듬기 | `document-quality-orchestrator` / `/improve-doc-quality` |
 | hwp↔docx | `docx-hwp-conversion` |
