@@ -22,8 +22,7 @@ from auto_write.image_automation.models import (
     PipelineStage,
     VisualAsset,
 )
-
-GPT_IMAGE_MODEL = "gpt-image-1"
+from auto_write.services.image_providers import GPT_IMAGE_MODEL, build_missing_gpt_writer
 
 
 @dataclass
@@ -108,18 +107,20 @@ def generate_missing_assets(
     max_paid_calls: int = 0,
     use_mock: bool = True,
     writer: Callable[..., None] | None = None,
+    settings: Any | None = None,
+    openai_service: Any | None = None,
 ) -> GenerateMissingResult:
     """Generate images only for unmatched anchors when explicitly enabled.
 
-    Real OpenAI is never called from this module unless a custom ``writer``
-    is injected by a higher layer. Default path is mock PNG stubs.
+    Real OpenAI is never called from this module unless ``use_mock=False`` and
+    ``settings``/``openai_service`` supply a key, or a custom ``writer`` is injected.
+    Default path is mock PNG stubs.
     """
     out_dir = Path(out_dir)
     gaps = missing_anchors(anchors, decisions) if missing_only else list(anchors)
     call_log: list[GenerateCallLog] = []
     generated: list[VisualAsset] = []
     skipped: list[str] = []
-    is_mock = bool(use_mock and writer is None)
     gap_ids = [a.anchor_id for a in gaps]
 
     if not enabled:
@@ -149,7 +150,7 @@ def generate_missing_assets(
                 "generated": [],
                 "skipped": gap_ids,
                 "calls": [],
-                "use_mock": is_mock,
+                "use_mock": use_mock,
                 "reason": "budget_zero",
             },
         )
@@ -164,11 +165,15 @@ def generate_missing_assets(
             extras={
                 "reason": "budget_zero",
                 "stage": PipelineStage.GENERATE_MISSING.value,
-                "use_mock": is_mock,
+                "use_mock": use_mock,
             },
         )
 
-    write_fn = writer or (_default_mock_writer if use_mock else None)
+    write_fn = writer
+    if write_fn is None and not use_mock:
+        write_fn = build_missing_gpt_writer(settings, openai_service)
+    if write_fn is None and use_mock:
+        write_fn = _default_mock_writer
     if write_fn is None:
         return GenerateMissingResult(
             generated=[],
@@ -180,6 +185,7 @@ def generate_missing_assets(
             extras={"reason": "no_writer", "stage": PipelineStage.GENERATE_MISSING.value},
         )
 
+    is_mock = write_fn is _default_mock_writer
     provider = "mock" if is_mock else "openai"
     for i, anchor in enumerate(gaps):
         if i >= budget:
@@ -189,7 +195,11 @@ def generate_missing_assets(
         ph = _prompt_hash(prompt)
         rel = f"generated/{anchor.anchor_id}-{ph}.png"
         out_path = out_dir / rel
-        write_fn(prompt, out_path, model=GPT_IMAGE_MODEL)
+        try:
+            write_fn(prompt, out_path, model=GPT_IMAGE_MODEL)
+        except OSError:
+            skipped.append(anchor.anchor_id)
+            continue
         sha = hashlib.sha256(out_path.read_bytes()).hexdigest()
         asset = VisualAsset(
             asset_id=f"gen-{anchor.anchor_id}",

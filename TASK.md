@@ -36,7 +36,7 @@ REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 [x] T-20260816-06 | 브랜치 보호 할 일을 사용자가 더 볼 필요 없게 닫는다
 [x] T-20260816-07 | main에 이미 들어간 원격 브랜치를 지우고 backup은 남긴다
 [x] T-20260816-08 | 열린 draft #149·#152·#153·#154를 한 브랜치로 합쳐 한 번에 머지할 수 있게 한다
-[~] T-20260825-01 | 다른 폴더에만 남아 있던 빠진 그림 생성 코드를 지금 저장소로 옮긴다
+[x] T-20260825-01 | 다른 폴더에만 남아 있던 빠진 그림 생성 코드를 지금 저장소로 옮긴다
 
 에이전트 본문 금지: `# 0` LIST + 열린(`[ ]`/`[~]`) `8-1`만. T-20260814-02 8-1 전문은 생략. 제품 목표=`AW-005` 8-1 + `최우선 사용 케이스`. 웹앱 실행 정본=`웹앱 최종 요구사항_20260816`(승인 전 웹앱 코드 대기). 원장 A/B 표만. TASK 통째·CHANGELOG·닫힌 `[x]` DETAILS 금지.
 
@@ -4215,6 +4215,13 @@ REQUEST_SOLVED=YES: 합본이 origin/main `1001b76`에 있다. #155는 `ddac657`
 
 ### DONE
 - REQUEST_SOLVED=YES: M4 빠진 그림 생성 코드가 저장소에 있고, 고아 워크트리 미커밋이 0이며, HTML·stash를 무단 적용하지 않았다
+
+### 판정 (2026-08-25)
+- 고아 워크트리 4파일 적용 + `--allow-paid-generation` (기본 mock, 키 없으면 폴백)
+- `_SUGGESTION_RULES` star-import 누락 재export — CLI 테스트 수집 가능
+- stash@{0}는 현재 SKILL/원장에 없는 L규칙·D절이라 적용하지 않고 보존
+- HTML 2개 미반영 유지
+- `py -3.11 -m pytest tests/test_generate_missing.py tests/test_run_business_plan_images_m4.py tests/test_image_pipeline.py tests/test_image_provider_gpt.py -q` → 20 passed
 
 # 9. 실제사용 시나리오
 

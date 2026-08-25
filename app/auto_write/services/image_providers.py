@@ -4,6 +4,9 @@
 - Gemini "Nano Banana" (gemini-2.5-flash-image) via google-genai  [1순위]
 - OpenAI 이미지 (gpt-image-1) via openai                          [2순위]
 
+GENERATE_MISSING(P5/M4) 전용 경로는 ``generate_missing_gpt_image`` 만 사용한다.
+이 경로는 Gemini를 호출하지 않고 gpt-image-1 만 허용한다.
+
 원칙:
 - 키가 없으면 외부 호출하지 않는다(무료 폴백은 호출측 image_service가 담당).
 - API 키(Secret)는 settings에서만 읽고 절대 출력/로그하지 않는다.
@@ -12,9 +15,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from ..utils import log_line
+
+GPT_IMAGE_MODEL = "gpt-image-1"
 
 INFOGRAPHIC_STYLE = (
     "Clean Korean business infographic that SUMMARIZES the key points as a diagram. "
@@ -53,6 +58,51 @@ def _openai_generate(openai_service: Any, prompt: str, out_path: Path) -> bool:
     except Exception as exc:
         log_line(f"[WARN] OpenAI 이미지 생성 실패: {type(exc).__name__}")
         return False
+
+
+def generate_missing_gpt_image(
+    settings: Any,
+    openai_service: Any,
+    prompt: str,
+    out_path: Path,
+    *,
+    model: str = GPT_IMAGE_MODEL,
+) -> bool:
+    """GENERATE_MISSING 전용: gpt-image-1만 호출. Gemini 경로 사용 금지."""
+    if settings is None or not getattr(settings, "has_openai", False):
+        return False
+    if model != GPT_IMAGE_MODEL:
+        log_line(f"[WARN] GENERATE_MISSING model must be {GPT_IMAGE_MODEL}, got {model}")
+        return False
+    configured = str(getattr(settings, "openai_image_model", GPT_IMAGE_MODEL) or GPT_IMAGE_MODEL)
+    if configured != GPT_IMAGE_MODEL:
+        log_line(
+            f"[WARN] settings.openai_image_model={configured!r} "
+            f"but GENERATE_MISSING requires {GPT_IMAGE_MODEL}"
+        )
+        return False
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        styled = f"{INFOGRAPHIC_STYLE}\n\n[요약 대상]\n{prompt}"
+        return bool(openai_service.generate_image_file(styled, out_path))
+    except Exception as exc:
+        log_line(f"[WARN] GENERATE_MISSING gpt-image-1 실패: {type(exc).__name__}")
+        return False
+
+
+def build_missing_gpt_writer(
+    settings: Any,
+    openai_service: Any,
+) -> Callable[[str, Path], None] | None:
+    """OpenAI 키가 있을 때만 gpt-image-1 writer를 반환한다."""
+    if settings is None or not getattr(settings, "has_openai", False):
+        return None
+
+    def _writer(prompt: str, out_path: Path, *, model: str = GPT_IMAGE_MODEL) -> None:
+        if not generate_missing_gpt_image(settings, openai_service, prompt, out_path, model=model):
+            raise OSError("gpt-image-1 generation failed")
+
+    return _writer
 
 
 def generate_infographic(settings: Any, openai_service: Any, prompt: str, out_path: Path) -> str:
