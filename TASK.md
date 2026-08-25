@@ -15,7 +15,7 @@ TASK 1개 = 반드시 1줄. LIST의 TASK_ID와 DETAILS의 TASK_ID는 반드시 1
 REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 -->
 
-[~] AW-001 | 문서 작성이 정해진 검사 경로를 거쳐 끝나게 한다
+[ ] AW-001 | 문서 작성이 정해진 검사 경로를 거쳐 끝나게 한다
 [ ] AW-002 | GitHub와 작업 상태를 안전하게 주고받게 한다
 [ ] AW-003 | L 규칙을 한 화면에서 보고 고칠 수 있게 한다
 [ ] AW-004 | 문서 작성 진행 상태를 한 화면에서 보게 한다
@@ -36,6 +36,7 @@ REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 [x] T-20260816-06 | 브랜치 보호 할 일을 사용자가 더 볼 필요 없게 닫는다
 [x] T-20260816-07 | main에 이미 들어간 원격 브랜치를 지우고 backup은 남긴다
 [x] T-20260816-08 | 열린 draft #149·#152·#153·#154를 한 브랜치로 합쳐 한 번에 머지할 수 있게 한다
+[~] T-20260825-01 | 다른 폴더에만 남아 있던 빠진 그림 생성 코드를 지금 저장소로 옮긴다
 
 에이전트 본문 금지: `# 0` LIST + 열린(`[ ]`/`[~]`) `8-1`만. T-20260814-02 8-1 전문은 생략. 제품 목표=`AW-005` 8-1 + `최우선 사용 케이스`. 웹앱 실행 정본=`웹앱 최종 요구사항_20260816`(승인 전 웹앱 코드 대기). 원장 A/B 표만. TASK 통째·CHANGELOG·닫힌 `[x]` DETAILS 금지.
 
@@ -4169,6 +4170,51 @@ STATUS_THIS_TURN: #156 squash `1001b76`. #155는 이미 main `ddac657`. MAIN_MER
 
 ### DONE
 REQUEST_SOLVED=YES: 합본이 origin/main `1001b76`에 있다. #155는 `ddac657`. 열린 PR 0. backup 유지. MAIN_MERGED=YES.
+
+## T-20260825-01
+
+### 8-1. 사용자 원문
+미반영변경?
+
+ㅇ 너가 추천하는법으로 해결해
+
+### 최종 결과
+다른 작업 폴더에만 저장 안 되고 남아 있던 빠진 그림 생성 코드가 이 저장소에 들어간다. 오래된 임시 보관함은 이미 있는 내용이면 지우고, 요청하지 않은 HTML 두 개는 넣지 않는다.
+
+### MUST
+- `D:/tmp/wt-auto_write-m4-generate-prep` 미커밋 4파일을 최신 `origin/main` 위에 적용한다
+- 기본 경로는 mock stub 유지. 실 OpenAI(`gpt-image-1`)는 `--allow-paid-generation`과 키가 있을 때만
+- GENERATE_MISSING 경로는 Gemini를 호출하지 않는다
+- 테스트는 실 API를 호출하지 않는다
+- 적용 후 해당 워크트리 미커밋을 정리한다
+- 오래된 stash는 현재 파일과 겹치면 삭제하고, 고유하면 적용하지 않고 남긴다
+- HTML 2개(`상권분석.html`, `배달앱 마케팅 전략 작성.html`)는 이번 요청 범위가 아니므로 반영하지 않는다
+
+### KEEP
+- AW-001~AW-009, T-20260814-02 본문을 합치지 않는다
+- `generate_infographic`의 Gemini 1순위 경로는 그대로 둔다
+- 키 없으면 외부 호출하지 않는다
+- 기본 mock 동작과 기존 GENERATE_MISSING 테스트 계약
+
+### REMOVE
+- 고아 워크트리에만 남아 있던 동일 미커밋 변경
+
+### FORBIDDEN
+- .env / 비밀값
+- 요청에 없는 기능 추가
+- HTML 2개 무단 반영
+- stash 맹목적 apply
+- 기본 경로에서 실 OpenAI 호출
+- force push / `git add -A` / `reset --hard`
+- 유료 API 무단 호출
+
+### VERIFY
+- `py -3.11 -m pytest app/tests/test_generate_missing.py app/tests/test_run_business_plan_images_m4.py app/tests/test_image_pipeline.py -q`
+- `D:/tmp/wt-auto_write-m4-generate-prep` working tree dirty=0
+- `--allow-paid-generation` 도움말에 있고, 키 없으면 mock으로 폴백한다
+
+### DONE
+- REQUEST_SOLVED=YES: M4 빠진 그림 생성 코드가 저장소에 있고, 고아 워크트리 미커밋이 0이며, HTML·stash를 무단 적용하지 않았다
 
 # 9. 실제사용 시나리오
 
