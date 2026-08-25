@@ -36,6 +36,7 @@ _REQUIRED_SKILLS = (
     "session-resume/SKILL.md",
     "user-bizdoc-playbook/SKILL.md",
     "user-applications-memory/SKILL.md",
+    "ir-storyboard-pptx/SKILL.md",
 )
 _REQUIRED_COMMANDS = (
     "bizdoc.md",

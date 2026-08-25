@@ -54,6 +54,7 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 | 2026-08-23 | 신청 원장: KICXUP 선정 · 온랩 접수 · 1인창조 취소. 플레이북·도보네비 카드. 채팅만(Docs 정리본 금지) | `docs/clients/user_applications.md` · `user-bizdoc-playbook` |
 | 2026-08-23 | 세션 마무리. 스킬 `tech-framing-provenance` 의미 확인(공고 맞춤 문장≠보유기술). 추가 구현 없음 | 이 체크포인트 · 위키 `session-2026-08-23.md` |
 | 2026-08-23 | 원장 A1~A6 종료(사용자: 이미 제출). 웹앱은 승인 전 대기. AW-001 #161 main | 이 체크포인트 · `9851ab3` |
+| 2026-08-20 | K-네비 9장 PPT는 Skywork 이관(불합격 아님). 스킬 `ir-storyboard-pptx`. Cursor 카드덱 재작성 금지 | `.claude/skills/ir-storyboard-pptx` · `docs/KNEVI_KICKXUP_SKYWORK_PROMPT.md` |
 | 2026-08-20 | 케이네비 MVP 컷시트·16.5초 하이라이트. 스킬 `k-navi-mvp-highlight`. 보이는 것만(랜드마크/KASS 금지) | Drive `1_BUufLAantULLQkHEQshEAHMgxAcjxqz` · `.claude/skills/k-navi-mvp-highlight` |
 | 2026-08-20 | K-Navi 배너 EN/KO 16:9 artifact(미커밋). `session-resume` 스킬 신설. `promo-banner-localize` 일회성이라 철회 | `.claude/skills/session-resume` |
 | 2026-08-20 | 세션 마무리. STAR 위성항법=프레이밍(원문 없음). 스킬수확 `tech-framing-provenance` + 훅 규칙 §7 | Drive 위키 · `.claude/skills/tech-framing-provenance` · `AGENTS.md` §7 |
@@ -77,6 +78,7 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 | "문서 도와줘 / 뭘로 처리해" (의도 불명) | 스킬 `bizdoc-hub` 또는 `/bizdoc` |
 | "업무 절차 / 그대로 실행 / 도보네비 카드" | 스킬 `user-bizdoc-playbook` + `docs/clients/dobonevi_card.md` |
 | "뭐 신청했지 / 아이템별로" | 스킬 `user-applications-memory` + `docs/clients/user_applications.md`. 채팅만. Docs 정리본 금지 |
+| IR/피치덱 스토리보드 → PPT | 스킬 `ir-storyboard-pptx` + Skywork. Cursor python-pptx 카드덱 금지 |
 | PC·폴더 어디서든 채움·진단 CLI | `py -3.11 app/auto_write_hub.py env\|diagnose\|fill …` |
 | 구 BizPlan Injector (JSON→DOCX) | `tools/injector/inject.py` / `run.sh` |
 | 상세 라우팅표 | `docs/BIZDOC_HUB_MAP.md` |
@@ -85,6 +87,7 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 
 0. **STAR-Exploration:** 원장 A6 종료(선정·재작성 금지). 상위2 지원금·발표자료는 **새 요청이 있을 때만**. 그때 IR 위성항법=공고 맞춤 프레이밍(미보유 기술) — 과대포장 금지
 0a. **K-Navi 배너:** 16:9 한글/영문은 Cursor artifact. 재생성은 요청 시에만(스킬로 고정하지 않음). 저장소/슬라이드 삽입은 사용자가 원할 때만
+0a2. **K-네비 9장 PPT (A8):** Skywork 결과 검수 대기. Cursor가 카드덱을 다시 그리지 말 것. 프롬프트=`docs/KNEVI_KICKXUP_SKYWORK_PROMPT.md`
 0b. **엔진 / STEP 2 추출기:** 실문서 D1–D3 HWP + `STEP2_EXTRACTION_GOLDEN_V1.json` 으로
    `python app/tools/step2_extraction_baseline.py --golden … --input-dir …`
    → `baseline_report`의 READ_MISS / STRUCTURED_EXTRACTION_MISSING / VALUE_ERROR / SOURCE_LOST 건수.
@@ -137,6 +140,7 @@ py -3.11 auto_write_hub.py env
 - 실사용 원장: `docs/REQUEST_LEDGER.md`
 - 신청 원장(채팅만): `docs/clients/user_applications.md` · 스킬 `user-applications-memory`
 - 도보네비 카드·절차: `docs/clients/dobonevi_card.md` · 스킬 `user-bizdoc-playbook`
+- K-네비 IR PPT: `.claude/skills/ir-storyboard-pptx/SKILL.md` · `docs/KNEVI_KICKXUP_SKYWORK_PROMPT.md`
 - BPQ 정밀화 대기 지식: `docs/BPQ_PIPELINE_INSIGHTS_20260815.md`
 - 웹앱 실행 정본: `docs/AUTO_WRITE_웹앱_최종_요구사항_20260816.md`
 - 작업 규약: `CLAUDE.md` · `AGENTS.md`
