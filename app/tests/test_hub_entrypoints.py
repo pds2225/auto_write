@@ -37,6 +37,7 @@ _REQUIRED_SKILLS = (
     "user-bizdoc-playbook/SKILL.md",
     "user-applications-memory/SKILL.md",
     "ir-storyboard-pptx/SKILL.md",
+    "session-closeout-all/SKILL.md",
 )
 _REQUIRED_COMMANDS = (
     "bizdoc.md",
@@ -44,6 +45,7 @@ _REQUIRED_COMMANDS = (
     "auto-write-autopilot.md",
     "auto-write-bizplan.md",
     "auto-write-analyze.md",
+    "session-closeout-all.md",
 )
 _REQUIRED_FILES = (
     "docs/BIZDOC_HUB_MAP.md",
