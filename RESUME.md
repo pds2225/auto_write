@@ -12,7 +12,7 @@
 **밤샘 2026-08-19 → main #161:** AW-001 `[~]`. `run_to_final` + mechanized 가드(`build_lrule_guards`, unverifiable=0).
 judgment/gap은 REVIEW_REQUIRED → FINAL 차단 유지. 웹앱·BPQ-00 제품 코드는 승인 전 대기. 공고+양식 오기 전 초안 대기.
 
-**문서 작업:** 원장 A1~A6 **종료**(사용자 2026-08-23: 이미 제출). 항우연은 6팀 멘토링 선정·상위2 지원금은 별도. 새 요청 없으면 문서 트랙 닫음.
+**문서 작업:** 원장 A1~A7. A1 온랩 **접수**. A5 1인창조 **취소**. A6 STAR **선정**(6팀 멘토링, 상위2 지원금은 별도). 내비 KICXUP **선정**. 신청 원장=`docs/clients/user_applications.md`(채팅만, Google Docs 정리본 금지). 도보네비 카드=`docs/clients/dobonevi_card.md`.
 **엔진:** T-20260814-02 명세+실행지시+BPQ-00 감사+#150 측정기+#155 git-sync(기준 브랜치=GitHub default/`main`)+#156(웹앱 사양·계획 보강·STEP 3A)+#161(DomainRouter→LRule→Hash→Finalizer 게이트)이 main에 있음. DOCX 정본=`core.docx.services`.
 **열린 작업:** 이 브랜치가 main보다 앞섬(STAR 스킬+§7 훅). Cursor 클라우드 PR은 기본 draft. 원격 `main` + `backup/*` 2개.
 **머지 주의:** Cursor 클라우드 PR은 기본 draft. GitHub 자동머지는 draft에서 불가. 머지 요청 시 Ready for review 후 `gh pr merge --auto --squash`.
@@ -51,6 +51,7 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 
 | 날짜 | 내용 | 근거 |
 |------|------|------|
+| 2026-08-23 | 신청 원장: KICXUP 선정 · 온랩 접수 · 1인창조 취소. 플레이북·도보네비 카드. 채팅만(Docs 정리본 금지) | `docs/clients/user_applications.md` · `user-bizdoc-playbook` |
 | 2026-08-23 | 세션 마무리. 스킬 `tech-framing-provenance` 의미 확인(공고 맞춤 문장≠보유기술). 추가 구현 없음 | 이 체크포인트 · 위키 `session-2026-08-23.md` |
 | 2026-08-23 | 원장 A1~A6 종료(사용자: 이미 제출). 웹앱은 승인 전 대기. AW-001 #161 main | 이 체크포인트 · `9851ab3` |
 | 2026-08-20 | K-Navi 배너 EN/KO 16:9 artifact(미커밋). `session-resume` 스킬 신설. `promo-banner-localize` 일회성이라 철회 | `.claude/skills/session-resume` |
@@ -73,13 +74,15 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 | 상황 | 쓸 것 |
 |------|--------|
 | "문서 도와줘 / 뭘로 처리해" (의도 불명) | 스킬 `bizdoc-hub` 또는 `/bizdoc` |
+| "업무 절차 / 그대로 실행 / 도보네비 카드" | 스킬 `user-bizdoc-playbook` + `docs/clients/dobonevi_card.md` |
+| "뭐 신청했지 / 아이템별로" | 스킬 `user-applications-memory` + `docs/clients/user_applications.md`. 채팅만. Docs 정리본 금지 |
 | PC·폴더 어디서든 채움·진단 CLI | `py -3.11 app/auto_write_hub.py env\|diagnose\|fill …` |
 | 구 BizPlan Injector (JSON→DOCX) | `tools/injector/inject.py` / `run.sh` |
 | 상세 라우팅표 | `docs/BIZDOC_HUB_MAP.md` |
 
 ## 남은 일 (우선순위)
 
-0. **STAR-Exploration:** 원장 A1~A6 종료(이미 제출). 상위2 지원금·발표자료는 **새 요청이 있을 때만**. 그때 IR 위성항법=공고 맞춤 프레이밍(미보유 기술) — 과대포장 금지
+0. **STAR-Exploration:** 원장 A6 종료(선정·재작성 금지). 상위2 지원금·발표자료는 **새 요청이 있을 때만**. 그때 IR 위성항법=공고 맞춤 프레이밍(미보유 기술) — 과대포장 금지
 0a. **K-Navi 배너:** 16:9 한글/영문은 Cursor artifact. 재생성은 요청 시에만(스킬로 고정하지 않음). 저장소/슬라이드 삽입은 사용자가 원할 때만
 0b. **엔진 / STEP 2 추출기:** 실문서 D1–D3 HWP + `STEP2_EXTRACTION_GOLDEN_V1.json` 으로
    `python app/tools/step2_extraction_baseline.py --golden … --input-dir …`
@@ -131,6 +134,8 @@ py -3.11 auto_write_hub.py env
 - autowrite 통합: `docs/REPO_DUPLICATION_CHECK.md`
 - HWPX 파리티(B 완결): `docs/RESUME_hwpx_parity.md`
 - 실사용 원장: `docs/REQUEST_LEDGER.md`
+- 신청 원장(채팅만): `docs/clients/user_applications.md` · 스킬 `user-applications-memory`
+- 도보네비 카드·절차: `docs/clients/dobonevi_card.md` · 스킬 `user-bizdoc-playbook`
 - BPQ 정밀화 대기 지식: `docs/BPQ_PIPELINE_INSIGHTS_20260815.md`
 - 웹앱 실행 정본: `docs/AUTO_WRITE_웹앱_최종_요구사항_20260816.md`
 - 작업 규약: `CLAUDE.md` · `AGENTS.md`
