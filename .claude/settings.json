@@ -1,7 +1,27 @@
 {
   "hooks": {
-    "SessionStart": [],
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python scripts/session_closeout.py sync-disk --agent claude --location local"
+          }
+        ]
+      }
+    ],
     "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \".claude/hooks/session_resume_hook.js\"",
+            "timeout": 5
+          }
+        ]
+      },
       {
         "matcher": "",
         "hooks": [
