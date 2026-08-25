@@ -53,6 +53,7 @@ def test_enable_generate_missing_help_says_mock(cli):
     help_text = cli.build_parser().format_help()
     assert "mock" in help_text.lower()
     assert "실 OpenAI" in help_text or "OpenAI 호출 없음" in help_text
+    assert "--allow-paid-generation" in help_text
 
 
 def test_run_m4_budget_zero_warns_and_receipt(cli, tmp_path: Path, capsys):
@@ -79,3 +80,24 @@ def test_run_m4_prints_use_mock_true(cli, tmp_path: Path, capsys):
     assert payload["use_mock"] is True
     assert payload["openai_calls_real"] == 0
     assert payload["mock_calls"] == 1
+
+
+def test_allow_paid_without_key_falls_back_to_mock(cli, tmp_path: Path, capsys, monkeypatch):
+    monkeypatch.setattr(
+        "auto_write.config.get_settings",
+        lambda: SimpleNamespace(has_openai=False),
+    )
+    monkeypatch.setattr(
+        "auto_write.services.openai_client.OpenAIService",
+        lambda settings: SimpleNamespace(),
+    )
+    rc = cli._run_m4_generate_missing(
+        _m2_stub(tmp_path), max_paid_calls=1, allow_paid=True
+    )
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert "OPENAI_API_KEY 없음" in captured.err
+    assert "mock stub" in captured.out
+    payload = json.loads(captured.out.split("--- M4", 1)[1].split("\n", 1)[1])
+    assert payload["use_mock"] is True
+    assert payload["openai_calls_real"] == 0

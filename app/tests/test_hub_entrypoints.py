@@ -32,6 +32,12 @@ _REQUIRED_SKILLS = (
     "document-quality-orchestrator/SKILL.md",
     "docx-hwp-conversion/SKILL.md",
     "hwpx-doctor/SKILL.md",
+    "tech-framing-provenance/SKILL.md",
+    "session-resume/SKILL.md",
+    "user-bizdoc-playbook/SKILL.md",
+    "user-applications-memory/SKILL.md",
+    "ir-storyboard-pptx/SKILL.md",
+    "session-closeout-all/SKILL.md",
 )
 _REQUIRED_COMMANDS = (
     "bizdoc.md",
@@ -39,11 +45,14 @@ _REQUIRED_COMMANDS = (
     "auto-write-autopilot.md",
     "auto-write-bizplan.md",
     "auto-write-analyze.md",
+    "session-closeout-all.md",
 )
 _REQUIRED_FILES = (
     "docs/BIZDOC_HUB_MAP.md",
     "RESUME.md",
     "app/auto_write_hub.py",
+    "docs/clients/dobonevi_card.md",
+    "docs/clients/user_applications.md",
 )
 
 
@@ -65,7 +74,16 @@ def test_hub_commands_present() -> None:
 
 def test_hub_map_and_cli_present() -> None:
     missing = [p for p in _REQUIRED_FILES if not (_REPO / p).is_file()]
-    assert not missing, f"허브 맵/CLI/RESUME 누락: {missing}"
+    assert not missing, f"허브 맵/CLI/RESUME/카드/원장 누락: {missing}"
+
+
+@pytest.mark.skipif(not _has_claude(), reason="repo .claude 없음")
+def test_applications_memory_skill_forbids_google_docs() -> None:
+    """수확 스킬은 정리본 Docs를 만들지 말라고 못 박아야 한다."""
+    text = (_SKILLS / "user-applications-memory" / "SKILL.md").read_text(encoding="utf-8")
+    assert "Google Docs" in text
+    assert "채팅" in text
+    assert "user_applications.md" in text
 
 
 def test_auto_write_hub_subcommands() -> None:

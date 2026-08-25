@@ -3,6 +3,15 @@
 > AI 에이전트(Claude Code / Codex 등)가 `D:\auto_write` 에서 작업할 때의 규약.
 > 세션 재개: `RESUME.md` 먼저. 입구 맵: `docs/BIZDOC_HUB_MAP.md`.
 > 상세 작업 지침은 `CLAUDE.md`, 하네스 설계는 `docs/HARNESS_TEAM_DESIGN.md` 참조.
+>
+> **세션 시작 시** `git pull` 후 `.session/closeout_due.json` 의 `due` 가 true 이면
+> (로컬 Claude 훅은 `python scripts/session_closeout.py sync-disk` 로 디스크 깃발 동기)
+> **이 (agent, location) 이 acks 에 없을 때만** `RESUME.md` 를 갱신하고
+> `python scripts/session_closeout.py ack --agent <cursor|claude|codex> --location <local|cloud|github>`
+> 한 뒤 커밋·푸시한다. `due` 는 `cancel` 전까지 유지(다른 위치·AI가 이어서 저장).
+> 다른 창 대화를 대신 저장했다고 말하지 않는다.
+> 깃발 예약(여기 클라우드에서도 가능): `python scripts/session_closeout.py plant --from <이창>` → 커밋·푸시.
+> 확인: `python scripts/session_closeout.py status`. 설명: `.session/README.md`.
 
 ## 0. 프로젝트 구조 — 저장소 분리 진행 중
 
@@ -100,13 +109,25 @@ python -m pytest tests/test_document_quality_harness.py -q       # 테스트
 기존 정상 기능 삭제 · results/templates 원본 삭제 · 테스트 없이 커밋 · 실패의 성공 보고 ·
 글로벌 `D:\.claude` 무단 대체.
 
+## 7. 스킬 훅 — 요청 원문이 트리거다
+
+사용자가 **자기 필요 때문에 스킬을 만들게 한 그 요청 문장**(오타·구어·사업명 포함)을
+`SKILL.md` frontmatter `description` 훅의 **최우선**으로 넣는다. 정리된 영문 스킬명·전문용어는 보조다.
+
+스킬은 텍스트 프롬프트에 **자동으로** 걸려야 한다. 스킬명을 불러야만 켜지면 효용이 줄어든다.
+
+수확·신규 직후 확인: 요청 원문 구절이 `description`에 그대로 있는지. 없으면 미완.
+트리거 등록 위치는 위키 `frontmatter-yaml-5-2026-08-04`(5곳). 훅 **문구**는 이 절이 SSOT.
+
 ---
 
 **변경 이력**
 
 | 날짜 | 변경 내용 | 사유 |
 |------|----------|------|
+| 2026-08-20 | 세션 마무리 깃발을 GitHub 파일(`.session/closeout_due.json`)로 공유 | 로컬/클라우드/다른 AI가 같은 신호를 보게 함 |
 | 2026-06-05 | 문서 품질 하네스 에이전트 12종 규약 신규 | 하네스 초기 구축 |
 | 2026-06-07 | §2 에이전트 표 12→6 동기화 | 실제 `.claude/agents/` 슬림화(12→6)와 본 규약 불일치 해소 |
+| 2026-08-20 | §7 스킬 훅=요청 원문 우선. 자동 미발동이면 효용 감소 | 사용자 확정. 스킬명 호출 전제 금지 |
 | 2026-08-18 | §5 draft PR은 GitHub 자동머지 불가 → Ready 후 `--auto` | #155가 draft라 자동머지가 안 걸린 실측 |
 | 2026-08-04 | §5 GitHub PR 머지: `gh pr merge --auto` 디폴트 | 사용자 의도 auto-merge 기본 |

@@ -6,10 +6,17 @@
 > **🔄 세션을 새로 시작했다면 `RESUME.md` 를 먼저 읽어라** — 진행 상태·남은 일·재개 명령이 있다.
 > 작업을 잠시 멈추거나 컨텍스트가 무거워지면 "체크포인트 저장"으로 RESUME.md 를 갱신하고,
 > 새 세션에서 "이어서"로 복원한다(session-resume 스킬).
+> **마무리 예약(로컬·클라우드·GitHub · Cursor/Claude/Codex 공통):**
+> `python scripts/session_closeout.py plant|status|sync-disk|ack|cancel`.
+> `due: true` 이고 이 (agent, location) 이 아직 ack 가 아니면 `RESUME.md` 갱신 후
+> `ack` 하고 푸시. `due` 는 `cancel` 전까지 유지. 상세 `.session/README.md`.
 >
 > **현재 상태(2026-08-11):** RESUME.md 신설 + 허브 맵(`docs/BIZDOC_HUB_MAP.md`)·
 > `bizplan-orchestrator` 스킬·`/bizdoc` 커맨드로 입구 정리. autowrite 흡수는 PR #100 완료
 > (원격 삭제는 owner 수동). 테스트는 반드시 `py -3.11 -m pytest` (기본 3.14 는 matplotlib 부재).
+>
+> **스킬 훅(전역):** 스킬을 만들게 한 **요청 원문**을 `description` 훅 최우선으로 넣는다.
+> 텍스트 프롬프트에 자동으로 안 걸리면 효용이 줄어든다. 상세 `AGENTS.md` §7.
 
 ## 프로젝트 개요
 
@@ -68,6 +75,9 @@ table-whitespace-cleanup · content-emphasis · document-type-classification ·
 psst-structure-check · infographic-suggestion · document-quality-scoring ·
 backup-and-rollback · document-quality-inspection ·
 **docx-hwp-conversion**(DOCX↔HWP/HWPX 양방향 변환, 입출력단)
+**session-resume**(이어서/세션마무리/체크포인트. RESUME.md SSOT. 일회성 배너는 스킬 아님)
+**session-closeout-all**(위치×AI 공통 마무리 깃발. `.session/closeout_due.json`. 기본 커밋본은 due=false)
+**병행(문서 하네스 아님):** `k-navi-mvp-highlight` — KICXUP MVP 화면녹화 컷시트·하이라이트. `bizdoc-hub`로 라우팅하지 말 것.
 
 ### 커맨드 (`.claude/commands/`)
 
@@ -76,7 +86,7 @@ backup-and-rollback · document-quality-inspection ·
 
 `/improve-doc-quality` · `/auto-write-inspect` · `/auto-write-psst` ·
 `/auto-write-images` · `/auto-write-autopilot` · `/auto-write-bizplan` ·
-`/auto-write-analyze` · `/auto-write-selfdev`
+`/auto-write-analyze` · `/auto-write-selfdev` · `/session-closeout-all`
 > ※ `/auto-write-quality`(→`/improve-doc-quality` 와 완전중복)·`/auto-write-finalize`(→`/auto-write-autopilot` 로 흡수)는
 > 2026-07-16 통폐합으로 아카이브(`~/.claude/skills_archive/20260716-autowrite-consolidation/`). CLI(.py)는 보존.
 
@@ -175,11 +185,13 @@ submission_orchestrator·image_apply). 신규 에이전트는 `cross-form-filler
 
 | 날짜 | 변경 내용 | 대상 | 사유 |
 |------|----------|------|------|
-| 2026-07-02 | cross-form 자동채움: 표 셀 '안' 인라인 빈칸(`라벨 : ______`) 전사 (recall 확대, 야간 격리본) | 수정 app/auto_write/services/cross_form_autofill.py / 테스트 app/tests/test_cross_form_autofill.py(신규 5) | 실측 갭: python-docx `doc.paragraphs` 가 표 셀 단락을 포함하지 않아, 정부양식 표지/개요 박스에 흔한 한 셀 안 인라인 필드(`신청기업명 : ____  대표자 : ___`)가 **전혀 탐지·전사되지 않던** recall 갭. 해결: `find_target_fields` 에 각 논리셀 단락 스캔 추가(kind="cell_paragraph") → `match_fields`(cell_para_index 전파) → `autofill_from_source` 셀 단락 기입 루프(`_fill_paragraph_fields` 재사용). 셀 인라인은 **'보이는 빈칸'(밑줄/점/대시)만**(`_is_visible_blank`) — 콜론 뒤 공백/빈값은 옆 값칸 패턴과 모호해 제외(오기입 방지). 안전 불변: 실값·마스킹(○○○) 보존·날조0·원본 미수정. `_key` 가 콜론을 보존해 표-라벨 경로가 인라인 셀을 무매칭 → 이중 기입 없음 실측 확인. 한 셀 4칸(신청기업명·대표자·연락처·이메일) 동시 채움 E2E, 동의어(성명←대표자) 포함. py-3.11 **568 passed**(신규 5, 회귀 0). 중첩 표 인라인은 최상위 표 한계로 차기 |
 | 2026-07-13 | SFT 데이터 레이어 P0~P2 + 기업 Master JSON P3(슬1) 구축 (PR #74~#77) | 신규 app/auto_write/services/{generation_store,sft_export,company_extract}.py·app/{sft_export,company_master}.py·app/auto_write/services/learning_store.py(feedback/generation_traces 추가)·project_service.py·openai_client.py / 테스트 3종(test_generation_store·test_sft_human_approved·test_sft_export·test_company_extract) | 사용자 요구 '현행 자동작성 유지 + AI 입력/생성답안/사람 수정본을 자동 저장해 LoRA SFT 데이터 축적 + 기업정보 자산화'. 계획 wiki `.omc/wiki/auto-write-sft-master-json-2026-07-13.md`(정찰 4에이전트+적대검증 2에이전트). **P0**(#74) 생성 계측: `_complete_text` fail-safe 훅(로깅 실패가 AI 호출 안 깸·재시도 attempt=2)→generation_traces.jsonl(큰 본문 gen_blobs/<sha1> 해시참조)·generate 초입 입력스냅샷·ai_draft_snapshot(AI원문↔반영본)·answers_provenance(user/docx_seed/psst/ai/fallback/needs_confirm). **P1**(#75) 사람수정 캡처: feedback.jsonl·_capture_human_edits(save_project_form에서 P0 ai_draft_snapshot.reflected와 대조, **첫 divergence 게이트**로 사람 v1→v2 오라벨 방지, edited/draft_rejected). **P2**(#76) 학습셋 변환기+소비자: sft_export→sft_dataset.jsonl(chat, **사람승인본 우선**·rejected제외·dedup·--mask)+learned_snippets.json→`_suggest_learned_snippets`가 항목 라벨정확일치로 **AI 컨텍스트에만** few-shot 주입(폴백/문서 직접삽입 제외). **P3 슬1**(#77) 기업 Master JSON: company_extract(라벨정규화=cross_form_autofill 동의어 재사용·**숫자 사실값 보존**[extract_source_fields는 숫자 폐기라 미사용]·항목단위 provenance{file,raw_label}·confidence high/medium/conflict·불일치=conflict candidates·없으면 missing·전부 confirmed=false·하이픈무시 거짓충돌방지)+company_master.py CLI. **날조0·부수효과 fail-safe·기존흐름 무변경(계측만 추가)** 불변. 저장 workspace/learning·<project>/sft·workspace/companies(gitignore). py-3.11 810→**845 passed**(신규 29, 회귀 0). 각 단계 CLI/무키 E2E exit 0. 남음: P3 후속(페이지마커·양식커버리지·검수루프·생성 2단분리)·P4(비전·시각자료)·미결 5건 |
 | 2026-07-13 | hwpx-doctor: 안 열리는 한글 파일 진단·자동수정(표 격자 결함) + 엔진 예방 배선 + 스킬 | 신규 app/hwpx_doctor.py·.claude/skills/hwpx-doctor / 수정 app/auto_write/services/hwpx_layout_fix.py(repair_table_grid·repair_all_table_grids·check_hwpx_semantics·finalize repair_grid 배선) / 테스트 test_hwpx_layout_fix.py(신규 5) | 실측: 박다솜 프로필 v3~v7 hwpx가 한글에서 안 열림(불러오기도 실패). 지난번 zip/XML 구문검증만으론 '정상' 오판(오답노트 L033) → 심층 의미검증(itemCnt·ID참조·표격자)으로 **표 격자 결함 확정**: 수행 프로젝트 표(4×3) 마지막 행 rowAddr가 2로 중복 지정(정상=3)→row2 6칸 겹침·row3 텅 빔→한글 열기 거부. 원인=채움 스크립트가 행 추가 시 rowAddr 미증가(v3부터). 수정본 생성→한글에서 열림 확인(원인 확정). **재발방지**: P0 validate_table_grid(검출)에 repair(교정) 추가 + `finalize_layout_hwpx(repair_grid=True 기본)`에 배선 → hwpx_submit 등 제출·마감 경로가 저장 직전 깨진 격자 자동교정(병합표 rowSpan/colSpan>1은 보호·멱등·원본미수정). on-demand CLI `hwpx_doctor.py diagnose|repair`(exit 0/2) + 전역 스킬 hwpx-doctor(안 열림 자동발동). py-3.11 신규 5·회귀 0 |
 | 2026-08-02 | autowrite 잔여 고유자산 흡수 완료(run/docs/tests) + 통합 문서 정리; 원격 삭제는 owner 수동 | tools/injector/{run.bat,run.sh,docs/,tests/} · REPO_DUPLICATION_CHECK · ONBOARDING · run_auto_loop_15.bat | 사용자 요청: autowrite에만 있던 기능 가져오고 autowrite 삭제. 코어는 상위호환·인젝터 잔여 7파일 이전·원격 admin권한 없어 삭제 절차 문서화 |
 | 2026-08-11 | RESUME.md 신설 + 허브·중복 정리(A): BIZDOC_HUB_MAP·bizplan-orchestrator 스킬·/bizdoc·죽은 커맨드 참조 정리·입구 가드 테스트 | RESUME.md · docs/BIZDOC_HUB_MAP.md · .claude/skills/bizplan-orchestrator · .claude/commands/bizdoc.md · test_hub_entrypoints.py · HANDOFF/PROJECT_REPORT/CLAUDE/AGENTS | 사용자 요청 3·4순위. 입구 이중(에이전트 bizdoc-hub vs CLI auto_write_hub) 역할 분리 문서화. 문서가 가리키던 bizplan-orchestrator 스킬 부재 해소. 아카이브 커맨드(/auto-write-quality·finalize) 잔존 참조 제거 |
+| 2026-08-20 | session-resume 스킬 신설. 배너 스킬/후크는 일회성이라 철회 | 신규 `.claude/skills/session-resume/SKILL.md` · `.claude/hooks/session_resume_hook.js` · 삭제 promo-banner-localize | CLAUDE.md 가 session-resume 을 가리키는데 파일이 없음 = 매 세션 빈손. K-Navi 배너 한/영은 다음 요청 0회 예상이라 스킬·GenerateImage 후크 철회. 후크는 「세션마무리/이어서」만 |
+| 2026-08-20 | 케이네비 MVP 하이라이트 스킬 수확 + 위키 3페이지 | 신규 `.claude/skills/k-navi-mvp-highlight` · `.omc/wiki/k-navi-mvp-highlight-edit.md` · `k-navi-cloud-drive-ingest.md` · `session-2026-08-20-k-navi-mvp.md` · RESUME | KICXUP 실녹화 컷시트 재실행용. 클라우드=Windows 경로 불가, Drive MCP 10MB, gdown 후 공유 제한. 보이는 것만 주장(랜드마크/KASS 금지). bizdoc-hub 라우팅 아님. 엔진 코드 무변경 |
+| 2026-08-20 | 세션 마무리 깃발을 GitHub 파일(`.session/closeout_due.json`)로 공유 — 로컬/클라우드/GitHub × Cursor/Claude/Codex | 신규 scripts/session_closeout.py·.session/·app/tests/test_session_closeout.py·.claude/skills/session-closeout-all | 한 창은 다른 창 대화를 저장할 수 없음. 저장소 깃발+pull 후 각 (agent,location)이 RESUME.md 를 스스로 갱신·ack. due 는 cancel 전까지 유지. 로컬 Claude 훅은 sync-disk |
 
 > **이전 이력 35건은 [docs/CHANGELOG.md](docs/CHANGELOG.md) 로 옮겼다**(2026-07-20).
 > 이 표가 파일의 80%(42KB)를 차지했고, `CLAUDE.md` 는 매 세션 통째로 로드되기 때문이다.

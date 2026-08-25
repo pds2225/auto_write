@@ -21,8 +21,11 @@
 | 의도 | 에이전트(스킬/커맨드) | CLI (사람이 직접) |
 |------|----------------------|-------------------|
 | 뭘 해야 할지 모름 / "문서 도와줘" | **bizdoc-hub** `/bizdoc` | — (먼저 의도 확정) |
+| 뭐 신청했지 / 아이템별 지원 목록 | **user-applications-memory** + `docs/clients/user_applications.md` (채팅만. Docs 정리본 금지) | — |
+| 업무 절차 / 그대로 실행 / 도보네비 카드 | **user-bizdoc-playbook** + `docs/clients/dobonevi_card.md` | — |
 | 공고·양식 분석 | `announcement-form-analysis` · `/auto-write-analyze` | `py -3.11 app/analyze_docs.py …` |
 | 처음부터 본문 작성 | **bizplan-orchestrator** · `/auto-write-bizplan` | `py -3.11 app/bizplan_autopilot.py …` |
+| 기술 문장 출처 / IR 보유기술 단정 여부 | `tech-framing-provenance` | — (위키 `tech-framing-provenance.md`) |
 | 완성본 A → 빈 양식 B 전사 | `cross-form-submission` | `py -3.11 app/cross_form_fill.py …` |
 | HWPX 직접 채움(변환 없음) | (hub가 CLI로 안내) | `py -3.11 app/hwp_fill_direct.py …` |
 | 채움+검수+제출 판정 | (hub가 CLI로 안내) | `py -3.11 app/hwpx_submit.py …` 또는 `auto_write_hub.py fill …` |
@@ -33,6 +36,9 @@
 | 제출 가능성 진단만 | — | `py -3.11 app/self_diagnose.py …` 또는 `auto_write_hub.py diagnose …` |
 | JSON→DOCX 주입(구 autowrite) | — | `tools/injector/inject.py` / `run.sh` |
 | 이력서 L규칙 | `resume-l-rules` | `py -3.11 app/lrule_gate.py …` |
+| 세션 이어서 / 마무리 / 체크포인트 | `session-resume` | `RESUME.md` (코드 아님) |
+| 위치×AI 공통 세션 마무리 깃발 | `session-closeout-all` · `/session-closeout-all` | `python scripts/session_closeout.py …` |
+| 일러스트 스토리보드 → PPT (IR/피치덱 시안) | **`ir-storyboard-pptx`** · Skywork + `docs/KNEVI_KICKXUP_SKYWORK_PROMPT.md` | Cursor python-pptx 카드덱 금지. 원본 이미지 첨부 |
 | GitHub에서 저장소 받기 | — | `git clone https://github.com/pds2225/auto_write.git D:\auto_write` / `clone.bat` / `py -3.11 app/clone_repo.py --dest …` |
 | 로컬 PC 리모트 컨트롤 | — | PC에서 `remote_control.bat` 더블클릭. `py -3.11 app/local_pc_remote.py --dest D:\auto_write --start` |
 

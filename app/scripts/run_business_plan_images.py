@@ -99,7 +99,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--enable-generate-missing",
         action="store_true",
-        help="M4: 결손 앵커용 mock stub만 생성 (실 OpenAI 호출 없음, 기본 OFF)",
+        help="M4: 결손 앵커용 이미지 생성 (기본 mock stub, 실 OpenAI는 --allow-paid-generation 필요)",
+    )
+    p.add_argument(
+        "--allow-paid-generation",
+        action="store_true",
+        help="M4: mock 대신 gpt-image-1 실호출 (OPENAI_API_KEY 필요, Gemini 미사용)",
     )
     p.add_argument(
         "--max-paid-calls",
@@ -110,9 +115,16 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def _run_m4_generate_missing(m2: Any, *, max_paid_calls: int) -> int:
-    """Run M4 mock generate_missing after M2. Returns 0 always (fail-safe)."""
+def _run_m4_generate_missing(
+    m2: Any,
+    *,
+    max_paid_calls: int,
+    allow_paid: bool = False,
+) -> int:
+    """Run M4 generate_missing after M2. Returns 0 always (fail-safe)."""
+    from auto_write.config import get_settings
     from auto_write.image_automation.generate_missing import generate_missing_assets
+    from auto_write.services.openai_client import OpenAIService
 
     if max_paid_calls <= 0:
         print(
@@ -121,6 +133,20 @@ def _run_m4_generate_missing(m2: Any, *, max_paid_calls: int) -> int:
             file=sys.stderr,
         )
 
+    use_mock = not allow_paid
+    settings = None
+    openai_service = None
+    if allow_paid:
+        settings = get_settings()
+        openai_service = OpenAIService(settings)
+        if not settings.has_openai:
+            print(
+                "경고: --allow-paid-generation 이지만 OPENAI_API_KEY 없음 "
+                "→ mock stub으로 폴백합니다.",
+                file=sys.stderr,
+            )
+            use_mock = True
+
     gen = generate_missing_assets(
         list(m2.manifest.anchors),
         list(m2.manifest.matches),
@@ -128,14 +154,21 @@ def _run_m4_generate_missing(m2: Any, *, max_paid_calls: int) -> int:
         enabled=True,
         missing_only=True,
         max_paid_calls=int(max_paid_calls),
-        use_mock=True,
+        use_mock=use_mock,
+        settings=settings,
+        openai_service=openai_service,
     )
     reason = gen.extras.get("reason", "")
-    print("--- M4 GENERATE_MISSING (mock stub, no real OpenAI) ---")
+    header = (
+        "--- M4 GENERATE_MISSING (gpt-image-1) ---"
+        if not use_mock
+        else "--- M4 GENERATE_MISSING (mock stub, no real OpenAI) ---"
+    )
+    print(header)
     print(
         json.dumps(
             {
-                "use_mock": True,
+                "use_mock": use_mock,
                 "openai_calls": gen.openai_calls,
                 "openai_calls_real": gen.extras.get("openai_calls_real", 0),
                 "mock_calls": gen.extras.get("mock_calls", 0),
@@ -188,7 +221,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"run_dir={m2.run_dir}")
         print(f"draft={m2.draft}")
         if args.enable_generate_missing:
-            _run_m4_generate_missing(m2, max_paid_calls=int(args.max_paid_calls))
+            _run_m4_generate_missing(
+                m2,
+                max_paid_calls=int(args.max_paid_calls),
+                allow_paid=bool(args.allow_paid_generation),
+            )
             m4_ran = True
         return 0
 
@@ -237,7 +274,11 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(m2.report, ensure_ascii=False, indent=2))
         print(f"m2_run_dir={m2.run_dir}")
         if args.enable_generate_missing:
-            _run_m4_generate_missing(m2, max_paid_calls=int(args.max_paid_calls))
+            _run_m4_generate_missing(
+                m2,
+                max_paid_calls=int(args.max_paid_calls),
+                allow_paid=bool(args.allow_paid_generation),
+            )
             m4_ran = True
 
     if args.enable_generate_missing and not m4_ran:
