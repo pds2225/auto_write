@@ -1,13 +1,13 @@
 # RESUME.md — auto_write 세션 체크포인트
 
 > 세션을 새로 시작하면 **이 파일을 먼저** 읽는다. 상세 트랙은 아래 링크.
-> 최종 갱신: **2026-08-28** (열린 draft #159+#162+#163+#165+#166+#167 합본. 충돌 없는 #164+#160은 이미 main)
+> 최종 갱신: **2026-08-28** (주간 검토: #160·#164·#168·#169·#170 병합 완료, 열린 PR 0건)
 
 ## 한 줄 상태
 
-`pds2225/auto_write` 단일 정본. `origin/main` @ `6471322` (#160 마켓게이트 본문. 그 앞 #164 STAR 스킬, #161 AW-001 게이트).
+`pds2225/auto_write` 단일 정본. `origin/main` @ `2130493` (#170 M4 `gpt-image-1` 누락 생성 경로. 이번 주 #160·#164·#168·#169·#170 병합).
 에이전트 입구 = **bizdoc-hub** / CLI 입구 = **auto_write_hub.py**. 맵: `docs/BIZDOC_HUB_MAP.md`.
-**이 브랜치(합본):** #159 소셜벤처 빌더 · #162 session-resume · #163 신청원장/도보네비 · #165 k-navi-mvp · #166 ir-storyboard-pptx · #167 session-closeout.
+로컬 `master`도 `2130493`이며 `origin/master` 추적명은 사라짐. 미커밋: 이 체크포인트와 A9 미제출 종료 원장 2개 문서(보존, 커밋 여부 결정 필요).
 
 **밤샘 2026-08-19 → main #161:** AW-001 `[~]`. `run_to_final` + mechanized 가드(`build_lrule_guards`, unverifiable=0).
 judgment/gap은 REVIEW_REQUIRED → FINAL 차단 유지. 웹앱·BPQ-00 제품 코드는 승인 전 대기. 공고+양식 오기 전 초안 대기.
@@ -15,7 +15,7 @@ judgment/gap은 REVIEW_REQUIRED → FINAL 차단 유지. 웹앱·BPQ-00 제품 �
 **문서 작업:** 원장 A1~A7. A1 온랩 **접수**. A5 1인창조 **취소**. A6 STAR **선정**(6팀 멘토링, 상위2 지원금은 별도). 내비 KICXUP **선정**. 신청 원장=`docs/clients/user_applications.md`(채팅만, Google Docs 정리본 금지). 도보네비 카드=`docs/clients/dobonevi_card.md`.
 **세션 마무리 신호:** `python scripts/session_closeout.py plant|status|sync-disk|ack|cancel`. 기본 커밋본 `due: false`.
 **엔진:** T-20260814-02 명세+실행지시+BPQ-00 감사+#150 측정기+#155 git-sync(기준 브랜치=GitHub default/`main`)+#156(웹앱 사양·계획 보강·STEP 3A)+#161(DomainRouter→LRule→Hash→Finalizer 게이트)+#164(STAR 프레이밍 스킬)+#160(소셜벤처 본문)이 main에 있음. DOCX 정본=`core.docx.services`.
-**열린 작업:** 이 합본 브랜치. Cursor 클라우드 PR은 기본 draft. 원격 `main` + `backup/*` 2개.
+**열린 작업:** 열린 PR 0건. AW-001·웹앱은 승인 전 대기, A9 미제출 종료 기록은 로컬 원장 2개에 미커밋 보존. Cursor 클라우드 PR은 기본 draft.
 **머지 주의:** Cursor 클라우드 PR은 기본 draft. GitHub 자동머지는 draft에서 불가. 머지 요청 시 Ready for review 후 `gh pr merge --auto --squash`.
 작업 시작 전: `git fetch` → `TASK.md` → 현재 구현 조사 → 그다음 작업.
 목표 흐름: `LLM → StageResult(JSON) → 검증 → 다음 Stage → 렌더 → Finalizer`. 한 번에 최종 DOCX 금지.
@@ -29,6 +29,8 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 - 중요 미확인 메일: `mail` workflow 4시간 후 실패와 P0 7개 수집원 누락, `walk` Vercel preview 실패 22건, Cursor GitHub App 추가 권한 요청, Kimi·Zoom Google 접근 및 Claude 신뢰 기기 확인, OpenAI Plus·Cursor 결제 실패 확인 필요.
 - 오늘 할 일: ① 한경련 마감 여부 결정 ② 키핀 비즈니스지원단(D-1) 30분 착수 ③ mail-monitor·walk 반복 실패 원인 확인 ④ 계정 접근·구독 상태 확인. SIW(9/1~3)는 관심 프로그램만 사전등록 검토.
 - 경계: Gmail/Calendar 읽기 전용 유지. 읽음 처리·회신·발송·캘린더 수정·권한 승인·결제 변경 없음. 제품 코드 수정 없음.
+- 주간 검토: 8/24~8/28 PR 5건 병합·`docs-gate` 전부 통과. 소셜벤처 본문, STAR 출처 가드, draft 6건 합본, M4 복구 TASK와 이미지 누락 생성 경로 반영. 서울 AI 허브 2기 신청서는 작성했으나 미제출 종료.
+- 다음 액션: A9 원장 기록 커밋 여부 결정 → AW-001·웹앱 승인 상태 확인. 자동화 보고 외 제품 코드 작업 없음.
 
 ## 지금 세션 — 2026-08-23 마무리
 
