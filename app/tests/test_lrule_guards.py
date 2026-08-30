@@ -27,7 +27,7 @@ def test_build_lrule_guards_covers_every_mechanized(tmp_path):
     guards = build_lrule_guards(path)
     enforcer = LRuleEnforcer()
     mech = [l for l in enforcer._lessons if l.get("category") == "mechanized"]
-    assert len(mech) == 44
+    assert len(mech) == 45
     for lesson in mech:
         assert lesson["id"] in guards, lesson["id"]
         assert rule_code(lesson["id"]) in guards

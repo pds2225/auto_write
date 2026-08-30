@@ -3,7 +3,7 @@
 
 기존 usage_acceptance / hwpx_acceptance / doc_quality_ops 검사를 재사용한다.
 가드가 없으면 mechanized 규칙은 UNVERIFIABLE → 항상 FINAL 불가였다.
-이 모듈이 44개 mechanized 규칙마다 callable 결과를 채워, 실제 결함은 FAIL,
+이 모듈이 mechanized 규칙마다 callable 결과를 채워, 실제 결함은 FAIL,
 해당 없는 형식은 skip(PASS), 채움/git 시점 불변은 process PASS 로 기록한다.
 
 judgment/gap 규칙은 여기 넣지 않는다(사람 증거 없으면 REVIEW_REQUIRED 유지).
@@ -196,6 +196,7 @@ class _ArtifactCtx:
             "L053": "form row preservation",
             "L054": "no table transpose",
             "L070": "value-cell-only fill",
+            "L145": "hwpx_fill._set_cell_text/_splice_run_text auto-strip lineseg",
         }
         if code in process_map:
             return _process(code, process_map[code])

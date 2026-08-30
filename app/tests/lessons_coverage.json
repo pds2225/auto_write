@@ -1,8 +1,8 @@
 {
   "counts": {
-    "mechanized": 44,
+    "mechanized": 45,
     "gap": 21,
-    "judgment": 86,
+    "judgment": 85,
     "total": 151
   },
   "coverage_note": "총 92개 교훈(레지스트리): 기계화 43(46%)·갭 17(18%)·사람판단 32(34%). 2026-07-29 야간 high 잔여 7건 gap→mechanized: L074·L075·L078·L087·L088·L089·L091. L070/L076/L077 guard_ref 에 test_*.py 경로 보강(커버리지 메타테스트 정합).",
@@ -1559,10 +1559,10 @@
     },
     {
       "id": "L145 | 문서작성 | 2026-08-07 | hwpx_fill 을 안 쓰고 좌표로 직접 셀을 고치면 linesegarray strip 을 잊는다 — L002 를 알면서도 재발",
-      "summary": "hwpx_fill 의 저수준 함수(_set_cell_text 등)를 직접 호출해 좌표 기반으로 셀을 편집할 때는, 상위 파이프라인이 자동으로 해주는 _strip_linesegarray(L002) 호출을 편집 범위에 한정해 직접 불러야 한다.",
-      "mechanizable": "no",
-      "category": "judgment",
-      "guard_ref": "",
+      "summary": "텍스트 변경 원시함수(_set_cell_text·_splice_run_text)가 편집 직후 그 칸/문단의 hp:linesegarray 를 스스로 제거한다. 호출자가 fill_hwpx 파이프라인 strip 을 잊어도 글씨 겹침이 재발하지 않는다(L002 뿌리, L074 범위 한정).",
+      "mechanizable": "yes",
+      "category": "mechanized",
+      "guard_ref": "hwpx_fill._set_cell_text/_splice_run_text → _invalidate_lineseg + app/tests/test_hwpx_fill.py::test_set_cell_text_strips_own_lineseg_keeps_sibling·test_splice_run_text_strips_paragraph_lineseg·test_invalidate_lineseg_on_t_walks_to_paragraph·test_set_cell_text_skips_form_control_without_stripping_sibling",
       "gap_desc": "",
       "impact": "high",
       "domain": "all"

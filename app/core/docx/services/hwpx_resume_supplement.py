@@ -22,6 +22,7 @@ from .hwpx_fill import (
     _cell_text,
     _direct,
     _direct_form_checkbtns,
+    _invalidate_lineseg,
     _q,
     _same_file,
     _strip_linesegarray,
@@ -324,6 +325,7 @@ def supplement_hwpx_from_resume(
             txt = t.text or ""
             if re.search(r"\d{4}\s*년", txt) and "월" in txt and "일" in txt:
                 t.text = sign_date
+                _invalidate_lineseg(t)
                 changed = True
                 rep.tables_filled.append("서명일")
                 break
@@ -341,6 +343,7 @@ def supplement_hwpx_from_resume(
                         nxt = runs[idx + 1]
                         if not (nxt.text or "").strip():
                             nxt.text = sign_name
+                            _invalidate_lineseg(nxt)
                             changed = True
                             rep.tables_filled.append("신청인")
                             break
