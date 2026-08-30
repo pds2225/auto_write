@@ -20,6 +20,9 @@ import matplotlib.pyplot as plt  # noqa: E402
 from lxml import etree
 from matplotlib.patches import FancyBboxPatch  # noqa: E402
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from auto_write.services.hwpx_fill import _invalidate_lineseg  # noqa: E402
+
 _HP = "http://www.hancom.co.kr/hwpml/2011/paragraph"
 _HC = "http://www.hancom.co.kr/hwpml/2011/core"
 _OPF = "http://www.idpf.org/2007/opf/"
@@ -84,7 +87,7 @@ def _set_cell(tc, value: str, *, char_pr: str = "51") -> None:
     run.set("charPrIDRef", char_pr)
     t = etree.SubElement(run, _q("t"))
     t.text = value
-    etree.SubElement(p, _q("linesegarray"))
+    _invalidate_lineseg(tc)
 
 
 def _parse_consulting_rows(tbl) -> list[dict[str, str]]:
@@ -269,7 +272,7 @@ def _make_pic_para(image_id: str, binary_ref: str, width_px: int, height_px: int
         outm.set(side, "0")
     comment = etree.SubElement(pic, _q("shapeComment"))
     comment.text = f"수행리스트 타임라인 ({binary_ref})"
-    etree.SubElement(p, _q("linesegarray"))
+    _invalidate_lineseg(p)
     return p
 
 
@@ -285,7 +288,7 @@ def _text_para(text: str, *, bold: bool = False) -> etree._Element:
     run.set("charPrIDRef", "52" if bold else "51")
     t = etree.SubElement(run, _q("t"))
     t.text = text
-    etree.SubElement(p, _q("linesegarray"))
+    _invalidate_lineseg(p)
     return p
 
 

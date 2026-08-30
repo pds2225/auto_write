@@ -22,10 +22,11 @@ from .hwpx_fill import (
     _cell_text,
     _direct,
     _direct_form_checkbtns,
+    _has_form_control,
     _invalidate_lineseg,
     _q,
     _same_file,
-    _strip_linesegarray,
+    _set_cell_text,
 )
 
 _STANDALONE_RE = re.compile(rb"standalone\s*=\s*['\"](yes|no)['\"]")
@@ -89,39 +90,17 @@ def _is_fillable_cell_text(cur: str) -> bool:
 
 
 def _set_tc_text(tc, text: str, *, force_placeholder: bool = False) -> bool:
-    """값 칸 hp:t 설정. 빈칸·플레이스홀더만(실값 보호)."""
+    """값 칸 텍스트 설정. 빈칸·플레이스홀더만(실값 보호).
+
+    기입은 ``_set_cell_text`` 로 위임한다 — 폼컨트롤 칸 거부(L086)와
+    줄위치 캐시 제거(L002/L145)가 빠지지 않는다.
+    """
     cur = _cell_text(tc).strip()
     if cur and not _is_fillable_cell_text(cur) and not force_placeholder:
         return False
-    for t in tc.iter(_q("t")):
-        raw = str(t.text or "")
-        if t.text is None or not raw.strip() or _is_fillable_cell_text(raw):
-            t.text = text
-            parent = t.getparent()
-            while parent is not None:
-                if str(parent.tag).endswith("tc"):
-                    _strip_linesegarray(parent)
-                    break
-                parent = parent.getparent()
-            return True
-    # 셀에 hp:t 가 없으면 run 추가
-    run = etree.Element(_q("run"))
-    run.set("charPrIDRef", "0")
-    t_el = etree.SubElement(run, _q("t"))
-    t_el.text = text
-    sub = tc.find(".//{%s}subList" % _HP)
-    if sub is None:
+    if _has_form_control(tc):
         return False
-    p = sub.find("{%s}p" % _HP)
-    if p is None:
-        p = etree.SubElement(sub, _q("p"))
-    # 기존 placeholder run 비우기
-    for old_t in list(p.iter(_q("t"))):
-        if _is_fillable_cell_text(str(old_t.text or "")):
-            old_t.text = ""
-    p.append(run)
-    _strip_linesegarray(tc)
-    return True
+    return _set_cell_text(tc, text)
 
 
 def _find_tbl_by_snippet(root, snippet: str):
