@@ -32,7 +32,7 @@ def main(argv: list[str] | None = None) -> int:
         description="HWPX 양식을 채우고 수용검사 게이트로 판정해 제출본을 완성한다"
                     "(원본 미수정·날조0·fail-closed).")
     ap.add_argument("input", help="입력 양식(.hwpx)")
-    ap.add_argument("-o", "--output", help="출력 경로(미지정 시 <원본>_제출.hwpx)")
+    ap.add_argument("-o", "--output", help="출력 경로(미지정 시 <원본>_제출.hwpx — 한글 기본)")
     ap.add_argument("--identity", help="라벨-값 JSON 파일 경로")
     ap.add_argument("--set", dest="sets", action="append", default=[],
                     metavar="라벨=값", help="라벨-값 직접 지정(반복 가능)")
@@ -72,7 +72,9 @@ def main(argv: list[str] | None = None) -> int:
               "--set 라벨=값 을 지정하세요(빈 제출 방지).", file=sys.stderr)
         return 1
 
-    out = Path(args.output) if args.output else src.with_name(f"{src.stem}_제출.hwpx")
+    from auto_write.services.hangul_default import default_fill_output
+
+    out = default_fill_output(src, args.output)
 
     try:
         rep = submit_hwpx(src, out, identity=identity, replacements=replacements,

@@ -49,7 +49,11 @@ def main(argv: list[str] | None = None) -> int:
         description="제출 가능 사업계획서 생성·완성 오케스트레이터 (AI작성+품질+채점 반복)"
     )
     parser.add_argument("input", help="초안/메모 DOCX 경로")
-    parser.add_argument("--output", "-o", help="최종 출력 DOCX(미지정 시 results/ 자동 명명)")
+    parser.add_argument(
+        "--output",
+        "-o",
+        help="최종 출력(미지정 시 results/{stem}_bizplan.hwpx). 워드가 필요하면 *.docx 를 명시",
+    )
     parser.add_argument("--brief", default="", help="사업 브리프 텍스트(아이디어·팀·수치)")
     parser.add_argument("--brief-file", help="사업 브리프 텍스트 파일 경로")
     parser.add_argument("--announcement-file", help="공고 평가기준 텍스트 파일(있으면 채점·목표반복)")
@@ -120,7 +124,7 @@ def main(argv: list[str] | None = None) -> int:
               + (" → 출력명에 _DRAFT 표시" if report.draft_marked else ""))
     print(f"이미지    : NotebookLM 슬라이드 프롬프트 {report.prompts_inserted}건")
     print(f"AI 보강   : {report.ai_areas_written}영역")
-    print(f"출력 DOCX : {report.output_docx}")
+    print(f"출력     : {report.output_docx}")
     print(f"원본 백업 : {report.backup_dir}")
     if report.report_md:
         print(f"리포트    : {report.report_md}")

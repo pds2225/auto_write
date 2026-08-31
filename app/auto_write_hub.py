@@ -4,10 +4,12 @@
 
     py -3.11 auto_write_hub.py env
     py -3.11 auto_write_hub.py diagnose 문서.docx|문서.hwpx
-    py -3.11 auto_write_hub.py fill --notice-folder … --confirm-output-plan …
+    py -3.11 auto_write_hub.py fill --notice-folder …
 
-본선은 RHWP → **HWPX만** 산출. DOCX로 만들지 않음(명시적 docx-crossform+승인 제외).
+본선은 RHWP → **HWPX만** 산출(기본, 승인 불필요). DOCX로 만들지 않음
+(명시적 docx-crossform + --confirm-output-plan 제외).
 COM 은 Windows+한글2022 에서만(없으면 정직히 실패, DOCX로 우회 금지).
+이진 .hwp 저장은 Windows+한글 COM 전용 — 이 환경은 .hwpx XML 채움.
 """
 
 from __future__ import annotations
@@ -64,6 +66,15 @@ def cmd_fill(args: argparse.Namespace) -> int:
 
     outputs = list(args.outputs or ["hwpx"])
     # 본선 계약: DOCX로 만들지 않음. 명시적 docx-crossform+승인만 예외.
+    from auto_write.services.hangul_default import is_hangul_default_combo
+
+    if not args.confirm_output_plan and not is_hangul_default_combo(outputs, engine):
+        print(
+            "ERROR: --confirm-output-plan 필수 (DOCX·엔진 변경). "
+            "한글 기본(hwpx + rhwp-hwpx-fill)은 승인 없이 진행합니다.",
+            file=sys.stderr,
+        )
+        return 2
     if "docx" in outputs and engine != "docx-crossform":
         print(
             "ERROR: DOCX 산출 금지. 본선은 --output hwpx 만. "
@@ -137,23 +148,24 @@ def main(argv: list[str] | None = None) -> int:
     p_diag.add_argument("--require-specialty", action="store_true")
     p_diag.set_defaults(func=cmd_diagnose)
 
-    p_fill = sub.add_parser("fill", help="공고 양식 HWPX 채움 (RHWP 본선)")
+    p_fill = sub.add_parser("fill", help="공고 양식 HWPX 채움 (기본 산출=한글)")
     p_fill.add_argument("--notice-folder", required=True)
     p_fill.add_argument(
         "--engine",
         default=None,
-        help="기본=환경 recommended (rhwp-hwpx-fill)",
+        help="기본=rhwp-hwpx-fill (한글 XML 채움)",
     )
     p_fill.add_argument(
         "--output",
         dest="outputs",
         action="append",
         choices=["hwpx", "hwp", "docx"],
+        help="기본=hwpx. docx 는 --engine docx-crossform --confirm-output-plan 필요",
     )
     p_fill.add_argument(
         "--confirm-output-plan",
         action="store_true",
-        help="출력 형식·엔진 사용자 승인 (필수)",
+        help="DOCX·엔진 변경 승인 (한글 기본 hwpx 는 불필요)",
     )
     p_fill.add_argument("--extract-forms", action="store_true")
     p_fill.add_argument("--supplement-resume", action="store_true")
@@ -168,12 +180,6 @@ def main(argv: list[str] | None = None) -> int:
     p_fill.set_defaults(func=cmd_fill)
 
     args = parser.parse_args(argv)
-    if args.cmd == "fill" and not args.confirm_output_plan:
-        print(
-            "ERROR: --confirm-output-plan 필수 (승인 없는 엔진/출력 우회 금지)",
-            file=sys.stderr,
-        )
-        return 2
     return int(args.func(args))
 
 

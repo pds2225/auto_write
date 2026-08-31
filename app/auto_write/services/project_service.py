@@ -555,7 +555,7 @@ class ProjectService:
     def _build_results_summary_ko(self, qa_report: dict[str, Any], render_result: dict[str, Any], results_dir: Path) -> str:
         lines: list[str] = []
         if qa_report.get("passed"):
-            lines.append("✅ 생성 점검: 통과했습니다. output.docx와 results 폴더 파일을 확인하세요.")
+            lines.append("✅ 생성 점검: 통과했습니다. output.hwpx(한글)와 results 폴더 파일을 확인하세요.")
         else:
             lines.append(
                 f"⚠️ 생성 점검: 오류 {qa_report.get('error_count', 0)}건, "
@@ -591,6 +591,22 @@ class ProjectService:
         results_docx = results_dir / dated_name
         shutil.copy2(output_path, results_docx)
         shutil.copy2(output_path, results_dir / "output.docx")
+
+        results_hwpx = ""
+        output_hwpx = ""
+        try:
+            from .hangul_default import emit_hangul_file
+
+            out_hwpx = self.storage.project_dir(project_id) / "output" / "output.hwpx"
+            res_hwpx = results_dir / Path(dated_name).with_suffix(".hwpx").name
+            emit_out = emit_hangul_file(output_path, out_hwpx)
+            emit_res = emit_hangul_file(output_path, res_hwpx)
+            if emit_out.ok:
+                output_hwpx = emit_out.output
+            if emit_res.ok:
+                results_hwpx = emit_res.output
+        except Exception as exc:  # noqa: BLE001 — 한글 산출 실패가 생성 전체를 막지 않음
+            log_line(f"[WARN] 한글 산출 실패(DOCX 작업본은 유지): {exc}")
 
         hwp_text = self._build_hwp_paste_text(
             profile,
@@ -629,6 +645,8 @@ class ProjectService:
         return {
             "results_dir": str(results_dir),
             "results_docx": str(results_docx),
+            "results_hwpx": results_hwpx,
+            "output_hwpx": output_hwpx,
             "hwp_paste": str(hwp_path),
             "copy_blocks": str(copy_blocks_path),
             "fill_map": str(fill_map_path),
@@ -1011,6 +1029,8 @@ class ProjectService:
             generated_assets=[image.path for image in images],
             results_dir=published.get("results_dir", ""),
             results_docx=published.get("results_docx", ""),
+            results_hwpx=published.get("results_hwpx", ""),
+            output_hwpx=published.get("output_hwpx", ""),
             hwp_paste=published.get("hwp_paste", ""),
             copy_blocks=published.get("copy_blocks", ""),
             fill_map=published.get("fill_map", ""),

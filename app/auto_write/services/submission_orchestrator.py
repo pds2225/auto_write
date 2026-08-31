@@ -377,4 +377,24 @@ class SubmissionPipeline:
             except Exception as exc:
                 report["needs_input"].append(f"L048 증빙 PDF 합본 실패: {exc}")
         log_line(f"[Submission] project={project_id} final={Path(final_docx).name} steps={report['steps']}")
+        # 사용자 산출은 한글. DOCX 작업본(final_docx)은 품질 하네스·기존 테스트용으로 남긴다.
+        # required_format=docx 일 때만 워드를 최종본으로 둔다(작업본 경로가 .docx 인 것은 명시가 아님).
+        from .hangul_default import emit_hangul_file, is_explicit_docx
+
+        report["final"] = str(final_docx)
+        if not is_explicit_docx(requested_format=required_format):
+            hangul_dest = Path(final_docx).with_suffix(".hwpx")
+            try:
+                emit = emit_hangul_file(Path(final_docx), hangul_dest)
+            except ValueError as exc:
+                report["needs_input"].append(f"한글 산출 거부: {exc}")
+            else:
+                report["hangul_emit"] = emit.as_dict()
+                report["final_hangul"] = emit.output
+                if emit.ok:
+                    report["final"] = emit.output
+                else:
+                    report["needs_input"].append(
+                        "한글 산출 실패: " + "; ".join(emit.notes or ["원인 미상"])
+                    )
         return report

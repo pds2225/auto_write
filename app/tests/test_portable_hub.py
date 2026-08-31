@@ -57,8 +57,15 @@ def test_hub_diagnose_missing_file():
     assert code == 1
 
 
-def test_hub_fill_requires_confirm(tmp_path: Path):
-    code = hub_main(["fill", "--notice-folder", str(tmp_path)])
+def test_hub_fill_hangul_default_does_not_demand_confirm(tmp_path: Path, capsys):
+    """한글 기본 채움은 --confirm-output-plan 없이 실행에 들어간다."""
+    hub_main(["fill", "--notice-folder", str(tmp_path)])
+    err = capsys.readouterr().err
+    assert "confirm-output-plan 필수" not in err
+
+
+def test_hub_fill_docx_still_requires_confirm(tmp_path: Path):
+    code = hub_main(["fill", "--notice-folder", str(tmp_path), "--output", "docx"])
     assert code == 2
 
 
