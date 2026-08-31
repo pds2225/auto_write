@@ -84,6 +84,8 @@ def test_applications_memory_skill_forbids_google_docs() -> None:
     assert "Google Docs" in text
     assert "채팅" in text
     assert "user_applications.md" in text
+    assert "특정지원사업은 저장하지마" in text
+    assert "원장 씨가 제일 중요" in text
 
 
 def test_auto_write_hub_subcommands() -> None:
