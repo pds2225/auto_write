@@ -5,7 +5,7 @@
 > 원칙: **151개 전부를 한 번에 재발 0으로 만들 수 없다.** 사람 판단(L005 눈검증, L009 날조)은 테스트가 대체하지 않는다.
 > 기계화 4점(AW-008): **guard + test + coverage JSON + runtime wiring**. 하나라도 없으면 `mechanized` 표시 금지.
 
-분류(사용자 확정): **문서가 다시 깨지는 것(A) → 제출·품질 게이트(B) → 이력서(C)**. D·E(COM·환경·작업방식)는 테스트로 못 막는 것이 많다.
+이어가기 프롬프트(복붙)는 파일 아래 「이어가기 프롬프트」 절. `+프롬프트` 요청의 정본이다.
 
 ---
 
@@ -48,25 +48,25 @@
 
 ---
 
-## Wave B — 점수·제출·cross-form (다음)
+## Wave B — 점수·제출·cross-form
 
-우선: **L040** 필수서식 누락 `_DRAFT` · **L059** 작업접미사 제출폴더 오염(테스트만 있고 오케스트레이터 denylist 미배선) · **L016/L046** 자리표시 잔존 보강 · **L048** 원본·중간본 혼입 · **L049** 공고 PDF를 양식으로 채움 · **L050** 한글 전용인데 DOCX만 줌 · **L080** 라벨 칸 굵게 · **L095** 페이지 수 베이스라인.
+우선(계획 ID): **L040** 필수서식 누락 `_DRAFT` · **L059** 작업접미사 · **L048** 원본·중간본 혼입 · **L049** 공고 PDF를 양식으로 채움 · **L050** 한글 전용인데 DOCX만 · **L080** 라벨 칸 굵게 · **L095** 페이지 수 베이스라인.
 
-L008/L017(테스트 없이 완료 보고)은 규약(E). L009 날조 본문은 judgment.
+구현 상태·JSON 매핑은 아래 「Wave B (구현됨)」. L008/L017은 규약(E). L009 날조 본문은 judgment.
 
 ---
 
 ## Wave C — 이력서·신청서
 
-**L038/L060** 정량 컬럼 유실 · **L039** 포트폴리오 이미지 마커 · **L043/L044** 슬래시 헤더·골격 · **L154** 최소 1섹션 샘플 · **L155** `#0000FF` 본문 금지 · **L156** 참고이미지 표 프레임 170×55mm · **L061** 출력 형식 사용자 확인.
+**L038/L060** 정량 컬럼 · **L039** 포트폴리오 마커 · **L043/L044** 슬래시 헤더·골격 · **L154** 최소 1섹션 샘플 · **L155** `#0000FF` 본문 금지 · **L156** 참고이미지 170×55mm · **L061** 출력 형식 확인.
 
-L035/L036(키워드·자기기술서)은 사람 판단.
+구현 상태는 아래 「Wave C (구현됨)」. L035/L036은 사람 판단.
 
 ---
 
 ## Wave D·E — 변환·COM·에이전트
 
-테스트보다 규약. L003/L026 COM, L004 왕복 일치도, L005 눈검증, L027–L030 추측패치, L067 `git add -A`, L105 스킬 훅 원문, L151 POSIX는 A6에서 코드 쪽만 잠금.
+테스트보다 규약. L003 kill spy는 코드. L005 눈검증 BLOCKED. L067 `git add -A` 금지. JSON 잔여 갭 L004/L014/L048/L049/L050/L072/L105.
 
 ---
 
@@ -80,3 +80,66 @@ L035/L036(키워드·자기기술서)은 사람 판단.
 - [x] 그림 `sz` 세로 0이면 실패
 - [x] `lessons_coverage.json` counts = 실제 분류. L032/L096/L097/L151이 4점일 때만 mechanized
 - [x] 관련 pytest 통과. 한글 눈검증은 BLOCKED로 명시
+
+---
+
+## 이어가기 프롬프트 (복붙)
+
+사용자가 `+프롬프트` / `승인요청하지않고 … 끝까지` 를 말한 이유: 다음 에이전트가 “다음 웨이브 할까요?” 를 묻지 않게 한다.
+
+```
+승인 요청 금지. docs/LESSONS_LOCKDOWN_WAVES.md 정본. TASK T-20260831-01.
+열린 웨이브(남은 JSON gap → D규약)를 한 세션에서 순서대로 닫는다. 중간 보고 후 멈추지 마라.
+이미 엔진에 있는 것(lineseg, rowAddr, 파란예시, auto색, 안내문구, 원본덮어쓰기금지, D6, L032, L097, L001세로, L096/L151, L037공고채움금지, L059작업접미사, L080괄호볼드, L095페이지기준선, L038/L060정량컬럼, L003 kill spy)은 재구현 금지.
+기계화 4점(guard+test+coverage JSON+runtime wiring) 없으면 mechanized 표시 금지.
+JSON 본문과 계획 ID가 다르면 JSON 요약을 따른다. 계획 L049=JSON L037. 계획 L050(한글전용 DOCX)=형식게이트(JSON L050 HWP+PDF쌍은 gap). 계획 L048 혼입 코드는 있으나 JSON L048 PDF합본은 gap.
+L005 한글 픽셀·L009 날조 본문은 judgment. 이 환경 한글 없음=BLOCKED 후 다음 항목.
+L154–L156은 lessons.md에 없으면 coverage JSON에 넣지 말고 코드+테스트만.
+AW-008과 합치지 않음. 원본 덮어쓰기 금지. git add -A 금지. py -3.11 pytest (이 클라우드 python3).
+남은 JSON gap: L004 세금계산서 · L014 표헤더서식 · L048 PDF합본 · L049 제출/폴더 · L050 HWP+PDF쌍 · L072 휴리스틱원복 · L105 YAML description.
+웨이브가 남아 있으면 같은 지시로 다음 항목을 이어서 구현한다. REQUEST_SOLVED는 닫을 수 있는 B·C가 닫히고 D·E가 규약으로 적힌 뒤에만. 151개 재발 0 보고 금지.
+```
+
+---
+
+## Wave B — 점수·제출·cross-form (구현됨, JSON은 정직)
+
+계획 ID → JSON 매핑 ( mechanized 는 JSON 요약이 실제로 잠긴 것만 ):
+
+| 계획 | JSON | 상태 |
+|------|------|------|
+| L040 `_DRAFT` | L040 | 이미 mechanized. 오케스트레이터 `--required-doc` 추가 배선 |
+| L059 작업접미사 | L059 | mechanized. warn + `work_suffix` / `needs_input` |
+| L048 원본·중간본 혼입 | L048 은 PDF 합본 | **코드는 `submit_mix`**. JSON L048 본문은 gap |
+| L049 공고 PDF 채움 | L037 | mechanized (`assert_not_announcement_form`) |
+| L050 한글전용 DOCX | L050 은 HWP+PDF 쌍 | **코드는 `infer_hangul_required`**. JSON L050 gap |
+| L080 괄호 라벨 굵게 | L080 | mechanized |
+| L095 페이지 기준선 | L095 | mechanized (XML 추정. 한글 렌더 쪽수는 L005) |
+
+**성공 기준 (Wave B)**
+
+- [x] 필수서식 누락 시 파이프라인 `_DRAFT` (`required_documents`)
+- [x] `_converted` / `_노트북LM` 파일명 warn + 오케스트레이터 기록
+- [x] `모집공고.hwpx`·공고 PDF 를 `fill_hwpx`/`ensure_template_docx` 가 거부
+- [x] 공고문 “한글 전용” → DOCX 산출 `_DRAFT` (형식 게이트)
+- [x] `ㅇ (문제인식)` 만 굵게, 문장 중간 괄호는 그대로, `run_all` 배선
+- [x] `fill_hwpx` 리포트에 `pages_before`/`pages_after`
+- [x] JSON counts = 분류. L048/L049/L050 JSON 본문은 gap 유지
+
+---
+
+## Wave C — 이력서·신청서 (구현됨)
+
+- [x] L038 업체수·합계 행 파싱 보존
+- [x] L060 강의 `kind`(구분) 보존 (judgment→mechanized)
+- [x] L039 포트폴리오 마커 / L043 슬래시 헤더 / L044 골격 / JSON L061 사진칸 — `resume_layout_warnings`
+- [x] 계획 L061 `--confirm-output-plan` 은 기존 `test_cross_form_output_policy.py` (JSON L061과 다름)
+- [x] L154–L156 코드+테스트만 (`require_sample_ok`, `safe_body_accent`, `REF_IMAGE_FRAME_MM`). JSON 미수록
+
+---
+
+## Wave D·E — 변환·COM·에이전트 (규약 + spy)
+
+- [x] L003 `kill_hangul_processes` 를 `_dispatch_hwp` 직전에 호출. 유닛은 spy. 실 `taskkill` 은 Windows. 이 클라우드 Linux = no-op
+- [ ] L005 한글 픽셀 눈검증 — judgment / 이 환경 **BLOCKED**
+- E 규약: `git add -A` 금지 · 승인 질문으로 웨이브를 멈추지 않음 · 스킬 훅=요청 원문 (`AGENTS.md` §7)

@@ -5,6 +5,17 @@
 
 ## 한 줄 상태
 
+`pds2225/auto_write` 단일 정본. 교훈 잠금 **T-20260831-01** Wave A+B+C 가드는 `cursor/lessons-wave-bc-e71f` (Wave A PR #172 포함). JSON mechanized **60**/151, gap 7. 이어가기 프롬프트=`docs/LESSONS_LOCKDOWN_WAVES.md`. LIST는 `[~]` (JSON L048/L049/L050 본문 gap + L005 BLOCKED).
+
+## 지금 세션 — 2026-08-31 (교훈 잠금 Wave B/C + 이어가기 프롬프트)
+
+| 항목 | 내용 |
+|------|------|
+| 요청 | `승인요청하지않고 웨이브C? … 끝까지` + `+프롬프트` |
+| 한 일 | `submission_gates` + fill/submit/수용검사/이력서/COM kill spy. 테스트 `test_lockdown_wave_bc.py`. coverage 49→60 |
+| 안 한 일 | JSON L048 PDF합본 · L049 `제출/` 폴더 · L050 HWP+PDF 쌍(한글 COM). L005 픽셀(이 클라우드 한글 없음) |
+| 재개 | 계획 파일의 「이어가기 프롬프트」를 그대로 붙인다. 승인 질문 금지 |
+
 `pds2225/auto_write` 단일 정본. `origin/main` @ `5edd4f5` (#171 hwpx linesegarray 겹침버그 정식 수정 — 로컬 master는 아직 `2130493`, 1커밋 뒤처짐, `git pull` 필요). 이전 주: #170 M4 `gpt-image-1` 누락 생성 경로. 이번 주 #160·#164·#168·#169·#170·#171 병합.
 에이전트 입구 = **bizdoc-hub** / CLI 입구 = **auto_write_hub.py**. 맵: `docs/BIZDOC_HUB_MAP.md`.
 로컬 `master`도 `2130493`이며 `origin/master` 추적명은 사라짐. 미커밋: 이 체크포인트와 A9 미제출 종료 원장 2개 문서(보존, 커밋 여부 결정 필요).
@@ -140,7 +151,8 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 ## 재개 명령
 
 ```text
-이어서: 스킬 `session-resume` + `RESUME.md`. 최우선 = 이지비건 8p본(제출자료\v2.hwpx) 회차 날짜정정(00번 참조).
+이어서: 스킬 `session-resume` + `RESUME.md`. 교훈 잠금은 `docs/LESSONS_LOCKDOWN_WAVES.md` 이어가기 프롬프트를 그대로 붙여 T-20260831-01 남은 JSON gap을 닫는다. 승인 요청 금지.
+최우선 개인문서 = 이지비건 8p본(제출자료\v2.hwpx) 회차 날짜정정(00번 참조).
 원장 A는 종료. 발표 IR은 새 요청이 있을 때만. 그때 위성항법을 항우연 보유기술처럼 쓰지 말 것(스킬 `tech-framing-provenance`, 2026-08-20 출처).
 K-Navi: 16:9 한글/영문 배너는 Cursor artifact. 저장소에 넣을지는 사용자 확인. 재생성 요청이 오기 전에 스킬화하지 말 것.
 스킬 훅: 만들게 한 요청 원문을 description 맨 앞. 스킬명만 부르면 효용 감소 (`AGENTS.md` §7).

@@ -131,6 +131,7 @@ AW DETAILS에는 「원칙」 칸이 없다. 칸은 MUST / KEEP / FORBIDDEN이�
 | `계획 보강 — 2026-08-16` | P 개발 중=Problem만·파일 오면 초안 1건. P 완료 후=최우선. 사업자등록증은 첫 화면 필수 아님. 우선순위 1–5. #150은 측정기, 다음=3 HWP×Golden 41 Baseline |
 | `STEP 3A 병렬 — 2026-08-16` | 이 트랙=양식↔Fact/Evidence↔공고 매칭 계약·Golden·비개발자 리포트. STEP 2 추출기 파일 금지. 만남점=`Fact[]`/`NarrativeEvidence[]`/`Conflict[]`. Writer/UI/HWP 금지 |
 | T-20260831-01 | 지금까지 난 오류를 우선순위대로 기계 가드로 닫는다. A 문서깨짐 → B 제출·품질 → C 이력서. 151개 한 번에 재발 0 불가. 계획 SSOT=`docs/LESSONS_LOCKDOWN_WAVES.md` |
+| T-20260831-01 | 승인요청하지않고 웨이브C? 인지뭔지 너가말한것다 끝까지 개발하게하는방법. +프롬프트. 이어가기 프롬프트=`docs/LESSONS_LOCKDOWN_WAVES.md` |
 
 실제 제출물·옛 엔진 요청 (표만): `docs/REQUEST_LEDGER.md` A1~A6(한난·울산·비앤코·이지비건·입주신청·항우연) / B1~B7(허브·HWPX 값만 채움·이미지·규칙 검사 등) / C1.
 
@@ -4230,8 +4231,8 @@ REQUEST_SOLVED=YES: 합본이 origin/main `1001b76`에 있다. #155는 `ddac657`
 
 TASK_ID: T-20260831-01
 TASK_START_SHA: 5edd4f5c725417be2855471002b0d7846caacec6
-WORK_BRANCH: cursor/lessons-wave-a-guards-0da1
-STATUS_THIS_TURN: LIST 등록. Wave A는 이 브랜치에 구현됨(mechanized 45→49). Wave B·C는 `[ ]`. REQUEST_SOLVED=NO.
+WORK_BRANCH: cursor/lessons-wave-bc-e71f
+STATUS_THIS_TURN: Wave A+B+C 가드 구현. JSON mechanized 49→60. JSON L048/L049/L050 본문은 gap. L005 BLOCKED. REQUEST_SOLVED=NO.
 
 ### 8-1. 사용자 원문
 
@@ -4246,6 +4247,10 @@ D·E는 테스트로 못 막는 것이 많습니다.
 계획 task에 추가
 
 전체 오류 표(A~E)는 그 대화에 있다. 실행 계획 정본=`docs/LESSONS_LOCKDOWN_WAVES.md`.
+
+승인요청하지않고 웨이브C? 인지뭔지 너가말한것다 끝까지 개발하게하는방법
+
++프롬프트
 
 ### 최종 결과
 문서가 다시 깨지는 오류(A)부터, 제출·품질 게이트(B), 이력서(C) 순으로 기계 가드가 닫힌다. 4점(guard+test+coverage JSON+runtime wiring)이 있는 것만 `mechanized`다. 한글 픽셀 눈검증·날조 본문은 사람 판단으로 남는다.
@@ -4279,7 +4284,7 @@ D·E는 테스트로 못 막는 것이 많습니다.
 ### VERIFY
 - Wave A: `python3 -m pytest app/tests/test_hwpx_no_fake_lineseg.py app/tests/test_hwpx_fill.py app/tests/test_hwpx_acceptance.py app/tests/test_pure_hwpx_acceptance.py app/tests/test_resume_defect_corpus.py app/tests/test_hwpx_resume_supplement.py app/tests/test_hwpx_submit.py app/tests/test_l001_hwpx_image_width_clamp.py app/tests/test_l151_no_posix_backup_path.py app/tests/test_lrule_guards.py app/tests/test_lessons_coverage.py app/tests/test_night_high_gaps_l074_l091.py app/tests/test_hwpx_layout_fix.py app/tests/test_hwpx_image_clamp.py -q` (Windows는 `py -3.11`)
 - `lessons_coverage.json` counts = 실제 분류
-- Wave B·C는 해당 웨이브 구현 때 같은 4점으로 검사
+- Wave B·C: `python3 -m pytest app/tests/test_lockdown_wave_bc.py app/tests/test_lessons_coverage.py app/tests/test_lrule_guards.py app/tests/test_resume_extract.py app/tests/test_required_documents_gate.py app/tests/test_cross_form_output_policy.py app/tests/test_hwpx_fill.py -q` (Windows는 `py -3.11`)
 
 ### 웨이브 상태 (2026-08-31)
 - [x] Wave A1 D1 잔여 — 가짜 `linesegarray` Element/문자열 XML 금지 + `fill_hwpx` 자간 -50→-30
@@ -4288,12 +4293,12 @@ D·E는 테스트로 못 막는 것이 많습니다.
 - [x] Wave A4 L032 — `canonical_sign_date(today=)` 실행일
 - [x] Wave A5 L001 세로 — `picture_display_wh` 높이 0 거부
 - [x] Wave A6 L096/L151 — 4점 충족 시 mechanized (45→49, gap 21→17)
-- [ ] Wave B — L040 · L059 오케스트레이터 배선 · L048 · L049 · L050 · L080 · L095
-- [ ] Wave C — L038/L060 · L039 · L043/L044 · L154–L156 · L061
-- [ ] Wave D spy — L003 COM kill (Windows). L005 눈검증은 judgment/BLOCKED
+- [x] Wave B — L040 오케스트레이터 · L059 · 계획 L048 혼입코드 · 계획 L049=JSON L037 · 계획 L050 형식게이트 · L080 · L095. JSON L048/L049/L050 본문은 gap
+- [x] Wave C — L038/L060 · L039 · L043/L044 · L154–L156(코드만) · JSON L061 사진칸 + 계획 L061 confirm-output-plan(기존)
+- [x] Wave D spy — L003 `kill_hangul_processes` before Dispatch. L005 눈검증은 judgment/BLOCKED
 
 ### DONE
-- REQUEST_SOLVED=NO: 계획 등록 + Wave A만. B·C 미착수. 한글 눈검증 BLOCKED.
+- REQUEST_SOLVED=NO: A·B·C 가드는 코드에 있음. JSON 갭 7건(L004/L014/L048/L049/L050/L072/L105) + L005 BLOCKED. 151 재발 0 아님. 이어가기 프롬프트=`docs/LESSONS_LOCKDOWN_WAVES.md`.
 
 # 9. 실제사용 시나리오
 
