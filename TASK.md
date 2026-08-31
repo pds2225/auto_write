@@ -59,6 +59,7 @@ REMOTE: https://github.com/pds2225/auto_write
 - 별도의 CURRENT_TASK.md / NEW_TASK.md / NEXT_TASK.md를 만들지 않는다.
 - 다른 레포 TASK, Google Tasks, 과거 채팅 내용을 임의 실행하지 않는다.
 - 사용자의 새 요청은 이 TASK.md에 새로운 TASK 항목으로 등록한다.
+- 예외: 특정 지원사업 신청서 작성(명명 공고 신청서)은 TASK.md LIST에 등록하지 않는다. 원장 A에만 기록. 사용자가 명시적으로 TASK 등록을 시킬 때만 예외.
 
 ## 우선순위 — 사용자 요청이 최우선 (2026-08-16)
 

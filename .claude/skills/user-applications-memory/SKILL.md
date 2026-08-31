@@ -2,7 +2,8 @@
 name: user-applications-memory
 description: >-
   특정지원사업은 저장하지마. 원장 씨가 제일 중요.
-  원장·파일에 사업명 저장 금지가 아니라 TASK에 특정지원사업 신청서 작성을 등록하지 말라는 뜻.
+  원장·파일에 사업명 저장 금지
+  아예 제외하라는게아니라 특정지원사업신청서 작성하는일을 task에등록하지마라고
   박다솜 지원사업 목록은 채팅으로만 답한다. Google Docs 정리본을 만들지 않는다.
   "뭐 신청했지", "아이템별로", "지원사업 목록", "스킬수확" 시 이 스킬과
   docs/clients/user_applications.md 를 연다.
@@ -12,6 +13,8 @@ triggers:
   - 지원사업 목록
   - 정리본
   - 스킬수확
+  - 특정지원사업은 저장하지마
+  - task에등록하지마
 ---
 
 # User applications memory
