@@ -1,14 +1,17 @@
 ---
 name: cross-form-submission
 description: >-
+  지 지금 자동으로 문서 만들면 워드로 만들어지냐 한글로 만들어지냐 한글로 만들어 줘야 돼.
   빈 새 양식 + 완성된 기존 사업계획서 → 기존 내용을 새 양식의 유사 칸에 자동 전사하고
   검수해서 "즉시 제출 가능한 상태"로 완성하는 오케스트레이터. 표 칸·본문 빈칸·선택칸
   (체크박스 □→■)을 채우고, A 에 없는 칸은 [확인필요]/[작성 필요]로 정직하게 남기며,
   그림칸은 NotebookLM 프롬프트로 대체(이미지 직접 생성 안 함)하고, 제출가능성 게이트
-  (usage_acceptance)로 판정한다. 입력은 항상 2개(완성본 A + 빈 양식 B). 다음 요청 시
+  (usage_acceptance)로 판정한다. 입력은 항상 2개(완성본 A + 빈 양식 B).
+  기본 산출은 한글(HWPX). DOCX는 명시적 docx-crossform+승인만.
+  다음 요청 시
   반드시 사용: "빈 양식 채워줘", "이 양식에 옮겨줘", "기존 사업계획서로 새 양식 작성",
   "양식 자동완성", "새 양식 제출본 만들어줘", "A 내용으로 B 채워 제출가능하게", "cross-form",
-  "전사해서 제출본 완성". 재실행·다시·수정·보완·부분 재실행(전사만/검수만)·needs_confirm
+  "전사해서 제출본 완성", "한글로 만들어 줘야 돼". 재실행·다시·수정·보완·부분 재실행(전사만/검수만)·needs_confirm
   확정·다른 양식으로 재전사도 이 스킬로 처리. ※ 완성된 DOCX 한 개를 '다듬기/검수'만 하는
   것은 document-quality-orchestrator, 빈 문서에서 '처음부터 작성'은 bizplan-orchestrator
   담당 — 이 스킬은 "완성본 A 의 사실을 빈 양식 B 로 옮겨 제출가능하게" 전용이다.
@@ -60,33 +63,35 @@ needs_confirm 후보 중 무엇을 확정할지, 못 채운 칸을 어떻게 분
    - 없으면 → 초기 실행(전체 파이프라인).
 3. A 와 B 가 **같은 회사/사업인지** 확인(소스가 타깃과 무관한 사업이면 채울 값이 적다고 안내).
 
-## Phase 0.5: 출력 형식·엔진 승인 (필수 — 재발 방지)
-**승인 없이 DOCX-only·엔진 축소·우회 금지.** HWP/HWPX 공고는 반드시 아래를 **사용자에게 확인**한 뒤 실행한다.
+## Phase 0.5: 출력 형식·엔진 (기본=한글)
+
+**승인 없이 DOCX-only·엔진 축소·우회 금지.** 자동 채움 기본 산출은 **HWPX**.
+DOCX나 다른 엔진은 `--confirm-output-plan` 이 필요하다. 한글 기본(rhwp-hwpx-fill + hwpx)은 승인 질문 없이 진행한다.
 
 | 질문 | 선택지 |
 |------|--------|
-| 산출 형식 | `hwpx` / `hwp` / `docx` (복수 가능, **기본값 없음**) |
-| 엔진 | `rhwp-hwpx-fill`(COM 없음, **hwpx 필수**) / `com-hwpx-fill`(한글2022 COM) / `docx-crossform`(DOCX만, **명시적**) |
+| 산출 형식 | 기본 `hwpx`. `hwp`(COM)·`docx`(명시적) |
+| 엔진 | 기본 `rhwp-hwpx-fill`. `com-hwpx-fill`(한글2022 COM) / `docx-crossform`(DOCX만, **명시적**) |
 
 - **RHWP-only ≠ DOCX-only.** RHWP는 `hwpx_fill`·`unhwp` 등 **엔진 이름**이지 DOCX 출력을 뜻하지 않는다.
 - **본선 산출 = HWPX 서식만.** DOCX는 중간 검수용·명시적 `docx-crossform` 만. 제출본으로 DOCX를 쓰지 않는다.
 - COM 로그인(한컴 2024) 이슈 시: **멈추고** `rhwp-hwpx-fill` + `10_form_base.hwpx` 경로를 제안. 승인 없이 `docx-crossform`으로 바꾸지 않는다.
-- 단일 진입점(권장): `auto_write_hub.py` — **로컬·원격·다른 PC·모바일(Python) 동일 CLI**.
-  하위 호환: `cross_form_hwp_pipeline.py` — **`--confirm-output-plan` 필수**.
+- 단일 진입점(권장): `auto_write_hub.py fill` — 한글 기본, `--confirm-output-plan` 불필요.
+  하위 호환: `cross_form_hwp_pipeline.py` — 한글 기본은 승인 불필요. DOCX는 `--confirm-output-plan`.
 - 구 스크립트 `_finish_minwon_rhwp.py` / 임의 1회성 스크립트 **사용 금지**.
+- 이진 `.hwp` 저장은 Windows+한글 COM 전용. 이 클라우드/리눅스는 `.hwpx` XML 채움.
 
 ```powershell
 cd D:\auto_write\app
 # 0) 환경 확인 (어디서든 동일 JSON 계약)
 py -3.11 auto_write_hub.py env
 
-# 1) HWPX 서식만 + 표 보강 (COM 없음, 권장) — 제출명 자동: 전문상담위원_참여신청서_{성명}.hwpx
+# 1) HWPX 서식만 + 표 보강 (COM 없음, 권장, 한글 기본 — 승인 불필요)
 py -3.11 auto_write_hub.py fill --notice-folder "C:\공고폴더" `
-    --confirm-output-plan --extract-forms --supplement-resume `
+    --extract-forms --supplement-resume `
     --confirm-specialty "경영활동"
-# 동등(구 CLI):
+# 동등(구 CLI, 한글 기본):
 # py -3.11 cross_form_hwp_pipeline.py --notice-folder "C:\공고폴더" `
-#     --engine rhwp-hwpx-fill --output hwpx --confirm-output-plan `
 #     --extract-forms --supplement-resume --confirm-specialty "경영활동"
 
 # 모집분야는 --confirm-specialty 없으면 미체크(L034)
