@@ -13,6 +13,7 @@ template+공고+brief -> '바로 제출 가능한' 사업계획서 자동 생성
 """
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -54,6 +55,16 @@ class SubmissionPipeline:
     ) -> dict[str, Any]:
         report: dict[str, Any] = {"project_id": project_id, "steps": [], "needs_input": []}
         results_root = Path(self.settings.results_root)
+        notice_folder = ""
+        try:
+            early_input = self.storage.load_project_input(project_id)
+            notice_folder = str((early_input.project_meta or {}).get("notice_folder") or "")
+        except Exception:
+            notice_folder = ""
+        if notice_folder:
+            from .submission_gates import build_submit_layout_dir
+
+            results_root = build_submit_layout_dir(notice_folder)
         results_root.mkdir(parents=True, exist_ok=True)
 
         from .submission_gates import infer_hangul_required
@@ -336,5 +347,34 @@ class SubmissionPipeline:
             report["needs_input"].append(
                 f"최종 파일명 작업접미사(L059): {suffix_hits}"
             )
+        meta = dict(project_input.project_meta or {})
+        evidence_pdfs = [
+            Path(str(raw))
+            for raw in (meta.get("evidence_pdfs") or [])
+            if Path(str(raw)).is_file() and Path(str(raw)).suffix.lower() == ".pdf"
+        ]
+        from .submission_gates import (
+            announcement_tuple_stem,
+            dated_notice_parts,
+            is_draft_artifact,
+            merge_pdfs,
+        )
+        if evidence_pdfs and not is_draft_artifact(final_docx):
+            ymd = datetime.now().strftime("%Y%m%d")
+            notice_name = "공고"
+            parts = dated_notice_parts(notice_folder) if notice_folder else None
+            if parts:
+                ymd, notice_name = parts
+            elif notice_folder:
+                notice_name = Path(notice_folder).name
+            stem = announcement_tuple_stem(
+                yyyymmdd=ymd, notice_name=notice_name, doc_kind="증빙합본"
+            )
+            dest = Path(final_docx).parent / f"{stem}.pdf"
+            try:
+                merge_pdfs(evidence_pdfs, dest)
+                report["merged_pdf"] = str(dest)
+            except Exception as exc:
+                report["needs_input"].append(f"L048 증빙 PDF 합본 실패: {exc}")
         log_line(f"[Submission] project={project_id} final={Path(final_docx).name} steps={report['steps']}")
         return report

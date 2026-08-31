@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from .label_utils import SYNONYMS, cluster_rep as _cluster_rep, key as _key
-from .doc_text_extract import extract_text
+from .doc_text_extract import extract_text, extract_tax_invoice_buyer, looks_like_tax_invoice
 
 _KST = timezone(timedelta(hours=9))
 
@@ -137,7 +137,14 @@ def extract_company_from_file(path: str | Path) -> tuple[dict[str, dict[str, str
     text, notes = extract_text(path)
     if not text or "지원하지 않는" in text or "텍스트 추출" in text:
         return {}, notes + [f"[skip] 텍스트 추출 실패: {Path(path).name}"]
-    return parse_company_fields(text), notes
+    fields = parse_company_fields(text)
+    src = Path(path)
+    if looks_like_tax_invoice(src, text):
+        buyer = extract_tax_invoice_buyer(text)
+        if buyer:
+            # 공급자(첫 (법인명))를 기업명으로 쓰지 않는다. 이름 필터 금지.
+            fields["기업명"] = {"value": buyer, "raw_label": "(법인명)#2 공급받는자"}
+    return fields, notes
 
 
 def _norm_value(value: str) -> str:

@@ -14,12 +14,47 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from docx import Document
 
 _TEXT_EXTS = {".txt", ".md"}
 _CONVERT_EXTS = {".hwp", ".hwpx", ".doc"}
+_TAX_HINTS = ("전자세금계산서", "세금계산서")
+_CORP_NAME_RE = re.compile(r"\(법인명\)\s*(.*)$")
+
+
+def looks_like_tax_invoice(path: str | Path | None, text: str) -> bool:
+    blob = f"{Path(path).name if path else ''} {text or ''}"
+    return any(hint in blob for hint in _TAX_HINTS)
+
+
+def extract_tax_invoice_buyer(text: str) -> str:
+    """전자세금계산서에서 공급받는자 = ``(법인명)`` 매치의 두 번째 값 (L004).
+
+    사람 이름처럼 보여도 버리지 않는다(이름 필터 금지).
+    """
+    values: list[str] = []
+    lines = (text or "").splitlines()
+    i = 0
+    while i < len(lines):
+        match = _CORP_NAME_RE.search(lines[i])
+        if match:
+            rest = (match.group(1) or "").strip()
+            if rest:
+                values.append(rest)
+            else:
+                nxt = i + 1
+                while nxt < len(lines) and not lines[nxt].strip():
+                    nxt += 1
+                if nxt < len(lines):
+                    values.append(lines[nxt].strip())
+                    i = nxt
+        i += 1
+    if len(values) >= 2:
+        return values[1]
+    return ""
 
 
 def _read_textfile(path: Path) -> str:
@@ -93,6 +128,10 @@ def extract_text(path: str | Path) -> tuple[str, list[str]]:
     if ext == ".pdf":
         t = _pdf_text(p)
         if t.strip():
+            if looks_like_tax_invoice(p, t):
+                buyer = extract_tax_invoice_buyer(t)
+                if buyer:
+                    notes.append(f"L004 공급받는자(법인명 2번째): {buyer}")
             return t, notes
         notes.append("PDF 텍스트 추출 실패(스캔본일 수 있음) — .docx/.txt 로 저장 후 재시도 권장.")
         return "", notes

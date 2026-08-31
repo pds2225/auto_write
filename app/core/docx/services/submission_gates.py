@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 import zipfile
+from datetime import datetime
 from pathlib import Path
 from typing import Iterable
 
@@ -256,3 +257,118 @@ def reference_image_frame_hwpunit() -> tuple[int, int]:
 
 def reference_image_title_hwpunit() -> int:
     return int(round(REF_IMAGE_TITLE_HEIGHT_MM * _HWPUNIT_PER_MM))
+
+
+# ---------------------------------------------------------------------------
+# L049 — YYYYMMDD 공고명/제출/
+# ---------------------------------------------------------------------------
+
+SUBMIT_DIR_NAME = "제출"
+_DATED_NOTICE_RE = re.compile(r"^(\d{8})(?:\s+|_)(.+)$")
+_INVALID_FN = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+
+
+def _stem_token(text: str, *, fallback: str = "미상") -> str:
+    s = _INVALID_FN.sub("", (text or "").strip())
+    s = re.sub(r"\s+", "", s)
+    return s or fallback
+
+
+def is_dated_notice_folder(path: str | Path) -> bool:
+    return bool(_DATED_NOTICE_RE.match(Path(path).name))
+
+
+def dated_notice_parts(path: str | Path) -> tuple[str, str] | None:
+    m = _DATED_NOTICE_RE.match(Path(path).name)
+    if not m:
+        return None
+    return m.group(1), m.group(2)
+
+
+def build_submit_layout_dir(
+    notice_folder: str | Path,
+    *,
+    today: str | None = None,
+    wrap_undated: bool = False,
+) -> Path:
+    """``YYYYMMDD 공고명/제출``. 이미 날짜 접두면 ``notice/제출``.
+
+    wrap_undated=False(기본)는 현행처럼 ``notice/제출`` 만 만든다 — 폴더를 옮기지 않는다.
+    """
+    folder = Path(notice_folder)
+    if is_dated_notice_folder(folder):
+        return folder / SUBMIT_DIR_NAME
+    if wrap_undated:
+        ymd = today or datetime.now().strftime("%Y%m%d")
+        return folder / f"{ymd} {folder.name}" / SUBMIT_DIR_NAME
+    return folder / SUBMIT_DIR_NAME
+
+
+def is_submit_layout_path(path: str | Path) -> bool:
+    """경로에 ``YYYYMMDD …/제출`` 구간이 있으면 True."""
+    parts = Path(path).parts
+    submit_idx = next((i for i, part in enumerate(parts) if part == SUBMIT_DIR_NAME), None)
+    if submit_idx is None or submit_idx == 0:
+        return False
+    return bool(_DATED_NOTICE_RE.match(parts[submit_idx - 1]))
+
+
+# ---------------------------------------------------------------------------
+# L048 — 공고 명명 튜플 + 기존 PDF 합본 (한글 COM 렌더는 아님)
+# ---------------------------------------------------------------------------
+
+def announcement_tuple_stem(
+    *,
+    yyyymmdd: str,
+    notice_name: str,
+    doc_kind: str = "증빙합본",
+) -> str:
+    """``YYYYMMDD_공고명_서류명`` (공백·금지문자 제거)."""
+    ymd = re.sub(r"\D", "", yyyymmdd or "")[:8]
+    if len(ymd) != 8:
+        raise ValueError("L048: yyyymmdd는 8자리 숫자여야 합니다")
+    return f"{ymd}_{_stem_token(notice_name)}_{_stem_token(doc_kind)}"
+
+
+def merge_pdfs(sources: Iterable[str | Path], dest: str | Path) -> Path:
+    """기존 PDF 들을 한 파일로 합친다. 한글 렌더/변환이 아니다."""
+    from pypdf import PdfReader, PdfWriter
+
+    srcs = [Path(s) for s in sources]
+    if not srcs:
+        raise ValueError("L048: 합본할 PDF가 없습니다")
+    dest_p = Path(dest)
+    writer = PdfWriter()
+    for src in srcs:
+        if not src.is_file():
+            raise FileNotFoundError(f"L048: PDF 없음 {src}")
+        reader = PdfReader(str(src))
+        for page in reader.pages:
+            writer.add_page(page)
+    dest_p.parent.mkdir(parents=True, exist_ok=True)
+    with dest_p.open("wb") as fh:
+        writer.write(fh)
+    return dest_p
+
+
+# ---------------------------------------------------------------------------
+# L050 — 동일 stem PDF 쌍 검사. 생성(한글/LibreOffice)은 이 환경 BLOCKED.
+# ---------------------------------------------------------------------------
+
+def sibling_pdf_path(path: str | Path) -> Path:
+    return Path(path).with_suffix(".pdf")
+
+
+def is_draft_artifact(path: str | Path) -> bool:
+    stem = Path(path).stem
+    return stem.endswith("_DRAFT") or stem.endswith("_DRAFT2")
+
+
+def missing_pdf_pair(path: str | Path) -> bool:
+    """초안이 아닌 HWP/HWPX/DOCX 에 같은 이름 PDF 가 없으면 True."""
+    p = Path(path)
+    if is_draft_artifact(p):
+        return False
+    if p.suffix.lower() not in {".hwp", ".hwpx", ".docx"}:
+        return False
+    return not sibling_pdf_path(p).is_file()

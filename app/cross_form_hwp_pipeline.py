@@ -376,7 +376,12 @@ def run_pipeline(
         person = person or "미상"
         hwpx_src = result.get("outputs", {}).get("hwpx")
         if hwpx_src and Path(hwpx_src).is_file():
-            submit_dir = notice_folder / "제출"
+            from auto_write.services.submission_gates import (
+                build_submit_layout_dir,
+                missing_pdf_pair,
+            )
+
+            submit_dir = build_submit_layout_dir(notice_folder)
             submit_dir.mkdir(parents=True, exist_ok=True)
             named = resolve_submit_path(
                 submit_dir,
@@ -391,6 +396,10 @@ def run_pipeline(
             shutil.copyfile(hwpx_src, ws_named)
             result["workspace_named"] = str(ws_named)
             result["submit_filename"] = named.name
+            if missing_pdf_pair(named):
+                result.setdefault("needs_input", []).append(
+                    "L050: 제출 HWPX 동일명 PDF 없음 (한글/LibreOffice PDF화 BLOCKED)"
+                )
 
     (work / "00_engines.json").write_text(
         json.dumps(

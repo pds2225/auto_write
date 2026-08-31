@@ -227,6 +227,12 @@ class _ArtifactCtx:
             "L061": "submission_gates.photo_slot_ok",
             "L080": "doc_quality_ops.bold_bullet_paren_labels",
             "L095": "hwpx_fill HwpxFillReport.pages_before/pages_after",
+            "L004": "doc_text_extract.extract_tax_invoice_buyer",
+            "L014": "docx_ops.style_generated_table/add_generated_table",
+            "L048": "submission_gates.merge_pdfs+announcement_tuple_stem",
+            "L049": "submission_gates.build_submit_layout_dir",
+            "L072": "DocumentQualityOrchestrator heuristic score rollback",
+            "L105": "skill_frontmatter.parse_skill_frontmatter",
         }
         if code in process_map:
             return _process(code, process_map[code])
