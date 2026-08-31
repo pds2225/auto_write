@@ -18,6 +18,7 @@ from typing import Any, Optional
 from lxml import etree
 
 from .hwpx_fill import _inline_texts, _local, _q, _strip_linesegarray
+from .submission_gates import REF_IMAGE_FRAME_MM, safe_body_accent
 
 
 _HWPUNIT_PER_PX = 7200 / 96      # 96dpi 기준 픽셀 → HWPUNIT
@@ -154,9 +155,16 @@ def add_pictures_to_hwpx(in_hwpx, out_hwpx, pictures: list[dict]) -> dict[str, A
             f'<opf:item id="{image_id}" href="{href}" '
             f'media-type="{media}" isEmbeded="1"/></opf:manifest>')
 
+        default_mm = (
+            REF_IMAGE_FRAME_MM[0]
+            if spec.get("role") == "reference_image"
+            else 150
+        )
+        if spec.get("accent"):
+            spec["accent"] = safe_body_accent(str(spec.get("accent")))
         pic = build_picture_element(
             donor, image_id=image_id, px=_px_size(path),
-            width_mm=float(spec.get("width_mm", 150)),
+            width_mm=float(spec.get("width_mm", default_mm)),
             comment=spec.get("comment", ""))
 
         target = hits[0]

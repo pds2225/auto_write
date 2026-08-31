@@ -42,6 +42,8 @@ def reference_accept_value() -> str:
 
 def ensure_template_docx(source_path: Path) -> tuple[Path, list[str]]:
     suffix = source_path.suffix.lower()
+    from .services.submission_gates import assert_not_announcement_form
+    assert_not_announcement_form(source_path)
     if suffix == ".docx":
         return source_path, []
 

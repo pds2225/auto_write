@@ -50,10 +50,18 @@ class SubmissionPipeline:
         max_pages: int | None = None,
         ai_section_max: int | None = None,
         strict_acceptance: bool = False,
+        required_documents: tuple[str, ...] = (),
     ) -> dict[str, Any]:
         report: dict[str, Any] = {"project_id": project_id, "steps": [], "needs_input": []}
         results_root = Path(self.settings.results_root)
         results_root.mkdir(parents=True, exist_ok=True)
+
+        from .submission_gates import infer_hangul_required
+        if not required_format and infer_hangul_required(announcement_text):
+            required_format = "hwpx"
+            report["needs_input"].append(
+                "공고가 한글 전용 제출을 요구함 — 산출이 DOCX 이면 _DRAFT (L050)"
+            )
 
         def _protect_output(p: Path) -> None:
             # 재실행 보호(PIPE-2): 고정 산출명이 이전 산출물을 무경고 파괴하지 않게 백업
@@ -217,7 +225,10 @@ class SubmissionPipeline:
             try:
                 acc = run_acceptance(str(final_docx), AcceptanceConfig(
                     blind_review=blind_review, max_pages=max_pages, ai_section_max=ai_section_max,
-                    strict_acceptance=strict_acceptance))
+                    strict_acceptance=strict_acceptance,
+                    required_documents=tuple(required_documents or ()),
+                    required_format=required_format,
+                ))
             except Exception as exc:
                 report["acceptance_error"] = f"{type(exc).__name__}: {exc}"
                 report["needs_input"].append(
@@ -311,5 +322,19 @@ class SubmissionPipeline:
                     final_docx = new_path
 
         report["final_docx"] = str(final_docx)
+        from .submission_gates import submit_folder_contamination, work_suffix_hits
+        named = [Path(p) for p in list(artifacts) + [Path(final_docx)]]
+        mix = submit_folder_contamination(p for p in named if p.is_file())
+        if mix:
+            report["submit_mix"] = mix
+            report["needs_input"].append(
+                f"제출 산출물에 원본·중간본 혼입(L048): {mix}"
+            )
+        suffix_hits = work_suffix_hits(Path(final_docx).name)
+        if suffix_hits:
+            report["work_suffix"] = suffix_hits
+            report["needs_input"].append(
+                f"최종 파일명 작업접미사(L059): {suffix_hits}"
+            )
         log_line(f"[Submission] project={project_id} final={Path(final_docx).name} steps={report['steps']}")
         return report

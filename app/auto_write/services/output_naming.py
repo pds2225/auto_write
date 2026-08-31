@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from .submission_gates import WORK_SUFFIXES, work_suffix_hits  # noqa: F401  L059
 
 _INVALID = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 

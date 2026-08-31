@@ -197,8 +197,13 @@ def supplement_hwpx_from_resume(
     sign_name: str = "",
     facts_json: Optional[str | Path] = None,
     today: date | None = None,
+    sample_ok: bool = True,
+    full_document: bool = False,
 ) -> ResumeSupplementReport:
     """이력서 표 사실을 HWPX 신청서 표에 좌표 기입."""
+    from .submission_gates import require_sample_ok
+
+    require_sample_ok(sample_ok=sample_ok, full_document=full_document)
     if facts_json is not None:
         f = facts_from_dict(load_resume_facts(facts_json))
         education = education if education is not None else f["education"]

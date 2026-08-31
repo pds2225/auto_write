@@ -901,6 +901,8 @@ class HwpxFillReport:
     line_edits_applied: int = 0   # 앵커 문단 편집(체크·치환) 성공 건수
     sections_changed: int = 0
     overflow_cells: list[str] = field(default_factory=list)  # L097 한 줄 칸 넘침 가능
+    pages_before: int = 0  # L095 XML 페이지 기준선 (한글 렌더 아님)
+    pages_after: int = 0
     notes: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
@@ -918,6 +920,8 @@ class HwpxFillReport:
             "line_edits_applied": self.line_edits_applied,
             "sections_changed": self.sections_changed,
             "overflow_cells": list(self.overflow_cells),
+            "pages_before": self.pages_before,
+            "pages_after": self.pages_after,
             "notes": list(self.notes),
         }
 
@@ -1287,6 +1291,12 @@ def fill_hwpx(
     # 1) 안전장치
     if not src.exists():
         raise FileNotFoundError(f"입력 파일이 없습니다: {src}")
+    from .submission_gates import (
+        assert_not_announcement_form,
+        estimate_page_count,
+        page_count_increased,
+    )
+    assert_not_announcement_form(src)
     if _same_file(src, dst):
         raise ValueError("출력이 입력과 같습니다. 원본 덮어쓰기는 금지입니다.")
     if src.suffix.lower() != ".hwpx":
@@ -1295,6 +1305,7 @@ def fill_hwpx(
         raise ValueError(f"출력은 .hwpx 만 지원합니다: {dst.name}")
     if not zipfile.is_zipfile(src):
         raise ValueError(f"올바른 HWPX(ZIP)가 아닙니다: {src.name}")
+    report.pages_before = estimate_page_count(src)
 
     # 2) ZIP 전체를 읽어 들인다(엔트리 순서·압축방식·내용 보존용).
     with zipfile.ZipFile(src) as zin:
@@ -1471,6 +1482,13 @@ def fill_hwpx(
         except OSError:
             pass
         raise
+
+    report.pages_after = estimate_page_count(dst)
+    if page_count_increased(report.pages_before, report.pages_after):
+        report.notes.append(
+            f"L095 페이지 증가 {report.pages_before}→{report.pages_after} "
+            "(XML 추정, 한글 렌더 쪽수는 L005)"
+        )
 
     report.ok = True
     if not report.filled and not report.replaced and not report.checked:
