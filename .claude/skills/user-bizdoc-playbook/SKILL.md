@@ -10,13 +10,13 @@ description: >-
 
 > 트리거: "업무 절차 알려줘", "그대로 실행", "하던 대로", "도보네비 카드", "이 신청서로 카드 바꿔",
 > "뭐 신청했지", "아이템별로", "지원사업 목록".
-> 신청 원장: `docs/clients/user_applications.md`. 목록 질문 스킬: `user-applications-memory`.
+> 목록은 저장하지 않음. 스킬: `user-applications-memory`. 채움 카드: `docs/clients/dobonevi_card.md`.
 > 허브 라우팅은 `bizdoc-hub`와 같다. **이 파일은 순서·정본 파일·금지항**.
 
 ## 사용자가 나중에 물으면
 
 1. **절차**면 아래 5단계를 짧게 말한 뒤 **그대로 실행**한다. 공고가 다르면 1지망·평가표만 갈아끼운다.
-2. **뭐 신청했지 / 아이템별로**면 스킬 `user-applications-memory`와 `docs/clients/user_applications.md`를 읽고 **채팅으로만** 답한다.
+2. **뭐 신청했지 / 아이템별로**면 스킬 `user-applications-memory`를 읽고 **채팅으로만** 답한다. 사업명 표를 파일에 저장하지 않는다.
 3. 기업 사실은 `docs/clients/dobonevi_card.md`만 쓴다. 카드에 없는 숫자는 `[확인필요]`.
 4. **Google Docs·드라이브 정리본을 만들지 않는다.** 사용자는 안 읽는다. 기억은 이 저장소 파일이다.
 
