@@ -37,6 +37,7 @@ REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 [x] T-20260816-07 | main에 이미 들어간 원격 브랜치를 지우고 backup은 남긴다
 [x] T-20260816-08 | 열린 draft #149·#152·#153·#154를 한 브랜치로 합쳐 한 번에 머지할 수 있게 한다
 [x] T-20260825-01 | 다른 폴더에만 남아 있던 빠진 그림 생성 코드를 지금 저장소로 옮긴다
+[~] T-20260831-01 | 문서가 다시 깨지는 오류부터 우선순위 A→B→C로 기계 검사에 넣는다
 
 에이전트 본문 금지: `# 0` LIST + 열린(`[ ]`/`[~]`) `8-1`만. T-20260814-02 8-1 전문은 생략. 제품 목표=`AW-005` 8-1 + `최우선 사용 케이스`. 웹앱 실행 정본=`웹앱 최종 요구사항_20260816`(승인 전 웹앱 코드 대기). 원장 A/B 표만. TASK 통째·CHANGELOG·닫힌 `[x]` DETAILS 금지.
 
@@ -115,6 +116,7 @@ AW DETAILS에는 「원칙」 칸이 없다. 칸은 MUST / KEEP / FORBIDDEN이�
 | T-20260814-02 | 8-1은 2026-08-14 **명세만 작성** 지시. **제품 목표 아님.** 제품 목표=`AW-005` 8-1 + `최우선 사용 케이스`. 이 8-1 전문은 기본 생략 |
 | T-20260816-03 | clone 끝나면 로컬 PC 리모트 컨트롤 |
 | T-20260816-08 | 지금PR정리 |
+| T-20260831-01 | ㅇㅜ선순우;ㅣ대로 해결하려고함 계획? → 문서가 다시 깨지는 것부터 A→B→C로 잠근다. 계획 task에 추가 |
 
 같은 파일에 나중에 기록된 사용자 요청 (8-1 아님. 충돌 시 나중 요청이 해당 부분만 덮음):
 
@@ -128,6 +130,7 @@ AW DETAILS에는 「원칙」 칸이 없다. 칸은 MUST / KEEP / FORBIDDEN이�
 | `웹앱 최종 요구사항_20260816` | 새 Google Doc이 AW-009 실행 정본. 첫 화면=공고+양식(1파일 가능·2+가능), 기존 계획서 선택. 파트만 작성. 칸=양식 대목차. 전사→유사→생성. 제출자동판정 UI 없음. P0 미완이면 업무흐름 고도화 금지. 이 계획 승인 전 웹앱 코드 대기 |
 | `계획 보강 — 2026-08-16` | P 개발 중=Problem만·파일 오면 초안 1건. P 완료 후=최우선. 사업자등록증은 첫 화면 필수 아님. 우선순위 1–5. #150은 측정기, 다음=3 HWP×Golden 41 Baseline |
 | `STEP 3A 병렬 — 2026-08-16` | 이 트랙=양식↔Fact/Evidence↔공고 매칭 계약·Golden·비개발자 리포트. STEP 2 추출기 파일 금지. 만남점=`Fact[]`/`NarrativeEvidence[]`/`Conflict[]`. Writer/UI/HWP 금지 |
+| T-20260831-01 | 지금까지 난 오류를 우선순위대로 기계 가드로 닫는다. A 문서깨짐 → B 제출·품질 → C 이력서. 151개 한 번에 재발 0 불가. 계획 SSOT=`docs/LESSONS_LOCKDOWN_WAVES.md` |
 
 실제 제출물·옛 엔진 요청 (표만): `docs/REQUEST_LEDGER.md` A1~A6(한난·울산·비앤코·이지비건·입주신청·항우연) / B1~B7(허브·HWPX 값만 채움·이미지·규칙 검사 등) / C1.
 
@@ -4222,6 +4225,75 @@ REQUEST_SOLVED=YES: 합본이 origin/main `1001b76`에 있다. #155는 `ddac657`
 - stash@{0}는 현재 SKILL/원장에 없는 L규칙·D절이라 적용하지 않고 보존
 - HTML 2개 미반영 유지
 - `py -3.11 -m pytest tests/test_generate_missing.py tests/test_run_business_plan_images_m4.py tests/test_image_pipeline.py tests/test_image_provider_gpt.py -q` → 20 passed
+
+## T-20260831-01
+
+TASK_ID: T-20260831-01
+TASK_START_SHA: 5edd4f5c725417be2855471002b0d7846caacec6
+WORK_BRANCH: cursor/lessons-wave-a-guards-0da1
+STATUS_THIS_TURN: LIST 등록. Wave A는 이 브랜치에 구현됨(mechanized 45→49). Wave B·C는 `[ ]`. REQUEST_SOLVED=NO.
+
+### 8-1. 사용자 원문
+
+1번은 **그 네 줄이 가리키는 범위에서는 코드에 걸려 있습니다.** 한글 화면에서 겹침이 0이라는 뜻은 아닙니다.
+2번은 재발 방지용으로, 지금까지 기록된 오류를 **전부** 나열합니다. 기준은 `app/tests/lessons_coverage.json` 151개 + 결함 코퍼스 D1–D6 + 스킬에만 있는 L154–L156입니다.
+다음 단계는 이 목록에서 **문서가 다시 깨지는 것**부터 잠그는 것입니다. 우선순위는 A → B → C입니다.
+D·E는 테스트로 못 막는 것이 많습니다.
+원하면 A부터 갭을 하나씩 기계 가드로 닫으면 됩니다. 151개 전부를 한 번에 “재발 0”으로 만들 수는 없습니다. 사람 판단(L005 눈검증, L009 날조)은 테스트가 대체하지 않습니다.
+
+ㅇㅜ선순우;ㅣ대로 해결하려고함 계획?
+
+계획 task에 추가
+
+전체 오류 표(A~E)는 그 대화에 있다. 실행 계획 정본=`docs/LESSONS_LOCKDOWN_WAVES.md`.
+
+### 최종 결과
+문서가 다시 깨지는 오류(A)부터, 제출·품질 게이트(B), 이력서(C) 순으로 기계 가드가 닫힌다. 4점(guard+test+coverage JSON+runtime wiring)이 있는 것만 `mechanized`다. 한글 픽셀 눈검증·날조 본문은 사람 판단으로 남는다.
+
+### MUST
+- 우선순위 A → B → C. D·E는 규약(테스트로 못 막는 항목은 BLOCKED로 남김)
+- 기계화 4점(AW-008): guard + test + coverage JSON + runtime wiring. 하나라도 없으면 `mechanized` 금지
+- 이미 잠긴 A 항목(D1 칸단위 lineseg, D2 격자, D3/D4 색, D5 병합, L007/L010/L011 등)은 다시 구현하지 않음
+- Wave A: D1 잔여(가짜 lineseg 우회+fill 자간) · D6 홍길동 · L097 overflow 기록(값 유지) · L032 실행일 서명 · L001 세로 0 거부 · L096/L151 4점이면 재분류
+- Wave B: L040 필수서식 `_DRAFT` · L059 작업접미사 오케스트레이터 배선 · L048 원본·중간본 혼입 · L049 공고 PDF를 양식으로 채움 · L050 한글 전용인데 DOCX만 · L080 라벨 칸 굵게 · L095 페이지 수 베이스라인
+- Wave C: L038/L060 정량 컬럼 · L039 포트폴리오 마커 · L043/L044 골격 · L154–L156 · L061 출력 형식 확인
+- L154–L156은 `lessons.md`에 없으면 `lessons_coverage.json`에 넣지 않음(무결성 테스트)
+
+### KEEP
+- AW-008 4점 규칙. AW-008 LIST는 이 TASK에 합치지 않음(`[ ]` 유지)
+- 기존 mechanized 가드·테스트
+- `app/tests/lessons_coverage.json` 총 151
+- 원본 덮어쓰기 금지, `_DRAFT` fail-closed
+
+### REMOVE
+- 없음. 미닫힘 갭을 mechanized로 위장하지 않음
+
+### FORBIDDEN
+- 151개 전부 재발 0 보고
+- 4점 미충족을 mechanized로 표시
+- L005 한글 픽셀을 이 클라우드에서 PASS로 보고(한글 없음=BLOCKED)
+- L009 날조 본문을 테스트가 대체했다고 보고
+- 원본 덮어쓰기 · `git add -A` · force push · 유료 API 무단 호출
+- AW-001~009 · T-20260814-02 본문에 이 계획을 섞기
+
+### VERIFY
+- Wave A: `python3 -m pytest app/tests/test_hwpx_no_fake_lineseg.py app/tests/test_hwpx_fill.py app/tests/test_hwpx_acceptance.py app/tests/test_pure_hwpx_acceptance.py app/tests/test_resume_defect_corpus.py app/tests/test_hwpx_resume_supplement.py app/tests/test_hwpx_submit.py app/tests/test_l001_hwpx_image_width_clamp.py app/tests/test_l151_no_posix_backup_path.py app/tests/test_lrule_guards.py app/tests/test_lessons_coverage.py app/tests/test_night_high_gaps_l074_l091.py app/tests/test_hwpx_layout_fix.py app/tests/test_hwpx_image_clamp.py -q` (Windows는 `py -3.11`)
+- `lessons_coverage.json` counts = 실제 분류
+- Wave B·C는 해당 웨이브 구현 때 같은 4점으로 검사
+
+### 웨이브 상태 (2026-08-31)
+- [x] Wave A1 D1 잔여 — 가짜 `linesegarray` Element/문자열 XML 금지 + `fill_hwpx` 자간 -50→-30
+- [x] Wave A2 D6 — 홍길동·아무개 잔존 fail, identity 허용, skip 해제, leftover `_DRAFT`
+- [x] Wave A3 L097 — `overflow_cells` 기록, 값은 유지
+- [x] Wave A4 L032 — `canonical_sign_date(today=)` 실행일
+- [x] Wave A5 L001 세로 — `picture_display_wh` 높이 0 거부
+- [x] Wave A6 L096/L151 — 4점 충족 시 mechanized (45→49, gap 21→17)
+- [ ] Wave B — L040 · L059 오케스트레이터 배선 · L048 · L049 · L050 · L080 · L095
+- [ ] Wave C — L038/L060 · L039 · L043/L044 · L154–L156 · L061
+- [ ] Wave D spy — L003 COM kill (Windows). L005 눈검증은 judgment/BLOCKED
+
+### DONE
+- REQUEST_SOLVED=NO: 계획 등록 + Wave A만. B·C 미착수. 한글 눈검증 BLOCKED.
 
 # 9. 실제사용 시나리오
 
