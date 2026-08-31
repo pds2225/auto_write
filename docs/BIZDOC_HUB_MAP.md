@@ -21,7 +21,7 @@
 | 의도 | 에이전트(스킬/커맨드) | CLI (사람이 직접) |
 |------|----------------------|-------------------|
 | 뭘 해야 할지 모름 / "문서 도와줘" | **bizdoc-hub** `/bizdoc` | — (먼저 의도 확정) |
-| 뭐 신청했지 / 아이템별 지원 목록 | **user-applications-memory** (채팅만. 원장·파일에 사업명 저장 금지) | — |
+| 뭐 신청했지 / 아이템별 지원 목록 | **user-applications-memory** + `docs/clients/user_applications.md` (채팅만. Docs 정리본 금지. TASK에 named 신청서 작성 등록 금지) | — |
 | 업무 절차 / 그대로 실행 / 도보네비 카드 | **user-bizdoc-playbook** + `docs/clients/dobonevi_card.md` | — |
 | 공고·양식 분석 | `announcement-form-analysis` · `/auto-write-analyze` | `py -3.11 app/analyze_docs.py …` |
 | 처음부터 본문 작성 | **bizplan-orchestrator** · `/auto-write-bizplan` | `py -3.11 app/bizplan_autopilot.py …` |
