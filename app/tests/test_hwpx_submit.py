@@ -148,7 +148,7 @@ def test_submit_normalizes_colors_by_default(colored_hwpx, tmp_path):
 
 
 def test_submit_acceptance_exception_fail_closed(clean_hwpx, tmp_path, monkeypatch):
-    def _boom(path):
+    def _boom(path, **_kwargs):
         raise RuntimeError("acceptance exploded (simulated)")
 
     monkeypatch.setattr(hs, "run_hwpx_acceptance", _boom)
@@ -225,7 +225,7 @@ def test_cli_exit_codes(clean_hwpx, colored_hwpx, tmp_path, monkeypatch):
     assert (tmp_path / "fail_DRAFT.hwpx").exists()
 
     # 3: 검사불능(예외) → fail-closed _DRAFT
-    def _boom(path):
+    def _boom(path, **_kwargs):
         raise RuntimeError("boom")
 
     monkeypatch.setattr(hs, "run_hwpx_acceptance", _boom)

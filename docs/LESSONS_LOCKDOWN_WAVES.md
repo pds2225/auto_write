@@ -79,4 +79,4 @@ L035/L036(키워드·자기기술서)은 사람 판단.
 - [x] JSON 낡은 서명일이 실행일로 바뀜
 - [x] 그림 `sz` 세로 0이면 실패
 - [x] `lessons_coverage.json` counts = 실제 분류. L032/L096/L097/L151이 4점일 때만 mechanized
-- [ ] 관련 pytest 통과. 한글 눈검증은 BLOCKED로 명시
+- [x] 관련 pytest 통과. 한글 눈검증은 BLOCKED로 명시
