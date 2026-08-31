@@ -1,66 +1,18 @@
 {
   "counts": {
-    "mechanized": 60,
-    "gap": 7,
+    "mechanized": 66,
+    "gap": 1,
     "judgment": 84,
     "total": 151
   },
-  "coverage_note": "2026-08-31 Wave B/C/D: mechanized 60(39%)·갭 7(4%)·사람판단 84(55%). B: L037·L059·L080·L095 + L040 오케스트레이터. C: L038·L039·L043·L044·L060·L061. D spy: L003 kill. JSON L048/L049/L050 본문(PDF합본·제출폴더·HWP+PDF쌍)은 gap. L154–L156은 lessons.md 없어 JSON 미수록(코드+테스트만). L005 한글 픽셀 judgment.",
+  "coverage_note": "2026-08-31 JSON gap 잠금: mechanized 66(43%)·갭 1(0%)·사람판단 84(55%). 닫힘 L004·L014·L048·L049·L072·L105. L050 HWP+PDF 생성은 한글/LibreOffice 없음 BLOCKED/gap. L154–L156 JSON 미수록. L005 한글 픽셀 judgment.",
   "top_gaps": [
-    {
-      "id": "L004",
-      "rule": "전자세금계산서 PDF에서 공급받는자는 (법인명) 매치의 두 번째 값으로 뽑는다(이름 필터 금지)",
-      "proposed_guard": "auto_write 저장소에 세금계산서/공급받는자 관련 코드가 전무(grep 0건) — 타 도메인(세금계산서 파서) 소관. auto_write 범위 밖이라 여기 가드 불필요. 만약 파서 도입 시: 공급자≠자사 픽스처로 '2번째 (법인명) 블록=공급받는자' 회귀테스트 추가",
-      "target_files": "",
-      "impact": "low",
-      "effort": "M"
-    },
-    {
-      "id": "L014",
-      "rule": "생성한 표는 첫 행=헤더(음영+굵게), 둘째 행부터=내용(무음영+보통)으로 서식을 구분한다.",
-      "proposed_guard": "표를 새로 생성하는 경로(psst_fill/bizplan 등) 산출 표에 대해 '첫 행 shd+bold, 내용행 무음영·보통'을 단언하는 회귀테스트 추가. 현재 헤더 서식 로직은 cross_form_autofill의 읽기(세로/행렬 헤더 판별)만 있고 생성 표 서식 구분을 강제하는 가드·테스트가 없음(폼 채움은 원본 서식 보존이라 위험은 낮음).",
-      "target_files": "",
-      "impact": "low",
-      "effort": "M"
-    },
-    {
-      "id": "L048",
-      "rule": "출력 폴더에 원본·중간본이 섞여 제출됨 금지 — 공고 명명 튜플 단일 합본",
-      "proposed_guard": "제출 폴더 denylist(원본 양식명·_converted·중간본) + 공고 튜플 개명.",
-      "target_files": "app/auto_write/services/submission_orchestrator.py / app/tests/test_submission_pipeline.py",
-      "impact": "med",
-      "effort": "M"
-    },
-    {
-      "id": "L049",
-      "rule": "산출물을 repo/작업 루트에 방치 말고 'YYYYMMDD 공고명/제출/' 체계에 격리 저장.",
-      "proposed_guard": "계획 L049(공고 PDF를 양식으로 채움)는 JSON L037 로 잠금. JSON L049(YYYYMMDD 공고명/제출/ 폴더)는 경로 규약이 아직 강제되지 않아 gap.",
-      "target_files": "",
-      "impact": "med",
-      "effort": "M"
-    },
     {
       "id": "L050",
       "rule": "최종 제출본·증빙 확정 시 동일 파일명 .pdf를 병행 생성(초안은 불필요).",
-      "proposed_guard": "계획 L050(한글 전용인데 DOCX만)은 infer_hangul_required → required_format=hwpx → 기존 형식 게이트 _DRAFT. JSON L050(동일명 HWP+PDF 쌍)은 COM PDF화 없어 gap. / test_lockdown_wave_bc.py::test_l050_hangul_required_announcement_drafts_docx",
-      "target_files": "",
+      "proposed_guard": "missing_pdf_pair 검사는 있음. 한글 COM/LibreOffice 로 PDF 생성하는 경로는 이 클라우드 BLOCKED.",
+      "target_files": "app/core/docx/services/submission_gates.py / app/cross_form_hwp_pipeline.py",
       "impact": "med",
-      "effort": "M"
-    },
-    {
-      "id": "L072",
-      "rule": "일괄 자동보정은 백업→옛/새 값 실측 1:1 대조→열등이면 원복을 한 세트로. '값 있으면 건너뛴다' 가드 없는 도구 불신.",
-      "proposed_guard": "'기존 값 보존' 가드는 코드로 강제 가능하나 대상 도구가 mail 리포(autofill_selectors.py) — auto_write 범위 밖",
-      "target_files": "",
-      "impact": "med",
-      "effort": "M"
-    },
-    {
-      "id": "L105",
-      "rule": "SKILL.md frontmatter 의 'description: [한글] …' 은 깨진 YAML 이다(관대한 로더가 숨긴다).",
-      "proposed_guard": "스킬 frontmatter 를 엄격 YAML 로 파싱해 검증하는 가드가 이 repo 에 없다.",
-      "target_files": "",
-      "impact": "medium",
       "effort": "M"
     }
   ],
@@ -99,9 +51,9 @@
       "id": "L004 | 문서작성 | 2026-07-10 | 세금계산서 공급받는자 추출",
       "summary": "전자세금계산서 PDF에서 공급받는자는 (법인명) 매치의 두 번째 값으로 뽑는다(이름 필터 금지)",
       "mechanizable": "yes",
-      "category": "gap",
-      "guard_ref": "",
-      "gap_desc": "auto_write 저장소에 세금계산서/공급받는자 관련 코드가 전무(grep 0건) — 타 도메인(세금계산서 파서) 소관. auto_write 범위 밖이라 여기 가드 불필요. 만약 파서 도입 시: 공급자≠자사 픽스처로 '2번째 (법인명) 블록=공급받는자' 회귀테스트 추가",
+      "category": "mechanized",
+      "guard_ref": "doc_text_extract.extract_tax_invoice_buyer + company_extract.extract_company_from_file / app/tests/test_lockdown_wave_gaps.py::test_l004_second_corp_name_is_buyer_even_if_personlike·test_l004_company_extract_overrides_supplier",
+      "gap_desc": "",
       "impact": "low",
       "domain": "all"
     },
@@ -198,10 +150,10 @@
     {
       "id": "L014 | 문서작성 | 2026-07-11 | 표 헤더/내용행 서식 구분",
       "summary": "생성한 표는 첫 행=헤더(음영+굵게), 둘째 행부터=내용(무음영+보통)으로 서식을 구분한다.",
-      "mechanizable": "partial",
-      "category": "gap",
-      "guard_ref": "",
-      "gap_desc": "표를 새로 생성하는 경로(psst_fill/bizplan 등) 산출 표에 대해 '첫 행 shd+bold, 내용행 무음영·보통'을 단언하는 회귀테스트 추가. 현재 헤더 서식 로직은 cross_form_autofill의 읽기(세로/행렬 헤더 판별)만 있고 생성 표 서식 구분을 강제하는 가드·테스트가 없음(폼 채움은 원본 서식 보존이라 위험은 낮음).",
+      "mechanizable": "yes",
+      "category": "mechanized",
+      "guard_ref": "docx_ops.style_generated_table/add_generated_table + document_ingest._render_unhwp_table / app/tests/test_lockdown_wave_gaps.py::test_l014_add_generated_table_header_shaded_body_plain·test_l014_unhwp_render_wires_generated_header_style",
+      "gap_desc": "",
       "impact": "low",
       "domain": "all"
     },
@@ -538,20 +490,20 @@
     {
       "id": "L048 | 문서작성 | 2026-07-15 | 최종 제출 = 공고 명명 튜플로 개명한 단일 합본 PDF까지",
       "summary": "작업명 hwpx에서 끝내지 말고 공고 지정 튜플로 개명 + 증빙 포함 단일 합본 PDF까지 생성.",
-      "mechanizable": "partial",
-      "category": "gap",
-      "guard_ref": "",
-      "gap_desc": "submission_gates.submit_folder_contamination + SubmissionPipeline.submit_mix 로 원본·_converted·_노트북LM 혼입은 경고한다. JSON 본문(공고 튜플 개명 + 증빙 단일 PDF 합본)은 한글 COM/PDF merge 가 없어 gap 유지. / app/tests/test_lockdown_wave_bc.py::test_l048_submit_folder_contamination_mix_names",
+      "mechanizable": "yes",
+      "category": "mechanized",
+      "guard_ref": "submission_gates.merge_pdfs+announcement_tuple_stem + SubmissionPipeline evidence_pdfs / app/tests/test_lockdown_wave_gaps.py::test_l048_announcement_tuple_and_merge_pdfs·test_l048_pipeline_merges_evidence_pdfs",
+      "gap_desc": "",
       "impact": "med",
       "domain": "business_plan"
     },
     {
       "id": "L049 | 문서작성 | 2026-07-15 | 산출물은 'YYYYMMDD 공고명' 폴더 + '제출/' 하위폴더에 배치",
       "summary": "산출물을 repo/작업 루트에 방치 말고 'YYYYMMDD 공고명/제출/' 체계에 격리 저장.",
-      "mechanizable": "partial",
-      "category": "gap",
-      "guard_ref": "",
-      "gap_desc": "계획 L049(공고 PDF를 양식으로 채움)는 JSON L037 로 잠금. JSON L049(YYYYMMDD 공고명/제출/ 폴더)는 경로 규약이 아직 강제되지 않아 gap.",
+      "mechanizable": "yes",
+      "category": "mechanized",
+      "guard_ref": "submission_gates.build_submit_layout_dir + cross_form_hwp_pipeline/SubmissionPipeline notice_folder / app/tests/test_lockdown_wave_gaps.py::test_l049_submit_layout_dir_dated_and_undated·test_l048_pipeline_merges_evidence_pdfs",
+      "gap_desc": "",
       "impact": "med",
       "domain": "business_plan"
     },
@@ -560,8 +512,8 @@
       "summary": "최종 제출본·증빙 확정 시 동일 파일명 .pdf를 병행 생성(초안은 불필요).",
       "mechanizable": "partial",
       "category": "gap",
-      "guard_ref": "",
-      "gap_desc": "계획 L050(한글 전용인데 DOCX만)은 infer_hangul_required → required_format=hwpx → 기존 형식 게이트 _DRAFT. JSON L050(동일명 HWP+PDF 쌍)은 COM PDF화 없어 gap. / test_lockdown_wave_bc.py::test_l050_hangul_required_announcement_drafts_docx",
+      "guard_ref": "submission_gates.missing_pdf_pair (검사만). 한글/LibreOffice PDF 생성은 이 클라우드 BLOCKED. / app/tests/test_lockdown_wave_gaps.py::test_l050_pair_check_skips_draft_and_flags_final",
+      "gap_desc": "동일 stem HWP+PDF 병행 생성은 COM/soffice 없음. 쌍 검사(missing_pdf_pair)와 초안 생략은 코드에 있으나 생성이 없어 gap 유지.",
       "impact": "med",
       "domain": "business_plan"
     },
@@ -778,10 +730,10 @@
     {
       "id": "L072 | 개발 | 2026-07-23 | 휴리스틱 자동보정 도구는 사람이 배선한 설정을 덮어쓴다",
       "summary": "일괄 자동보정은 백업→옛/새 값 실측 1:1 대조→열등이면 원복을 한 세트로. '값 있으면 건너뛴다' 가드 없는 도구 불신.",
-      "mechanizable": "partial",
-      "category": "gap",
-      "guard_ref": "",
-      "gap_desc": "'기존 값 보존' 가드는 코드로 강제 가능하나 대상 도구가 mail 리포(autofill_selectors.py) — auto_write 범위 밖",
+      "mechanizable": "yes",
+      "category": "mechanized",
+      "guard_ref": "DocumentQualityOrchestrator 점수 열등 시 backup 원복 / app/tests/test_lockdown_wave_gaps.py::test_l072_quality_orchestrator_rolls_back_when_worse·test_l072_quality_orchestrator_keeps_improvement",
+      "gap_desc": "",
       "impact": "med",
       "domain": "consultant_application"
     },
@@ -1129,9 +1081,9 @@
       "id": "L105 | 개발 | 2026-08-04 | SKILL.md frontmatter 의 `description: [한글] …` 은 **깨진 YAML** 이다 — 관대한 로더가 숨겨준다",
       "summary": "SKILL.md frontmatter 의 'description: [한글] …' 은 깨진 YAML 이다(관대한 로더가 숨긴다).",
       "mechanizable": "yes",
-      "category": "gap",
-      "guard_ref": "",
-      "gap_desc": "스킬 frontmatter 를 엄격 YAML 로 파싱해 검증하는 가드가 이 repo 에 없다.",
+      "category": "mechanized",
+      "guard_ref": "skill_frontmatter.parse_skill_frontmatter yaml.safe_load / app/tests/test_lockdown_wave_gaps.py::test_l105_broken_bracket_description_rejected·test_l105_folded_scalar_ok_and_repo_skills_parse",
+      "gap_desc": "",
       "impact": "medium",
       "domain": "all"
     },
