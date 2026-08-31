@@ -7,7 +7,11 @@ L040 필수서식은 usage_acceptance.check_missing_required_documents 가 이�
 from __future__ import annotations
 
 import re
+import shutil
+import subprocess
+import sys
 import zipfile
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable
@@ -352,7 +356,7 @@ def merge_pdfs(sources: Iterable[str | Path], dest: str | Path) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# L050 — 동일 stem PDF 쌍 검사. 생성(한글/LibreOffice)은 이 환경 BLOCKED.
+# L050 — 동일 stem PDF 쌍 검사. 생성은 rhwp/한글만. 이 클라우드 BLOCKED. soffice 미인정.
 # ---------------------------------------------------------------------------
 
 def sibling_pdf_path(path: str | Path) -> Path:
@@ -372,3 +376,82 @@ def missing_pdf_pair(path: str | Path) -> bool:
     if p.suffix.lower() not in {".hwp", ".hwpx", ".docx"}:
         return False
     return not sibling_pdf_path(p).is_file()
+
+
+@dataclass(frozen=True)
+class PdfPairGenerateResult:
+    """L050 생성 시도 결과. generated=True 가 아니면 mechanized 로 올리지 않는다."""
+
+    generated: bool
+    skipped: bool
+    blocked: bool
+    reason: str
+
+
+def hangul_pdf_tool() -> str | None:
+    """제출 품질 PDF 도구. LibreOffice(soffice) 는 한글 레이아웃이 달라 인정하지 않는다."""
+    if shutil.which("rhwp"):
+        return "rhwp"
+    return None
+
+
+def try_generate_sibling_pdf(path: str | Path) -> PdfPairGenerateResult:
+    """동일 stem PDF 를 만들 수 있으면 만든다. 도구 없으면 BLOCKED (L050 gap 유지).
+
+    초안은 생성하지 않는다. soffice 폴백 없음. Hangul COM PDF 저장은 아직 미배선
+    (Windows 한글에서 사람이 같은 이름으로 PDF 저장 = Wave D 규약).
+    """
+    p = Path(path)
+    if is_draft_artifact(p):
+        return PdfPairGenerateResult(False, True, False, "draft skipped")
+    if p.suffix.lower() not in {".hwp", ".hwpx", ".docx"}:
+        return PdfPairGenerateResult(False, True, False, "not a document pair source")
+    dest = sibling_pdf_path(p)
+    if dest.is_file() and dest.stat().st_size > 0:
+        return PdfPairGenerateResult(False, True, False, "pdf already exists")
+    tool = hangul_pdf_tool()
+    if tool == "rhwp":
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        proc = subprocess.run(
+            ["rhwp", "export-pdf", str(p.resolve()), "-o", str(dest.resolve())],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        if dest.is_file() and dest.stat().st_size > 0:
+            return PdfPairGenerateResult(True, False, False, "rhwp")
+        err = (proc.stderr or proc.stdout or "").strip()[:200]
+        return PdfPairGenerateResult(
+            False, False, True, f"BLOCKED: rhwp failed rc={proc.returncode} {err}"
+        )
+    if sys.platform == "win32":
+        return PdfPairGenerateResult(
+            False,
+            False,
+            True,
+            "BLOCKED: Hangul COM PDF 미배선 — 한글에서 같은 stem 으로 PDF 저장",
+        )
+    return PdfPairGenerateResult(
+        False,
+        False,
+        True,
+        "BLOCKED: no rhwp/Hangul (this cloud cannot generate L050 pair)",
+    )
+
+
+def l005_pixel_review_status() -> dict[str, str | bool]:
+    """L005: pytest·로직 리뷰는 검증이 아니다. 한글 GUI 픽셀이 필요하다.
+
+    이 클라우드(Linux) 는 항상 BLOCKED. Windows 도 한글 미설치면 NEEDS_HANGUL_GUI.
+    """
+    status = "BLOCKED" if sys.platform != "win32" else "NEEDS_HANGUL_GUI"
+    return {
+        "status": status,
+        "logic_review_is_verification": False,
+        "platform": sys.platform,
+        "rule": (
+            "Open the output in 한글 2022 (한컴오피스). Check overlap, page count, "
+            "table grid, image size on screen. Screenshot. pytest PASS is not L005."
+        ),
+    }

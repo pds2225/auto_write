@@ -379,6 +379,7 @@ def run_pipeline(
             from auto_write.services.submission_gates import (
                 build_submit_layout_dir,
                 missing_pdf_pair,
+                try_generate_sibling_pdf,
             )
 
             submit_dir = build_submit_layout_dir(notice_folder)
@@ -396,9 +397,10 @@ def run_pipeline(
             shutil.copyfile(hwpx_src, ws_named)
             result["workspace_named"] = str(ws_named)
             result["submit_filename"] = named.name
+            gen = try_generate_sibling_pdf(named)
             if missing_pdf_pair(named):
                 result.setdefault("needs_input", []).append(
-                    "L050: 제출 HWPX 동일명 PDF 없음 (한글/LibreOffice PDF화 BLOCKED)"
+                    f"L050: 제출 HWPX 동일명 PDF 없음 ({gen.reason})"
                 )
 
     (work / "00_engines.json").write_text(
