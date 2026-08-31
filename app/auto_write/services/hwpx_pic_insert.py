@@ -224,6 +224,20 @@ def force_signature_pos(pic) -> dict[str, str]:
     }
 
 
+def picture_display_wh(pic) -> tuple[int, int]:
+    """표시 크기(sz, 없으면 curSz)의 가로·세로. 둘 다 >0 이어야 한다(L001/L142)."""
+    el = _find_child(pic, "sz")
+    if el is None:
+        el = _find_child(pic, "curSz")
+    if el is None:
+        raise ValueError("pic 에 sz/curSz 없음")
+    w = int(el.get("width") or 0)
+    h = int(el.get("height") or 0)
+    if w <= 0 or h <= 0:
+        raise ValueError(f"표시 크기 가로·세로가 모두 필요: {w}x{h}")
+    return w, h
+
+
 def insert_signature_into_tc(tc, pic_element) -> bool:
     """값 칸 tc 의 첫 문단에 서명 pic 을 붙인다(L078 앵커=값 tc).
 
@@ -346,6 +360,7 @@ def resize_hwpx_picture(
             if rect.get(k) != v:
                 raise RuntimeError(f"L088 위반: imgRect.{k} 가 변경됨")
 
+    disp_w, disp_h = picture_display_wh(pic)
     return {
         "scale": scale,
         "org_w": org_w,

@@ -242,8 +242,8 @@ def test_as_dict_shape(tmp_path):
     _make_hwpx(p, header=header, section=_section_xml(_p("본문")))
     d = run_hwpx_acceptance(p).as_dict()
     for key in ("source", "ok", "verdict", "fail_defects",
-                "colored", "guides", "linesegarray",
-                "colored_samples", "guides_samples", "notes"):
+                "colored", "guides", "linesegarray", "dummy_names",
+                "colored_samples", "guides_samples", "dummy_name_samples", "notes"):
         assert key in d
     assert d["ok"] is False
     assert d["colored"] == 1
@@ -299,3 +299,17 @@ def test_bad_section_xml_skipped_with_note(tmp_path):
         z.writestr("Contents/section0.xml", b"<hs:sec>NOT CLOSED")
     rep = run_hwpx_acceptance(p)
     assert any("section0.xml" in n and "파싱 실패" in n for n in rep.notes)
+
+
+def test_dummy_name_detected_unless_allowed(tmp_path):
+    """D6: 홍길동 잔존은 fail. identity 로 채운 값이면 허용."""
+    p = tmp_path / "dummy.hwpx"
+    section = _section_xml(_p("대표자 홍길동") + _table("안내"))
+    _make_hwpx(p, header=_header_xml(_charpr(0, "#000000")), section=section)
+    rep = run_hwpx_acceptance(p)
+    assert rep.dummy_names == 1
+    assert "홍길동" in rep.dummy_name_samples
+    assert rep.ok is False
+    ok = run_hwpx_acceptance(p, allowed_names=["홍길동"])
+    assert ok.dummy_names == 0
+    assert ok.ok is True

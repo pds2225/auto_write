@@ -1748,3 +1748,76 @@ def test_line_edits_set_replaces_whole_paragraph(tmp_path: Path):
     assert rep.line_edits_applied == 1
     assert texts[1] == "희망 근무지역 : 서울 마포"
     assert "[ ] 동의" in texts[0]          # 다른 문단은 손대지 않는다
+
+
+# --- Wave A: fill-path 자간 clamp / L097 한 줄 칸 넘침 ---------------------------
+
+_HH = "http://www.hancom.co.kr/hwpml/2011/head"
+
+
+def test_fill_clamps_letter_spacing_without_submit(tmp_path):
+    """submit 을 안 타도 fill_hwpx 가 자간 -50 을 -30 으로 올린다."""
+    from lxml import etree
+
+    header = (
+        f'<?xml version="1.0" encoding="UTF-8"?>'
+        f'<hh:head xmlns:hh="{_HH}"><hh:refList><hh:charProperties>'
+        f'<hh:charPr id="0" textColor="#000000">'
+        f'<hh:spacing hangul="-50" latin="-10" hanja="-30"/>'
+        f'</hh:charPr></hh:charProperties></hh:refList></hh:head>'
+    ).encode("utf-8")
+    src = tmp_path / "form.hwpx"
+    _make_hwpx_color(src, _row(0, "상호", ""), header=header)
+    out = tmp_path / "out.hwpx"
+    fill_hwpx(src, out, identity={"기업명": "도보네비(주)"})
+    with zipfile.ZipFile(out) as z:
+        hroot = etree.fromstring(z.read("Contents/header.xml"))
+    sp = next(e for e in hroot.iter() if str(e.tag).rsplit("}", 1)[-1] == "spacing")
+    assert sp.get("hangul") == "-30"
+    assert sp.get("latin") == "-10"
+    assert sp.get("hanja") == "-30"
+
+
+def test_one_line_cell_overflow_noted_but_value_kept(tmp_path):
+    """L097: 한 줄 칸에 긴 값은 들어가고 overflow_cells 에 남는다(데이터 손실 금지)."""
+    from lxml import etree
+
+    def sz_cell(col, row, text, *, width, height):
+        inner = f"<hp:t>{text}</hp:t>" if text else "<hp:t></hp:t>"
+        return (
+            f'<hp:tc><hp:cellAddr colAddr="{col}" rowAddr="{row}"/>'
+            f'<hp:cellSpan colSpan="1" rowSpan="1"/>'
+            f'<hp:cellSz width="{width}" height="{height}"/>'
+            f'<hp:subList><hp:p><hp:run charPrIDRef="0">{inner}</hp:run>'
+            f'</hp:p></hp:subList></hp:tc>'
+        )
+
+    rows = (
+        f"<hp:tr>{sz_cell(0, 0, '상호', width=8000, height=400)}"
+        f"{sz_cell(1, 0, '', width=2000, height=400)}</hp:tr>"
+    )
+    src = tmp_path / "form.hwpx"
+    _make_hwpx_color(src, rows)
+    out = tmp_path / "out.hwpx"
+    long_name = "밸류업파트너스주식회사"
+    rep = fill_hwpx(src, out, identity={"기업명": long_name})
+    assert long_name in "".join(rep.overflow_cells)
+    with zipfile.ZipFile(out) as z:
+        root = etree.fromstring(z.read("Contents/section0.xml"))
+    blob = "".join(root.itertext())
+    assert long_name in blob
+
+
+def test_cell_text_may_overflow_unit():
+    from lxml import etree
+
+    xml = (
+        f'<hp:tc xmlns:hp="{_HP}">'
+        f'<hp:cellSz width="2000" height="400"/>'
+        f'<hp:subList><hp:p><hp:run><hp:t/></hp:run></hp:p></hp:subList></hp:tc>'
+    )
+    tc = etree.fromstring(xml.encode("utf-8"))
+    assert hwpx_fill.cell_text_may_overflow(tc, "가나다라마바사아자차") is True
+    assert hwpx_fill.cell_text_may_overflow(tc, "가") is False
+    assert hwpx_fill.estimate_text_width_hwpunit("가나") == 2000
+

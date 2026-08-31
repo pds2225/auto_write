@@ -19,7 +19,7 @@ __all__ = ["build_lrule_guards"]
 
 _HWPX_ONLY = {
     "L001", "L002", "L031", "L033", "L074", "L076", "L078",
-    "L083", "L086", "L087", "L088", "L089", "L090", "L091", "L142",
+    "L083", "L086", "L087", "L088", "L089", "L090", "L091", "L096", "L097", "L142",
 }
 
 
@@ -196,7 +196,11 @@ class _ArtifactCtx:
             "L053": "form row preservation",
             "L054": "no table transpose",
             "L070": "value-cell-only fill",
+            "L032": "hwpx_resume_supplement.canonical_sign_date",
+            "L096": "hwpx_pic_insert.force_signature_pos treatAsChar=0",
+            "L097": "hwpx_fill.cell_text_may_overflow",
             "L145": "hwpx_fill._set_cell_text/_splice_run_text auto-strip lineseg",
+            "L151": "backup_original results/backup; backup_existing_output beside target",
         }
         if code in process_map:
             return _process(code, process_map[code])

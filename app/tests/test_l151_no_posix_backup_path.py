@@ -51,3 +51,36 @@ class TestL151NoPosixBackupPath:
             assert '"/tmp' not in stripped and "'/tmp" not in stripped, (
                 f"L151 위반: backup_rollback.py:{i}에 POSIX /tmp 경로: {stripped[:80]}"
             )
+
+
+def test_backup_existing_output_stays_beside_target(tmp_path):
+    """백업은 산출물과 같은 폴더에 둔다 — POSIX /tmp 하드코딩이 아니다."""
+    from pathlib import Path
+
+    from auto_write.services.usage_acceptance import backup_existing_output
+
+    target = tmp_path / "out.docx"
+    target.write_text("이전 산출물", encoding="utf-8")
+    bak = Path(backup_existing_output(target))
+    assert bak.parent == tmp_path
+    assert bak.name.startswith("out_prev") and bak.suffix == ".docx"
+    assert bak.exists() and not target.exists()
+    assert bak.read_text(encoding="utf-8") == "이전 산출물"
+
+
+def test_orchestrator_backup_under_results_backup(tmp_path):
+    """품질 하네스 원본 백업은 results/backup/<ts>/ 이다."""
+    from docx import Document
+
+    from auto_write.services.document_quality_orchestrator import (
+        DocumentQualityOrchestrator,
+    )
+
+    src = tmp_path / "in.docx"
+    Document().save(str(src))
+    results = tmp_path / "results"
+    orch = DocumentQualityOrchestrator(results)
+    assert orch.backup_root == results / "backup"
+    bak_dir = orch.backup_original(src)
+    assert bak_dir.parent == orch.backup_root
+    assert (bak_dir / src.name).is_file()

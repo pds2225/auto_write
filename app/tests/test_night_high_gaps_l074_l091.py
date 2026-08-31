@@ -11,6 +11,7 @@ from auto_write.services.hwpx_layout_fix import table_width_from_colspan1
 from auto_write.services.hwpx_pic_insert import (
     force_signature_pos,
     insert_signature_into_tc,
+    picture_display_wh,
     resize_hwpx_picture,
 )
 from auto_write.services.hwpx_section_split import (
@@ -293,3 +294,17 @@ def test_resize_hwpx_picture_keeps_display_aspect_when_orgsz_wrong():
     assert 3300 < info["disp_h"] < 3400       # 표시 비율 유지(≈3357), 눌림(227) 아님
     sca = [el for el in pic.iter() if el.tag.endswith("scaMatrix")][0]
     assert sca.get("e1") != sca.get("e5")     # 가로·세로 배율을 따로 계산
+
+
+def test_picture_display_wh_requires_height():
+    """L001/L142: 표시 크기 세로는 0이면 안 된다."""
+    import pytest
+
+    pic = _make_pic(w=2000, h=1000)
+    info = resize_hwpx_picture(pic, scale=0.5)
+    w, h = picture_display_wh(pic)
+    assert (w, h) == (info["disp_w"], info["disp_h"])
+    assert h > 0
+    pic.find(_q("sz")).set("height", "0")
+    with pytest.raises(ValueError, match="가로·세로"):
+        picture_display_wh(pic)
