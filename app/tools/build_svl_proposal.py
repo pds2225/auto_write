@@ -19,7 +19,11 @@ from lxml import etree
 APP = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(APP))
 
-from core.docx.services.hwpx_fill import _q, _set_cell_text  # noqa: E402
+from core.docx.services.hwpx_fill import (  # noqa: E402
+    _invalidate_lineseg,
+    _q,
+    _set_cell_text,
+)
 
 _STANDALONE_RE = re.compile(rb"standalone\s*=\s*['\"](yes|no)['\"]")
 
@@ -205,6 +209,7 @@ def set_cell_multiline(tc, text: str) -> bool:
             ts[0].text = line
             for t in ts[1:]:
                 t.text = ""
+        _invalidate_lineseg(clone)
         sub.append(clone)
     return True
 

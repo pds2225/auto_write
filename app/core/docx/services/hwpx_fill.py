@@ -314,6 +314,10 @@ def _set_cell_text(tc, value: str, black: Optional[_BlackCharPr] = None) -> bool
 
     L086: 폼 컨트롤(checkBtn 등)이 든 칸에는 텍스트를 절대 기입하지 않는다 —
     ``_cell_is_fillable`` 우회·resume 경로에서도 이중 표시를 막기 위한 최종 방어핀.
+
+    L002/L145: 기입에 성공하면 그 칸의 ``hp:linesegarray`` 를 즉시 제거한다.
+    호출자가 ``fill_hwpx`` 파이프라인·별도 strip 을 잊어도 옛 줄좌표에 새 글씨가
+    겹치지 않는다. 형제 칸은 건드리지 않는다(L074).
     """
     if _has_form_control(tc):
         return False
@@ -330,6 +334,7 @@ def _set_cell_text(tc, value: str, black: Optional[_BlackCharPr] = None) -> bool
             run = ts[0].getparent()
             if run is not None and _local(getattr(run, "tag", "")) == "run":
                 black.fix_run(run)
+        _invalidate_lineseg(tc)
         return True
     runs = list(p.iter(_q("run")))
     if runs:
@@ -341,6 +346,7 @@ def _set_cell_text(tc, value: str, black: Optional[_BlackCharPr] = None) -> bool
         run.set("charPrIDRef", _inherit_charpr(tc, black))
     t = etree.SubElement(run, _q("t"))
     t.text = value
+    _invalidate_lineseg(tc)
     return True
 
 
@@ -385,6 +391,7 @@ def _splice_run_text(p, fill_start: int, fill_end: int, value: str) -> bool:
         return False  # cross-run span: 보수적 skip(오채움<빈칸)
     cur = start_t.text or ""
     start_t.text = cur[:start_off] + value + cur[end_off:]
+    _invalidate_lineseg(p)
     return True
 
 
@@ -559,6 +566,7 @@ def _apply_line_edits(
                         run = ts[0].getparent()
                         if run is not None and _local(getattr(run, "tag", "")) == "run":
                             black.fix_run(run)
+                    _invalidate_lineseg(p)
                     applied += 1
                     edited.append(p)
                 else:
@@ -868,13 +876,44 @@ class HwpxFillReport:
         }
 
 
+def _layout_scope(el):
+    """``hp:linesegarray`` 가 붙는 단위(문단 p, 없으면 셀 tc)로 올라간다.
+
+    캐시는 run/t 가 아니라 그 조상 ``hp:p`` 의 자식(run 과 형제)이다. t 만
+    넘기면 하위 iter 로는 안 잡히므로 조상으로 올린다.
+    """
+    cur = el
+    while cur is not None:
+        loc = _local(getattr(cur, "tag", ""))
+        if loc in ("p", "tc"):
+            return cur
+        cur = cur.getparent()
+    return el
+
+
+def _invalidate_lineseg(el) -> int:
+    """텍스트를 바꾼 요소의 줄위치 캐시(hp:linesegarray)를 즉시 제거한다.
+
+    L002 뿌리: 편집 직후 그 칸/문단만 무효화한다. ``fill_hwpx`` 파이프라인을
+    거치지 않는 직접 호출(``_set_cell_text``, L145)에서도 글씨 겹침이 나지 않는다.
+    L074: 형제 문단(안내박스) 캐시는 건드리지 않는다.
+    """
+    if el is None:
+        return 0
+    scope = _layout_scope(el)
+    if scope is None:
+        return 0
+    return _strip_linesegarray(scope, only_under=[scope])
+
+
 def _strip_linesegarray(root, *, only_under=None) -> int:
     """채운 섹션의 옛 줄위치 캐시(hp:linesegarray)를 제거한다.
 
     텍스트를 바꿔도 예시문구 기준의 linesegarray 가 남으면 한글이 새 글씨를 옛
     좌표에 겹쳐 그린다(사용자 실측: STAR·서울 AI 허브 신청서 글씨 겹침 재발). 제거하면
     문서를 열 때 줄위치를 새로 계산한다 — 레이아웃 캐시라 내용 무손실·멱등.
-    HWPX 직접 납품(.hwpx→.hwpx) 경로의 글씨 겹침을 엔진 단에서 원천 차단한다.
+    원천 차단은 ``_set_cell_text`` / ``_splice_run_text`` 가 편집 직후
+    ``_invalidate_lineseg`` 를 부르는 쪽이다. 이 함수는 그 구현 + 후처리 진입점.
 
     L074: ``only_under`` 가 주어지면 그 요소(들) 하위의 lineseg 만 제거한다.
     rhwp→PDF 경로에서 전역 strip 이 안내박스 다중문단을 깨뜨리는 것을 막기 위한
@@ -1088,6 +1127,7 @@ def _fill_section_xml(
                 t.text = new
                 replaced += 1
                 changed = True
+                _invalidate_lineseg(t)
                 # L074: 치환된 run 의 조상 p/tc 를 strip 범위에 포함.
                 anc = t.getparent()
                 while anc is not None:

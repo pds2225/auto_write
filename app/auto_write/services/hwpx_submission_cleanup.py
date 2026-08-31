@@ -128,7 +128,8 @@ def finalize_submission_hwpx(in_path, out_path, *, force_black=True,
         infos = zin.infolist()
         store = {i.filename: zin.read(i.filename) for i in infos}
 
-    stats = {"linesegarray_removed": 0, "guides_removed": 0, "charpr_blacked": 0}
+    stats = {"linesegarray_removed": 0, "guides_removed": 0, "charpr_blacked": 0,
+             "spacing_clamped": 0}
     for name, data in list(store.items()):
         if _SECTION_RE.search(name):
             root = etree.fromstring(data)
@@ -137,9 +138,12 @@ def finalize_submission_hwpx(in_path, out_path, *, force_black=True,
             if strip_lineseg:
                 stats["linesegarray_removed"] += strip_linesegarray(root)
             store[name] = etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone=True)
-        elif _HEADER_RE.search(name) and force_black:
+        elif _HEADER_RE.search(name):
             hroot = etree.fromstring(data)
-            stats["charpr_blacked"] += force_black_text(hroot)
+            if force_black:
+                stats["charpr_blacked"] += force_black_text(hroot)
+            from .hwpx_layout_fix import clamp_letter_spacing
+            stats["spacing_clamped"] += clamp_letter_spacing(hroot)
             store[name] = etree.tostring(hroot, xml_declaration=True, encoding="UTF-8", standalone=True)
 
     with zipfile.ZipFile(out_path, "w") as zout:

@@ -463,6 +463,104 @@ def test_strip_linesegarray_helper_idempotent():
     assert "상호" in texts  # 라벨 텍스트 보존
 
 
+def _lineseg_tbl_xml() -> str:
+    """값칸+안내칸 각각 lineseg 를 가진 2열 표. L145 직접호출 픽스처."""
+    value = (
+        '<hp:tc><hp:cellAddr colAddr="0" rowAddr="0"/>'
+        '<hp:cellSpan colSpan="1" rowSpan="1"/><hp:subList><hp:p>'
+        '<hp:linesegarray><hp:lineseg textpos="0" vertpos="120"/></hp:linesegarray>'
+        '<hp:run charPrIDRef="0"><hp:t></hp:t></hp:run></hp:p></hp:subList></hp:tc>'
+    )
+    guide = (
+        '<hp:tc><hp:cellAddr colAddr="1" rowAddr="0"/>'
+        '<hp:cellSpan colSpan="1" rowSpan="1"/><hp:subList><hp:p>'
+        '<hp:linesegarray><hp:lineseg textpos="0" vertpos="20"/></hp:linesegarray>'
+        '<hp:run charPrIDRef="0"><hp:t>안내</hp:t></hp:run></hp:p></hp:subList></hp:tc>'
+    )
+    return (
+        f'<hp:tbl xmlns:hp="{_HP}">'
+        f'<hp:tr>{value}{guide}</hp:tr></hp:tbl>'
+    )
+
+
+def test_set_cell_text_strips_own_lineseg_keeps_sibling():
+    """L145 뿌리: _set_cell_text 직접 호출만으로 그 칸 lineseg 가 사라진다.
+
+    fill_hwpx 파이프라인·별도 strip 없이 호출해도 겹침 캐시가 남으면 안 된다.
+    형제 칸(안내) 캐시는 보존(L074).
+    """
+    from lxml import etree
+
+    tbl = etree.fromstring(_lineseg_tbl_xml())
+    tcs = list(tbl.iter(hwpx_fill._q("tc")))
+    assert hwpx_fill._set_cell_text(tcs[0], "도보네비게이션") is True
+    edited = [e for e in tcs[0].iter() if etree.QName(e).localname == "linesegarray"]
+    sibling = [e for e in tcs[1].iter() if etree.QName(e).localname == "linesegarray"]
+    assert edited == []
+    assert len(sibling) == 1
+    assert "".join(tcs[0].itertext()).strip() == "도보네비게이션"
+    assert "".join(tcs[1].itertext()).strip() == "안내"
+
+
+def test_set_cell_text_skips_form_control_without_stripping_sibling():
+    """L086 실패 시 칸을 안 바꾸고, 형제 lineseg 도 안 건드린다."""
+    from lxml import etree
+
+    xml = (
+        f'<hp:tbl xmlns:hp="{_HP}"><hp:tr>'
+        f'<hp:tc><hp:subList><hp:p>'
+        f'<hp:linesegarray><hp:lineseg/></hp:linesegarray>'
+        f'<hp:run charPrIDRef="0">'
+        f'<hp:checkBtn name="CB" value="UNCHECKED"/><hp:t/></hp:run>'
+        f'</hp:p></hp:subList></hp:tc>'
+        f'<hp:tc><hp:subList><hp:p>'
+        f'<hp:linesegarray><hp:lineseg/></hp:linesegarray>'
+        f'<hp:run charPrIDRef="0"><hp:t>안내</hp:t></hp:run>'
+        f'</hp:p></hp:subList></hp:tc>'
+        f'</hp:tr></hp:tbl>'
+    )
+    tbl = etree.fromstring(xml)
+    tcs = list(tbl.iter(hwpx_fill._q("tc")))
+    assert hwpx_fill._set_cell_text(tcs[0], "010-9999-8888") is False
+    assert len([e for e in tcs[0].iter() if etree.QName(e).localname == "linesegarray"]) == 1
+    assert len([e for e in tcs[1].iter() if etree.QName(e).localname == "linesegarray"]) == 1
+
+
+def test_splice_run_text_strips_paragraph_lineseg():
+    """인라인 스플라이스도 그 문단 lineseg 를 즉시 제거한다(L002 뿌리)."""
+    from lxml import etree
+
+    xml = (
+        f'<hp:p xmlns:hp="{_HP}">'
+        f'<hp:linesegarray><hp:lineseg textpos="0" vertpos="0"/></hp:linesegarray>'
+        f'<hp:run charPrIDRef="0"><hp:t>상호 : ______</hp:t></hp:run>'
+        f'</hp:p>'
+    )
+    p = etree.fromstring(xml)
+    flat = "상호 : ______"
+    start = flat.index("_")
+    assert hwpx_fill._splice_run_text(p, start, start + 6, "도보네비") is True
+    assert not [e for e in p.iter() if etree.QName(e).localname == "linesegarray"]
+    assert "도보네비" in "".join(p.itertext())
+
+
+def test_invalidate_lineseg_on_t_walks_to_paragraph():
+    """hp:t 만 넘겨도 조상 p 의 lineseg 를 찾는다(캐시는 t 하위에 없음)."""
+    from lxml import etree
+
+    xml = (
+        f'<hp:p xmlns:hp="{_HP}">'
+        f'<hp:run charPrIDRef="0"><hp:t>값</hp:t></hp:run>'
+        f'<hp:linesegarray><hp:lineseg/></hp:linesegarray>'
+        f'</hp:p>'
+    )
+    p = etree.fromstring(xml)
+    t = next(p.iter(hwpx_fill._q("t")))
+    assert hwpx_fill._invalidate_lineseg(t) == 1
+    assert not [e for e in p.iter() if etree.QName(e).localname == "linesegarray"]
+    assert "".join(p.itertext()).strip() == "값"
+
+
 # --------------------------------------------------------------------------- #
 # 구조 (a): 한 셀 '안' 인라인 빈칸(`라벨 : ______`) 채움 — offset 스플라이스
 # (가시 빈칸만 채움 · used_keys 공유 · 형제 run 보존 · cross-run 은 보수적 skip)
