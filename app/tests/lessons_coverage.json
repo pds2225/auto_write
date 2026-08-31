@@ -5,12 +5,12 @@
     "judgment": 84,
     "total": 151
   },
-  "coverage_note": "2026-08-31 JSON gap 잠금: mechanized 66(43%)·갭 1(0%)·사람판단 84(55%). 닫힘 L004·L014·L048·L049·L072·L105. L050 HWP+PDF 생성은 한글/LibreOffice 없음 BLOCKED/gap. L154–L156 JSON 미수록. L005 한글 픽셀 judgment.",
+  "coverage_note": "2026-08-31 Wave D·E 규약 잠금. mechanized 66(43%)·갭 1(0%)·사람판단 84(55%). L050 생성은 한글/rhwp 없음 BLOCKED/gap(검사+시도만). L005 픽셀 judgment. L008 위계 judgment. 닫힘≠머지. L154–L156 JSON 미수록.",
   "top_gaps": [
     {
       "id": "L050",
       "rule": "최종 제출본·증빙 확정 시 동일 파일명 .pdf를 병행 생성(초안은 불필요).",
-      "proposed_guard": "missing_pdf_pair 검사는 있음. 한글 COM/LibreOffice 로 PDF 생성하는 경로는 이 클라우드 BLOCKED.",
+      "proposed_guard": "missing_pdf_pair + try_generate_sibling_pdf. rhwp 없으면 BLOCKED. soffice 미인정. 한글에서 같은 stem PDF 저장은 Windows 규약.",
       "target_files": "app/core/docx/services/submission_gates.py / app/cross_form_hwp_pipeline.py",
       "impact": "med",
       "effort": "M"
@@ -62,8 +62,8 @@
       "summary": "사람이 볼 산출물(PDF·문서·이미지)은 렌더링해 실제 픽셀을 읽어 검증한다 — 로직 리뷰는 검증이 아니다",
       "mechanizable": "partial",
       "category": "judgment",
-      "guard_ref": "",
-      "gap_desc": "",
+      "guard_ref": "docs/LESSONS_LOCKDOWN_WAVES.md Wave D L005 규약 + submission_gates.l005_pixel_review_status / app/tests/test_lockdown_wave_de.py::test_l005_stays_judgment_and_pixel_review_blocked_here (judgment — pytest PASS is not pixel verification)",
+      "gap_desc": "한글 GUI 픽셀 눈검증. 이 클라우드 BLOCKED. 로직 리뷰·XML 추정(L095/L097)은 대체 불가.",
       "impact": "high",
       "domain": "all"
     },
@@ -92,7 +92,7 @@
       "summary": "대제목=유지, 중16/소14/본문12/각주10/표11pt 위계 — 단 공고가 크기 명시 시 그게 우선",
       "mechanizable": "partial",
       "category": "judgment",
-      "guard_ref": "app/auto_write/services/doc_quality_ops.py:normalize_font_sizes(394, 본문 이상치 클램프·기본 비활성) + doc_quality_score.py:283 font_consistency(≤6종 카운트만)",
+      "guard_ref": "doc_quality_ops.normalize_font_sizes(기본 비활성) + run_all normalize_fonts=False + doc_quality_score font_consistency(≤6종 카운트만) / app/tests/test_lockdown_wave_de.py::test_l008_run_all_does_not_force_font_hierarchy (judgment — 위계 강제 정규화 금지)",
       "gap_desc": "",
       "impact": "med",
       "domain": "business_plan"
@@ -512,8 +512,8 @@
       "summary": "최종 제출본·증빙 확정 시 동일 파일명 .pdf를 병행 생성(초안은 불필요).",
       "mechanizable": "partial",
       "category": "gap",
-      "guard_ref": "submission_gates.missing_pdf_pair (검사만). 한글/LibreOffice PDF 생성은 이 클라우드 BLOCKED. / app/tests/test_lockdown_wave_gaps.py::test_l050_pair_check_skips_draft_and_flags_final",
-      "gap_desc": "동일 stem HWP+PDF 병행 생성은 COM/soffice 없음. 쌍 검사(missing_pdf_pair)와 초안 생략은 코드에 있으나 생성이 없어 gap 유지.",
+      "guard_ref": "submission_gates.missing_pdf_pair + try_generate_sibling_pdf (rhwp만, soffice 미인정) / app/tests/test_lockdown_wave_gaps.py::test_l050_pair_check_skips_draft_and_flags_final + test_lockdown_wave_de.py::test_l050_stays_gap_and_generate_blocked_without_rhwp",
+      "gap_desc": "동일 stem HWP+PDF 병행 생성은 이 클라우드에 rhwp/한글 없음. 쌍 검사와 BLOCKED 생성 시도는 코드. 생성 성공 전 gap 유지. soffice 레이아웃은 제출 품질로 인정하지 않음.",
       "impact": "med",
       "domain": "business_plan"
     },
@@ -682,7 +682,7 @@
       "summary": "워크트리 커밋은 파일 명시 add(수정분만), .omc 잡파일 배제, 이미 push되면 rm --cached+squash.",
       "mechanizable": "yes",
       "category": "mechanized",
-      "guard_ref": ".gitignore line 45 '.omc/' — auto_write 리포는 .omc 세션파일이 이미 무시됨(add -A 로도 스테이징 안 됨) / app/tests/test_gitignore_protects_session_artifacts.py (규칙 삭제 방지 가드)",
+      "guard_ref": ".gitignore '.omc/' (add -A 로도 세션파일 미스테이징) / app/tests/test_gitignore_protects_session_artifacts.py + test_lockdown_wave_de.py::test_l067_no_git_add_all_in_executable_scripts (실행 스크립트/CI 의 git add -A 명령 금지)",
       "gap_desc": "워크트리 생성 훅이 .git/info/exclude 에 '.omc/'를 추가하도록(현재 info/exclude 는 .claude/worktrees 만 커버) — 명시 add 규율 자체는 사람 워크플로",
       "impact": "med",
       "domain": "all"
