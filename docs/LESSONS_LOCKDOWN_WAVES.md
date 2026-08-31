@@ -1,6 +1,6 @@
 # 교훈 잠금 계획 — A → B → C
 
-> TASK: **T-20260831-01** (`TASK.md` LIST `[~]`). 사용자 요청(2026-08-31): 지금까지 난 오류를 **우선순위대로** 기계 가드로 닫는다.
+> TASK: **T-20260831-01** (`TASK.md` LIST `[x]`). 사용자 요청(2026-08-31): 지금까지 난 오류를 **우선순위대로** 기계 가드로 닫는다.
 > 기준: `app/tests/lessons_coverage.json` 151개 + 결함 코퍼스 D1–D6 + 스킬 L154–L156.
 > 원칙: **151개 전부를 한 번에 재발 0으로 만들 수 없다.** 사람 판단(L005 눈검증, L009 날조)은 테스트가 대체하지 않는다.
 > 기계화 4점(AW-008): **guard + test + coverage JSON + runtime wiring**. 하나라도 없으면 `mechanized` 표시 금지.
@@ -66,8 +66,8 @@
 
 ## Wave D·E — 변환·COM·에이전트
 
-테스트보다 규약. L003 kill spy는 코드. L005 눈검증 BLOCKED. L067 `git add -A` 금지.
-JSON 잔여: **L050** 동일명 HWP+PDF 병행 생성(한글 COM/LibreOffice 없음). 쌍 검사 `missing_pdf_pair` 는 있음. 생성 없이 mechanized 금지.
+테스트보다 규약. 상세 표는 아래 「Wave D·E — 변환·COM·에이전트 (규약 + spy)」.
+JSON 잔여: **L050** 동일명 HWP+PDF 병행 생성. 쌍 검사·BLOCKED 생성 시도는 코드. 생성 성공 없이 mechanized 금지.
 
 ---
 
@@ -90,16 +90,16 @@ JSON 잔여: **L050** 동일명 HWP+PDF 병행 생성(한글 COM/LibreOffice 없
 
 ```
 승인 요청 금지. docs/LESSONS_LOCKDOWN_WAVES.md 정본. TASK T-20260831-01.
-열린 웨이브(남은 JSON gap → D규약)를 한 세션에서 순서대로 닫는다. 중간 보고 후 멈추지 마라.
-이미 엔진에 있는 것(lineseg, rowAddr, 파란예시, auto색, 안내문구, 원본덮어쓰기금지, D6, L032, L097, L001세로, L096/L151, L037공고채움금지, L059작업접미사, L080괄호볼드, L095페이지기준선, L038/L060정량컬럼, L003 kill spy)은 재구현 금지.
+닫힘은 머지가 아니다. PR draft를 머지할지 묻지 마라. 사용자가 "머지"라고 한 뒤에만 Ready+auto-merge.
+A/B/C/JSON gap/D규약/E규약은 이미 이 브랜치에 있다. 재구현 금지.
+이미 엔진에 있는 것(lineseg, rowAddr, 파란예시, auto색, 안내문구, 원본덮어쓰기금지, D6, L032, L097, L001세로, L096/L151, L037공고채움금지, L059작업접미사, L080괄호볼드, L095페이지기준선, L038/L060정량컬럼, L003 kill spy, L004·L014·L048·L049·L072·L105)은 재구현 금지.
 기계화 4점(guard+test+coverage JSON+runtime wiring) 없으면 mechanized 표시 금지.
-JSON 본문과 계획 ID가 다르면 JSON 요약을 따른다. 계획 L049=JSON L037. 계획 L050(한글전용 DOCX)=형식게이트(JSON L050 HWP+PDF쌍은 gap). 계획 L048 혼입 코드는 있으나 JSON L048 PDF합본은 gap.
-L005 한글 픽셀·L009 날조 본문은 judgment. 이 환경 한글 없음=BLOCKED 후 다음 항목.
+JSON 본문과 계획 ID가 다르면 JSON 요약을 따른다.
+L005 한글 픽셀·L009 날조 본문은 judgment. L008 폰트 위계는 judgment(run_all normalize_fonts 기본 False).
 L154–L156은 lessons.md에 없으면 coverage JSON에 넣지 말고 코드+테스트만.
 AW-008과 합치지 않음. 원본 덮어쓰기 금지. git add -A 금지. py -3.11 pytest (이 클라우드 python3).
-남은 JSON gap: L050 HWP+PDF 병행 생성(이 클라우드 한글/LibreOffice 없음=BLOCKED, missing_pdf_pair 검사만). L005 픽셀·L009 날조=judgment.
-이미 잠긴 JSON gap(L004·L014·L048·L049·L072·L105)과 Wave A/B/C 가드는 재구현 금지.
-웨이브가 남아 있으면 같은 지시로 다음 항목을 이어서 구현한다. REQUEST_SOLVED는 닫을 수 있는 B·C가 닫히고 D·E가 규약으로 적힌 뒤에만. 151개 재발 0 보고 금지.
+남은 일(Windows 한글 PC만): L050 동일 stem PDF를 한글/rhwp로 실제로 만들고 L005 픽셀 눈검증. 이 클라우드에서 생성 성공으로 mechanized 올리지 마라.
+151개 재발 0 보고 금지. “다음 웨이브 할까요?” 금지.
 ```
 
 ---
@@ -142,10 +142,33 @@ AW-008과 합치지 않음. 원본 덮어쓰기 금지. git add -A 금지. py -3
 
 ## Wave D·E — 변환·COM·에이전트 (규약 + spy)
 
-- [x] L003 `kill_hangul_processes` 를 `_dispatch_hwp` 직전에 호출. 유닛은 spy. 실 `taskkill` 은 Windows. 이 클라우드 Linux = no-op
-- [ ] L005 한글 픽셀 눈검증 — judgment / 이 환경 **BLOCKED**
-- [ ] L050 동일명 HWP+PDF 병행 생성 — 검사(`missing_pdf_pair`)만. 생성은 한글/LibreOffice 없음 **BLOCKED**
-- E 규약: `git add -A` 금지 · 승인 질문으로 웨이브를 멈추지 않음 · 스킬 훅=요청 원문 (`AGENTS.md` §7)
+**닫힘은 머지가 아니다.** 가드가 브랜치 코드·테스트에 있으면 그 항목은 닫힌 것이다. `main` 반영은 사용자가 "머지"라고 한 뒤에만 한다. Cursor 클라우드 PR은 draft라 GitHub 자동머지가 안 걸린다.
+
+### Wave D — 변환·COM (Windows 한글 PC)
+
+| ID | 분류 | 이 클라우드 | Windows 한글에서 할 일 |
+|----|------|-------------|------------------------|
+| L003 | mechanized (spy) | Linux `kill_hangul_processes` no-op. `_dispatch_hwp` 직전 호출은 유닛 spy | `taskkill /F /IM Hwp.exe` 실측. 이 프로세스 PID 는 대상 아님 |
+| L005 | **judgment / BLOCKED** | 한글 GUI 없음. pytest PASS ≠ 픽셀 검증. `l005_pixel_review_status()` | 산출물을 **한글 2022(한컴오피스)** 로 연다. 글자겹침·쪽수·표격자·그림크기를 화면에서 본다. 스크린샷을 남긴다. 로직 리뷰는 검증이 아니다 |
+| L050 | **gap / BLOCKED** | `missing_pdf_pair` + `try_generate_sibling_pdf`(rhwp 없으면 BLOCKED). soffice 는 레이아웃이 달라 인정하지 않음 | 최종본(비 `_DRAFT`) HWP/HWPX와 **같은 stem PDF** 를 한글 저장 또는 `rhwp export-pdf` 로 만든다. 초안은 쌍 불필요. 생성이 실제로 되기 전에는 mechanized 금지 |
+
+- [x] L003 spy 배선 (`test_lockdown_wave_bc.py`)
+- [x] L005 규약 문서 + BLOCKED 상태 함수. 카테고리 judgment 유지
+- [x] L050 쌍 검사 + 생성 시도가 도구 없으면 BLOCKED. 카테고리 gap 유지
+
+### Wave E — 에이전트 규약
+
+| 규칙 | 분류 | 가드 |
+|------|------|------|
+| L067 `git add -A` 금지 | mechanized | `.gitignore` `.omc/` + `test_gitignore_protects_session_artifacts.py`. 실행 스크립트/CI 명령 스캔=`test_lockdown_wave_de.py`. 파일 명시 add 는 사람 워크플로 |
+| L008 폰트 크기 위계 | judgment | `run_all(..., normalize_fonts=False)` 기본. 공고 명시 크기가 우선. 전 문서 폰트 강제 통일 금지 |
+| L017 NotebookLM 프롬프트 | mechanized | `image_apply` (재구현 금지) |
+| 스킬 훅 = 요청 원문 | 규약 | `AGENTS.md` §7 + `test_skill_request_hooks.py` |
+| 승인 질문으로 웨이브 정지 금지 | 규약 | 이어가기 프롬프트 본문. “다음 웨이브 할까요?” / “머지할까요?” 금지 |
+
+- [x] L067 스크립트 `git add -A` 스캔
+- [x] L008 기본 비활성 고정 테스트
+- [x] 이어가기 프롬프트에 닫힘≠머지 · 승인 금지 유지
 
 ## JSON gap 웨이브 (구현됨, L050 제외)
 
@@ -157,4 +180,4 @@ AW-008과 합치지 않음. 원본 덮어쓰기 금지. git add -A 금지. py -3
 | L049 | `build_submit_layout_dir` → `YYYYMMDD 공고명/제출`. cross_form·파이프라인 `notice_folder` | mechanized |
 | L072 | 품질 오케스트레이터 점수 열등이면 백업 원복 | mechanized |
 | L105 | `skill_frontmatter` `yaml.safe_load`. `description: [한글]` 거부 | mechanized |
-| L050 | `missing_pdf_pair` 검사 + needs_input. PDF 생성 없음 | **gap / BLOCKED** |
+| L050 | `missing_pdf_pair` + `try_generate_sibling_pdf`. rhwp 없으면 BLOCKED. soffice 미인정 | **gap / BLOCKED** |

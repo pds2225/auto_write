@@ -132,6 +132,7 @@ AW DETAILS에는 「원칙」 칸이 없다. 칸은 MUST / KEEP / FORBIDDEN이�
 | `STEP 3A 병렬 — 2026-08-16` | 이 트랙=양식↔Fact/Evidence↔공고 매칭 계약·Golden·비개발자 리포트. STEP 2 추출기 파일 금지. 만남점=`Fact[]`/`NarrativeEvidence[]`/`Conflict[]`. Writer/UI/HWP 금지 |
 | T-20260831-01 | 지금까지 난 오류를 우선순위대로 기계 가드로 닫는다. A 문서깨짐 → B 제출·품질 → C 이력서. 151개 한 번에 재발 0 불가. 계획 SSOT=`docs/LESSONS_LOCKDOWN_WAVES.md` |
 | T-20260831-01 | 승인요청하지않고 웨이브C? 인지뭔지 너가말한것다 끝까지 개발하게하는방법. +프롬프트. 이어가기 프롬프트=`docs/LESSONS_LOCKDOWN_WAVES.md` |
+| T-20260831-01 | 닫힘이 머지했다는거임? → 아님(브랜치 가드). D·E도 승인요청없이 마무리 |
 
 실제 제출물·옛 엔진 요청 (표만): `docs/REQUEST_LEDGER.md` A1~A6(한난·울산·비앤코·이지비건·입주신청·항우연) / B1~B7(허브·HWPX 값만 채움·이미지·규칙 검사 등) / C1.
 
@@ -4232,7 +4233,7 @@ REQUEST_SOLVED=YES: 합본이 origin/main `1001b76`에 있다. #155는 `ddac657`
 TASK_ID: T-20260831-01
 TASK_START_SHA: 5edd4f5c725417be2855471002b0d7846caacec6
 WORK_BRANCH: cursor/lessons-wave-bc-e71f
-STATUS_THIS_TURN: JSON gap 6건 잠금(L004·L014·L048·L049·L072·L105). mechanized 60→66. L050 생성 BLOCKED. L005 judgment. REQUEST_SOLVED=YES.
+STATUS_THIS_TURN: Wave D·E 규약 잠금. L003/L017/L067 mechanized 유지. L005/L008 judgment. L050 gap/BLOCKED(try_generate). 닫힘≠머지. REQUEST_SOLVED=YES.
 
 ### 8-1. 사용자 원문
 
@@ -4252,8 +4253,12 @@ D·E는 테스트로 못 막는 것이 많습니다.
 
 +프롬프트
 
+닫힘이 머지했다는거임?
+
+그럼이제 d,e어떻게해 이것도 승인요청없이 마무리
+
 ### 최종 결과
-문서가 다시 깨지는 오류(A)부터, 제출·품질 게이트(B), 이력서(C) 순으로 기계 가드가 닫힌다. 4점(guard+test+coverage JSON+runtime wiring)이 있는 것만 `mechanized`다. 한글 픽셀 눈검증·날조 본문은 사람 판단으로 남는다.
+문서가 다시 깨지는 오류(A)부터, 제출·품질 게이트(B), 이력서(C) 순으로 기계 가드가 닫힌다. D·E는 규약(L005/L050 이 환경 BLOCKED, L067/스킬훅/승인금지). 4점이 있는 것만 `mechanized`다. 닫힘≠머지.
 
 ### MUST
 - 우선순위 A → B → C. D·E는 규약(테스트로 못 막는 항목은 BLOCKED로 남김)
@@ -4285,6 +4290,7 @@ D·E는 테스트로 못 막는 것이 많습니다.
 - Wave A: `python3 -m pytest app/tests/test_hwpx_no_fake_lineseg.py app/tests/test_hwpx_fill.py app/tests/test_hwpx_acceptance.py app/tests/test_pure_hwpx_acceptance.py app/tests/test_resume_defect_corpus.py app/tests/test_hwpx_resume_supplement.py app/tests/test_hwpx_submit.py app/tests/test_l001_hwpx_image_width_clamp.py app/tests/test_l151_no_posix_backup_path.py app/tests/test_lrule_guards.py app/tests/test_lessons_coverage.py app/tests/test_night_high_gaps_l074_l091.py app/tests/test_hwpx_layout_fix.py app/tests/test_hwpx_image_clamp.py -q` (Windows는 `py -3.11`)
 - `lessons_coverage.json` counts = 실제 분류
 - Wave JSON gap: `python3 -m pytest app/tests/test_lockdown_wave_gaps.py app/tests/test_lessons_coverage.py app/tests/test_lrule_guards.py app/tests/test_lockdown_wave_bc.py -q` (Windows는 `py -3.11`)
+- Wave D·E: `python3 -m pytest app/tests/test_lockdown_wave_de.py app/tests/test_lessons_coverage.py app/tests/test_lrule_guards.py -q`
 
 ### 웨이브 상태 (2026-08-31)
 - [x] Wave A1 D1 잔여 — 가짜 `linesegarray` Element/문자열 XML 금지 + `fill_hwpx` 자간 -50→-30
@@ -4297,9 +4303,10 @@ D·E는 테스트로 못 막는 것이 많습니다.
 - [x] Wave C — L038/L060 · L039 · L043/L044 · L154–L156(코드만) · JSON L061 사진칸 + 계획 L061 confirm-output-plan(기존)
 - [x] Wave D spy — L003 `kill_hangul_processes` before Dispatch. L005 눈검증은 judgment/BLOCKED
 - [x] JSON gap — L004 세금계산서 · L014 생성표 헤더 · L048 PDF합본 · L049 `제출/` · L072 열등원복 · L105 YAML. L050 HWP+PDF 생성은 한글/LibreOffice 없음 **BLOCKED**(검사는 `missing_pdf_pair`)
+- [x] Wave D·E 규약 — 닫힘≠머지. L005/L050 BLOCKED 정직. L067 스크립트 `git add -A` 스캔. L008 `normalize_fonts` 기본 False. 승인 질문 금지. `test_lockdown_wave_de.py`
 
 ### DONE
-- REQUEST_SOLVED=YES: 닫을 수 있는 JSON gap 6건이 4점으로 mechanized(66/151). L050 병행 생성은 이 환경 BLOCKED로 D규약에 적음. L005 픽셀·L009 날조 본문은 judgment. 151 재발 0 아님. 이어가기 프롬프트=`docs/LESSONS_LOCKDOWN_WAVES.md`.
+- REQUEST_SOLVED=YES: A→B→C 기계 가드 + JSON gap 6건 mechanized(66/151) + D·E 규약 문서·테스트. L050 병행 생성·L005 픽셀은 이 환경 BLOCKED(judgment/gap 유지). 닫힘≠머지. 151 재발 0 아님. 이어가기 프롬프트=`docs/LESSONS_LOCKDOWN_WAVES.md`.
 
 # 9. 실제사용 시나리오
 
