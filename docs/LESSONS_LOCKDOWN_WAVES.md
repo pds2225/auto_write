@@ -66,7 +66,8 @@
 
 ## Wave D·E — 변환·COM·에이전트
 
-테스트보다 규약. L003 kill spy는 코드. L005 눈검증 BLOCKED. L067 `git add -A` 금지. JSON 잔여 갭 L004/L014/L048/L049/L050/L072/L105.
+테스트보다 규약. L003 kill spy는 코드. L005 눈검증 BLOCKED. L067 `git add -A` 금지.
+JSON 잔여: **L050** 동일명 HWP+PDF 병행 생성(한글 COM/LibreOffice 없음). 쌍 검사 `missing_pdf_pair` 는 있음. 생성 없이 mechanized 금지.
 
 ---
 
@@ -96,7 +97,8 @@ JSON 본문과 계획 ID가 다르면 JSON 요약을 따른다. 계획 L049=JSON
 L005 한글 픽셀·L009 날조 본문은 judgment. 이 환경 한글 없음=BLOCKED 후 다음 항목.
 L154–L156은 lessons.md에 없으면 coverage JSON에 넣지 말고 코드+테스트만.
 AW-008과 합치지 않음. 원본 덮어쓰기 금지. git add -A 금지. py -3.11 pytest (이 클라우드 python3).
-남은 JSON gap: L004 세금계산서 · L014 표헤더서식 · L048 PDF합본 · L049 제출/폴더 · L050 HWP+PDF쌍 · L072 휴리스틱원복 · L105 YAML description.
+남은 JSON gap: L050 HWP+PDF 병행 생성(이 클라우드 한글/LibreOffice 없음=BLOCKED, missing_pdf_pair 검사만). L005 픽셀·L009 날조=judgment.
+이미 잠긴 JSON gap(L004·L014·L048·L049·L072·L105)과 Wave A/B/C 가드는 재구현 금지.
 웨이브가 남아 있으면 같은 지시로 다음 항목을 이어서 구현한다. REQUEST_SOLVED는 닫을 수 있는 B·C가 닫히고 D·E가 규약으로 적힌 뒤에만. 151개 재발 0 보고 금지.
 ```
 
@@ -110,9 +112,9 @@ AW-008과 합치지 않음. 원본 덮어쓰기 금지. git add -A 금지. py -3
 |------|------|------|
 | L040 `_DRAFT` | L040 | 이미 mechanized. 오케스트레이터 `--required-doc` 추가 배선 |
 | L059 작업접미사 | L059 | mechanized. warn + `work_suffix` / `needs_input` |
-| L048 원본·중간본 혼입 | L048 은 PDF 합본 | **코드는 `submit_mix`**. JSON L048 본문은 gap |
-| L049 공고 PDF 채움 | L037 | mechanized (`assert_not_announcement_form`) |
-| L050 한글전용 DOCX | L050 은 HWP+PDF 쌍 | **코드는 `infer_hangul_required`**. JSON L050 gap |
+| L048 원본·중간본 혼입 | L048 은 PDF 합본 | mix denylist + **`merge_pdfs`/`announcement_tuple_stem` mechanized** |
+| L049 공고 PDF 채움 | L037 | mechanized (`assert_not_announcement_form`). JSON L049 폴더는 gap 웨이브에서 mechanized |
+| L050 한글전용 DOCX | L050 은 HWP+PDF 쌍 | 형식게이트는 `infer_hangul_required`. JSON L050 생성은 **gap/BLOCKED** |
 | L080 괄호 라벨 굵게 | L080 | mechanized |
 | L095 페이지 기준선 | L095 | mechanized (XML 추정. 한글 렌더 쪽수는 L005) |
 
@@ -124,7 +126,7 @@ AW-008과 합치지 않음. 원본 덮어쓰기 금지. git add -A 금지. py -3
 - [x] 공고문 “한글 전용” → DOCX 산출 `_DRAFT` (형식 게이트)
 - [x] `ㅇ (문제인식)` 만 굵게, 문장 중간 괄호는 그대로, `run_all` 배선
 - [x] `fill_hwpx` 리포트에 `pages_before`/`pages_after`
-- [x] JSON counts = 분류. L048/L049/L050 JSON 본문은 gap 유지
+- [x] JSON counts = 분류. L048 합본·L049 `제출/` 는 이후 JSON gap 웨이브에서 mechanized. L050 생성은 gap
 
 ---
 
@@ -142,4 +144,17 @@ AW-008과 합치지 않음. 원본 덮어쓰기 금지. git add -A 금지. py -3
 
 - [x] L003 `kill_hangul_processes` 를 `_dispatch_hwp` 직전에 호출. 유닛은 spy. 실 `taskkill` 은 Windows. 이 클라우드 Linux = no-op
 - [ ] L005 한글 픽셀 눈검증 — judgment / 이 환경 **BLOCKED**
+- [ ] L050 동일명 HWP+PDF 병행 생성 — 검사(`missing_pdf_pair`)만. 생성은 한글/LibreOffice 없음 **BLOCKED**
 - E 규약: `git add -A` 금지 · 승인 질문으로 웨이브를 멈추지 않음 · 스킬 훅=요청 원문 (`AGENTS.md` §7)
+
+## JSON gap 웨이브 (구현됨, L050 제외)
+
+| ID | 가드 | 상태 |
+|----|------|------|
+| L004 | `extract_tax_invoice_buyer` — `(법인명)` 2번째, 이름 필터 없음. `company_extract` 배선 | mechanized |
+| L014 | `style_generated_table` / `add_generated_table`. `_render_unhwp_table` 만. 폼 채움 표는 호출 금지 | mechanized |
+| L048 | `merge_pdfs` + `announcement_tuple_stem`. 파이프라인 `evidence_pdfs` | mechanized |
+| L049 | `build_submit_layout_dir` → `YYYYMMDD 공고명/제출`. cross_form·파이프라인 `notice_folder` | mechanized |
+| L072 | 품질 오케스트레이터 점수 열등이면 백업 원복 | mechanized |
+| L105 | `skill_frontmatter` `yaml.safe_load`. `description: [한글]` 거부 | mechanized |
+| L050 | `missing_pdf_pair` 검사 + needs_input. PDF 생성 없음 | **gap / BLOCKED** |
