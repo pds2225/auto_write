@@ -23,6 +23,8 @@ from typing import Any, Optional
 
 from docx import Document
 
+from .hwp_docx_convert import convert, hancom_com_available
+
 # 텍스트 정규화: 공백 류를 단일 공백으로 접고 양끝을 다듬어 토큰/문자 일치율을 안정화.
 _WS_RE = re.compile(r"\s+")
 
@@ -190,8 +192,6 @@ def measure_roundtrip_fidelity(
 
     중간 파일은 ``work_dir``(미지정 시 임시 디렉터리)에 생성하며 입력은 수정하지 않는다.
     """
-    from .hwp_docx_convert import convert, hancom_com_available
-
     src = Path(docx_path)
     if not src.exists():
         raise FileNotFoundError(f"입력 파일이 없습니다: {src}")

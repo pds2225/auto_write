@@ -163,7 +163,12 @@ class OpenAIService:
         승격되면 안 된다 — 어떤 예외도 여기서 흡수하고 경고 한 줄만 남긴다.
         """
         try:
-            from . import generation_store
+            try:
+                from . import generation_store
+            except ImportError:
+                # generation_store belongs to the auto_write application layer;
+                # keep the core client usable while preserving the app trace hook.
+                from auto_write.services import generation_store
 
             meta = log_meta or {}
             generation_store.record_ai_call(

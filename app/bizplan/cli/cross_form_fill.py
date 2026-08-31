@@ -13,7 +13,7 @@
     cd D:\auto_write\app
   # 1쌍 채우기
     python cross_form_fill.py --source A.docx --target B.docx -o out.docx
-  # 공고 폴더 양식 일괄 채우기 + HWP
+  # 공고 폴더 양식 일괄 채우기(DOCX 기본, HWP는 --hwp 명시)
     python cross_form_fill.py batch --notice-folder "C:\\공고폴더" \\
         --source-pool "C:\\완성본폴더" -o filled
 
@@ -171,7 +171,7 @@ def _run_batch(args: argparse.Namespace) -> int:
             use_ai=args.use_ai,
             confirmations=confirmations or None,
             enable_checkbox=not args.no_checkbox,
-            convert_hwp=not args.no_hwp,
+            convert_hwp=args.hwp and not args.no_hwp,
         )
     except (FileNotFoundError, ValueError, OSError, json.JSONDecodeError) as exc:
         print(f"[실패] {exc}", file=sys.stderr)
@@ -246,7 +246,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="사람용 요약 대신 기계용 원본 JSON 출력")
 
     # --- 배치: 공고 폴더 ---
-    batch = sub.add_parser("batch", help="공고 폴더 양식 일괄 채우기 + HWP")
+    batch = sub.add_parser("batch", help="공고 폴더 양식 일괄 채우기(DOCX 기본, HWP는 --hwp)")
     batch.add_argument("--notice-folder", "--target-folder",
                         dest="notice_folder", metavar="PATH", required=True,
                         help="공고 첨부가 모인 폴더(양식 파일들)")
@@ -264,8 +264,10 @@ def main(argv: list[str] | None = None) -> int:
     batch.add_argument("--confirm", action="append", metavar="타깃=소스")
     batch.add_argument("--confirm-file", metavar="PATH")
     batch.add_argument("--no-checkbox", action="store_true")
+    batch.add_argument("--hwp", action="store_true",
+                       help="한글 COM을 실행해 HWP도 생성(명시적 선택)")
     batch.add_argument("--no-hwp", action="store_true",
-                       help="HWP 자동 변환 끄기(DOCX만 저장)")
+                       help="하위호환 옵션: HWP 변환 끄기(DOCX만 저장)")
     batch.add_argument("--notify", action="store_true",
                        help="완료 시 Windows 팝업(가능할 때만)")
     batch.add_argument("--json", action="store_true",

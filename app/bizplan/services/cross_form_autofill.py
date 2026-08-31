@@ -2386,9 +2386,13 @@ def batch_autofill_from_pool(
     use_ai: bool = False,
     confirmations: Optional[dict[str, str]] = None,
     enable_checkbox: bool = True,
-    convert_hwp: bool = True,
+    convert_hwp: bool = False,
 ) -> BatchAutofillReport:
-    """공고 폴더의 양식들을 소스 풀에서 고른 A 로 일괄 채운다."""
+    """공고 폴더의 양식들을 소스 풀에서 고른 A 로 일괄 채운다.
+
+    HWP 생성은 한글 COM을 실행할 수 있으므로 기본적으로 끈다. 필요한 경우
+    호출자가 ``convert_hwp=True``를 명시적으로 선택한다.
+    """
     notice = Path(notice_folder)
     pool = Path(source_pool)
     out_dir = notice / output_subdir

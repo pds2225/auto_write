@@ -136,8 +136,15 @@ async def finalize_template(template_id: str, profile_json: str = Form(...)):
 
 
 @app.post("/api/projects")
-async def create_project(template_id: str = Form(...), project_name: str = Form("")):
-    project_id = project_service.create_project(template_id, project_name)
+async def create_project(
+    template_id: str = Form(...),
+    project_name: str = Form(""),
+    domain: str = Form(""),
+):
+    try:
+        project_id = project_service.create_project(template_id, project_name, domain=domain)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return RedirectResponse(url=f"/projects/{project_id}", status_code=303)
 
 
@@ -159,7 +166,11 @@ async def project_detail(request: Request, project_id: str):
     results_folder = str(storage.results_dir(project_id))
     artifact_dir = storage.project_dir(project_id) / "output"
     if artifact_dir.exists():
-        for name in ("output.docx", "qa_report.json", "sources.json", "benchmark_compare.json", "transfer_report.json", "preview_manifest.json"):
+        for name in (
+            "output.docx", "qa_report.json", "sources.json", "benchmark_compare.json",
+            "transfer_report.json", "preview_manifest.json", "domain_context.json", "domain_pipeline.json",
+            "lrule_report.json",
+        ):
             path = artifact_dir / name
             if path.exists():
                 artifacts[name] = str(path)
@@ -305,6 +316,37 @@ async def generate_project_api(project_id: str):
     return artifacts.model_dump()
 
 
+@app.post("/api/projects/{project_id}/finalize")
+async def finalize_project_api(project_id: str):
+    """생성된 작업본을 LRule/해시/Finalizer를 거쳐 결과 폴더에 발행한다."""
+    try:
+        return project_service.finalize_project(project_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/projects/{project_id}/finalize")
+async def finalize_project_page(project_id: str):
+    """웹 버튼용 Finalizer 실행 후 프로젝트 화면으로 돌아간다."""
+    from urllib.parse import quote
+
+    try:
+        result = project_service.finalize_project(project_id)
+        status = "제출본 판정: " + (
+            "FINAL" if result.get("finalizer", {}).get("submittable") else "_DRAFT"
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        status = f"제출본 판정 실패: {exc}"
+    except Exception as exc:
+        status = f"제출본 판정 오류: {type(exc).__name__}: {exc}"
+    return RedirectResponse(
+        url=f"/projects/{project_id}?finalize_status={quote(status, safe='')}",
+        status_code=303,
+    )
+
+
 @app.post("/api/projects/{project_id}/evaluate")
 async def evaluate_project(
     project_id: str,
@@ -386,7 +428,11 @@ async def get_eval_report(project_id: str):
 async def get_artifacts(project_id: str):
     artifact_dir = storage.project_dir(project_id) / "output"
     result = {}
-    for name in ("output.docx", "qa_report.json", "sources.json", "benchmark_compare.json", "transfer_report.json", "preview_manifest.json"):
+    for name in (
+        "output.docx", "qa_report.json", "sources.json", "benchmark_compare.json",
+        "transfer_report.json", "preview_manifest.json", "domain_context.json", "domain_pipeline.json",
+        "lrule_report.json",
+    ):
         path = artifact_dir / name
         if path.exists():
             result[name] = str(path)

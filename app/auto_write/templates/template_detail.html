@@ -44,6 +44,13 @@
     <label>프로젝트 이름
       <input type="text" name="project_name" placeholder="예: 2026 창업도약 사업계획서">
     </label>
+    <label>문서 도메인
+      <select name="domain">
+        <option value="business_plan" selected>사업계획서</option>
+        <option value="consultant_application">컨설턴트 신청서</option>
+        <option value="other">기타</option>
+      </select>
+    </label>
     <button type="submit" {% if not template_docx_ready %}disabled aria-disabled="true"{% endif %}>이 템플릿으로 프로젝트 생성</button>
   </form>
 </section>

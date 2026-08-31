@@ -27,10 +27,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
+from ..domains.domain_router import resolve_domain
 from .hwpx_acceptance import run_hwpx_acceptance
 from .hwpx_fill import fill_hwpx
 from .hwpx_layout_fix import normalize_colors_in_hwpx
 from .hwpx_submission_cleanup import finalize_submission_hwpx
+from .finalizer import finalize_artifact
+from .lrule_enforcer import enforce_lrules
 from .usage_acceptance import force_draft_name
 
 
@@ -54,6 +57,9 @@ class SubmitReport:
     draft_marked: bool = False
     draft_reason: str = ""
     error: str = ""
+    lrule_report: str = ""
+    finalizer: dict[str, Any] = field(default_factory=dict)
+    domain_pipeline: dict[str, Any] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
@@ -68,6 +74,9 @@ class SubmitReport:
             "draft_marked": self.draft_marked,
             "draft_reason": self.draft_reason,
             "error": self.error,
+            "lrule_report": self.lrule_report,
+            "finalizer": dict(self.finalizer),
+            "domain_pipeline": dict(self.domain_pipeline),
             "notes": list(self.notes),
         }
 
@@ -97,6 +106,7 @@ def submit_hwpx(
     acceptance_gate: bool = True,
     normalize_colors: bool = True,
     submission_cleanup: bool = True,
+    lrule_gate: bool = False,
 ) -> SubmitReport:
     """HWPX 양식을 채우고 수용검사 게이트로 판정해 제출 가능 여부를 확정한다.
 
@@ -113,6 +123,9 @@ def submit_hwpx(
         submission_cleanup: True(기본)면 ``finalize_submission_hwpx`` 로 안내문구 제거·
             유색→검정·linesegarray 제거를 적용한다(원본 out 은 temp 경유 후 교체 —
             out==in 금지 불변 유지). 한글 직접 납품용 전역 lineseg strip 포함.
+        lrule_gate: True면 consultant_application 도메인 LRule report와 전역
+            Finalizer를 추가로 실행한다. 기본값 False는 기존 라이브러리 호출의
+            호환성을 유지하며, 제출을 확정하는 production caller가 명시적으로 켠다.
 
     Returns:
         SubmitReport — final 은 항상 실제 존재하는 최종 경로.
@@ -172,6 +185,8 @@ def submit_hwpx(
         report.ok = bool(fill_rep.ok)
         report.notes.append(
             "수용검사 게이트 생략(acceptance_gate=False) — 제출 전 별도 점검 필요.")
+        if lrule_gate:
+            _apply_lrule_gate(report, Path(report.final), document_type="application_form")
         return report
 
     # 3) 수용검사 — 예외는 '검사불능'이며 fail-closed 로 _DRAFT 강제(R9).
@@ -184,11 +199,15 @@ def submit_hwpx(
         report.draft_reason = "검사불능 — 판정 불가는 제출불가로 처리(_DRAFT 강제)"
         report.final = str(_mark_draft(report, out, src))
         report.ok = False
+        if lrule_gate:
+            _apply_lrule_gate(report, Path(report.final), document_type="application_form")
         return report
 
     report.acceptance = acc.as_dict()
     if acc.ok:
         report.ok = True
+        if lrule_gate:
+            _apply_lrule_gate(report, Path(report.final), document_type="application_form")
         return report
 
     # 4) 게이트 fail — 결함 요약을 사유로 남기고 _DRAFT 강제.
@@ -199,4 +218,59 @@ def submit_hwpx(
     )
     report.final = str(_mark_draft(report, out, src))
     report.ok = False
+    if lrule_gate:
+        _apply_lrule_gate(report, Path(report.final), document_type="application_form")
     return report
+
+
+def _apply_lrule_gate(report: SubmitReport, artifact: Path, *, document_type: str) -> None:
+    """Run the shared CA route and materialize the fail-closed decision."""
+    try:
+        from ..domains.consultant_application.pipeline import ConsultantApplicationPipeline
+
+        context = resolve_domain(
+            text="컨설턴트 신청서 이력서 경력 자격",
+            filename=artifact.name,
+            document_type=document_type,
+            explicit_domain="consultant_application",
+        )
+        coverage = ConsultantApplicationPipeline().check_coverage(artifact)
+        report.domain_pipeline = {
+            "name": "ConsultantApplicationPipeline",
+            "coverage": coverage.as_dict(),
+        }
+        lrule_path = artifact.with_name(f"{artifact.stem}_lrule_report.json")
+        lrule_report = enforce_lrules(
+            domain=context.domain,
+            document_type=document_type,
+            artifact_path=artifact,
+            report_path=lrule_path,
+        )
+        result = finalize_artifact(
+            artifact_path=artifact,
+            lrule_report=lrule_report,
+            materialize=True,
+        )
+        final_path = Path(result.final_path)
+        if final_path != artifact and final_path.exists():
+            lrule_report.artifact_path = str(final_path)
+            try:
+                lrule_report.save(lrule_path)
+            except Exception as exc:
+                report.error = (
+                    f"{report.error} / LRule 보고서 갱신 실패: {type(exc).__name__}: {exc}"
+                ).strip(" /")
+                report.ok = False
+        report.lrule_report = str(lrule_path)
+        report.finalizer = result.as_dict()
+        report.final = str(final_path)
+        report.ok = bool(report.ok and result.submittable)
+        if not result.submittable:
+            report.draft_reason = f"{report.draft_reason} / LRule/Finalizer 차단".strip(" /")
+    except Exception as exc:
+        report.ok = False
+        report.error = (
+            f"{report.error} / LRule/Finalizer 실행 실패: {type(exc).__name__}: {exc}"
+        ).strip(" /")
+        if artifact.exists() and not artifact.stem.endswith(("_DRAFT", "_DRAFT2")):
+            report.final = str(_mark_draft(report, artifact, artifact))

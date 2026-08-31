@@ -5,10 +5,10 @@
 
 사용법 (PowerShell):
     cd D:\auto_write\app
-    python hwp_docx.py "양식.hwp"                      # → 양식.docx
+    python hwp_docx.py "양식.hwp"                      # → 양식.docx (구조 변환 기본)
     python hwp_docx.py "사업계획서.docx"               # → 사업계획서.hwp (한글 COM 필요)
     python hwp_docx.py "양식.hwp" -o "분석용.docx"
-    python hwp_docx.py "양식.hwp" --no-com             # 한글 COM 건너뛰고 구조 변환만
+    python hwp_docx.py "양식.hwp" --use-com             # 한글 COM을 명시적으로 사용
 
 DOCX→HWP 는 한글(Hancom Office) COM 이 필요하므로 **사용자가 직접 연 PowerShell**
 에서 실행해야 한다(백그라운드 세션에서는 한글이 안 뜰 수 있음).
@@ -27,12 +27,14 @@ def main(argv: list[str] | None = None) -> int:
         description="HWP/HWPX ↔ DOCX 양방향 변환 (원본 보존)")
     parser.add_argument("src", help="입력 파일(.hwp/.hwpx/.docx)")
     parser.add_argument("-o", "--out", help="출력 경로(기본: 입력과 같은 폴더, 반대 확장자)")
+    parser.add_argument("--use-com", action="store_true",
+                        help="HWP→DOCX 변환에서 한글 COM 사용(한글 실행·보안창 가능)")
     parser.add_argument("--no-com", action="store_true",
-                        help="한글 COM 을 쓰지 않고 구조 변환만 시도(HWP→DOCX 전용)")
+                        help="하위호환 옵션: 한글 COM 없이 구조 변환(HWP→DOCX 전용)")
     args = parser.parse_args(argv)
 
     try:
-        report = convert(args.src, args.out, use_com=not args.no_com)
+        report = convert(args.src, args.out, use_com=args.use_com and not args.no_com)
     except (ValueError, FileNotFoundError) as exc:
         print(f"[실패] {exc}")
         return 2

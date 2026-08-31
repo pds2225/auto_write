@@ -75,8 +75,12 @@ class DomainRouter:
                 domain = Domain.OTHER
             domain_result = DomainResult(
                 domain=domain,
-                confidence=1.0,
-                reason=f"explicit={explicit_domain}",
+                confidence=1.0 if domain != Domain.OTHER else 0.0,
+                reason=(
+                    f"explicit={explicit_domain}"
+                    if domain != Domain.OTHER
+                    else f"invalid_explicit_domain={explicit_domain}"
+                ),
             )
         else:
             # 2-3. Classifier
@@ -107,7 +111,9 @@ class DomainRouter:
         """DOCX 파일로부터 도메인을 판정한다."""
         try:
             from auto_write.services.doc_text_extract import extract_text
-            text = extract_text(docx_path)
+            extracted = extract_text(docx_path)
+            # extract_text historically returned either text or (text, metadata).
+            text = extracted[0] if isinstance(extracted, tuple) else extracted
         except Exception:
             text = ""
         return self.resolve(text=text, filename=docx_path.name)

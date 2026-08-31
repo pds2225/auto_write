@@ -134,3 +134,5 @@ class ArtifactBundle(BaseModel):
     hwp_paste: str = ""
     copy_blocks: str = ""
     fill_map: str = ""
+    domain: str = ""
+    lrule_report: str = ""

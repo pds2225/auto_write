@@ -23,6 +23,7 @@ from ..analysis.docx_template import (
     sanitize_template_profile,
 )
 from ..document_ingest import REFERENCE_SUFFIXES, ensure_template_docx, extract_additional_text
+from ..domains.domain_router import resolve_domain
 from ..models import (
     ArtifactBundle,
     EvidenceRequest,
@@ -38,7 +39,9 @@ from ..utils import log_line, read_json, sanitize_user_filename, unique_lines, w
 from . import learning_store
 from .evaluation_service import EvalLoopReport, EvaluationService
 from .evidence_service import EvidenceService
+from .finalizer import finalize_artifact
 from .image_service import ImageService
+from .lrule_enforcer import enforce_lrules
 from .openai_client import OpenAIService
 from .psst_patterns import PSST_PROBLEM_RE, PSST_SOLUTION_RE, PSST_SCALE_RE, PSST_TEAM_RE
 from .qa_service import QAService
@@ -149,8 +152,20 @@ class ProjectService:
         self.storage.save_template_profile(profile)
         return profile
 
-    def create_project(self, template_id: str, project_name: str) -> str:
-        project_id, _ = self.storage.create_project_space(template_id, project_name or "새 프로젝트")
+    def create_project(self, template_id: str, project_name: str, domain: str = "") -> str:
+        """프로젝트를 만든다.
+
+        domain을 명시한 신규 프로젝트는 도메인별 workspace를 사용한다.
+        빈 값은 기존 caller와 저장 위치의 호환성을 위해 legacy 경로를 유지한다.
+        """
+        resolved_domain = str(domain or "").strip().lower()
+        if resolved_domain and resolved_domain not in {"business_plan", "consultant_application", "other"}:
+            raise ValueError(f"알 수 없는 domain: {resolved_domain}")
+        project_id, _ = self.storage.create_project_space(
+            template_id,
+            project_name or "새 프로젝트",
+            domain=resolved_domain or None,
+        )
         profile = sanitize_template_profile(self.storage.load_template_profile(template_id))
         profile = self._pin_template_source_to_project(profile, project_id)
         blank = ProjectInput(template_id=template_id)
@@ -159,6 +174,8 @@ class ProjectService:
             "psst_only": True,
             "disable_images": True,
         }
+        if resolved_domain:
+            blank.project_meta["domain"] = resolved_domain
         self.storage.save_project_input(project_id, blank)
         write_json(self.storage.project_dir(project_id) / "template_snapshot.json", profile.model_dump())
         return project_id
@@ -923,6 +940,51 @@ class ProjectService:
             transfer_mode=transfer_mode,
         )
 
+    def finalize_project(self, project_id: str) -> dict[str, Any]:
+        """Run the production web finalization path for a generated artifact.
+
+        The working ``output/output.docx`` remains intact.  Finalizer writes a
+        separate result copy, or a ``_DRAFT`` copy when any LRule is blocked.
+        """
+        profile = self.load_profile_for_project(project_id)
+        project_input = self.storage.load_project_input(project_id)
+        artifact = self.storage.project_dir(project_id) / "output" / "output.docx"
+        if not artifact.is_file():
+            raise FileNotFoundError("먼저 사업계획서를 생성해주세요.")
+
+        explicit_domain = str(project_input.project_meta.get("domain", "") or "").strip().lower()
+        document_type = str(project_input.project_meta.get("document_type", "") or "").strip()
+        context = resolve_domain(
+            text=f"{profile.template_name}\n{document_type}",
+            filename=profile.template_name,
+            document_type=document_type,
+            explicit_domain=explicit_domain,
+            settings=self.storage.settings,
+        )
+        output_dir = artifact.parent
+        lrule_path = output_dir / "lrule_report.json"
+        lrule_report = enforce_lrules(
+            domain=context.domain,
+            document_type=document_type,
+            artifact_path=artifact,
+            report_path=lrule_path,
+        )
+        result_path = self.storage.results_dir(project_id) / f"제출초안_{project_id}.docx"
+        finalizer_result = finalize_artifact(
+            artifact_path=artifact,
+            lrule_report=lrule_report,
+            output_path=result_path,
+            materialize=True,
+        )
+        return {
+            "project_id": project_id,
+            "domain": context.as_dict(),
+            "lrule_report": str(lrule_path),
+            "lrule": lrule_report.as_dict(),
+            "finalizer": finalizer_result.as_dict(),
+            "final_docx": finalizer_result.final_path,
+        }
+
     def _render_and_publish(
         self,
         project_id: str,
@@ -987,6 +1049,55 @@ class ProjectService:
                 transfer_mode=transfer_mode,
             ),
         )
+        # Every generated artifact receives a domain-aware LRule audit. This is
+        # intentionally an audit artifact here; only the submission/finalization
+        # path may turn an artifact into a FINAL deliverable.
+        explicit_domain = str(project_input.project_meta.get("domain", "") or "").strip().lower()
+        document_type = str(project_input.project_meta.get("document_type", "") or "").strip()
+        domain_context = resolve_domain(
+            text=f"{profile.template_name}\n{document_type}",
+            filename=profile.template_name,
+            document_type=document_type,
+            explicit_domain=explicit_domain,
+            settings=self.storage.settings,
+        )
+        domain_path = self.storage.project_dir(project_id) / "output" / "domain_context.json"
+        write_json(domain_path, domain_context.as_dict())
+        domain_pipeline_path = self.storage.project_dir(project_id) / "output" / "domain_pipeline.json"
+        if domain_context.domain.value == "business_plan":
+            try:
+                from ..domains.business_plan.pipeline import BusinessPlanPipeline
+
+                psst_report = BusinessPlanPipeline().check_psst(Document(str(output_path)))
+                write_json(
+                    domain_pipeline_path,
+                    {
+                        "name": "BusinessPlanPipeline",
+                        "psst": psst_report.as_dict(),
+                    },
+                )
+            except Exception as exc:
+                # Keep the diagnostic explicit; finalization remains fail-closed
+                # through the LRule/Finalizer path.
+                write_json(
+                    domain_pipeline_path,
+                    {
+                        "name": "BusinessPlanPipeline",
+                        "error": f"{type(exc).__name__}: {exc}",
+                    },
+                )
+        else:
+            write_json(
+                domain_pipeline_path,
+                {"name": f"{domain_context.domain.value} pipeline", "status": "not_applicable"},
+            )
+        lrule_path = self.storage.project_dir(project_id) / "output" / "lrule_report.json"
+        lrule_report = enforce_lrules(
+            domain=domain_context.domain,
+            document_type=document_type,
+            artifact_path=output_path,
+            report_path=lrule_path,
+        )
         published = self._publish_results_bundle(
             project_id,
             profile,
@@ -1014,6 +1125,8 @@ class ProjectService:
             hwp_paste=published.get("hwp_paste", ""),
             copy_blocks=published.get("copy_blocks", ""),
             fill_map=published.get("fill_map", ""),
+            domain=lrule_report.domain,
+            lrule_report=str(lrule_path),
         )
 
     def regenerate_sections(

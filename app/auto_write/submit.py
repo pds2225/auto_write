@@ -98,6 +98,7 @@ def main(argv: list[str] | None = None) -> int:
         max_pages=args.max_pages,
         ai_section_max=args.ai_section_max,
         strict_acceptance=args.strict_acceptance,
+        lrule_gate=True,
     )
     print(json.dumps(report, ensure_ascii=False, indent=2))
     print("\n최종 제출초안:", report.get("final_docx", ""))
@@ -115,6 +116,8 @@ def main(argv: list[str] | None = None) -> int:
         if report.get("acceptance_error") or report.get("draft_mark_error"):
             return 3
         if (acc and not acc.get("submittable")) or report.get("format_mismatch"):
+            return 2
+        if report.get("lrule_error") or not (report.get("finalizer") or {}).get("submittable", False):
             return 2
     return 0
 

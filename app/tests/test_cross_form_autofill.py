@@ -1105,6 +1105,28 @@ def test_batch_autofill_fills_multiple_targets(tmp_path: Path) -> None:
     assert report.items[0].transcribed >= 1
 
 
+def test_batch_default_does_not_launch_hancom_for_hwp_output(tmp_path: Path, monkeypatch) -> None:
+    """배치 기본값은 DOCX만 만들고 한글 COM HWP 변환을 요청하지 않는다."""
+    pool = tmp_path / "pool"
+    notice = tmp_path / "notice"
+    pool.mkdir()
+    notice.mkdir()
+    _make_source(pool / "완성.docx")
+    _make_target(notice / "양식.docx")
+
+    import core.docx.services.cross_form_autofill as canonical
+
+    def _must_not_run(*_args, **_kwargs):
+        raise AssertionError("기본 배치에서 HWP 변환을 호출하면 안 됩니다")
+
+    monkeypatch.setattr(canonical, "try_convert_filled_docx_to_hwp", _must_not_run)
+    report = batch_autofill_from_pool(notice, pool, "filled")
+
+    assert report.ok_count == 1
+    assert report.hwp_count == 0
+    assert report.items[0].output.endswith("양식_filled.docx")
+
+
 def test_format_batch_summary_korean() -> None:
     from auto_write.services.cross_form_autofill import BatchAutofillItem
     report = BatchAutofillReport(

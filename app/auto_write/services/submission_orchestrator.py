@@ -16,9 +16,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from ..domains.domain_classifier import Domain
+from ..domains.domain_router import resolve_domain
 from ..utils import log_line
+from .finalizer import finalize_artifact
 from .document_quality_orchestrator import DocumentQualityOrchestrator
 from .eval_loop_runner import EvalLoopRunner
+from .lrule_enforcer import enforce_lrules
 from .plan_builder import build_fill_plan
 from .submittable_filler import SubmittableFiller
 from .usage_acceptance import (
@@ -50,9 +54,14 @@ class SubmissionPipeline:
         max_pages: int | None = None,
         ai_section_max: int | None = None,
         strict_acceptance: bool = False,
+        lrule_gate: bool = False,
     ) -> dict[str, Any]:
         report: dict[str, Any] = {"project_id": project_id, "steps": [], "needs_input": []}
-        results_root = Path(self.settings.results_root)
+        try:
+            results_root = Path(self.storage.results_dir(project_id))
+        except (AttributeError, TypeError, ValueError):
+            # Compatibility for small embedders that provide only project_dir.
+            results_root = Path(self.settings.results_root)
         results_root.mkdir(parents=True, exist_ok=True)
 
         def _protect_output(p: Path) -> None:
@@ -71,6 +80,40 @@ class SubmissionPipeline:
 
         # 2. 공고 평가 루프(공고문 있을 때만)
         if announcement_text.strip():
+            # BusinessPlanPipeline is the domain facade for the production
+            # announcement path.  It reuses the existing analyzer; failures
+            # are recorded and do not trigger a retry loop.
+            try:
+                profile_for_domain = self.project_service.load_profile_for_project(project_id)
+                project_input_for_domain = self.storage.load_project_input(project_id)
+                domain_context = resolve_domain(
+                    text=f"{getattr(profile_for_domain, 'template_name', '')}",
+                    filename=getattr(profile_for_domain, "template_name", ""),
+                    document_type=str(
+                        project_input_for_domain.project_meta.get("document_type", "") or ""
+                    ).strip(),
+                    explicit_domain=str(
+                        project_input_for_domain.project_meta.get("domain", "") or ""
+                    ).strip().lower(),
+                    settings=self.settings,
+                )
+                if domain_context.domain == Domain.BUSINESS_PLAN:
+                    from ..domains.business_plan.pipeline import BusinessPlanPipeline
+
+                    announcement_report = BusinessPlanPipeline().analyze_announcement(
+                        announcement_text,
+                        is_text=True,
+                        openai_service=getattr(self.project_service, "openai_service", None),
+                    )
+                    report["domain_pipeline"] = {
+                        "name": "BusinessPlanPipeline",
+                        "announcement": announcement_report.as_dict(),
+                    }
+            except Exception as exc:
+                report["domain_pipeline_error"] = f"{type(exc).__name__}: {exc}"
+                report["needs_input"].append(
+                    "사업계획서 도메인 공고 분석에 실패했습니다. 결과를 제출하지 마세요."
+                )
             runner = EvalLoopRunner(self.evaluation_service, self.project_service, self.storage)
             loop_report = runner.run(
                 project_id,
@@ -308,6 +351,77 @@ class SubmissionPipeline:
                     for key in ("submit_docx", "quality_docx"):
                         if report.get(key) == str(fp):
                             report[key] = str(new_path)
+                    final_docx = new_path
+
+        # Production CLI path: the generated submission is not considered FINAL
+        # until the domain router, canonical LRule registry and finalizer all run.
+        # The opt-in argument keeps direct library callers backward compatible;
+        # submit.py enables it for the real end-to-end command.
+        if lrule_gate:
+            project_input = self.storage.load_project_input(project_id)
+            try:
+                profile = self.project_service.load_profile_for_project(project_id)
+                explicit_domain = str(project_input.project_meta.get("domain", "") or "").strip().lower()
+                document_type = str(project_input.project_meta.get("document_type", "") or "").strip()
+                context = resolve_domain(
+                    text=f"{getattr(profile, 'template_name', '')}\n{document_type}",
+                    filename=getattr(profile, "template_name", ""),
+                    document_type=document_type,
+                    explicit_domain=explicit_domain,
+                    settings=self.settings,
+                )
+                if context.domain == Domain.OTHER:
+                    report["needs_input"].append(
+                        "도메인을 business_plan 또는 consultant_application으로 확인해야 합니다."
+                    )
+                lrule_path = results_root / f"제출초안_{project_id}_lrule_report.json"
+                lrule_report = enforce_lrules(
+                    domain=context.domain,
+                    document_type=document_type,
+                    artifact_path=final_docx,
+                    report_path=lrule_path,
+                )
+                finalizer_result = finalize_artifact(
+                    artifact_path=final_docx,
+                    lrule_report=lrule_report,
+                    force_draft=bool(report.get("domain_pipeline_error")),
+                    materialize=True,
+                )
+                materialized_path = Path(finalizer_result.final_path)
+                if materialized_path != Path(final_docx) and materialized_path.exists():
+                    # The report is an attestation over the final bytes; keep its
+                    # path aligned after the fail-closed rename.
+                    lrule_report.artifact_path = str(materialized_path)
+                    try:
+                        lrule_report.save(lrule_path)
+                    except Exception as exc:
+                        report["lrule_report_save_error"] = f"{type(exc).__name__}: {exc}"
+                        report["needs_input"].append(
+                            "LRule 보고서 갱신에 실패해 제출할 수 없습니다."
+                        )
+                report["domain"] = context.as_dict()
+                report["lrule_report"] = str(lrule_path)
+                report["lrule"] = lrule_report.as_dict()
+                report["finalizer"] = finalizer_result.as_dict()
+                report["steps"].append("lrule")
+                report["steps"].append("finalizer")
+                final_docx = materialized_path
+                if not finalizer_result.submittable:
+                    report["needs_input"].append(
+                        "LRule/Finalizer 차단 상태입니다. 확인·보완 후 재실행하세요."
+                    )
+            except Exception as exc:
+                # A runtime gate failure is itself a blocked decision; never
+                # silently return a submission-shaped path.
+                report["lrule_error"] = f"{type(exc).__name__}: {exc}"
+                report["needs_input"].append(
+                    "LRule/Finalizer 실행 실패로 제출할 수 없습니다."
+                )
+                old_final = Path(final_docx)
+                if old_final.exists() and not old_final.stem.endswith(("_DRAFT", "_DRAFT2")):
+                    new_path, mark_error = force_draft_name(old_final)
+                    if mark_error:
+                        report["draft_mark_error"] = mark_error
                     final_docx = new_path
 
         report["final_docx"] = str(final_docx)

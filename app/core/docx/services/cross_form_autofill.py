@@ -1459,13 +1459,17 @@ def _fill_paragraph_fields(para, matches: list[Match]) -> list[Match]:
 # --- 변환 헬퍼(HWP) -----------------------------------------------------------
 
 def _to_docx_if_needed(path: Path, tmpdir: Path, report: AutofillReport) -> Optional[Path]:
-    """입력이 .hwp/.hwpx 면 DOCX 로 변환해 그 경로를 반환. 실패 시 None."""
+    """입력이 .hwp/.hwpx 면 DOCX 로 변환해 그 경로를 반환. 실패 시 None.
+
+    자동 전사에서 한글 GUI/COM을 띄우면 사용자가 보안창을 승인해야 하므로
+    구조 변환을 우선한다. HWP 원본의 고충실도 COM 변환은 별도 명시 경로다.
+    """
     if path.suffix.lower() not in _HWP_EXTS:
         return path
     from .hwp_docx_convert import hwp_to_docx
 
     out = tmpdir / (path.stem + "_in.docx")
-    rep = hwp_to_docx(path, out)
+    rep = hwp_to_docx(path, out, use_com=False)
     if rep.ok:
         report.notes.append(f"HWP 변환({path.name} → DOCX, {rep.method})")
         return out
@@ -2386,9 +2390,13 @@ def batch_autofill_from_pool(
     use_ai: bool = False,
     confirmations: Optional[dict[str, str]] = None,
     enable_checkbox: bool = True,
-    convert_hwp: bool = True,
+    convert_hwp: bool = False,
 ) -> BatchAutofillReport:
-    """공고 폴더의 양식들을 소스 풀에서 고른 A 로 일괄 채운다."""
+    """공고 폴더의 양식들을 소스 풀에서 고른 A 로 일괄 채운다.
+
+    HWP 생성은 한글 COM을 실행할 수 있으므로 기본적으로 끈다. 필요한 경우
+    호출자가 ``convert_hwp=True``를 명시적으로 선택한다.
+    """
     notice = Path(notice_folder)
     pool = Path(source_pool)
     out_dir = notice / output_subdir
