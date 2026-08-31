@@ -228,3 +228,31 @@ def test_skill_hooks_include_hangul_request() -> None:
         text = (REPO / rel).read_text(encoding="utf-8")
         fm = text.split("---", 2)[1]
         assert needle in fm, f"{rel} description 훅에 요청 원문 없음"
+
+
+def test_submission_pipeline_user_facing_is_hwpx(tmp_path: Path) -> None:
+    """제출 파이프라인 작업본은 DOCX, 사용자 산출은 .hwpx."""
+    from auto_write.models import ProjectInput
+    from auto_write.services.evaluation_service import EvaluationService
+    from auto_write.services.openai_client import OpenAIService
+    from auto_write.services.submission_orchestrator import SubmissionPipeline
+    from test_submission_pipeline import _FakeProjectService, _FakeStorage, _profile, _settings
+
+    settings = _settings(tmp_path)
+    storage = _FakeStorage(tmp_path)
+    oa = OpenAIService(settings)
+    ps = _FakeProjectService(storage, _profile(tmp_path), oa)
+    storage.save_project_input(
+        "p1",
+        ProjectInput(template_id="t1", organization_profile={"기업명": "테스트(주)"}, project_meta={}),
+    )
+    report = SubmissionPipeline(ps, EvaluationService(oa), storage, settings).run(
+        "p1", announcement_text="", enable_images=False, enable_notebooklm=False
+    )
+    hangul = Path(report["final_hangul"])
+    assert hangul.suffix == ".hwpx"
+    assert hangul.is_file()
+    assert Path(report["final"]).suffix == ".hwpx"
+    assert Path(report["final_docx"]).suffix == ".docx"
+    assert Path(report["final_docx"]).is_file()
+
