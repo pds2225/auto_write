@@ -33,6 +33,10 @@ def test_rhwp_hwpx_ok():
     validate_output_plan(_plan(["hwpx"], "rhwp-hwpx-fill"))
 
 
+def test_rhwp_hwpx_ok_without_confirm():
+    validate_output_plan(_plan(["hwpx"], "rhwp-hwpx-fill", confirmed=False))
+
+
 def test_docx_crossform_cannot_output_hwpx():
     with pytest.raises(OutputPolicyError, match="docx-crossform"):
         validate_output_plan(_plan(["hwpx"], "docx-crossform"))

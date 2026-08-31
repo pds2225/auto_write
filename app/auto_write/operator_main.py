@@ -53,6 +53,21 @@ def _project_output_dir(project_id: str) -> Path:
     return storage.project_dir(project_id) / "output"
 
 
+def _result_hangul(project_id: str) -> Path | None:
+    """사용자 산출 한글(HWPX/HWP). 편집기용 DOCX 와 별개."""
+    output_dir = _project_output_dir(project_id)
+    for name in ("output.hwpx", "output.hwp"):
+        path = output_dir / name
+        if path.is_file() and path.stat().st_size > 0:
+            return path
+    results_dir = storage.results_dir(project_id)
+    if results_dir.exists():
+        for path in sorted(results_dir.glob("*.hwpx")) + sorted(results_dir.glob("*.hwp")):
+            if path.is_file() and path.stat().st_size > 0:
+                return path
+    return None
+
+
 def _result_docx(project_id: str) -> Path | None:
     output_dir = _project_output_dir(project_id)
     edited = sorted(
@@ -322,14 +337,17 @@ async def _run_document_generation(
 
         result = _result_docx(project_id)
         if not result or not result.is_file() or result.stat().st_size <= 0:
-            raise RuntimeError("생성 엔진이 비어 있지 않은 DOCX 결과를 만들지 못했습니다.")
+            raise RuntimeError("생성 엔진이 비어 있지 않은 DOCX 작업본을 만들지 못했습니다.")
+        hangul = _result_hangul(project_id)
+        user_facing = hangul if hangul is not None else result
 
         workflow_monitor.finish_run(
             run_id,
             {
                 "project_id": project_id,
-                "result": str(result),
-                "result_size": result.stat().st_size,
+                "result": str(user_facing),
+                "result_size": user_facing.stat().st_size,
+                "result_hangul": str(hangul) if hangul else "",
                 "workflow_route": cross_form_stats.get("mode", "bizplan"),
                 "cross_form": cross_form_stats,
             },

@@ -18,7 +18,11 @@ class OutputFormat(str, Enum):
 
 
 class FillEngine(str, Enum):
-    """엔진 선택 — 암묵적 기본값 없음."""
+    """엔진 선택.
+
+    한글 기본(승인 불필요): ``rhwp-hwpx-fill`` + ``hwpx``.
+    DOCX·엔진 변경은 ``--confirm-output-plan`` 필수.
+    """
 
     RHWP_HWPX = "rhwp-hwpx-fill"       # fill_hwpx, COM 없음
     COM_HWPX = "com-hwpx-fill"         # fill_hwp_via_hwpx (COM 변환 + hwpx_fill)
@@ -50,7 +54,7 @@ class OutputPlan:
                 f"알 수 없는 출력 형식: {output_names}. 허용: hwpx, hwp, docx"
             ) from exc
         if not outputs:
-            raise OutputPolicyError("최소 1개 --output (hwpx|hwp|docx) 가 필요합니다.")
+            outputs = frozenset({OutputFormat.HWPX})
         try:
             engine = FillEngine(engine_name.lower())
         except ValueError as exc:
@@ -68,8 +72,21 @@ class OutputPlan:
         }
 
 
+def is_hangul_default_plan(plan: OutputPlan) -> bool:
+    """자동생성 기본: RHWP XML 채움 + HWPX만. 승인 질문 없이 진행한다."""
+    return plan.engine is FillEngine.RHWP_HWPX and plan.outputs == frozenset(
+        {OutputFormat.HWPX}
+    )
+
+
 def validate_output_plan(plan: OutputPlan) -> None:
-    """승인 없는 우회·축소·대체를 코드로 차단한다."""
+    """승인 없는 DOCX-only·엔진 축소를 코드로 차단한다.
+
+    한글 기본(rhwp-hwpx-fill + hwpx)은 승인이 필요 없다.
+    워드 산출·다른 엔진은 --confirm-output-plan 이 필요하다.
+    """
+    if is_hangul_default_plan(plan):
+        return
     if not plan.user_confirmed:
         raise OutputPolicyError(
             "출력 형식·엔진 변경은 --confirm-output-plan 플래그가 필요합니다. "

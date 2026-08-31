@@ -1,11 +1,20 @@
 # RESUME.md — auto_write 세션 체크포인트
 
 > 세션을 새로 시작하면 **이 파일을 먼저** 읽는다. 상세 트랙은 아래 링크.
-> 최종 갱신: **2026-08-31** (원장 C 최우선. 사업명은 원장·파일 저장. named 신청서 작성 TASK 등록 금지. T-20260831-01은 `main` `6ff5ec0`)
+> 최종 갱신: **2026-08-31** (원장 C 최우선. 사업명은 원장·파일 저장. named 신청서 작성 TASK 등록 금지. 자동생성 기본=HWPX. T-20260831-01은 `main` `2a8e14e`)
 
 ## 한 줄 상태
 
-`pds2225/auto_write` 단일 정본. `origin/main` @ `6ff5ec0` (#175 교훈 A→E). 개발 원장 **C가 최우선**. 사업명은 원장 A·`user_applications.md`에 저장. named 지원사업 신청서 작성은 TASK에 등록하지 않음.
+`pds2225/auto_write` 단일 정본. `origin/main` @ `2a8e14e` (#176 원장 정책). 개발 원장 **C가 최우선**. 사업명은 원장 A·`user_applications.md`에 저장. named 지원사업 신청서 작성은 TASK에 등록하지 않음. 자동생성·채움 기본 산출=**한글(HWPX)**. DOCX는 명시할 때만. 이진 .hwp 는 Windows+한글 COM.
+
+## 지금 세션 — 2026-08-31 (자동생성 기본 한글)
+
+| 항목 | 내용 |
+|------|------|
+| 요청 | 「지 지금 자동으로 문서 만들면 워드로 만들어지냐 한글로 만들어지냐 한글로 만들어 줘야 돼」 |
+| 한 일 | 기본 산출=.hwpx. hub fill 한글 기본은 승인 불필요. generate/submit/bizplan 사용자 산출 HWPX. COM 없으면 XML 래핑. `.hwp` 저장은 Windows-only |
+| 안 한 일 | 이진 .hwp COM 저장(이 리눅스 클라우드 BLOCKED). L050 PDF 쌍 생성. draft 머지 안 함 |
+| 재개 | 한글 PC에서 .hwp 저장·L050 PDF. 워드가 필요하면 `-o *.docx` / `--required-format docx` |
 
 ## 지금 세션 — 2026-08-31 (Wave D·E 규약, 승인 없이 마무리)
 
@@ -96,7 +105,7 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 
 | 날짜 | 내용 | 근거 |
 |------|------|------|
-| 2026-08-31 | 이지비건 종합완료보고서 8p본 완성(겹침수정·폰트) + 32p 정식본 완성(일정정정 반영). 8p본 날짜정정 남음 | `SESSION_RECAP.md` · 이 체크포인트 |
+| 2026-08-31 | 자동생성·채움 기본 산출=한글(HWPX). DOCX는 명시할 때만. 이진 .hwp 는 Windows+한글 COM | `hangul_default.py` · `test_hangul_default_output.py` |
 | 2026-08-25 | 열린 draft #159+#162+#163+#165+#166+#167 합본. 충돌 없는 #164+#160은 먼저 squash | 이 체크포인트 |
 | 2026-08-23 | 신청 원장: KICXUP 선정 · 온랩 접수 · 1인창조 취소. 플레이북·도보네비 카드. 채팅만(Docs 정리본 금지) | `docs/clients/user_applications.md` · `user-bizdoc-playbook` |
 | 2026-08-23 | 세션 마무리. 스킬 `tech-framing-provenance` 의미 확인(공고 맞춤 문장≠보유기술). 추가 구현 없음 | 이 체크포인트 · 위키 `session-2026-08-23.md` |
@@ -198,3 +207,4 @@ py -3.11 auto_write_hub.py env
 ## 안전 불변
 
 원본 미수정 · 날조 0 · fail 시 `_DRAFT` · 경로 광역 스캔 금지 · 테스트 `py -3.11`.
+자동생성·채움·제출 기본 산출 = 한글(HWPX). 이진 .hwp 는 Windows+한글 COM.

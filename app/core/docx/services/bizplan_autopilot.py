@@ -15,7 +15,8 @@
 - **원본 절대 보존**: run_autopilot 1단계가 원본을 백업한다. 모든 출력은 새 경로.
 - **근거 없는 날조 0**: AI 작성은 출처 병기/[확인필요] 규칙을 강제. AI 키 없으면 작성 생략.
 - **점수 부풀리기 방지**: 채점은 별도 AI 패스(심사위원 프롬프트)로 독립 수행.
-- 최종 산출은 '제출 직전본 DOCX + 점수 추이 + 확인필요 To-Do' 이며, 핵심 수치 검증 책임은 사용자.
+- 최종 산출은 한글(HWPX) 기본. DOCX 는 ``-o *.docx`` 로 명시한 경우만.
+  내부 품질 하네스는 DOCX 작업본을 쓰고, 사용자 산출만 한글로 내보낸다.
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ from ..config import ensure_directories, get_settings
 from .autopilot_pipeline import run_autopilot
 from .bizplan_ai_writer import ai_write_areas
 from .evaluation_service import EvaluationService
+from .hangul_default import default_auto_create_path, emit_hangul_file, is_hangul_ext
 
 
 @dataclass
@@ -183,7 +185,8 @@ def run_bizplan_autopilot(
 
     Args:
         input_docx: 초안/메모 DOCX(원본, 자동 백업).
-        output_docx: 최종 출력. 미지정 시 results/ 자동 명명.
+        output_docx: 최종 출력. 미지정 시 results/{stem}_bizplan.hwpx (한글 기본).
+            ``*.docx`` 를 직접 주면 워드로 남긴다.
         brief: 사업 브리프(아이디어·팀·수치 등 자유 텍스트). AI 작성에 사용.
         announcement_text: 공고 평가기준 텍스트. 있으면 채점·목표 반복 수행.
         target_ratio: 목표 충족률(기본 0.85 = 85%). 도달하면 조기 종료.
@@ -203,7 +206,9 @@ def run_bizplan_autopilot(
     if not in_path.exists():
         raise FileNotFoundError(f"입력 DOCX 가 없습니다: {input_docx}")
     stem = in_path.stem
-    final_path = Path(output_docx) if output_docx else results_root / f"{stem}_bizplan.docx"
+    final_path = default_auto_create_path(
+        stem, results_root, kind="bizplan", output_path=output_docx
+    )
     if in_path.resolve() == final_path.resolve():
         raise ValueError("출력이 입력과 같습니다. 원본 덮어쓰기는 금지입니다.")
 
@@ -285,8 +290,20 @@ def run_bizplan_autopilot(
         final_path = final_path.with_name(f"{final_path.stem}_DRAFT{final_path.suffix}")
         report.draft_marked = True
     final_path.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(cur, str(final_path))
-    report.output_docx = str(final_path)
+    if is_hangul_ext(final_path):
+        emit = emit_hangul_file(Path(cur), final_path)
+        report.output_docx = emit.output if emit.ok else str(final_path)
+        if not emit.ok:
+            report.manual_todo = _build_todo(report)
+            report.manual_todo.append(
+                "한글 산출 실패: " + "; ".join(emit.notes or ["원인 미상"])
+            )
+            if write_report:
+                report.report_md = _write_report(results_root, stem, report)
+            return report
+    else:
+        shutil.copyfile(cur, str(final_path))
+        report.output_docx = str(final_path)
     report.manual_todo = _build_todo(report)
 
     if write_report:

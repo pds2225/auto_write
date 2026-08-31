@@ -1,18 +1,18 @@
 """cross_form_hwp_pipeline.py — 공고 HWP/HWPX 양식 채움 단일 진입점 (Sprint 1).
 
 재발 방지:
-- ``--output`` + ``--engine`` + ``--confirm-output-plan`` 필수 (암묵적 DOCX 우회 금지)
+- 기본 산출 = HWPX (rhwp-hwpx-fill). 한글 기본은 --confirm-output-plan 불필요.
+- DOCX·엔진 변경은 ``--confirm-output-plan`` 필수 (암묵적 DOCX 우회 금지)
 - COM 은 ``hancom_com_guard`` 가 2024(HOffice130) 기동을 차단
 - 본선 산출은 HWPX(서식만). DOCX는 명시적 ``docx-crossform`` 만.
 - 구 스크립트 ``_finish_minwon_rhwp.py`` / ``_complete_minwon_job.py`` 사용 금지
+- 이진 .hwp 는 Windows+한글 COM 전용. 이 환경은 .hwpx XML 채움.
 
 사용 예 (PowerShell)::
 
     cd D:\\auto_write\\app
     py -3.11 cross_form_hwp_pipeline.py ^
-        --notice-folder "C:\\...\\21_기업민원..." ^
-        --engine rhwp-hwpx-fill --output hwpx --confirm-output-plan ^
-        --extract-forms --supplement-resume --facts-json facts.json
+        --notice-folder "C:\\...\\21_기업민원..."
 """
 
 from __future__ import annotations
@@ -428,19 +428,18 @@ def main(argv: list[str] | None = None) -> int:
         dest="outputs",
         action="append",
         choices=[o.value for o in OutputFormat],
-        required=True,
-        help="산출 형식. 본선은 hwpx. docx는 명시적 docx-crossform 만.",
+        help="산출 형식. 기본 hwpx. docx는 명시적 docx-crossform + --confirm-output-plan.",
     )
     parser.add_argument(
         "--engine",
-        required=True,
+        default="rhwp-hwpx-fill",
         choices=[e.value for e in FillEngine],
-        help="rhwp-hwpx-fill(권장) | com-hwpx-fill | docx-crossform(명시)",
+        help="기본 rhwp-hwpx-fill. docx-crossform 은 명시+승인.",
     )
     parser.add_argument(
         "--confirm-output-plan",
         action="store_true",
-        help="출력 형식·엔진 사용자 승인 (필수)",
+        help="DOCX·엔진 변경 승인 (한글 기본 hwpx 는 불필요)",
     )
     parser.add_argument("--hwpx-base", type=Path, help="입력 HWPX (기본: _workspace/10_form_base.hwpx)")
     parser.add_argument("--source-profile", type=Path)
@@ -496,7 +495,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         plan = OutputPlan.parse(
-            output_names=args.outputs,
+            output_names=args.outputs or ["hwpx"],
             engine_name=args.engine,
             user_confirmed=args.confirm_output_plan,
         )

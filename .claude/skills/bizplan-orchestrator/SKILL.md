@@ -1,10 +1,13 @@
 ---
 name: bizplan-orchestrator
 description: >-
+  지 지금 자동으로 문서 만들면 워드로 만들어지냐 한글로 만들어지냐 한글로 만들어 줘야 돼.
   초안/메모 DOCX를 제출에 가까운 사업계획서로 끌어올리는 작성 오케스트레이터.
   AI 근거명시 본문 작성 → 품질 오토파일럿 → 공고 채점 → 목표 충족까지 반복.
+  기본 산출은 한글(HWPX). -o *.docx 를 명시한 경우만 워드.
   다음 요청 시 반드시 사용: "사업계획서 작성", "처음부터 작성", "본문 써줘",
-  "PSST 채워줘", "초안을 제출본으로", "bizplan", "/auto-write-bizplan".
+  "PSST 채워줘", "초안을 제출본으로", "bizplan", "/auto-write-bizplan",
+  "한글로 만들어 줘야 돼".
   ※ 완성본 A의 사실을 빈 양식 B로 옮기는 것은 cross-form-submission,
   완성 DOCX 서식만 다듬는 것은 document-quality-orchestrator.
   의도가 불분명하면 bizdoc-hub 로 라우팅.
@@ -20,6 +23,7 @@ description: >-
 ```powershell
 cd D:\auto_write\app
 py -3.11 bizplan_autopilot.py "<초안.docx>" --brief-file 브리프.txt --announcement-file 공고.txt
+# 기본 산출: results\{stem}_bizplan.hwpx  (워드가 필요하면 -o out.docx)
 # 또는 Claude 커맨드: /auto-write-bizplan
 ```
 
