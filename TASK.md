@@ -37,7 +37,7 @@ REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 [x] T-20260816-07 | main에 이미 들어간 원격 브랜치를 지우고 backup은 남긴다
 [x] T-20260816-08 | 열린 draft #149·#152·#153·#154를 한 브랜치로 합쳐 한 번에 머지할 수 있게 한다
 [x] T-20260825-01 | 다른 폴더에만 남아 있던 빠진 그림 생성 코드를 지금 저장소로 옮긴다
-[~] T-20260831-01 | 문서가 다시 깨지는 오류부터 우선순위 A→B→C로 기계 검사에 넣는다
+[x] T-20260831-01 | 문서가 다시 깨지는 오류부터 우선순위 A→B→C로 기계 검사에 넣는다
 
 에이전트 본문 금지: `# 0` LIST + 열린(`[ ]`/`[~]`) `8-1`만. T-20260814-02 8-1 전문은 생략. 제품 목표=`AW-005` 8-1 + `최우선 사용 케이스`. 웹앱 실행 정본=`웹앱 최종 요구사항_20260816`(승인 전 웹앱 코드 대기). 원장 A/B 표만. TASK 통째·CHANGELOG·닫힌 `[x]` DETAILS 금지.
 
@@ -4231,7 +4231,7 @@ REQUEST_SOLVED=YES: 합본이 origin/main `1001b76`에 있다. #155는 `ddac657`
 TASK_ID: T-20260831-01
 TASK_START_SHA: 5edd4f5c725417be2855471002b0d7846caacec6
 WORK_BRANCH: cursor/lessons-wave-a-guards-0da1
-STATUS_THIS_TURN: LIST 등록. Wave A는 이 브랜치에 구현됨(mechanized 45→49). Wave B·C는 `[ ]`. REQUEST_SOLVED=NO.
+STATUS_THIS_TURN: 사용자 「닫아」(2026-08-31). LIST `[x]`. 계획 등록 + Wave A. Wave B·C는 다음 요청. REQUEST_SOLVED=YES.
 
 ### 8-1. 사용자 원문
 
@@ -4245,18 +4245,19 @@ D·E는 테스트로 못 막는 것이 많습니다.
 
 계획 task에 추가
 
-전체 오류 표(A~E)는 그 대화에 있다. 실행 계획 정본=`docs/LESSONS_LOCKDOWN_WAVES.md`.
+닫아
+
+전체 오류 표(A~E)는 그 대화에 있다. 실행 계획 정본=`docs/LESSONS_LOCKDOWN_WAVES.md`. 이 TASK의 닫는 범위는 계획 등록 + Wave A. B·C는 계획 문서에 남기고 다음 요청에서 연다.
 
 ### 최종 결과
-문서가 다시 깨지는 오류(A)부터, 제출·품질 게이트(B), 이력서(C) 순으로 기계 가드가 닫힌다. 4점(guard+test+coverage JSON+runtime wiring)이 있는 것만 `mechanized`다. 한글 픽셀 눈검증·날조 본문은 사람 판단으로 남는다.
+계획과 Wave A(문서가 다시 깨지는 것)가 TASK에 등록·구현되어 있다. B(제출·품질)·C(이력서)는 `docs/LESSONS_LOCKDOWN_WAVES.md`에 남아 있고, 사용자 「닫아」로 이 TASK에서는 열지 않는다.
 
 ### MUST
 - 우선순위 A → B → C. D·E는 규약(테스트로 못 막는 항목은 BLOCKED로 남김)
 - 기계화 4점(AW-008): guard + test + coverage JSON + runtime wiring. 하나라도 없으면 `mechanized` 금지
 - 이미 잠긴 A 항목(D1 칸단위 lineseg, D2 격자, D3/D4 색, D5 병합, L007/L010/L011 등)은 다시 구현하지 않음
 - Wave A: D1 잔여(가짜 lineseg 우회+fill 자간) · D6 홍길동 · L097 overflow 기록(값 유지) · L032 실행일 서명 · L001 세로 0 거부 · L096/L151 4점이면 재분류
-- Wave B: L040 필수서식 `_DRAFT` · L059 작업접미사 오케스트레이터 배선 · L048 원본·중간본 혼입 · L049 공고 PDF를 양식으로 채움 · L050 한글 전용인데 DOCX만 · L080 라벨 칸 굵게 · L095 페이지 수 베이스라인
-- Wave C: L038/L060 정량 컬럼 · L039 포트폴리오 마커 · L043/L044 골격 · L154–L156 · L061 출력 형식 확인
+- Wave B·C는 이 TASK에서 구현하지 않음(사용자 「닫아」). 잔여 목록은 `docs/LESSONS_LOCKDOWN_WAVES.md`
 - L154–L156은 `lessons.md`에 없으면 `lessons_coverage.json`에 넣지 않음(무결성 테스트)
 
 ### KEEP
@@ -4288,12 +4289,10 @@ D·E는 테스트로 못 막는 것이 많습니다.
 - [x] Wave A4 L032 — `canonical_sign_date(today=)` 실행일
 - [x] Wave A5 L001 세로 — `picture_display_wh` 높이 0 거부
 - [x] Wave A6 L096/L151 — 4점 충족 시 mechanized (45→49, gap 21→17)
-- [ ] Wave B — L040 · L059 오케스트레이터 배선 · L048 · L049 · L050 · L080 · L095
-- [ ] Wave C — L038/L060 · L039 · L043/L044 · L154–L156 · L061
-- [ ] Wave D spy — L003 COM kill (Windows). L005 눈검증은 judgment/BLOCKED
+- 사용자 「닫아」 — Wave B·C·D는 이 TASK에서 열지 않음. 목록은 `docs/LESSONS_LOCKDOWN_WAVES.md`
 
 ### DONE
-- REQUEST_SOLVED=NO: 계획 등록 + Wave A만. B·C 미착수. 한글 눈검증 BLOCKED.
+- REQUEST_SOLVED=YES: 계획이 `TASK.md`에 있고 Wave A 가드가 이 브랜치에 있다. B·C는 미구현이며 다음 요청 과업이다. 한글 눈검증 BLOCKED(이 환경에 한글 없음).
 
 # 9. 실제사용 시나리오
 
