@@ -12,6 +12,7 @@ description: >-
 > "뭐 신청했지", "아이템별로", "지원사업 목록".
 > 신청 원장: `docs/clients/user_applications.md`. 목록 질문 스킬: `user-applications-memory`.
 > 허브 라우팅은 `bizdoc-hub`와 같다. **이 파일은 순서·정본 파일·금지항**.
+> 특정 공고 신청서 작성을 TASK.md에 등록하지 않는다. 사업명 파일 삭제는 아님.
 
 ## 사용자가 나중에 물으면
 

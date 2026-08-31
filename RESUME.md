@@ -1,11 +1,11 @@
 # RESUME.md — auto_write 세션 체크포인트
 
 > 세션을 새로 시작하면 **이 파일을 먼저** 읽는다. 상세 트랙은 아래 링크.
-> 최종 갱신: **2026-08-31** (T-20260831-01 Wave D·E 규약. 닫힘≠머지. L050/L005 BLOCKED)
+> 최종 갱신: **2026-08-31** (원장 C 최우선. 사업명은 원장·파일 저장. named 신청서 작성 TASK 등록 금지. T-20260831-01은 `main` `6ff5ec0`)
 
 ## 한 줄 상태
 
-`pds2225/auto_write` 단일 정본. 교훈 잠금 **T-20260831-01** `cursor/lessons-wave-bc-e71f` (draft, **미머지**). JSON mechanized **66**/151, gap **1**(L050 생성 BLOCKED). LIST `[x]`. D·E 규약 잠금. 이어가기=`docs/LESSONS_LOCKDOWN_WAVES.md`.
+`pds2225/auto_write` 단일 정본. `origin/main` @ `6ff5ec0` (#175 교훈 A→E). 개발 원장 **C가 최우선**. 사업명은 원장 A·`user_applications.md`에 저장. named 지원사업 신청서 작성은 TASK에 등록하지 않음.
 
 ## 지금 세션 — 2026-08-31 (Wave D·E 규약, 승인 없이 마무리)
 
@@ -34,7 +34,7 @@
 **밤샘 2026-08-19 → main #161:** AW-001 `[~]`. `run_to_final` + mechanized 가드(`build_lrule_guards`, unverifiable=0).
 judgment/gap은 REVIEW_REQUIRED → FINAL 차단 유지. 웹앱·BPQ-00 제품 코드는 승인 전 대기. 공고+양식 오기 전 초안 대기.
 
-**문서 작업:** 원장 A1~A7. A1 온랩 **접수**. A5 1인창조 **취소**. A6 STAR **선정**(6팀 멘토링, 상위2 지원금은 별도). 내비 KICXUP **선정**. 신청 원장=`docs/clients/user_applications.md`(채팅만, Google Docs 정리본 금지). 도보네비 카드=`docs/clients/dobonevi_card.md`.
+**문서 작업:** 원장 A1~A8. A1 온랩 **접수**. A5 1인창조 **취소**. A6 STAR **선정**(6팀 멘토링, 상위2 지원금은 별도). 내비 KICXUP **선정**. 신청 원장=`docs/clients/user_applications.md`(채팅만, Google Docs 정리본 금지). 도보네비 카드=`docs/clients/dobonevi_card.md`. 개발 원장 C 최우선.
 **세션 마무리 신호:** `python scripts/session_closeout.py plant|status|sync-disk|ack|cancel`. 기본 커밋본 `due: false`.
 **엔진:** T-20260814-02 명세+실행지시+BPQ-00 감사+#150 측정기+#155 git-sync(기준 브랜치=GitHub default/`main`)+#156(웹앱 사양·계획 보강·STEP 3A)+#161(DomainRouter→LRule→Hash→Finalizer 게이트)+#164(STAR 프레이밍 스킬)+#160(소셜벤처 본문)+#171(hwpx linesegarray 정식수정, origin에만)이 있음. DOCX 정본=`core.docx.services`.
 **열린 작업:** 열린 PR 0건(파악 시점 기준, #171은 이미 merge됨). AW-001·웹앱은 승인 전 대기, A9 미제출 종료 기록은 로컬 원장 2개에 미커밋 보존. Cursor 클라우드 PR은 기본 draft.
@@ -132,7 +132,8 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 
 ## 남은 일 (우선순위)
 
-00. **이지비건 8p본 날짜정정:** `제출자료\기술지원단 종합완료보고_이지비건 v2.hwpx`의 회차 날짜를 32p본과 동일하게(3회차7/25·4회차8/3·5회차8/8) 정정 — 다음 세션 최우선. 이후 매출액·연락처 등 [확인 필요] 값은 사용자 확답 오면 두 파일 모두 반영
+00. **원장 C (제일 중요):** 있는 기능을 실사용 가능하게. B4 그림 품질 · B5 DOCX 실삽입 · B7 안내문구 오탐 · AW-001 FINAL 막힘. named 지원사업 신청서 작성을 TASK에 등록하지 말 것
+00p. **이지비건 8p본 날짜정정:** `제출자료\기술지원단 종합완료보고_이지비건 v2.hwpx`의 회차 날짜를 32p본과 동일하게(3회차7/25·4회차8/3·5회차8/8) 정정 — 다음 세션 최우선. 이후 매출액·연락처 등 [확인 필요] 값은 사용자 확답 오면 두 파일 모두 반영
 0. **STAR-Exploration:** 원장 A6 종료(선정·재작성 금지). 상위2 지원금·발표자료는 **새 요청이 있을 때만**. 그때 IR 위성항법=공고 맞춤 프레이밍(미보유 기술) — 과대포장 금지
 0a. **K-Navi 배너:** 16:9 한글/영문은 Cursor artifact. 재생성은 요청 시에만(스킬로 고정하지 않음). 저장소/슬라이드 삽입은 사용자가 원할 때만
 0a2. **K-네비 9장 PPT (A8):** Skywork 결과 검수 대기. Cursor가 카드덱을 다시 그리지 말 것. 프롬프트=`docs/KNEVI_KICKXUP_SKYWORK_PROMPT.md`
@@ -151,7 +152,7 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
    - HWPX: `py -3.11 app/hwpx_submit.py 양식.hwpx -o 결과.hwpx --identity identity.json`
    - DOCX 품질: `py -3.11 app/auto_write_autopilot.py 문서.docx --submit-clean --strict`
    - 인젝터: `cd tools/injector && python3 -m pytest tests/test_v2.py -q`
-3. **REQUEST_LEDGER A:** A1~A6 재작성 금지(A5는 취소). A7 소셜벤처 리그 사용자 확인. A8 Skywork PPT 검수 대기. 웹앱은 최종계획 승인 전 코드 대기
+3. **REQUEST_LEDGER:** C 최우선. A1~A6 재작성 금지(A5는 취소). A7 소셜벤처 리그 사용자 확인. A8 Skywork PPT 검수 대기. named 신청서 작성 TASK 등록 금지. 웹앱은 최종계획 승인 전 코드 대기
 4. **보류**: HWPX 세로 라벨(c) — 코퍼스 수요 극소(AC6)
 5. **보류**: SFT P3 후속·DOCX↔HWP 100% — 실사용에서 막힐 때
 6. **원격 정리:** `main` + `backup/*` 2개. 이 합본이 머지되면 흡수 draft #159+#162+#163+#165+#166+#167 닫음. 닫힌 #139 충돌 표시는 무시.
@@ -160,14 +161,10 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 ## 재개 명령
 
 ```text
-이어서: 스킬 `session-resume` + `RESUME.md`. T-20260831-01 A~E는 브랜치에 닫힘(닫힘≠머지). 남은 것은 Windows 한글에서 L050 PDF 생성·L005 픽셀뿐. 승인 요청 금지. 재구현 금지.
-최우선 개인문서 = 이지비건 8p본(제출자료\v2.hwpx) 회차 날짜정정(00번 참조).
-원장 A는 종료. 발표 IR은 새 요청이 있을 때만. 그때 위성항법을 항우연 보유기술처럼 쓰지 말 것(스킬 `tech-framing-provenance`, 2026-08-20 출처).
-K-Navi: 16:9 한글/영문 배너는 Cursor artifact. 저장소에 넣을지는 사용자 확인. 재생성 요청이 오기 전에 스킬화하지 말 것.
-스킬 훅: 만들게 한 요청 원문을 description 맨 앞. 스킬명만 부르면 효용 감소 (`AGENTS.md` §7).
-엔진: T-20260814-02 + #150 측정기 + #155 git-sync(base=GitHub default/main) + #161 생산 게이트 + #171 hwpx linesegarray 정식수정(origin에만, pull 필요). main `9851ab3`. 합본 #156 squash `1001b76`. 세션핀 #158 `d6b96b8`.
+이어서: 스킬 `session-resume` + `RESUME.md`. 원장 **C**가 제일 중요(있는 기능 실사용). 사업명은 원장·`user_applications.md`에 저장. named 신청서 작성 TASK 등록 금지. 승인 요청 금지.
+스킬 훅: 만들게 한 요청 원문을 description 맨 앞 (`AGENTS.md` §7).
+엔진: #175 교훈 잠금 `6ff5ec0`. #161 생산 게이트. 웹앱은 승인 전 대기.
 P 개발 중=Problem만. P 완료 후=최우선 사용 케이스.
-GitSync 기준 브랜치: AUTO_WRITE_GIT_BASE_BRANCH 없으면 origin/HEAD → ls-remote HEAD → main.
 머지: draft면 자동머지 안 됨. Ready 후 gh pr merge --auto --squash.
 ```
 
@@ -188,7 +185,7 @@ py -3.11 auto_write_hub.py env
 - 이 세션 위키: `session-2026-08-23.md` (Drive)
 - autowrite 통합: `docs/REPO_DUPLICATION_CHECK.md`
 - HWPX 파리티(B 완결): `docs/RESUME_hwpx_parity.md`
-- 실사용 원장: `docs/REQUEST_LEDGER.md`
+- 개발 원장(C 최우선): `docs/REQUEST_LEDGER.md`
 - 신청 원장(채팅만): `docs/clients/user_applications.md` · 스킬 `user-applications-memory`
 - 도보네비 카드·절차: `docs/clients/dobonevi_card.md` · 스킬 `user-bizdoc-playbook`
 - K-네비 IR PPT: `.claude/skills/ir-storyboard-pptx/SKILL.md` · `docs/KNEVI_KICKXUP_SKYWORK_PROMPT.md`

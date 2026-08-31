@@ -38,8 +38,9 @@ REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 [x] T-20260816-08 | 열린 draft #149·#152·#153·#154를 한 브랜치로 합쳐 한 번에 머지할 수 있게 한다
 [x] T-20260825-01 | 다른 폴더에만 남아 있던 빠진 그림 생성 코드를 지금 저장소로 옮긴다
 [x] T-20260831-01 | 문서가 다시 깨지는 오류부터 우선순위 A→B→C로 기계 검사에 넣는다
+[x] T-20260831-02 | 신청서 작성을 TASK에 등록 금지 — 파일에서 사업명 삭제 아님. 원장 C가 제일 중요
 
-에이전트 본문 금지: `# 0` LIST + 열린(`[ ]`/`[~]`) `8-1`만. T-20260814-02 8-1 전문은 생략. 제품 목표=`AW-005` 8-1 + `최우선 사용 케이스`. 웹앱 실행 정본=`웹앱 최종 요구사항_20260816`(승인 전 웹앱 코드 대기). 원장 A/B 표만. TASK 통째·CHANGELOG·닫힌 `[x]` DETAILS 금지.
+에이전트 본문 금지: `# 0` LIST + 열린(`[ ]`/`[~]`) `8-1`만. T-20260814-02 8-1 전문은 생략. 제품 목표=`AW-005` 8-1 + `최우선 사용 케이스`. 웹앱 실행 정본=`웹앱 최종 요구사항_20260816`(승인 전 웹앱 코드 대기). 원장 **C가 최우선**. 신청서 작성을 TASK에 등록 금지 — 파일에서 사업명 삭제 아님. TASK 통째·CHANGELOG·닫힌 `[x]` DETAILS 금지.
 
 ---
 
@@ -58,6 +59,7 @@ REMOTE: https://github.com/pds2225/auto_write
 - 별도의 CURRENT_TASK.md / NEW_TASK.md / NEXT_TASK.md를 만들지 않는다.
 - 다른 레포 TASK, Google Tasks, 과거 채팅 내용을 임의 실행하지 않는다.
 - 사용자의 새 요청은 이 TASK.md에 새로운 TASK 항목으로 등록한다.
+- 예외: 특정 지원사업 신청서 작성(명명 공고 신청서)은 TASK.md LIST에 등록하지 않는다. 원장 A에만 기록. 사용자가 명시적으로 TASK 등록을 시킬 때만 예외.
 
 ## 우선순위 — 사용자 요청이 최우선 (2026-08-16)
 
@@ -83,7 +85,7 @@ AW DETAILS에는 「원칙」 칸이 없다. 칸은 MUST / KEEP / FORBIDDEN이�
 기록된 요청(요약):
 
 - 엔진 AW-001~009 — 검사 경로, git 동기화, L규칙 화면, 진행 화면, 새작성=기존자료 한 흐름, 루트 정리, 중복 정리, L빈칸, 웹앱 P0
-- 실제출 원장 A1~A6 — 한난, 울산, 비앤코, 이지비건, 입주신청, 항우연
+- 원장 **C가 최우선** — 있는 기능을 실사용 가능하게. 신청서 작성을 TASK에 등록 금지(원장 A 사업명 기록은 유지)
 - 기능 원장 B1~B7 — 허브, HWPX 값만 채움, 이미지, 규칙 검사 등
 - 이번 세션에 추가로 적은 것 — 기존 계획서 1순위 흐름, 생성은 허용·인지, 사용자 원문 최우선
 
@@ -91,7 +93,7 @@ AW DETAILS에는 「원칙」 칸이 없다. 칸은 MUST / KEEP / FORBIDDEN이�
 
 1. 이 파일 `# 0` LIST만 (20줄).
 2. 열린(`[ ]`/`[~]`) 항목의 `8-1` 인용문만.
-3. `docs/REQUEST_LEDGER.md` A/B 표만.
+3. `docs/REQUEST_LEDGER.md` **C가 최우선**, 그다음 B, A는 기록 유지. A 항목을 TASK.md 작업으로 바꾸지 않음.
 4. T-20260814-02 긴 `8-1` 전문은 기본 생략. **제품 목표 = AW-005 `8-1` + `최우선 사용 케이스`.**
 
 에이전트에게는 LIST+8-1만. DETAILS 본문(MUST/KEEP/BPQ/실행지시) 금지. 한 줄이면 된다.
@@ -117,6 +119,7 @@ AW DETAILS에는 「원칙」 칸이 없다. 칸은 MUST / KEEP / FORBIDDEN이�
 | T-20260816-03 | clone 끝나면 로컬 PC 리모트 컨트롤 |
 | T-20260816-08 | 지금PR정리 |
 | T-20260831-01 | ㅇㅜ선순우;ㅣ대로 해결하려고함 계획? → 문서가 다시 깨지는 것부터 A→B→C로 잠근다. 계획 task에 추가 |
+| T-20260831-02 | 신청서 작성을 TASK에 등록 금지 — 파일에서 사업명 삭제 아님. 원장 씨가 제일 중요 |
 
 같은 파일에 나중에 기록된 사용자 요청 (8-1 아님. 충돌 시 나중 요청이 해당 부분만 덮음):
 
@@ -133,8 +136,9 @@ AW DETAILS에는 「원칙」 칸이 없다. 칸은 MUST / KEEP / FORBIDDEN이�
 | T-20260831-01 | 지금까지 난 오류를 우선순위대로 기계 가드로 닫는다. A 문서깨짐 → B 제출·품질 → C 이력서. 151개 한 번에 재발 0 불가. 계획 SSOT=`docs/LESSONS_LOCKDOWN_WAVES.md` |
 | T-20260831-01 | 승인요청하지않고 웨이브C? 인지뭔지 너가말한것다 끝까지 개발하게하는방법. +프롬프트. 이어가기 프롬프트=`docs/LESSONS_LOCKDOWN_WAVES.md` |
 | T-20260831-01 | 닫힘이 머지했다는거임? → 아님(브랜치 가드). D·E도 승인요청없이 마무리 |
+| T-20260831-02 | 특정지원사업은 저장하지마 / 원장 씨가 제일 중요 / 원장·파일에 사업명 저장 금지 / 아예 제외하라는게아니라 특정지원사업신청서 작성하는일을 task에등록하지마라고 |
 
-실제 제출물·옛 엔진 요청 (표만): `docs/REQUEST_LEDGER.md` A1~A6(한난·울산·비앤코·이지비건·입주신청·항우연) / B1~B7(허브·HWPX 값만 채움·이미지·규칙 검사 등) / C1.
+개발 원장: `docs/REQUEST_LEDGER.md` **C → B → A**. 사업명은 원장·`user_applications.md`에 저장. named 신청서 작성 TASK 등록 금지.
 
 ---
 
@@ -4307,6 +4311,46 @@ D·E는 테스트로 못 막는 것이 많습니다.
 
 ### DONE
 - REQUEST_SOLVED=YES: A→B→C 기계 가드 + JSON gap 6건 mechanized(66/151) + D·E 규약 문서·테스트. L050 병행 생성·L005 픽셀은 이 환경 BLOCKED(judgment/gap 유지). 닫힘≠머지. 151 재발 0 아님. 이어가기 프롬프트=`docs/LESSONS_LOCKDOWN_WAVES.md`.
+
+## T-20260831-02
+
+TASK_ID: T-20260831-02
+TASK_START_SHA: 6ff5ec01d02895e9aebe1c3609c6882b27c3deca
+WORK_BRANCH: cursor/ledger-c-priority-e71f
+STATUS_THIS_TURN: 원장 C 최우선 고정. 사업명 원장·파일 저장 복원. named 신청서 작성 TASK 등록 금지. REQUEST_SOLVED=YES.
+
+### 8-1. 사용자 원문
+
+특정지원사업은 저장하지마
+원장 씨가 제일 중요
+원장·파일에 사업명 저장 금지
+아예 제외하라는게아니라 특정지원사업신청서 작성하는일을 task에등록하지마라고
+
+### 최종 결과
+요청사항체크·개발은 C(있는 기능 실사용)를 먼저 본다. A 표·`user_applications.md`에 사업명을 유지한다. `TASK.md` LIST에 named 지원사업 **신청서 작성**을 새로 등록하지 않는다.
+
+### MUST
+- `docs/REQUEST_LEDGER.md` 절 순서 C → B → A
+- A 표에 named 지원사업(예: STAR-Exploration) 유지
+- `docs/clients/user_applications.md` 정본 유지
+- 스킬 훅에 요청 원문 그대로 (`AGENTS.md` §7)
+- 물으면 채팅만. Google Docs 정리본 금지. 원장 A·user_applications.md 사업명 표는 유지
+
+### KEEP
+- 엔진 원장 B1~B7
+- 채움용 사실 카드 `docs/clients/dobonevi_card.md` (사업 목록 아님)
+- 열린 LIST AW-001~009
+
+### FORBIDDEN
+- `TASK.md` LIST에 named 지원사업 신청서 작성을 새로 등록
+- Google Docs 지원사업 목록 정리본
+- `git add -A` · 원본 덮어쓰기
+
+### VERIFY
+- `python3 -m pytest app/tests/test_request_ledger_c_priority.py app/tests/test_hub_entrypoints.py app/tests/test_skill_request_hooks.py -q`
+
+### DONE
+- REQUEST_SOLVED=YES: 원장 A·user_applications.md 사업명 복원. C가 맨 위. 신청서 작성을 TASK에 등록하지 않음(파일에서 사업명 삭제 아님). 원문 두 줄+정정이 8-1·스킬 description에 있다.
 
 # 9. 실제사용 시나리오
 

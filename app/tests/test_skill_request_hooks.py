@@ -44,3 +44,21 @@ def test_tech_framing_skill_uses_original_request_as_hook() -> None:
         assert needle in fm, f"description 훅에 요청 원문 {needle!r} 없음"
     # 스킬명만 있고 원문이 뒤에 묻히면 실패 — 원문이 description 앞쪽에 온다.
     assert fm.lower().find("star experation") < fm.lower().find("gnss 출처")
+
+def test_applications_memory_skill_and_agents_include_clarification() -> None:
+    """T-20260831-02: 원문 두 줄 + 정정이 description·AGENTS §7에 있다."""
+    apps = (_REPO / ".claude" / "skills" / "user-applications-memory" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    fm = _frontmatter(apps)
+    for needle in (
+        "특정지원사업은 저장하지마",
+        "원장 씨가 제일 중요",
+        "원장·파일에 사업명 저장 금지",
+        "아예 제외하라는게아니라",
+        "task에등록하지마라고",
+    ):
+        assert needle in fm, f"applications-memory 훅에 {needle!r} 없음"
+    agents = _AGENTS.read_text(encoding="utf-8")
+    assert "아예 제외하라는게아니라 특정지원사업신청서 작성하는일을 task에등록하지마라고" in agents
+
