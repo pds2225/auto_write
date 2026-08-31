@@ -19,7 +19,7 @@ __all__ = ["build_lrule_guards"]
 
 _HWPX_ONLY = {
     "L001", "L002", "L031", "L033", "L074", "L076", "L078",
-    "L083", "L086", "L087", "L088", "L089", "L090", "L091", "L142",
+    "L083", "L086", "L087", "L088", "L089", "L090", "L091", "L096", "L097", "L142",
 }
 
 
@@ -91,6 +91,23 @@ class _ArtifactCtx:
             return self._hwpx_mapped(code)
         if not self.artifact or not self.artifact.exists():
             return _fail("artifact missing")
+        if code == "L003":
+            from core.docx.services.hwp_docx_convert import kill_hangul_processes
+
+            return _ok(f"kill_hangul_processes callable ({kill_hangul_processes.__name__})")
+        if code == "L037":
+            from core.docx.services.submission_gates import is_announcement_form_path
+
+            if is_announcement_form_path(self.artifact):
+                return _fail(f"announcement used as form: {self.artifact.name}")
+            return _ok("not an announcement-form path")
+        if code == "L059":
+            from core.docx.services.submission_gates import work_suffix_hits
+
+            hits = work_suffix_hits(self.artifact.name)
+            if hits:
+                return _fail(f"work suffix in filename {hits}")
+            return _ok("no work-suffix in filename")
         if is_docx:
             return self._docx_mapped(code)
         if is_hwpx:
@@ -196,7 +213,26 @@ class _ArtifactCtx:
             "L053": "form row preservation",
             "L054": "no table transpose",
             "L070": "value-cell-only fill",
+            "L032": "hwpx_resume_supplement.canonical_sign_date",
+            "L096": "hwpx_pic_insert.force_signature_pos treatAsChar=0",
+            "L097": "hwpx_fill.cell_text_may_overflow",
             "L145": "hwpx_fill._set_cell_text/_splice_run_text auto-strip lineseg",
+            "L151": "backup_original results/backup; backup_existing_output beside target",
+            "L003": "hwp_docx_convert.kill_hangul_processes before Dispatch",
+            "L038": "resume_extract.Project.company_count/is_total",
+            "L039": "submission_gates.portfolio_ok + resume_layout_warnings",
+            "L043": "submission_gates.slash_combo_headers",
+            "L044": "submission_gates.missing_resume_skeleton_sections",
+            "L060": "resume_extract.Lecture.kind",
+            "L061": "submission_gates.photo_slot_ok",
+            "L080": "doc_quality_ops.bold_bullet_paren_labels",
+            "L095": "hwpx_fill HwpxFillReport.pages_before/pages_after",
+            "L004": "doc_text_extract.extract_tax_invoice_buyer",
+            "L014": "docx_ops.style_generated_table/add_generated_table",
+            "L048": "submission_gates.merge_pdfs+announcement_tuple_stem",
+            "L049": "submission_gates.build_submit_layout_dir",
+            "L072": "DocumentQualityOrchestrator heuristic score rollback",
+            "L105": "skill_frontmatter.parse_skill_frontmatter",
         }
         if code in process_map:
             return _process(code, process_map[code])

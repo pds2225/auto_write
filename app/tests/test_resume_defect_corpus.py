@@ -11,11 +11,8 @@
   D3 파란 예시체 상속(유색 잔존)    → hwpx_layout_fix.force_black_text
   D4 유색 auto값 오교정            → force_black_text 가 auto/테마색 보존   (L022)
   D5 라벨-값 표 오른쪽 빈칸        → merge_trailing_empty_value_cells (진짜 다열표 보존)
-  D6 홍길동 등 템플릿 placeholder 이름 → (검출기 미구현) resume-autowriter P4+ 과제로 skip 표기
+  D6 홍길동 등 템플릿 placeholder 이름 → hwpx_acceptance.count_template_dummy_names
 """
-import zipfile
-
-import pytest
 from lxml import etree
 
 from auto_write.services.hwpx_layout_fix import (
@@ -160,8 +157,22 @@ def test_D5_real_multicolumn_table_untouched():
         assert len(tr.findall(q("tc"))) == 4
 
 
-# --- D6: 템플릿 placeholder 이름(홍길동) — 검출기 미구현 ----------------------
-@pytest.mark.skip(reason="placeholder 이름 검출기 미구현 — resume-autowriter P4+ 과제. "
-                         "현재는 채움 드라이버가 신원값으로 직접 치환(엔진 회귀 대상 아님).")
+# --- D6: 템플릿 placeholder 이름(홍길동) --------------------------------------
 def test_D6_placeholder_name_detected():
-    ...
+    from auto_write.services.hwpx_acceptance import count_template_dummy_names
+
+    root = _sec(
+        _table(
+            [
+                _row([_cell(0, 0, text="성명"), _cell(1, 0, text="홍길동")]),
+            ],
+            col_cnt=2,
+        )
+    )
+    n, samples = count_template_dummy_names(root)
+    assert n == 1
+    assert "홍길동" in samples
+    n2, _ = count_template_dummy_names(root, allowed=("홍길동",))
+    assert n2 == 0
+    n3, _ = count_template_dummy_names(root, allowed=("박다솜",))
+    assert n3 == 1

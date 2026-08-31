@@ -23,7 +23,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from datetime import datetime
 from pathlib import Path
 
 from auto_write.services.cross_form_output_policy import (
@@ -38,6 +37,7 @@ from auto_write.services.cross_form_autofill import extract_source_fields
 from auto_write.services.hwp_docx_convert import hwp_to_docx
 from auto_write.services.hwpx_fill import fill_hwpx
 from auto_write.services.hwpx_form_extract import extract_forms_only, looks_like_notice_blob
+from auto_write.services.hwpx_resume_supplement import canonical_sign_date
 
 APP = Path(__file__).resolve().parent
 
@@ -143,7 +143,7 @@ def _ensure_forms_base(work: Path, raw_base: Path, *, extract: bool) -> tuple[Pa
 
 def _default_facts(identity: dict[str, str]) -> dict:
     """하드코딩 금지 대체: 파이프라인 기본 facts(모집분야 체크 없음)."""
-    today = datetime.now().strftime("%Y년  %m월  %d일").replace(" 0", " ")
+    today = canonical_sign_date()
     return {
         "education": [
             ["2025년 8월 (졸업)", "한양대학교 대학원", "경영컨설팅학과 (석사)"],
@@ -376,7 +376,13 @@ def run_pipeline(
         person = person or "미상"
         hwpx_src = result.get("outputs", {}).get("hwpx")
         if hwpx_src and Path(hwpx_src).is_file():
-            submit_dir = notice_folder / "제출"
+            from auto_write.services.submission_gates import (
+                build_submit_layout_dir,
+                missing_pdf_pair,
+                try_generate_sibling_pdf,
+            )
+
+            submit_dir = build_submit_layout_dir(notice_folder)
             submit_dir.mkdir(parents=True, exist_ok=True)
             named = resolve_submit_path(
                 submit_dir,
@@ -391,6 +397,11 @@ def run_pipeline(
             shutil.copyfile(hwpx_src, ws_named)
             result["workspace_named"] = str(ws_named)
             result["submit_filename"] = named.name
+            gen = try_generate_sibling_pdf(named)
+            if missing_pdf_pair(named):
+                result.setdefault("needs_input", []).append(
+                    f"L050: 제출 HWPX 동일명 PDF 없음 ({gen.reason})"
+                )
 
     (work / "00_engines.json").write_text(
         json.dumps(

@@ -148,7 +148,7 @@ def test_submit_normalizes_colors_by_default(colored_hwpx, tmp_path):
 
 
 def test_submit_acceptance_exception_fail_closed(clean_hwpx, tmp_path, monkeypatch):
-    def _boom(path):
+    def _boom(path, **_kwargs):
         raise RuntimeError("acceptance exploded (simulated)")
 
     monkeypatch.setattr(hs, "run_hwpx_acceptance", _boom)
@@ -225,7 +225,7 @@ def test_cli_exit_codes(clean_hwpx, colored_hwpx, tmp_path, monkeypatch):
     assert (tmp_path / "fail_DRAFT.hwpx").exists()
 
     # 3: 검사불능(예외) → fail-closed _DRAFT
-    def _boom(path):
+    def _boom(path, **_kwargs):
         raise RuntimeError("boom")
 
     monkeypatch.setattr(hs, "run_hwpx_acceptance", _boom)
@@ -289,3 +289,35 @@ def test_submit_cleanup_opt_out_keeps_legacy_normalize(colored_hwpx, tmp_path):
     assert not any(n.startswith("제출 cleanup:") for n in rep.notes)
     assert any("검정 정규화" in n for n in rep.notes)
     assert rep.acceptance.get("colored", -1) == 0
+
+
+def test_submit_leftover_dummy_name_forces_draft(tmp_path):
+    """D6: 양식 예시 이름(홍길동)이 남고 identity 가 아니면 _DRAFT."""
+    src = tmp_path / "dummy_form.hwpx"
+    rows = "".join([_row(0, "상호", ""), _row(1, "대표자", "홍길동")])
+    section = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f'<hs:sec xmlns:hp="{_HP}" xmlns:hs="{_HS}">'
+        '<hp:p><hp:run charPrIDRef="0">'
+        f'<hp:tbl rowCnt="2" colCnt="2">{rows}</hp:tbl>'
+        "</hp:run></hp:p></hs:sec>"
+    ).encode("utf-8")
+    with zipfile.ZipFile(src, "w") as z:
+        zi = zipfile.ZipInfo("mimetype")
+        zi.compress_type = zipfile.ZIP_STORED
+        z.writestr(zi, _MIMETYPE)
+        z.writestr("Contents/header.xml", _header_xml(colored=False))
+        z.writestr("Contents/section0.xml", section)
+    out = tmp_path / "out.hwpx"
+    rep = submit_hwpx(src, out, identity={"기업명": "도보네비(주)"})
+    assert rep.ok is False
+    assert Path(rep.final).name == "out_DRAFT.hwpx"
+    assert rep.acceptance.get("dummy_names", 0) >= 1
+    assert "예시이름" in rep.draft_reason
+
+    ok = submit_hwpx(
+        src, tmp_path / "ok.hwpx",
+        identity={"기업명": "도보네비(주)", "대표자": "홍길동"},
+    )
+    assert ok.acceptance.get("dummy_names", -1) == 0
+    assert ok.ok is True

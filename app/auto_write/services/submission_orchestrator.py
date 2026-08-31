@@ -13,6 +13,7 @@ template+공고+brief -> '바로 제출 가능한' 사업계획서 자동 생성
 """
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -50,10 +51,28 @@ class SubmissionPipeline:
         max_pages: int | None = None,
         ai_section_max: int | None = None,
         strict_acceptance: bool = False,
+        required_documents: tuple[str, ...] = (),
     ) -> dict[str, Any]:
         report: dict[str, Any] = {"project_id": project_id, "steps": [], "needs_input": []}
         results_root = Path(self.settings.results_root)
+        notice_folder = ""
+        try:
+            early_input = self.storage.load_project_input(project_id)
+            notice_folder = str((early_input.project_meta or {}).get("notice_folder") or "")
+        except Exception:
+            notice_folder = ""
+        if notice_folder:
+            from .submission_gates import build_submit_layout_dir
+
+            results_root = build_submit_layout_dir(notice_folder)
         results_root.mkdir(parents=True, exist_ok=True)
+
+        from .submission_gates import infer_hangul_required
+        if not required_format and infer_hangul_required(announcement_text):
+            required_format = "hwpx"
+            report["needs_input"].append(
+                "공고가 한글 전용 제출을 요구함 — 산출이 DOCX 이면 _DRAFT (L050)"
+            )
 
         def _protect_output(p: Path) -> None:
             # 재실행 보호(PIPE-2): 고정 산출명이 이전 산출물을 무경고 파괴하지 않게 백업
@@ -217,7 +236,10 @@ class SubmissionPipeline:
             try:
                 acc = run_acceptance(str(final_docx), AcceptanceConfig(
                     blind_review=blind_review, max_pages=max_pages, ai_section_max=ai_section_max,
-                    strict_acceptance=strict_acceptance))
+                    strict_acceptance=strict_acceptance,
+                    required_documents=tuple(required_documents or ()),
+                    required_format=required_format,
+                ))
             except Exception as exc:
                 report["acceptance_error"] = f"{type(exc).__name__}: {exc}"
                 report["needs_input"].append(
@@ -311,5 +333,48 @@ class SubmissionPipeline:
                     final_docx = new_path
 
         report["final_docx"] = str(final_docx)
+        from .submission_gates import submit_folder_contamination, work_suffix_hits
+        named = [Path(p) for p in list(artifacts) + [Path(final_docx)]]
+        mix = submit_folder_contamination(p for p in named if p.is_file())
+        if mix:
+            report["submit_mix"] = mix
+            report["needs_input"].append(
+                f"제출 산출물에 원본·중간본 혼입(L048): {mix}"
+            )
+        suffix_hits = work_suffix_hits(Path(final_docx).name)
+        if suffix_hits:
+            report["work_suffix"] = suffix_hits
+            report["needs_input"].append(
+                f"최종 파일명 작업접미사(L059): {suffix_hits}"
+            )
+        meta = dict(project_input.project_meta or {})
+        evidence_pdfs = [
+            Path(str(raw))
+            for raw in (meta.get("evidence_pdfs") or [])
+            if Path(str(raw)).is_file() and Path(str(raw)).suffix.lower() == ".pdf"
+        ]
+        from .submission_gates import (
+            announcement_tuple_stem,
+            dated_notice_parts,
+            is_draft_artifact,
+            merge_pdfs,
+        )
+        if evidence_pdfs and not is_draft_artifact(final_docx):
+            ymd = datetime.now().strftime("%Y%m%d")
+            notice_name = "공고"
+            parts = dated_notice_parts(notice_folder) if notice_folder else None
+            if parts:
+                ymd, notice_name = parts
+            elif notice_folder:
+                notice_name = Path(notice_folder).name
+            stem = announcement_tuple_stem(
+                yyyymmdd=ymd, notice_name=notice_name, doc_kind="증빙합본"
+            )
+            dest = Path(final_docx).parent / f"{stem}.pdf"
+            try:
+                merge_pdfs(evidence_pdfs, dest)
+                report["merged_pdf"] = str(dest)
+            except Exception as exc:
+                report["needs_input"].append(f"L048 증빙 PDF 합본 실패: {exc}")
         log_line(f"[Submission] project={project_id} final={Path(final_docx).name} steps={report['steps']}")
         return report

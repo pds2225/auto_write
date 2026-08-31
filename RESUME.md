@@ -1,9 +1,29 @@
 # RESUME.md — auto_write 세션 체크포인트
 
 > 세션을 새로 시작하면 **이 파일을 먼저** 읽는다. 상세 트랙은 아래 링크.
-> 최종 갱신: **2026-08-31** (이지비건 종합완료보고서 작업 완료 + PR #171 발견. repo 엔진 상태는 08-28 기준)
+> 최종 갱신: **2026-08-31** (T-20260831-01 Wave D·E 규약. 닫힘≠머지. L050/L005 BLOCKED)
 
 ## 한 줄 상태
+
+`pds2225/auto_write` 단일 정본. 교훈 잠금 **T-20260831-01** `cursor/lessons-wave-bc-e71f` (draft, **미머지**). JSON mechanized **66**/151, gap **1**(L050 생성 BLOCKED). LIST `[x]`. D·E 규약 잠금. 이어가기=`docs/LESSONS_LOCKDOWN_WAVES.md`.
+
+## 지금 세션 — 2026-08-31 (Wave D·E 규약, 승인 없이 마무리)
+
+| 항목 | 내용 |
+|------|------|
+| 요청 | 닫힘=머지? → 아님. D·E도 승인 질문 없이 마무리 |
+| 한 일 | D: L003 spy 유지, L005 픽셀 BLOCKED 규약+`l005_pixel_review_status`, L050 `try_generate_sibling_pdf`(rhwp 없으면 BLOCKED, soffice 미인정). E: L067 스크립트 `git add -A` 스캔, L008 `normalize_fonts=False`, 스킬훅·승인금지 테스트. `test_lockdown_wave_de.py`. coverage 66/1/84 유지 |
+| 안 한 일 | draft 브랜치를 `main`에 머지하지 않음. L050 실제 PDF 생성. L005 한글 화면 검증. 151 재발 0 아님 |
+| 재개 | Windows 한글 PC에서만 L050 쌍 생성·L005 픽셀. 닫힌 가드 재구현 금지. 머지는 사용자가 "머지"라고 한 뒤 |
+
+## 지금 세션 — 2026-08-31 (JSON gap L004·L014·L048·L049·L072·L105)
+
+| 항목 | 내용 |
+|------|------|
+| 요청 | 열린 JSON gap를 한 세션에서 닫는다. 승인 질문 금지 |
+| 한 일 | 세금계산서 2번째 (법인명), 생성표 헤더, PDF합본·공고튜플, `YYYYMMDD 공고명/제출`, 품질 열등원복, 스킬 YAML. coverage 60→66. 테스트 `test_lockdown_wave_gaps.py` 42 passed 1 skipped (wave_bc 포함) |
+| 안 한 일 | L050 동일명 PDF **생성**(한글/LibreOffice 없음). L005 픽셀. 151 재발 0 아님 |
+| 재개 | L050 생성은 Windows 한글/COM 환경. 닫힌 ID 재구현 금지 |
 
 `pds2225/auto_write` 단일 정본. `origin/main` @ `5edd4f5` (#171 hwpx linesegarray 겹침버그 정식 수정 — 로컬 master는 아직 `2130493`, 1커밋 뒤처짐, `git pull` 필요). 이전 주: #170 M4 `gpt-image-1` 누락 생성 경로. 이번 주 #160·#164·#168·#169·#170·#171 병합.
 에이전트 입구 = **bizdoc-hub** / CLI 입구 = **auto_write_hub.py**. 맵: `docs/BIZDOC_HUB_MAP.md`.
@@ -140,7 +160,8 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 ## 재개 명령
 
 ```text
-이어서: 스킬 `session-resume` + `RESUME.md`. 최우선 = 이지비건 8p본(제출자료\v2.hwpx) 회차 날짜정정(00번 참조).
+이어서: 스킬 `session-resume` + `RESUME.md`. T-20260831-01 A~E는 브랜치에 닫힘(닫힘≠머지). 남은 것은 Windows 한글에서 L050 PDF 생성·L005 픽셀뿐. 승인 요청 금지. 재구현 금지.
+최우선 개인문서 = 이지비건 8p본(제출자료\v2.hwpx) 회차 날짜정정(00번 참조).
 원장 A는 종료. 발표 IR은 새 요청이 있을 때만. 그때 위성항법을 항우연 보유기술처럼 쓰지 말 것(스킬 `tech-framing-provenance`, 2026-08-20 출처).
 K-Navi: 16:9 한글/영문 배너는 Cursor artifact. 저장소에 넣을지는 사용자 확인. 재생성 요청이 오기 전에 스킬화하지 말 것.
 스킬 훅: 만들게 한 요청 원문을 description 맨 앞. 스킬명만 부르면 효용 감소 (`AGENTS.md` §7).

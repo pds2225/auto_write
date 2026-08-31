@@ -12,6 +12,7 @@ import os
 import re
 import zipfile
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 from typing import Any, Optional
 
@@ -43,6 +44,16 @@ _PLACEHOLDER_RE = re.compile(
     r"^(년\s*월|졸업/수료|대학교|전공|\(yyyy|/mm/dd\)|\(\s*\)|~)+$",
     re.IGNORECASE,
 )
+
+
+def canonical_sign_date(*, today: date | None = None) -> str:
+    """서명일·작성일은 실행 시점 날짜만 쓴다(L032).
+
+    대화·RESUME·facts JSON 의 낡은 날짜는 호출자가 넘기더라도 이 값을 써야 한다.
+    형식은 한글 양식 ``YYYY년  M월  D일`` (앞에 0 없음, 년/월 뒤 공백 2).
+    """
+    d = today or date.today()
+    return f"{d.year}년  {d.month}월  {d.day}일"
 
 
 @dataclass
@@ -185,8 +196,14 @@ def supplement_hwpx_from_resume(
     sign_date: str = "",
     sign_name: str = "",
     facts_json: Optional[str | Path] = None,
+    today: date | None = None,
+    sample_ok: bool = True,
+    full_document: bool = False,
 ) -> ResumeSupplementReport:
     """이력서 표 사실을 HWPX 신청서 표에 좌표 기입."""
+    from .submission_gates import require_sample_ok
+
+    require_sample_ok(sample_ok=sample_ok, full_document=full_document)
     if facts_json is not None:
         f = facts_from_dict(load_resume_facts(facts_json))
         education = education if education is not None else f["education"]
@@ -201,6 +218,8 @@ def supplement_hwpx_from_resume(
     licenses = list(licenses or [])
     careers = list(careers or [])
     check_columns = list(check_columns or [])
+    if sign_date:
+        sign_date = canonical_sign_date(today=today)
 
     src, dst = Path(in_hwpx), Path(out_hwpx)
     rep = ResumeSupplementReport(input=str(src), output=str(dst))

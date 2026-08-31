@@ -1,6 +1,7 @@
 # test_lrule_guards.py — mechanized callable wiring
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from docx import Document
@@ -27,7 +28,12 @@ def test_build_lrule_guards_covers_every_mechanized(tmp_path):
     guards = build_lrule_guards(path)
     enforcer = LRuleEnforcer()
     mech = [l for l in enforcer._lessons if l.get("category") == "mechanized"]
-    assert len(mech) == 45
+    coverage = json.loads(
+        (Path(__file__).resolve().parent / "lessons_coverage.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert len(mech) == coverage["counts"]["mechanized"]
     for lesson in mech:
         assert lesson["id"] in guards, lesson["id"]
         assert rule_code(lesson["id"]) in guards

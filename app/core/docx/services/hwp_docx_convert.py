@@ -21,9 +21,13 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
+
+_HANGUL_PROCESS_IM = ("Hwp.exe",)
 
 _HWP_EXTS = {".hwp", ".hwpx"}
 _COM_PROGID = "HWPFrame.HwpObject"
@@ -64,12 +68,33 @@ def hancom_com_available() -> bool:
         return False
 
 
+def kill_hangul_processes() -> list[str]:
+    """L003: COM Dispatch 직전 Hwp.exe 를 종료한다.
+
+    실측 종료는 Windows ``taskkill /F /IM Hwp.exe`` 만. 이 프로세스 PID 는
+    대상이 아니다. 비-Windows 는 no-op(빈 목록) — 유닛은 이 함수 호출 spy.
+    """
+    if sys.platform != "win32":
+        return []
+    done: list[str] = []
+    for im in _HANGUL_PROCESS_IM:
+        subprocess.run(
+            ["taskkill", "/F", "/IM", im],
+            capture_output=True,
+            check=False,
+        )
+        done.append(im)
+    return done
+
+
 def _dispatch_hwp(*, skip_com_guard: bool = False):
     """한글 COM 객체를 띄운다(테스트에서 monkeypatch 하는 분리점).
 
     기본: ``hancom_com_guard`` 로 HOffice130(2024·로그인) COM 기동을 차단한다.
   ``skip_com_guard=True`` 또는 ``AUTO_WRITE_ALLOW_HANCOM_2024_COM=1`` 로만 우회.
+    L003: Dispatch 직전에 ``kill_hangul_processes``.
     """
+    kill_hangul_processes()
     if not skip_com_guard:
         from .hancom_com_guard import assert_safe_hwp_com_or_raise
 

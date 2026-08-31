@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 import zipfile
+from datetime import date
 from pathlib import Path
 
 from lxml import etree
 
 from auto_write.services.hwpx_resume_supplement import (
+    canonical_sign_date,
     supplement_hwpx_from_resume,
 )
 
@@ -112,14 +114,16 @@ def test_fills_education_license_career_from_facts_json(tmp_path: Path):
         ),
         encoding="utf-8",
     )
-    rep = supplement_hwpx_from_resume(src, out, facts_json=facts)
+    frozen = date(2026, 8, 31)
+    rep = supplement_hwpx_from_resume(src, out, facts_json=facts, today=frozen)
     assert rep.ok
     text = _section_text(out)
     assert "한양대학교" in text
     assert "강남대학교" in text
     assert "경영지도사" in text
     assert "웰컴저축은행" in text
-    assert "2026년  7월  30일" in text
+    assert "2026년  8월  31일" in text
+    assert "2026년  7월  30일" not in text
     assert "년       월  (졸업/수료)" not in text or text.count("한양대학교") >= 1
     # 원본 미수정
     assert "한양대학교" not in _section_text(src)
@@ -138,3 +142,8 @@ def test_no_auto_check_without_columns(tmp_path: Path):
         check_columns=[],
     )
     assert rep.checks_set == []
+
+
+def test_canonical_sign_date_is_execution_day():
+    assert canonical_sign_date(today=date(2026, 8, 31)) == "2026년  8월  31일"
+    assert canonical_sign_date(today=date(2026, 1, 5)) == "2026년  1월  5일"
