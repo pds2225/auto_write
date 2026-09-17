@@ -215,3 +215,12 @@ py -3.11 auto_write_hub.py env
 ## 안전 불변
 
 원본 미수정 · 날조 0 · fail 시 `_DRAFT` · 경로 광역 스캔 금지 · 테스트 `py -3.11`.
+
+## 2026-09-18 LONG DEVELOPMENT RUN v2 — checkpoint
+
+- START_TIME: 2026-09-18 02:04:28 +09:00. AW-001 구현 branch `codex/overnight-aw-001-20260918`에 실제 코드·테스트·TASK 변경을 적용하고 push했다.
+- AW-001 commits: `da81c5a` (ProjectService 공통 final gate 연결), `2c316fe` (malformed gate fault-injection). 주요 검증: targeted 3 passed, domain/LRule 26 passed, finalizer/LRule/hash 23 passed, compileall exit 0. 넓은 보조 회귀는 origin/main에서도 재현되는 기존 실패 10건.
+- AW-008 실측: registry total 151, mechanized 66, judgment 84, gap 1(L050). L005/L008은 사람 판단·정책 예외, L050은 rhwp/한글 renderer 의존으로 신규 CLOSED 0건. 관련 28 passed. 별도 TASK 기록 branch `codex/overnight-aw-008-20260918`, commit `6098240` push.
+- AW-003은 registry/evaluator/JSON/report/CLI 구조가 이미 존재하여 UI·중복 abstraction을 만들지 않았다. 기존 핵심 console 3건 및 LRule 기반 19건 PASS 증거를 유지한다.
+- P0 `T-20260918-01`: gate/bypass 10 passed, HWPX acceptance/cleanup 22 passed 2 skipped. Hancom COM은 기존 2회 무응답으로 `ENVIRONMENT_BLOCKED`; 재시도 금지. `gh` PR 401은 HUMAN_GATE.
+- 현재 남은 자동 가능 작업: AW-001의 HWPX R9 수용검사와 P0 HWPX gate는 별도 계약/branch로 분리되어 있어 혼합하지 않고, 관련 baseline triage·최종 diff audit을 계속한다.

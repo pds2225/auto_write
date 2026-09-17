@@ -426,7 +426,7 @@ TASK_ID: AW-001
 TASK_START_SHA: d6b96b86a0015f53141054c27517607923a596a8
 TASK_BLOB_SHA: f6f8023b0dd47d301acedc75a5d4957edd147d4e
 WORK_BRANCH: cursor/overnight-aw-001-2cb9
-STATUS_THIS_TURN: mechanized 가드(`build_lrule_guards`)를 `run_to_final`/autopilot에 연결. mechanized unverifiable=0, L009 실 FAIL. LIST `[~]`. REQUEST_SOLVED=NO(judgment/gap REVIEW_REQUIRED로 FINAL 차단 유지·HWPX `submit_hwpx`는 R9 수용검사 KEEP).
+STATUS_THIS_TURN: 기존 `ProjectService.generate → _publish_results_bundle`에 공통 `run_to_final` 수렴과 `final_gate_report.json` 기록을 연결한 feature branch `codex/overnight-aw-001-20260918`를 push했다(`2c316fe`). 게이트 실행·예외·malformed 결과 모두 `DRAFT`/비제출 상태로 남긴다. LIST `[~]`. REQUEST_SOLVED=NO(HWPX `submit_hwpx`의 별도 R9 수용검사 계약과 실제 렌더 검증은 별도 blocker).
 
 ### 8-1. 사용자 원문 요청
 
@@ -470,7 +470,7 @@ INPUT
 - 현재 구현: DomainRouter, 도메인 Pipeline, LRule, Finalizer, workspace/results 구조가 존재
 - 2026-08-19: `app/auto_write/domains/pipeline_gate.py` `run_to_final` 이 생산 수렴점. autopilot 4.6·BP/CA pipeline·resume_fill CLI가 호출. ambiguous/누락 report/중복 ID/artifact·registry 해시 불일치 → FINAL 금지
 - 2026-08-19 가드: `app/auto_write/services/lrule_guards.py` `build_lrule_guards` 가 44 mechanized 규칙 callable을 `run_to_final`에 자동 주입. 산출물 검사(L009 마커 등)는 실 PASS/FAIL. 채움/git 규칙은 process PASS(가짜 산출물 검사 아님). judgment/gap은 넣지 않음 → REVIEW_REQUIRED 유지로 FINAL 계속 차단(의도된 fail-closed)
-- 현재 문제: judgment/gap 미가드이므로 실문서 FINAL 불가(의도). HWPX `submit_hwpx` 는 R9 수용검사 게이트 KEEP(LRule 미연결)
+- 현재 문제: judgment/gap 미가드이므로 실문서 FINAL 불가(의도). HWPX `submit_hwpx` 는 R9 수용검사 게이트 KEEP(LRule 미연결). `ProjectService`의 기존 DOCX bundle 우회는 `run_to_final` 실행결과와 예외 상태 sidecar를 남기도록 보강했다.
 - 이미 구현된 부분: 기존 CORE/shared services, LRule, Finalizer, mechanized 가드
 - 확인 필요한 부분: HWPX 경로를 LRule에 붙일지(수용검사 계약과 충돌). 실사용자 문서 E2E
 
@@ -483,7 +483,7 @@ INPUT
 - [x] ambiguous domain 자동 FINAL 금지
 - [x] LRule report 누락/duplicate/FAIL/REVIEW_REQUIRED/UNVERIFIABLE이면 FINAL 금지
 - [x] artifact/registry hash가 검사 이후 변경되면 FINAL 금지
-- [ ] legacy direct FINAL 우회경로 차단 (HWPX `submit_hwpx` 는 R9 수용검사 KEEP — LRule 미연결)
+- [~] legacy direct FINAL 우회경로 차단 (ProjectService DOCX bundle은 공통 gate 연결 완료; HWPX `submit_hwpx`는 R9 수용검사 KEEP — LRule 미연결)
 - [x] business_plan / consultant_application 실제 E2E (synthetic fixture)
 
 ### 8-6. KEEP — 유지
@@ -1344,6 +1344,9 @@ DEPENDS_ON:
 - 현재 문제: gap 중 일부는 guard/test/coverage/runtime이 빠졌을 수 있음
 - 이미 구현된 부분: AW-001/AW-003 범위의 규칙 골격
 - 확인 필요한 부분: HIGH impact gap 목록
+- 2026-09-18 실측: `app/tests/lessons_coverage.json` 151건, `mechanized=66`, `judgment=84`, `gap=1`로 합계가 일치한다. 과거 `44/86/21` 수치는 stale이며 현재 판정에 사용하지 않는다.
+- 현재 gap은 L050(HWP+PDF 쌍 생성) 하나이며 rhwp/한글 렌더러 환경 의존으로 `partial` 유지한다. L005(픽셀 눈검증)·L008(폰트 위계)는 사람 판단/정책 예외가 있어 deterministic mechanization 후보로 닫지 않는다.
+- 이번 실측에서는 재발 이력·낮은 오탐 위험·실패 fixture·runtime 차단 증거를 동시에 만족하는 신규 규칙이 없어 mechanized 전환 0건, AW-008은 `PARTIAL`이다.
 
 문서의 DONE 표시만 믿지 말고 실제 코드/runtime을 확인한다.
 
