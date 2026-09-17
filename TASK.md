@@ -426,7 +426,7 @@ TASK_ID: AW-001
 TASK_START_SHA: d6b96b86a0015f53141054c27517607923a596a8
 TASK_BLOB_SHA: f6f8023b0dd47d301acedc75a5d4957edd147d4e
 WORK_BRANCH: cursor/overnight-aw-001-2cb9
-STATUS_THIS_TURN: 기존 `ProjectService.generate → _publish_results_bundle`에 공통 `run_to_final` 수렴과 `final_gate_report.json` 기록을 연결한 feature branch `codex/overnight-aw-001-20260918`를 push했다(`2c316fe`). 게이트 실행·예외·malformed 결과 모두 `DRAFT`/비제출 상태로 남긴다. LIST `[~]`. REQUEST_SOLVED=NO(HWPX `submit_hwpx`의 별도 R9 수용검사 계약과 실제 렌더 검증은 별도 blocker).
+STATUS_THIS_TURN: 기존 `ProjectService.generate → _publish_results_bundle`에 공통 `run_to_final` 수렴과 `final_gate_report.json` 기록을 연결했다. 게이트 실행·예외·malformed 결과 모두 `DRAFT`/비제출 상태로 남긴다. 추가로 rename-lock fail-closed 테스트 주입 오류와 legacy private-helper re-export 누락을 보정했다. feature branch `codex/overnight-aw-001-20260918`에 `da81c5a`, `2c316fe`, `2a5117b`, `a60327a`, `e0723af`를 push했다. 관련 회귀 `71 passed`, 적용·품질·제출 통합 `96 passed`. LIST `[~]`. REQUEST_SOLVED=NO(HWPX `submit_hwpx`의 별도 R9 수용검사 계약과 실제 렌더 검증은 별도 blocker).
 
 ### 8-1. 사용자 원문 요청
 
@@ -722,6 +722,7 @@ L 규칙을 한 화면에서 보고 고칠 수 있게 한다
 - 현재 문제: 전수관리·수정 화면이 미완일 수 있음
 - 이미 구현된 부분: canonical LRule
 - 확인 필요한 부분: 누락/중복, runtime report 연결
+- 2026-09-18 실측: 기존 registry → evaluator → JSON/report → CLI/operator console 경로는 존재한다. registry subprocess timeout/start failure/partial output을 machine-readable 실패 결과로 보존하는 보강을 `codex/overnight-aw-003-20260918`에 push했다(`449c5d1`, `48be026`, `d77767c`, `69cbbe2`). 관련 LRule 회귀 `19 passed`, 핵심 console `6 passed`; 새 UI는 만들지 않았고 AW-003은 LIST `[ ]`, REQUEST_SOLVED=NO다.
 
 문서의 DONE 표시만 믿지 말고 실제 코드/runtime을 확인한다.
 

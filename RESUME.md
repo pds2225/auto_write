@@ -241,3 +241,10 @@ py -3.11 auto_write_hub.py env
 - AW-001 최신 targeted `3 passed`, 관련 domain/LRule/finalizer `49 passed`, fail-draft invariant `9 passed`; AW-003 관련 LRule 회귀 `19 passed`, compileall exit 0. 중단된 넓은 pytest 프로세스는 이 세션이 시작한 정확한 PID만 종료했고 다른 세션 프로세스는 건드리지 않았다.
 - 현재 feature worktree 4개는 모두 clean이며 각 원격 feature branch와 동기화되어 있다. root `master`는 기존 사용자 변경과 `_work/`를 계속 보존한다.
 - 종료 전 상태: P0 Hancom COM/render `ENVIRONMENT_BLOCKED`, AW-001/AW-003 구현 branch는 push 완료, AW-008 deterministic CLOSED 0건, PR 생성 `gh` 401은 `HUMAN_GATE`, main 직접 push/merge 없음.
+
+## 2026-09-18 LONG DEVELOPMENT RUN v2 — final execution checkpoint
+
+- AW-001 추가 구현: baseline 테스트의 잘못된 compatibility-wrapper patch를 core 모듈 patch로 바로잡고, legacy wrapper의 `_find_anchor`, `_RESIDUAL_RE`, `_build_todo`, `_write_report`, `_scan_guide`, `_is_guide_text` 노출을 복구했다. `test_auto_write_apply.py` `45 passed`, 문서품질+finalizer `42 passed`, 제출 파이프라인 `18 passed`, 통합 `96 passed`.
+- AW-001 최신 커밋: `da81c5a`, `2c316fe`, `2a5117b`, `a60327a`, `e0723af`; branch `codex/overnight-aw-001-20260918` remote push 완료. 관련 broad 회귀 `71 passed`, ProjectService 관련 `76 passed` 및 compileall exit 0.
+- 최종 root TASK 동기화: AW-001/AW-003 결과와 `REQUEST_SOLVED=NO`/PARTIAL을 반영했다. AW-008은 151건(`66/84/1`) 유지, 신규 CLOSED 0건이다. P0는 `32 passed, 2 skipped`, Hancom COM/render는 기존 2회 timeout으로 `ENVIRONMENT_BLOCKED` 유지.
+- 종료 전 feature worktree 상태를 재확인하고 main/master에는 push·merge하지 않는다. root 사용자 변경과 테스트가 만든 무시 임시폴더는 보존/정리 경계에 따라 건드리지 않는다.
