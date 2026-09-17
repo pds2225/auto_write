@@ -153,6 +153,25 @@ class ProjectServiceSafetyTests(unittest.TestCase):
         self.assertFalse(report.get("submittable"))
         self.assertIn("validator fixture failure", report.get("blocked_reason", ""))
 
+    def test_project_gate_malformed_result_never_becomes_final(self):
+        output_path = Path(self.tmp_dir.name) / "malformed_gate_fixture.docx"
+        Document().save(output_path)
+
+        class _MalformedGate:
+            def as_dict(self):
+                return {"submittable": True}
+
+        with patch(
+            "auto_write.domains.pipeline_gate.run_to_final",
+            return_value=_MalformedGate(),
+        ):
+            report = self.service._run_project_final_gate(output_path)
+
+        self.assertEqual(report.get("validator_status"), "EXECUTED")
+        self.assertEqual(report.get("status"), "DRAFT")
+        self.assertFalse(report.get("final_output_allowed"))
+        self.assertIn("finalizer missing", report.get("blocked_reason", ""))
+
     def test_template_upload_rejects_path_like_or_reserved_filename(self):
         for file_name in ("../evil.docx", r"..\evil.docx", r"C:\evil.docx", r"\\server\evil.docx", "CON.docx"):
             with self.subTest(file_name=file_name), self.assertRaises(ValueError):
