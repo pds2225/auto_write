@@ -248,3 +248,9 @@ py -3.11 auto_write_hub.py env
 - AW-001 최신 커밋: `da81c5a`, `2c316fe`, `2a5117b`, `a60327a`, `e0723af`; branch `codex/overnight-aw-001-20260918` remote push 완료. 관련 broad 회귀 `71 passed`, ProjectService 관련 `76 passed` 및 compileall exit 0.
 - 최종 root TASK 동기화: AW-001/AW-003 결과와 `REQUEST_SOLVED=NO`/PARTIAL을 반영했다. AW-008은 151건(`66/84/1`) 유지, 신규 CLOSED 0건이다. P0는 `32 passed, 2 skipped`, Hancom COM/render는 기존 2회 timeout으로 `ENVIRONMENT_BLOCKED` 유지.
 - 종료 전 feature worktree 상태를 재확인하고 main/master에는 push·merge하지 않는다. root 사용자 변경과 테스트가 만든 무시 임시폴더는 보존/정리 경계에 따라 건드리지 않는다.
+
+## 2026-09-18 LONG DEVELOPMENT RUN v2 — closeout evidence
+
+- 최종 추가 검증: AW-003 operator console `28 passed`; AW-001 한글 기본 출력 `19 passed`, service resilience `12 passed`, architecture boundary `3 passed`, document ingest `7 passed`.
+- 남은 baseline: generation store `5 passed, 2 failed` — `core.docx.services`에 기존 `generation_store` shim이 없어 trace 기록 테스트가 실패한다. AW-001 final-gate 범위 밖이라 이번 branch에 섞지 않았다.
+- 최종 원격 확인: `origin/main=f220d2d3004e058c7a167d2f38174bb6f2b385d0`; 네 feature branch 모두 clean/원격 동기화. `nightcopy` remote는 `D:\_night_pilot\auto_write-copy`가 repo가 아니어서 fetch 실패했으며, origin 동기화에는 영향이 없다.
