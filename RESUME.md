@@ -2,6 +2,14 @@
 
 ## 현재 세션 체크포인트 — 2026-09-17
 
+### 압축 후 갱신 — 2026-09-18
+
+- P0 안정화 Addendum을 적용한 실제 개발을 격리 worktree `D:\auto_write\_work\codex-p0-addendum-20260918` / 브랜치 `codex/p0-addendum-20260918`에서 계속한다.
+- 공통 `hwpx_integrity_gate`, validator 실행 상태·severity 집계, 제출 경로 fail-closed, 구조 회귀 테스트를 구현했다. targeted 결과는 `52 passed, 2 skipped`.
+- 남은 자동 작업: broad regression 결과 확정, 실제 HWPX 출력 entry point의 gate 우회 점검, 가능한 non-COM fixed-cell/rendering evidence 확인.
+- Hancom COM은 반복 재시도하지 않고, 실제 렌더 증거가 없으면 rendering/fixed-cell을 FULL/PASS로 표시하지 않는다.
+- 루트 `master`의 기존 dirty 변경, untracked 설정, 기존 worktree는 건드리지 않는다. 다음 세션 재개 시 TASK checkpoint와 이 격리 worktree를 우선 확인한다.
+
 - 사용자 요청: 현재 작업지시 파일 `TASK.md` 내용 확인.
 - 원격 기준: GitHub default branch `main`, `origin/main`=`f220d2d`; 원격 `TASK.md` blob=`ad37279`.
 - 로컬 상태: `master`=`2130493`, `origin/master`는 제거됨. 작업트리에 기존 미커밋 변경과 열린 worktree가 있어 보존 중이며, 이번 조회로 코드 파일은 수정하지 않음.
