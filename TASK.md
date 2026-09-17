@@ -701,6 +701,8 @@ Git fetch·sync 진행 상태 표시. 중복 실행 방지.
 
 ## AW-003
 
+STATUS_THIS_TURN: 기존 registry → LRuleEnforcer → JSON/CLI/operator console 구조를 재검증했다. registry test subprocess의 timeout/시작 실패가 예외로 누출되지 않도록 `RuleTestResult` 실패 결과로 반환하는 보강을 적용했다. 관련 targeted 5건 및 LRule/operator 회귀 23건 PASS. UI 신규 개발 없음. LIST `[ ]`, REQUEST_SOLVED=NO.
+
 ### 8-1. 사용자 원문 요청
 
 > 전체 L 규칙을 한 화면에서 조회·관리·수정할 수 있게 한다.
