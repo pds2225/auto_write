@@ -1,5 +1,14 @@
 # RESUME.md — auto_write 세션 체크포인트
 
+## 현재 세션 체크포인트 — 2026-09-17
+
+- 사용자 요청: 현재 작업지시 파일 `TASK.md` 내용 확인.
+- 원격 기준: GitHub default branch `main`, `origin/main`=`f220d2d`; 원격 `TASK.md` blob=`ad37279`.
+- 로컬 상태: `master`=`2130493`, `origin/master`는 제거됨. 작업트리에 기존 미커밋 변경과 열린 worktree가 있어 보존 중이며, 이번 조회로 코드 파일은 수정하지 않음.
+- 원격 TASK 요지: AW-001~009와 T-20260814-02, T-20260816-03이 미완료; 원장 C 최우선, named 신청서 작성은 TASK 등록 금지, 웹앱 코드는 승인 전 대기.
+- 다음: 사용자가 원하면 원격 TASK의 특정 열린 항목 8-1만 추가 확인. 구현·머지·정리는 별도 요청 전 하지 않음.
+- 추가 요청: P0 문서엔진 안정화 무인 실행 프롬프트의 의미·처리·안전성 평가. 이번 턴은 평가만 수행하고 코드·TASK 본문은 수정하지 않음.
+
 ## 현재 작업 — 2026-09-07 H 스타트업 신청서
 
 - 대상: 박다솜 예비창업자, 아이템 `MarketGate`.
@@ -13,7 +22,7 @@
 
 ## 한 줄 상태
 
-`pds2225/auto_write` 단일 정본. `origin/main` @ `2130493` (#170 M4 `gpt-image-1` 누락 생성 경로. 이번 주 #160·#164·#168·#169·#170 병합).
+`pds2225/auto_write` 단일 정본. 원격 `origin/main` @ `f220d2d` (default branch `main`, #177 반영). 로컬 `master` @ `2130493`, `origin/master` 추적명은 사라짐.
 에이전트 입구 = **bizdoc-hub** / CLI 입구 = **auto_write_hub.py**. 맵: `docs/BIZDOC_HUB_MAP.md`.
 로컬 `master`도 `2130493`이며 `origin/master` 추적명은 사라짐. 미커밋: 이 체크포인트와 A9 미제출 종료 원장 2개 문서(보존, 커밋 여부 결정 필요).
 
@@ -23,7 +32,7 @@ judgment/gap은 REVIEW_REQUIRED → FINAL 차단 유지. 웹앱·BPQ-00 제품 �
 **문서 작업:** 원장 A1~A7. A1 온랩 **접수**. A5 1인창조 **취소**. A6 STAR **선정**(6팀 멘토링, 상위2 지원금은 별도). 내비 KICXUP **선정**. 신청 원장=`docs/clients/user_applications.md`(채팅만, Google Docs 정리본 금지). 도보네비 카드=`docs/clients/dobonevi_card.md`.
 **세션 마무리 신호:** `python scripts/session_closeout.py plant|status|sync-disk|ack|cancel`. 기본 커밋본 `due: false`.
 **엔진:** T-20260814-02 명세+실행지시+BPQ-00 감사+#150 측정기+#155 git-sync(기준 브랜치=GitHub default/`main`)+#156(웹앱 사양·계획 보강·STEP 3A)+#161(DomainRouter→LRule→Hash→Finalizer 게이트)+#164(STAR 프레이밍 스킬)+#160(소셜벤처 본문)이 main에 있음. DOCX 정본=`core.docx.services`.
-**열린 작업:** 열린 PR 0건. AW-001·웹앱은 승인 전 대기, A9 미제출 종료 기록은 로컬 원장 2개에 미커밋 보존. Cursor 클라우드 PR은 기본 draft.
+**열린 작업:** GitHub 열린 PR #174 1건 확인. AW-001·웹앱은 승인 전 대기, A9 미제출 종료 기록은 로컬 원장 2개에 미커밋 보존. Cursor 클라우드 PR은 기본 draft.
 **머지 주의:** Cursor 클라우드 PR은 기본 draft. GitHub 자동머지는 draft에서 불가. 머지 요청 시 Ready for review 후 `gh pr merge --auto --squash`.
 작업 시작 전: `git fetch` → `TASK.md` → 현재 구현 조사 → 그다음 작업.
 목표 흐름: `LLM → StageResult(JSON) → 검증 → 다음 Stage → 렌더 → Finalizer`. 한 번에 최종 DOCX 금지.
