@@ -39,6 +39,7 @@ REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 [x] T-20260825-01 | 다른 폴더에만 남아 있던 빠진 그림 생성 코드를 지금 저장소로 옮긴다
 [x] T-20260831-01 | 문서가 다시 깨지는 오류부터 우선순위 A→B→C로 기계 검사에 넣는다
 [x] T-20260831-02 | 신청서 작성을 TASK에 등록 금지 — 파일에서 사업명 삭제 아님. 원장 C가 제일 중요
+[~] T-20260918-01 | P0 HWPX 공통 무결성 게이트·실행 실패 상태·출력 경로 우회를 잠근다
 
 에이전트 본문 금지: `# 0` LIST + 열린(`[ ]`/`[~]`) `8-1`만. T-20260814-02 8-1 전문은 생략. 제품 목표=`AW-005` 8-1 + `최우선 사용 케이스`. 웹앱 실행 정본=`웹앱 최종 요구사항_20260816`(승인 전 웹앱 코드 대기). 원장 **C가 최우선**. 신청서 작성을 TASK에 등록 금지 — 파일에서 사업명 삭제 아님. TASK 통째·CHANGELOG·닫힌 `[x]` DETAILS 금지.
 
@@ -4351,6 +4352,73 @@ STATUS_THIS_TURN: 원장 C 최우선 고정. 사업명 원장·파일 저장 복
 
 ### DONE
 - REQUEST_SOLVED=YES: 원장 A·user_applications.md 사업명 복원. C가 맨 위. 신청서 작성을 TASK에 등록하지 않음(파일에서 사업명 삭제 아님). 원문 두 줄+정정이 8-1·스킬 description에 있다.
+
+## T-20260918-01
+
+TASK_ID: T-20260918-01
+TASK_START_SHA: f220d2d3004e058c7a167d2f38174bb6f2b385d0
+TASK_BLOB_SHA: ad37279bddc021e543b98602d73829f8e4c09217
+WORK_BRANCH: codex/p0-addendum-20260918
+STATUS_THIS_TURN: PARTIAL. Addendum 기준으로 기존 P0 구현을 재사용하고, 구조/실행 실패/최종 제출 우회는 잠갔다. 실제 Hancom 렌더 smoke는 ENVIRONMENT_BLOCKED이며 기존 보조 회귀의 별도 P1 FOLLOWUP이 남아 있다.
+
+### 8-1. 사용자 원문
+
+현재 진행 중인 P0 안정화 작업을 중단·초기화하지 않고, 동일 결함 2회 실패·승인 필요·dirty worktree·Hancom COM 2회 실패를 별도 상태로 기록하며 독립 작업을 계속한다.
+
+### MUST
+
+- 기존 rowAddr 격자 검출·교정 구현을 다시 만들지 않는다.
+- 구조 검사 결과와 검사 실행 상태를 구분하고, 검사 실패를 PASS로 처리하지 않는다.
+- 실제 출력 경로가 공통 HWPX 무결성 gate를 우회하지 않는지 확인한다.
+- fixed-cell/rendering 의존 영역은 근거 없이 FULL/PASS로 보고하지 않는다.
+- 원본·사용자 dirty 변경·잠긴 worktree를 보존한다.
+
+### KEEP
+
+- 기존 `validate_table_grid`·`repair_table_grid`·`check_hwpx_semantics`·`run_hwpx_acceptance` 구현
+- `_DRAFT` fail-closed 제출 정책
+- HUMAN_GATE와 `ENVIRONMENT_BLOCKED` 정직한 상태
+- `py -3.11` 테스트 기준
+
+### FORBIDDEN
+
+- 원본 덮어쓰기·사용자 변경 삭제·force push·history rewrite
+- Secret·credential 출력·유료 API·실제 제출·운영 배포
+- 한글 COM 반복 재시도 2회 초과
+- fixed-cell 시각 문제의 추측 패치
+- 실제 존재하지 않는 출력 경로·관리자 UI를 새로 만드는 것
+
+### VERIFY
+
+- 기존 P0 rowAddr/layout/acceptance 회귀 테스트
+- 공통 gate의 PASS/실행 실패/결함 결과 분리
+- 실제 존재하는 HWPX 출력 entry point의 gate 배선 확인
+- gate bypass 회귀 테스트
+- COM 미사용 구조 검증과 렌더링 smoke 가능 여부 기록
+
+### CHECKPOINT — 2026-09-18
+
+- [x] `check_hwpx_semantics`가 `itemCnt` 없는 정상 ID 정의를 dangling으로 오판하던 결함을 최소 수정
+- [x] `hwpx_integrity_gate.run_hwpx_integrity_gate` 추가: 구조/수용 validator 실행상태와 severity 분리, `HARD_FAIL > REVIEW_REQUIRED > WARNING > PASS` 집계
+- [x] 구조 validator 실행 실패는 `ERROR/TIMEOUT/UNAVAILABLE` + `HARD_FAIL`, 렌더 validator 실행 실패는 `REVIEW_REQUIRED`로 evidence 기록
+- [x] `finalize_submission_hwpx`에 기존 `repair_all_table_grids`를 배선해 단순 깨진 격자는 제출 cleanup에서 교정
+- [x] `submit_hwpx`가 공통 gate를 사용하고, `acceptance_gate=False`도 최종 제출본으로 통과시키지 않고 `_DRAFT`로 보존
+- [x] 검증: 명시 Python 3.11 `py_compile` 통과, P0 targeted `56 passed, 2 skipped`; HWPX pure acceptance/cleanup `36 passed`; 모두 격리 worktree basetemp 사용
+- [~] broad regression 7개 파일 묶음은 22개 테스트 후 추가 출력 없이 3분 이상 대기하여 중단했다. 파일별 분리 결과 `test_lrule_guards.py` 5 passed, `test_resume_defect_corpus.py` 8 passed. `test_gate_faildraft_invariant.py`는 9개까지 통과한 뒤 `test_submission_pipeline_fail_doc_forces_draft[marker]`에서 3분 이상 대기하여 중단했다. 기존 DOCX submission pipeline 실행 지연/환경 가능성으로 분류하며 HWPX gate 실패로 단정하지 않는다.
+- [x] fixed-cell 구조 가드 후보를 `fixed_cell_height_guard`로 공통 gate에 연결했다. 실제 glyph/clipping은 확정하지 않고 `REVIEW_REQUIRED` + `render_confirmed=false` evidence로 남긴다.
+- [x] 실제 렌더 smoke는 `.render-smoke/smoke.hwpx`로 Hancom COM `Dispatch/Open`을 2회 시도했으나 각각 30초 무출력 대기로 중단했다. Addendum에 따라 추가 COM 재시도 금지, rendering은 `ENVIRONMENT_BLOCKED`이며 실제 시각 `FULL/PASS`로 보고하지 않는다. `rhwp`·`soffice`도 PATH에 없다.
+- [x] gate bypass architecture regression 추가: `test_hwpx_gate_bypass_architecture.py`; final submit/cross-form submit-copy가 공통 gate 결과 없이는 통과하지 않는지 확인.
+- [x] 출력 경로 조사: 최종 제출 경로는 `app/hwpx_submit.py`→`auto_write.services.hwpx_submit`와 `cross_form_hwp_pipeline`의 `submit_copy`로 분류해 공통 gate를 배선했다. `hwp_fill_direct.py`, `resume_fill_service.py`, `hwp_com_fill.py`는 현재 채움/중간 산출 엔진이며 제출용 복사본을 만들지 않는 별도 draft 경로로 확인했다.
+- [ ] `P1_FOLLOWUP`: draft 채움 CLI를 제품 최종 제출 경로로 승격할 경우 `submit_hwpx` 또는 공통 gate wrapper를 통해서만 제출명 출력을 허용하도록 추가 배선한다.
+- [~] resume/HWPX 보조 묶음은 `95 passed, 2 failed`; 실패 2건은 기존 `format_fill_korean` re-export 누락으로 CLI 수집/실행 단계에서 발생해 P1 FOLLOWUP 처리.
+- [x] 실행 실패 상태 회귀: 구조 validator `ERROR/UNAVAILABLE`는 `HARD_FAIL`, 렌더 timeout은 `REVIEW_REQUIRED`; gate/bypass 추가 테스트 최종 `10 passed`.
+- [ ] `P1_FOLLOWUP`: `app/tests/test_hwp_com_fill.py`는 `auto_write.services.hwp_com_fill` star re-export에서 private helper가 빠져 collection 단계 ImportError. 이번 P0 diff와 무관해 수정하지 않으며, canonical/re-export 계약 정리 후 별도 회귀로 처리한다.
+- [ ] `P1_FOLLOWUP`: `app/tests/test_resume_form_fill.py` CLI 2건이 `auto_write.services.resume_fill_service` re-export에 `format_fill_korean`이 없어 ImportError. 함수 자체 fill 회귀는 `95 passed`, 이번 P0 diff와 무관해 수정하지 않는다.
+
+### DONE
+
+- 구조·실행 상태·gate 우회 결과와 남은 BLOCKED/HUMAN_GATE를 TASK에 기록한다.
+- Release Gate가 전체 PASS가 아니면 이 TASK를 DONE으로 표시하지 않는다.
 
 # 9. 실제사용 시나리오
 
