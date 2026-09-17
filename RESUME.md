@@ -5,9 +5,9 @@
 ### 압축 후 갱신 — 2026-09-18
 
 - P0 안정화 Addendum을 적용한 실제 개발을 격리 worktree `D:\auto_write\_work\codex-p0-addendum-20260918` / 브랜치 `codex/p0-addendum-20260918`에서 계속한다.
-- 공통 `hwpx_integrity_gate`, validator 실행 상태·severity 집계, 제출 경로 fail-closed, 구조 회귀 테스트를 구현했다. targeted 결과는 `52 passed, 2 skipped`.
-- 남은 자동 작업: broad regression 결과 확정, 실제 HWPX 출력 entry point의 gate 우회 점검, 가능한 non-COM fixed-cell/rendering evidence 확인.
-- Hancom COM은 반복 재시도하지 않고, 실제 렌더 증거가 없으면 rendering/fixed-cell을 FULL/PASS로 표시하지 않는다.
+- 공통 `hwpx_integrity_gate`, validator 실행 상태·severity 집계, 제출 경로 fail-closed, fixed-cell `REVIEW_REQUIRED`, cross-form gate-bypass 회귀를 구현했다. P0 targeted 결과는 `56 passed, 2 skipped`, gate/bypass 추가 검증은 `10 passed`.
+- broad regression은 기존 DOCX submission pipeline에서 3분 이상 대기했고, resume 보조 묶음은 기존 private re-export 누락으로 `95 passed, 2 failed`; 각각 TASK의 환경/P1 FOLLOWUP으로 기록했다.
+- Hancom COM `Dispatch/Open` smoke는 2회 연속 30초 무출력 대기로 중단했다. 실제 렌더 증거가 없으므로 rendering은 `ENVIRONMENT_BLOCKED`, fixed-cell은 `REVIEW_REQUIRED`이며 FULL/PASS로 표시하지 않는다.
 - 루트 `master`의 기존 dirty 변경, untracked 설정, 기존 worktree는 건드리지 않는다. 다음 세션 재개 시 TASK checkpoint와 이 격리 worktree를 우선 확인한다.
 
 - 사용자 요청: 현재 작업지시 파일 `TASK.md` 내용 확인.
@@ -17,6 +17,15 @@
 - 다음: 사용자가 원하면 원격 TASK의 특정 열린 항목 8-1만 추가 확인. 구현·머지·정리는 별도 요청 전 하지 않음.
 - 추가 요청(2026-09-18): P0 안정화 Addendum을 적용해 실제 개발 실행을 재개. 원격 `main` 기준으로 확인한 결과 rowAddr 격자 검출·교정은 이미 존재하므로 재작성하지 않음. 루트 `master`는 `origin/main`보다 16커밋 뒤처지고 dirty 상태라 보존했으며, 격리 worktree `D:\auto_write\_work\codex-p0-addendum-20260918`와 브랜치 `codex/p0-addendum-20260918`을 생성함.
 - 현재 다음 단계: 격리 worktree에서 기존 P0 테스트·공통 gate·fixed-cell/rendering/gate-bypass 상태를 조사하고, 중복이 아닌 최소 독립 작업만 `origin/main` 기준 TASK에 등록·추적.
+
+### 병행 세션 — 2026-09-18 (L규칙 재발방지 설계 검증, 코드 미수정)
+
+- 사용자 요청: "같은 잘못을 반복하지 않게" → "설계만, 코드수정 금지" → 범위를 "전"(산출물게이트+화면노출+서브에이전트검증)으로 확정 → "설계 검증만, 코드/TASK.md/lessons registry 수정 금지"로 재검증.
+- 코드/TASK.md/`app/tests/lessons_coverage.json` 전혀 수정하지 않음(요청대로 설계·검증만). 이 항목은 위 P0 addendum 격리 worktree 작업과 **무관한 별개 트랙**이다(파일 겹치지 않음).
+- 핵심 발견(실측): ①`lessons_coverage.json` 151건(mechanized 44/gap 21/judgment 86) — `category`는 구현상태 단일축이고 "부분자동"은 `mechanizable` 필드에 별도로 있음. ②`top_gaps` 프리앰블 6건 중 4건(L040·L013·L046·L010)이 이미 mechanized로 승격됐는데 프리앰블만 stale. ③AW-003("L규칙 한 화면")은 TASK.md `[ ]`(미착수)로 보이지만 실제로는 `LRuleConsoleService`+`operator_main.py`(`/console/lrules`)로 registry↔UI 편집 절반이 이미 구현돼 있었고, `LRuleEnforcer.evaluate_all()`(런타임 PASS/FAIL 판정)만 그 콘솔에 안 붙어 있음. ④L167(서브에이전트 완료보고 미검증)형은 이 레지스트리에 없지만, 이 repo `.claude/settings.json` 에 이미 `PostToolUse: Agent|Task` 훅(전역 스킬 `omc_post_tool_remind.py`)이 걸려 있어 최소 방어선 확장은 전역 정책 수정 없이도 가능성 있음(단, tool_response에 실제 tool_uses 값이 들어오는지는 미검증).
+- 산출물: 위키 `.omc/wiki/aw-003-aw-008-l167-2026-09-18.md`(신규) · 스킬 `~/.claude/skills/omc-learned/lessons-coverage-ssot-sync.md`(재검토용 사전점검 절 추가).
+- 제안했으나 미승인(다음 세션 착수 가능): P0=`lessons_coverage.json`에 `enforcement_mode`/`implementation_status` 필드 **추가만**(기존 필드 보존)+top_gaps stale 4건 정리 / P1=gap 15건 중 impact=high(L032·L049·L151·L096·L097) 가드 구현.
+
 
 ## 현재 작업 — 2026-09-07 H 스타트업 신청서
 

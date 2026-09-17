@@ -1,11 +1,12 @@
 # Wiki Index
 
-> 76 pages | Last updated: 2026-08-31T01:54:31.433Z
+> 77 pages | Last updated: 2026-09-17T15:46:49.044Z
 
 ## architecture
 
 - [auto_write 웹앱 구조 + 실행법 (FastAPI+Jinja, headless 아님)](auto-write-fastapi-jinja-headless.md) — # auto_write 웹앱 구조 + 실행법 (FastAPI+Jinja, headless 아님)
 - [auto_write 자가학습 레이어 (learning layer) — Phase 1 구현·설계](auto-write-learning-layer-phase-1.md) — # auto_write 자가학습 레이어 (learning layer) — Phase 1 구현·설계
+- [AW-003/AW-008 실제 구현 현황 + L167 오케스트레이션 방어선 실측 (2026-09-18)](aw-003-aw-008-l167-2026-09-18.md) — # AW-003/AW-008 실제 구현 현황 + L167 오케스트레이션 방어선 실측 (2026-09-18)
 
 ## convention
 
