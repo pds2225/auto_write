@@ -4,11 +4,22 @@
 
 ### 압축 후 갱신 — 2026-09-18
 
-- P0 안정화 Addendum을 적용한 실제 개발을 격리 worktree `D:\auto_write\_work\codex-p0-addendum-20260918` / 브랜치 `codex/p0-addendum-20260918`에서 계속한다.
-- 공통 `hwpx_integrity_gate`, validator 실행 상태·severity 집계, 제출 경로 fail-closed, fixed-cell `REVIEW_REQUIRED`, cross-form gate-bypass 회귀를 구현했다. P0 targeted 결과는 `56 passed, 2 skipped`, gate/bypass 추가 검증은 `10 passed`.
-- broad regression은 기존 DOCX submission pipeline에서 3분 이상 대기했고, resume 보조 묶음은 기존 private re-export 누락으로 `95 passed, 2 failed`; 각각 TASK의 환경/P1 FOLLOWUP으로 기록했다.
-- Hancom COM `Dispatch/Open` smoke는 2회 연속 30초 무출력 대기로 중단했다. 실제 렌더 증거가 없으므로 rendering은 `ENVIRONMENT_BLOCKED`, fixed-cell은 `REVIEW_REQUIRED`이며 FULL/PASS로 표시하지 않는다.
-- 루트 `master`의 기존 dirty 변경, untracked 설정, 기존 worktree는 건드리지 않는다. 다음 세션 재개 시 TASK checkpoint와 이 격리 worktree를 우선 확인한다.
+- AUTONOMOUS NIGHT RUN 재개: `origin/main`과 현재 branch/worktree/TASK/REQUEST_LEDGER를 재검증한 뒤 안전한 작업만 계속한다.
+- P0 작업 worktree: `D:\auto_write\_work\codex-p0-addendum-20260918`, branch `codex/p0-addendum-20260918`.
+- 완료된 P0: 공통 `hwpx_integrity_gate`, validator 실행 상태·severity 집계, 제출 경로 fail-closed, fixed-cell `REVIEW_REQUIRED`, cross-form gate-bypass 회귀. 기존 COM 2회 무응답으로 rendering은 `ENVIRONMENT_BLOCKED` 유지.
+- 마지막 검증: P0 targeted `56 passed, 2 skipped`, gate/bypass `10 passed`, HWPX acceptance/cleanup `36 passed`. 기존 DOCX submission hang과 resume/private re-export 실패는 TASK followup으로 분리.
+- 이번 재개 다음 액션: remote/main/TASK 상태 재확인 → T-20260918-01 잔여 독립 검증 → 사람이 가능한 AW-001/AW-008/AW-003 중 현재 TASK에 명시된 안전 작업만 별도 worktree/commit으로 처리.
+- 금지: root master dirty 변경·기존 worktree 보존, main/master push·merge, PR 재시도(gh 401), COM 추가 재시도, AW-009 승인 전 코드, OAuth/secret/외부 전송.
+
+### 야간 실행 실측 갱신 — 2026-09-18
+
+- 재검증: `git fetch origin --prune` 완료. `origin/main=f220d2d`, root `master=2130493`는 `origin/master` 제거 상태이며 기존 dirty 변경을 보존했다. root `TASK.md`의 #0 LIST와 열린 AW-001/AW-003/AW-005/AW-008/AW-009 8-1, `docs/REQUEST_LEDGER.md` C1을 확인했다.
+- P0 worktree `codex/p0-addendum-20260918`는 clean, 원격 push SHA `2ebf550`; gate/bypass 재검증 `10 passed`. Hancom COM 2회 무응답은 계속 `ENVIRONMENT_BLOCKED`; 추가 시도 금지.
+- AW-001 별도 worktree에서 실제 caller를 확인했다. `run_to_final`은 autopilot/resume/domain facade에 연결되어 있고 E2E `26 passed`; 기존 `ProjectService.generate → _publish_results_bundle`는 gate 미연결이지만 AW-009 승인 전 웹앱 코드 금지와 겹쳐 수정하지 않고 PARTIAL/FOLLOWUP로 남겼다. 넓은 보조 회귀는 origin/main 기존 실패 10건(acceptance 전달/옵션 전달/private re-export 등)으로 확인했다.
+- AW-008 별도 worktree 실측: registry 151건, `mechanized=66`, `judgment=84`, `gap=1(L050)`; L050은 rhwp/renderer 의존으로 partial이며 관련 회귀 `28 passed`. DETERMINISTIC 신규 전환 없음.
+- AW-003 별도 worktree 실측: registry → `LRuleEnforcer` → `LRuleReport.to_json()` → 기존 CLI/operator console 구조가 이미 존재. evaluator/CLI 기반 회귀 `19 passed`, console 핵심 `3 passed`; 새 UI/중복 registry는 만들지 않음.
+- 생성 worktree: `D:\auto_write\_work\overnight-aw-001-20260918`, `overnight-aw-008-20260918`, `overnight-aw-003-20260918` 모두 origin/main 기준 clean 조사 브랜치이며 아직 코드 commit/push 없음.
+- 다음 재개: P0 TASK 상태·RESUME 최종 동기화 → root dirty/master 변경 없이 결과 보고. 추가 자동 수정 후보는 AW-001 ProjectService gate 연결이지만 AW-009 승인 없이는 착수하지 않는다.
 
 - 사용자 요청: 현재 작업지시 파일 `TASK.md` 내용 확인.
 - 원격 기준: GitHub default branch `main`, `origin/main`=`f220d2d`; 원격 `TASK.md` blob=`ad37279`.
