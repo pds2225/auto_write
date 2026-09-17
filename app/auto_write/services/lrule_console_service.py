@@ -206,6 +206,13 @@ class LRuleConsoleService:
                 output=f"{timeout_note}\n{output}".strip(),
                 returncode=124,
             )
+        except OSError as exc:
+            return RuleTestResult(
+                ok=False,
+                command=" ".join(cmd),
+                output=f"registry tests could not start: {type(exc).__name__}: {exc}",
+                returncode=127,
+            )
         output = "\n".join(part for part in [proc.stdout, proc.stderr] if part).strip()
         return RuleTestResult(
             ok=proc.returncode == 0,

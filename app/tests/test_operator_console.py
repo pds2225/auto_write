@@ -48,6 +48,22 @@ def test_registry_test_timeout_is_machine_readable(monkeypatch):
     assert "pytest" in result.command
 
 
+def test_registry_test_start_failure_is_machine_readable(monkeypatch):
+    service = LRuleConsoleService(REPO_ROOT)
+
+    def unavailable(*_args, **_kwargs):
+        raise OSError("python launcher unavailable")
+
+    monkeypatch.setattr(subprocess, "run", unavailable)
+
+    result = service.run_registry_tests()
+
+    assert result.ok is False
+    assert result.returncode == 127
+    assert "could not start" in result.output
+    assert "OSError" in result.output
+
+
 def test_lrule_preview_route_renders_failed_validation_without_confirm(monkeypatch):
     class FakeSnapshot:
         def as_dict(self):
