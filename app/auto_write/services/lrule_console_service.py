@@ -196,8 +196,13 @@ class LRuleConsoleService:
                 timeout=180,
             )
         except subprocess.TimeoutExpired as exc:
+            def _text(value: object) -> str:
+                if isinstance(value, bytes):
+                    return value.decode("utf-8", errors="replace")
+                return str(value) if value else ""
+
             output = "\n".join(
-                part for part in [exc.stdout, exc.stderr] if part
+                part for part in [_text(exc.stdout), _text(exc.stderr)] if part
             ).strip()
             timeout_note = "registry tests timed out after 180 seconds"
             return RuleTestResult(
