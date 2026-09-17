@@ -1353,6 +1353,9 @@ DEPENDS_ON:
 - 현재 문제: gap 중 일부는 guard/test/coverage/runtime이 빠졌을 수 있음
 - 이미 구현된 부분: AW-001/AW-003 범위의 규칙 골격
 - 확인 필요한 부분: HIGH impact gap 목록
+- 2026-09-18 실측: `app/tests/lessons_coverage.json` 151건, `mechanized=66`, `judgment=84`, `gap=1`로 합계가 일치한다. 과거 `44/86/21` 수치는 stale이며 현재 판정에 사용하지 않는다.
+- 현재 gap은 L050(HWP+PDF 쌍 생성) 하나이며 rhwp/한글 렌더러 환경 의존으로 `partial` 유지한다. L005(픽셀 눈검증)·L008(폰트 위계)는 사람 판단/정책 예외가 있어 deterministic mechanization 후보로 닫지 않는다.
+- 이번 실측에서는 재발 이력·낮은 오탐 위험·실패 fixture·runtime 차단 증거를 동시에 만족하는 신규 규칙이 없어 mechanized 전환 0건, AW-008은 `PARTIAL`이다.
 
 문서의 DONE 표시만 믿지 말고 실제 코드/runtime을 확인한다.
 
