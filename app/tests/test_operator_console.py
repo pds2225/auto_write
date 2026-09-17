@@ -32,6 +32,22 @@ def test_operator_console_smoke():
     assert "GitHub" in response.text
 
 
+def test_registry_test_timeout_is_machine_readable(monkeypatch):
+    service = LRuleConsoleService(REPO_ROOT)
+
+    def timeout(*_args, **_kwargs):
+        raise subprocess.TimeoutExpired(cmd="pytest", timeout=180)
+
+    monkeypatch.setattr(subprocess, "run", timeout)
+
+    result = service.run_registry_tests()
+
+    assert result.ok is False
+    assert result.returncode == 124
+    assert "timed out" in result.output
+    assert "pytest" in result.command
+
+
 def test_lrule_preview_route_renders_failed_validation_without_confirm(monkeypatch):
     class FakeSnapshot:
         def as_dict(self):
