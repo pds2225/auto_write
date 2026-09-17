@@ -265,7 +265,7 @@ def test_autopilot_acceptance_gate_can_be_disabled(tmp_path: Path) -> None:
 def test_autopilot_gate_fail_closed_on_acceptance_error(tmp_path: Path, monkeypatch) -> None:
     """R9: 게이트 자신이 죽어도 통과로 취급하지 않는다(fail-closed) —
     예외가 전파되지 않고 acceptance_error 기록 + _DRAFT 강제 + 리포트 보존."""
-    from auto_write.services import autopilot_pipeline
+    from core.docx.services import autopilot_pipeline
 
     def _boom(*_args, **_kwargs):  # 실제 시그니처(path, config) 변화에 둔감하게
         raise RuntimeError("acceptance crashed")
@@ -358,7 +358,7 @@ def test_bizplan_fail_closed_on_acceptance_error(tmp_path: Path, monkeypatch) ->
     bizplan 최종본도 _DRAFT 로 강제되고 acceptance_error 가 전파돼야 한다.
     (이전 누수: verdict 가 빈 문자열이라 DRAFT 가드를 건너뛰어 깨끗한 제출 이름으로 복사.)"""
     from auto_write.services.bizplan_autopilot import run_bizplan_autopilot
-    import auto_write.services.autopilot_pipeline as ap_mod
+    import core.docx.services.autopilot_pipeline as ap_mod
 
     def _boom(*a, **k):
         raise RuntimeError("acceptance crashed")
@@ -569,7 +569,7 @@ def test_cli_strict_exit_codes(tmp_path: Path, monkeypatch) -> None:
     assert cli.main([str(src), "-o", str(tmp_path / "o1.docx")] + common) == 0
     assert cli.main([str(src), "-o", str(tmp_path / "o2.docx"), "--strict"] + common) == 2
 
-    from auto_write.services import autopilot_pipeline
+    import core.docx.services.autopilot_pipeline as autopilot_pipeline
 
     def _boom(*_a, **_k):
         raise RuntimeError("crash")
@@ -686,7 +686,7 @@ def test_anchor_forward_match_wins_over_reverse_substring() -> None:
 
 def test_run_autopilot_passes_page_limits_to_config(tmp_path, monkeypatch) -> None:
     """R12: run_autopilot(max_pages=..) 가 수용검사 AcceptanceConfig 로 전달돼야 한다."""
-    import auto_write.services.autopilot_pipeline as ap
+    import core.docx.services.autopilot_pipeline as ap
     captured = {}
     real = ap.run_acceptance
 
@@ -706,7 +706,7 @@ def test_run_autopilot_passes_page_limits_to_config(tmp_path, monkeypatch) -> No
 def test_run_bizplan_passes_format_and_clean(tmp_path, monkeypatch) -> None:
     """R13/US-6: run_bizplan_autopilot 가 required_format/submit_clean 을 내부 run_autopilot
     로 전달해야 한다(구버전: 두 인자 미전달 → bizplan 경로만 형식게이트·정리 사각지대)."""
-    import auto_write.services.bizplan_autopilot as bp
+    import core.docx.services.bizplan_autopilot as bp
     captured = {}
     real = bp.run_autopilot
 
@@ -734,7 +734,7 @@ def test_run_bizplan_passes_format_and_clean(tmp_path, monkeypatch) -> None:
 
 def test_autopilot_forwards_blind_review_to_config(tmp_path, monkeypatch) -> None:
     """run_autopilot(blind_review=..) 가 수용검사 AcceptanceConfig.blind_review 로 전달."""
-    import auto_write.services.autopilot_pipeline as ap
+    import core.docx.services.autopilot_pipeline as ap
     captured = {}
     real = ap.run_acceptance
 
@@ -774,7 +774,7 @@ def test_autopilot_cli_forwards_blind_review(tmp_path, monkeypatch) -> None:
 
 def test_bizplan_forwards_blind_review_to_autopilot(tmp_path, monkeypatch) -> None:
     """run_bizplan_autopilot(blind_review=..) 가 내부 run_autopilot 로 전달(R13 동류)."""
-    import auto_write.services.bizplan_autopilot as bp
+    import core.docx.services.bizplan_autopilot as bp
     captured = {}
     real = bp.run_autopilot
 
