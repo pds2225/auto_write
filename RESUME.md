@@ -224,3 +224,20 @@ py -3.11 auto_write_hub.py env
 - AW-003은 registry/evaluator/JSON/report/CLI 구조가 이미 존재하여 UI·중복 abstraction을 만들지 않았다. 기존 핵심 console 3건 및 LRule 기반 19건 PASS 증거를 유지한다.
 - P0 `T-20260918-01`: gate/bypass 10 passed, HWPX acceptance/cleanup 22 passed 2 skipped. Hancom COM은 기존 2회 무응답으로 `ENVIRONMENT_BLOCKED`; 재시도 금지. `gh` PR 401은 HUMAN_GATE.
 - 현재 남은 자동 가능 작업: AW-001의 HWPX R9 수용검사와 P0 HWPX gate는 별도 계약/branch로 분리되어 있어 혼합하지 않고, 관련 baseline triage·최종 diff audit을 계속한다.
+## 2026-09-18 LONG DEVELOPMENT RUN v2 — final checkpoint
+
+- 구현 완료: AW-001 기존 `ProjectService.generate → _publish_results_bundle`에 `run_to_final` 공통 gate와 `final_gate_report.json`을 연결했다. 게이트 실행 오류·malformed report는 `DRAFT`/비제출로 남는다. 브랜치 `codex/overnight-aw-001-20260918`, commits `da81c5a`, `2c316fe`, remote 동기화 완료.
+- 구현 완료: AW-003 기존 registry/evaluator/CLI 구조의 registry test subprocess timeout/start failure를 `RuleTestResult(ok=false)`로 보존한다. 브랜치 `codex/overnight-aw-003-20260918`, commits `449c5d1`, `48be026`, `d77767c`, remote 동기화 완료.
+- AW-008 실측: total 151, mechanized 66, judgment 84, gap 1(L050). L005/L008은 judgment/정책·렌더 의존, 신규 deterministic CLOSED 0건. 브랜치 `codex/overnight-aw-008-20260918`, commit `6098240`.
+- P0 재검증: HWPX gate/bypass/acceptance/cleanup `32 passed, 2 skipped`; 실제 Hancom COM/render는 기존 2회 무응답으로 `ENVIRONMENT_BLOCKED`, 추가 재시도 금지. P0 브랜치 `codex/p0-addendum-20260918` clean, `2ebf550`.
+- AW-001 관련 회귀: 신규 targeted `3 passed`, domain/finalizer/LRule `49 passed`. 넓은 10건은 origin/main에서도 재현된 `BASELINE_FAILURE`이며 이번 변경 회귀가 아니다. registry integrity는 lessons.md의 L152-L167과 coverage 151 불일치 등 기존 실패가 남아 있어 해당 registry를 임의 확장하지 않았다.
+- AW-003 추가: operator console 전체는 30초 내 완료 증거를 얻지 못해 무한 재시도하지 않았고, 핵심 console `3 passed`, 신규 failure handling 포함 `5 passed`, LRule 회귀 `19 passed` 및 compileall exit 0을 기록했다.
+- Git 안전: main/master 직접 push·merge·force 작업 없음. PR 생성은 기존 GitHub CLI HTTP 401 `HUMAN_GATE`로 재시도하지 않았다. root dirty 변경과 기존 worktree는 보존했다.
+- 다음 자동 실행: 사용자가 승인한 경우에만 PR/merge를 진행하고, 그 전에는 P0 Hancom COM 환경 차단을 해소한 뒤 실제 렌더 smoke를 1회 검증한다.
+
+## 2026-09-18 LONG DEVELOPMENT RUN v2 — post-final checkpoint
+
+- 이후 AW-003 구현을 추가 검증했다: `69cbbe2`에서 부분 출력이 있는 registry timeout을 다루는 회귀 테스트를 추가했고, timeout/start-failure/partial-output targeted `3 passed`; 브랜치 원격 동기화 완료.
+- AW-001 최신 targeted `3 passed`, 관련 domain/LRule/finalizer `49 passed`, fail-draft invariant `9 passed`; AW-003 관련 LRule 회귀 `19 passed`, compileall exit 0. 중단된 넓은 pytest 프로세스는 이 세션이 시작한 정확한 PID만 종료했고 다른 세션 프로세스는 건드리지 않았다.
+- 현재 feature worktree 4개는 모두 clean이며 각 원격 feature branch와 동기화되어 있다. root `master`는 기존 사용자 변경과 `_work/`를 계속 보존한다.
+- 종료 전 상태: P0 Hancom COM/render `ENVIRONMENT_BLOCKED`, AW-001/AW-003 구현 branch는 push 완료, AW-008 deterministic CLOSED 0건, PR 생성 `gh` 401은 `HUMAN_GATE`, main 직접 push/merge 없음.
