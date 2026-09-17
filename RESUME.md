@@ -21,6 +21,14 @@
 - 생성 worktree: `D:\auto_write\_work\overnight-aw-001-20260918`, `overnight-aw-008-20260918`, `overnight-aw-003-20260918` 모두 origin/main 기준 clean 조사 브랜치이며 아직 코드 commit/push 없음.
 - 다음 재개: P0 TASK 상태·RESUME 최종 동기화 → root dirty/master 변경 없이 결과 보고. 추가 자동 수정 후보는 AW-001 ProjectService gate 연결이지만 AW-009 승인 없이는 착수하지 않는다.
 
+### AUTONOMOUS CONTINUE — 2026-09-18
+
+- 사용자 보정: AW-001의 기존 ProjectService 출력 경로 gate 연결은 신규 웹 UI가 아니라 기존 엔진의 fail-closed 수렴 작업인지 재판정하고, 안전하면 구현한다. AW-009 승인 제한은 신규 웹앱 기능 개발에만 적용한다.
+- 현재 구현 worktree: `D:\auto_write\_work\overnight-aw-001-20260918`, branch `codex/overnight-aw-001-20260918`, base `origin/main`. root master와 기존 dirty 변경은 건드리지 않는다.
+- 구현 목표: `ProjectService.generate → _publish_results_bundle`의 DOCX/HWPX 출력이 기존 LRule/Hash/Finalizer 공통 경로를 우회해 FINAL처럼 노출되지 않도록 최소 fail-closed gate와 bypass fixture/test를 추가한다. 실제 렌더 COM은 재시도하지 않는다.
+- 이전 조사 결과: domain/autopilot/resume 경로는 이미 `run_to_final` 연결. ProjectService 결과 bundle은 gate 미연결. 이 분기를 이번 턴에 구현 가능성 기준으로 검증한다.
+- 다음: caller 계약·ArtifactBundle·기존 테스트를 읽고 최소 패치 → targeted regression → 관련 E2E → commit/push. 실패 시 같은 원인 2회 이내로 분류하고 TASK/RESUME에 남긴다.
+
 - 사용자 요청: 현재 작업지시 파일 `TASK.md` 내용 확인.
 - 원격 기준: GitHub default branch `main`, `origin/main`=`f220d2d`; 원격 `TASK.md` blob=`ad37279`.
 - 로컬 상태: `master`=`2130493`, `origin/master`는 제거됨. 작업트리에 기존 미커밋 변경과 열린 worktree가 있어 보존 중이며, 이번 조회로 코드 파일은 수정하지 않음.
