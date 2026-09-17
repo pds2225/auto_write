@@ -4410,6 +4410,7 @@ STATUS_THIS_TURN: PARTIAL. Addendum 기준으로 기존 P0 구현을 재사용�
 - [x] gate bypass architecture regression 추가: `test_hwpx_gate_bypass_architecture.py`; final submit/cross-form submit-copy가 공통 gate 결과 없이는 통과하지 않는지 확인.
 - [x] 출력 경로 조사: 최종 제출 경로는 `app/hwpx_submit.py`→`auto_write.services.hwpx_submit`와 `cross_form_hwp_pipeline`의 `submit_copy`로 분류해 공통 gate를 배선했다. `hwp_fill_direct.py`, `resume_fill_service.py`, `hwp_com_fill.py`는 현재 채움/중간 산출 엔진이며 제출용 복사본을 만들지 않는 별도 draft 경로로 확인했다.
 - [ ] `P1_FOLLOWUP`: draft 채움 CLI를 제품 최종 제출 경로로 승격할 경우 `submit_hwpx` 또는 공통 gate wrapper를 통해서만 제출명 출력을 허용하도록 추가 배선한다.
+- [ ] `APPROVAL_REQUIRED`: 격리 브랜치 push는 완료했으나 `gh pr create`가 GitHub GraphQL HTTP 401로 막혔다. OAuth 재인증은 Addendum의 외부 권한 승인 대상이므로 자동 실행하지 않고 PR 생성만 보류한다.
 - [~] resume/HWPX 보조 묶음은 `95 passed, 2 failed`; 실패 2건은 기존 `format_fill_korean` re-export 누락으로 CLI 수집/실행 단계에서 발생해 P1 FOLLOWUP 처리.
 - [x] 실행 실패 상태 회귀: 구조 validator `ERROR/UNAVAILABLE`는 `HARD_FAIL`, 렌더 timeout은 `REVIEW_REQUIRED`; gate/bypass 추가 테스트 최종 `10 passed`.
 - [ ] `P1_FOLLOWUP`: `app/tests/test_hwp_com_fill.py`는 `auto_write.services.hwp_com_fill` star re-export에서 private helper가 빠져 collection 단계 ImportError. 이번 P0 diff와 무관해 수정하지 않으며, canonical/re-export 계약 정리 후 별도 회귀로 처리한다.
