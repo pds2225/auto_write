@@ -543,6 +543,9 @@ STATUS_THIS_TURN: `IN_PROGRESS`. 통합 검토에서 확인된 기존 안정화 
 - [x] 전체 pytest collection ImportError: legacy/private-helper re-export 계약을 canonical 구현 기준으로 복구하고 테스트 삭제/skip/xfail 없이 전체 수집 실패를 줄인다. Baseline `26 collection ImportError` → `pytest --collect-only -q` `2248 collected`, exit 0. 실제 전체 실행은 별도 기존 호환성 테스트 실패가 있어 전체 PASS로 표시하지 않는다. Commit `82e450a`.
 - [x] DOCX autopilot rename-lock 2건: legacy `auto_write.services.autopilot_pipeline`가 canonical 함수의 전역을 공유하지 않아 잠금 fixture monkeypatch가 무시되던 호환성 결함을 모듈 alias로 최소 보강했다. `test_gate_faildraft_invariant.py -k rename_lock` `2 passed`, 전체 `14 passed`. Commit `755abf0`.
 - [~] Windows `output.docx` cleanup lock 1건: 현재 stabilization 기준에서 동일 failure fixture의 정확한 재현 경로를 분리 중이다. AW-001 feature branch의 ProjectService publish/cleanup 회귀는 `28 passed, 23 subtests passed`로 재현되지 않아 full 회귀 결과를 추가 확인한다.
+- [~] 전체 회귀 재분류: stabilization branch의 `pytest -q`는 `1771 passed, 22 failed, 5 skipped, 23 subtests passed`로 종료했다. 22건은 lessons L152~L167 baseline mismatch, Hancom/변환 환경, cp949 출력, 기존 runtime 호환성 등으로 분류되며 `output.docx` cleanup lock은 재현되지 않았다. 전체 PASS가 아니므로 main 통합은 보류한다.
+- [x] 변경 영향 대조: origin/main에서 rename-lock은 `2 failed`, private-helper 관련 대상 수집은 `2 collection errors`로 재현되었고 stabilization branch에서는 rename-lock `2 passed`, 관련 서비스/ProjectService 회귀 `73 passed, 23 subtests passed`다. `compileall=PASS`, `git diff --check=PASS`.
+- MAIN_INTEGRATION: `NOT_READY` — 전체 회귀 baseline/environment 실패가 남아 있고, main 직접 merge/push는 수행하지 않았다.
 - [ ] lessons L152~L167 및 L163/L164 중복은 외부 baseline mismatch로 이번 안정화에서 수정하지 않는다.
 - WORK_BRANCH: `codex/stabilize-0918-20260918` (origin/main 기준 별도 worktree)
 - VERIFY: 수정 전/후 전체 pytest 결과, 해당 targeted 회귀, compileall, diff audit

@@ -404,3 +404,11 @@ py -3.11 auto_write_hub.py env
 - collection 복구와 legacy wrapper alias 보강은 완료·push 상태다. collect-only는 `2248 tests collected`, exit 0이며 rename-lock/관련 호환성 회귀는 PASS 증거가 있다.
 - 직전 전체 pytest 프로세스는 종료되었으나 최종 stdout/exit 요약이 세션 압축에 보존되지 않았다. 전체 결과를 로그로 재확인하기 전에는 전체 회귀 PASS로 표시하지 않는다.
 - `output.docx` cleanup lock은 아직 현재 stabilization에서 직접 재현되지 않았다. 다음 실행은 중복 pytest 프로세스 확인 → 전체 pytest 결과 로그화 → 실패 분류 → lock 재현 여부 판정 순서다.
+
+## 2026-09-18 AW-001 stabilization — full regression and merge decision
+
+- 전체 pytest 실측: `1771 passed, 22 failed, 5 skipped, 23 subtests passed` in `537.60s`; 전체 PASS가 아니므로 성공으로 표현하지 않는다.
+- origin/main 대조: rename-lock은 `2 failed`, private-helper 대상 수집은 `2 collection errors`; stabilization branch는 rename-lock `2 passed`, 관련 ProjectService/gate/서비스 회귀 `73 passed, 23 subtests passed`다.
+- `output.docx` cleanup lock은 현재 branch의 관련 ProjectService/submission 회귀에서 재현되지 않았다. 별도 코드 수정 없이 `BASELINE_UNREPRODUCED`로 남긴다.
+- `python -m compileall -q app` 및 `git diff --check`는 PASS. branch `codex/stabilize-0918-20260918`, HEAD `57c649d`, origin branch push 완료, main merge/push는 전체 회귀 실패로 보류.
+- 전체 실패 분류: lessons L152~L167/L163/L164 baseline mismatch, Hancom/변환 환경 차단, cp949 portability 및 기존 runtime compatibility. 다음 작업은 이 baseline 목록을 TASK별로 분리하거나, 사용자 승인 없이 가능한 compatibility 후속만 선택한다.
