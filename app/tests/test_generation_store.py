@@ -18,6 +18,7 @@ from docx import Document
 
 from auto_write.config import Settings, ensure_directories
 from auto_write.services import generation_store, learning_store
+from core.docx.services import generation_store as core_generation_store
 from auto_write.services.evidence_service import EvidenceService
 from auto_write.services.image_service import ImageService
 from auto_write.services.openai_client import OpenAIService
@@ -28,6 +29,10 @@ from auto_write.storage import Storage
 
 
 # --- generation_store 단위 테스트 (root 격리) ---------------------------------
+
+def test_core_generation_store_is_canonical_compatibility_alias() -> None:
+    assert core_generation_store is generation_store
+    assert core_generation_store.record_ai_call is generation_store.record_ai_call
 
 def test_record_ai_call_append_and_load_roundtrip(tmp_path: Path) -> None:
     rec = generation_store.record_ai_call(
