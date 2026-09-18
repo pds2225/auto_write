@@ -366,3 +366,5 @@ py -3.11 auto_write_hub.py env
 - 다음 개발 액션은 모바일 연결과 별개로 AW-001/P0/R9 통합 worktree 검토다.
 - Codex 모바일 원격 연결은 ChatGPT 모바일 앱의 `Remote`에서 지원되며, 데스크톱 ChatGPT 앱 `Settings > Connections > Control this PC`의 QR pairing이 필요하다.
 - 새 개발 작업은 root `TASK.md` 전체 확인·기존 TASK 귀속 또는 신규 ID 등록·TODO/IN_PROGRESS 기록 후에만 코드/테스트/fixture를 수정한다. 이번 턴은 규칙 적용만 했고 코드 수정은 없다.
+- TASK.md 읽기 전용 상태감사 요청: TASK/코드/RESUME 불일치를 보고만 하고 TASK·코드·branch는 수정하지 않는다.
+- AW-001 후속 실행 시작: 다음 작업은 최신 origin/main 기준 AW-001·R9·P0 통합 검토와 관련 Release Gate 재실행이며, main merge/push·Hancom COM 재시도는 하지 않는다.
