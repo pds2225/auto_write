@@ -397,3 +397,10 @@ py -3.11 auto_write_hub.py env
 - 같은 호환성 패턴으로 `hwp_com_fill.py`와 `infographic_suggest.py`도 alias 보강했고 관련 테스트 `36 passed`; 커밋 `57c649d`에 포함·push했다.
 - `test_submission_pipeline.py` 관련 gate/format/submit-clean 회귀는 `10 passed`; ProjectService 안전 테스트는 개별 핵심 및 AW-001 feature branch 기준 `28 passed, 23 subtests passed`다. `output.docx` cleanup lock은 현재 stabilization에서 직접 재현되지 않아 전체 회귀에서 재분류한다.
 - 다음: collection 재확인 → 단계적 전체 pytest 실행 및 hang/기존 실패 분류 → 필요 시 `output.docx` 파일 핸들 원인만 최소 수정한다.
+
+## 2026-09-18 AW-001 stabilization — compression recovery checkpoint
+
+- 현재 작업 worktree: `D:\auto_write\_work\stabilize-0918`, branch `codex/stabilize-0918-20260918`, latest known commit `57c649d`; root `master`와 기존 feature worktree는 보존한다.
+- collection 복구와 legacy wrapper alias 보강은 완료·push 상태다. collect-only는 `2248 tests collected`, exit 0이며 rename-lock/관련 호환성 회귀는 PASS 증거가 있다.
+- 직전 전체 pytest 프로세스는 종료되었으나 최종 stdout/exit 요약이 세션 압축에 보존되지 않았다. 전체 결과를 로그로 재확인하기 전에는 전체 회귀 PASS로 표시하지 않는다.
+- `output.docx` cleanup lock은 아직 현재 stabilization에서 직접 재현되지 않았다. 다음 실행은 중복 pytest 프로세스 확인 → 전체 pytest 결과 로그화 → 실패 분류 → lock 재현 여부 판정 순서다.
