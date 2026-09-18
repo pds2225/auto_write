@@ -50,6 +50,10 @@ class SubmitReport:
     output: str = ""
     final: str = ""
     ok: bool = False
+    # 최종 산출물 공개/제출 여부를 호출자가 ``ok`` 해석에 의존하지 않도록
+    # 공통 final gate의 정책 결과를 명시적으로 보존한다. 기본값은 fail-closed다.
+    final_output_allowed: bool = False
+    submittable: bool = False
     acceptance: dict[str, Any] = field(default_factory=dict)
     filled: dict[str, str] = field(default_factory=dict)
     residual: list[str] = field(default_factory=list)
@@ -66,6 +70,8 @@ class SubmitReport:
             "output": self.output,
             "final": self.final,
             "ok": self.ok,
+            "final_output_allowed": self.final_output_allowed,
+            "submittable": self.submittable,
             "acceptance": dict(self.acceptance),
             "filled": dict(self.filled),
             "residual": list(self.residual),
@@ -201,10 +207,14 @@ def submit_hwpx(
         )
         report.final = str(_mark_draft(report, out, src))
         report.ok = False
+        report.final_output_allowed = False
+        report.submittable = False
         return report
 
     if gate.final_status == "PASS":
         report.ok = True
+        report.final_output_allowed = True
+        report.submittable = True
         return report
 
     failed = [v for v in gate.validators if v.severity != "PASS"]
@@ -224,4 +234,6 @@ def submit_hwpx(
             break
     report.final = str(_mark_draft(report, out, src))
     report.ok = False
+    report.final_output_allowed = False
+    report.submittable = False
     return report
