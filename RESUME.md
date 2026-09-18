@@ -368,3 +368,17 @@ py -3.11 auto_write_hub.py env
 - 새 개발 작업은 root `TASK.md` 전체 확인·기존 TASK 귀속 또는 신규 ID 등록·TODO/IN_PROGRESS 기록 후에만 코드/테스트/fixture를 수정한다. 이번 턴은 규칙 적용만 했고 코드 수정은 없다.
 - TASK.md 읽기 전용 상태감사 요청: TASK/코드/RESUME 불일치를 보고만 하고 TASK·코드·branch는 수정하지 않는다.
 - AW-001 후속 실행 시작: 다음 작업은 최신 origin/main 기준 AW-001·R9·P0 통합 검토와 관련 Release Gate 재실행이며, main merge/push·Hancom COM 재시도는 하지 않는다.
+
+## 2026-09-18 AW-001/P0 통합 검토 재개
+
+- 압축 복원 후 재개: 기존 root master의 dirty 변경과 기존 feature worktree는 보존한다.
+- 다음 작업: 최신 `origin/main` 기준 별도 통합 worktree에서 AW-001/R9/P0 diff를 감사하고 non-COM Release Gate를 재실행한다.
+- 제한: main push/merge, force/reset/clean, Hancom COM 재시도는 하지 않는다.
+
+## 2026-09-18 AW-001/R9/P0 통합 검토 완료 checkpoint
+
+- 최신 `origin/main=7951360`에서 `codex/integration-aw001-r9-p0-20260918`를 만들고 AW-001·P0/R9 변경을 격리 조합했다. HEAD=`0a5d785`, 원격 feature branch push 완료, main 변경 없음.
+- 핵심 회귀: AW-001/R9/gate/bypass/submit/generation store `59 passed, 23 subtests`; cross-form/ProjectService 추가 `77 passed, 23 subtests`; 확장 HWPX `395 passed, 2 skipped, 2 baseline failures`.
+- LRule/lessons `37 passed, 3 baseline data mismatch`; 전체 pytest `25 collection ImportError`는 legacy/private-helper re-export 인프라 실패로 분류했다. `compileall`·`git diff --check` 통과.
+- 통합 판정: `READY_WITH_KNOWN_ENV_BLOCK`(non-COM P0/R9 통과, Hancom COM/실제 시각 렌더만 `ENVIRONMENT_BLOCKED`). main merge/push 및 COM 재시도는 하지 않는다.
+- 다음 작업: 사람 승인 없이 가능한 별도 baseline private-helper re-export 정리 또는 P0 통합 branch PR 검토 중 하나를 TASK 기준으로 선택한다. 실제 main 통합은 사용자 승인 대상이다.

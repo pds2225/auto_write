@@ -526,6 +526,28 @@ R9 판정:
 - gate 중복/성능 정적 점검: `submit_hwpx`는 공통 gate를 1회 호출하고 gate 내부에서 R9 acceptance를 1회 집계한다. 불필요한 중복 acceptance 호출은 확인되지 않았으며 이번에는 대규모 최적화를 하지 않는다.
 - Release 판정: `REVIEW_REQUIRED` — R9 non-COM/P0 범위는 통과했지만 branch가 최신 `origin/main`과 4 ahead/1 behind로 갈라져 있고 AW-001 별도 커밋 통합 및 실제 Hancom 렌더가 남아 있다. `READY_WITH_KNOWN_ENV_BLOCK`로 과장하지 않는다.
 
+### AW-001/R9 통합 검토 — 2026-09-18
+
+- 최신 `origin/main=7951360`에서 격리 통합 브랜치 `codex/integration-aw001-r9-p0-20260918`를 생성하고 AW-001 7개 커밋과 P0/R9 3개 코드·테스트 커밋을 선별 적용했다. 최신 HEAD=`0a5d785`, feature branch push 완료, main 직접 merge/push 없음.
+- 통합 worktree는 clean이며 `compileall=PASS`, `git diff --check=PASS`이다. 변경 범위는 AW-001 fail-closed/compatibility와 HWPX common gate/R9 fixture·tests 22개 파일이며 별도 unrelated production 변경은 확인되지 않았다.
+- 핵심 통합 회귀: AW-001/R9/gate/bypass/submit/generation store `59 passed, 23 subtests passed`; cross-form/ProjectService/generation store 관련 추가 회귀 `77 passed, 23 subtests passed`.
+- 확장 HWPX 회귀 `395 passed, 2 skipped, 2 failed`; 실패 2건은 변경하지 않은 기존 `docx_ops`·`usage_acceptance` private helper re-export 수집 불일치로 `BASELINE_FAILURE` 처리한다.
+- LRule/lessons 회귀 `37 passed, 3 failed`; 실패 3건은 외부 lessons L152~L167 및 L163/L164 중복과 coverage registry 불일치인 기존 `BASELINE_DATA_MISMATCH`이며 이번 통합에서 임의 편입하지 않는다.
+- 전체 pytest는 `25 collection ImportError`로 중단됐다. legacy/private-helper re-export 불일치이며 R9/AW-001 변경으로 새로 발생한 회귀로 보지 않는다(`TEST_INFRA_FAILURE/BASELINE_FAILURE`).
+- 통합 판정: `READY_WITH_KNOWN_ENV_BLOCK`(non-COM 구조·제출·R9 범위 통과, 실제 Hancom COM/시각 렌더만 `ENVIRONMENT_BLOCKED`). 기존 baseline/infra 실패는 별도 follow-up이며 main 통합은 별도 승인 절차다.
+
+### AW-001 안정화 후속 — 2026-09-18
+
+STATUS_THIS_TURN: `IN_PROGRESS`. 통합 검토에서 확인된 기존 안정화 범위의 테스트 인프라/Windows 파일 핸들 실패를 최소 수정으로 복구한다. 새 기능·PRD·데이터 구조는 만들지 않는다.
+
+- [~] 전체 pytest collection ImportError: legacy/private-helper re-export 계약을 canonical 구현 기준으로 복구하고 테스트 삭제/skip/xfail 없이 전체 수집 실패를 줄인다.
+- [ ] DOCX autopilot rename-lock 2건: 파일 핸들 수명과 원자적 rename/예외처리를 재현 테스트 근거로 최소 보강한다.
+- [ ] Windows `output.docx` cleanup lock 1건: 2순위와 원인이 같으면 함께 수정하고, 다르면 별도 최소 수정한다.
+- [ ] lessons L152~L167 및 L163/L164 중복은 외부 baseline mismatch로 이번 안정화에서 수정하지 않는다.
+- WORK_BRANCH: `codex/stabilize-0918-20260918` (origin/main 기준 별도 worktree)
+- VERIFY: 수정 전/후 전체 pytest 결과, 해당 targeted 회귀, compileall, diff audit
+- FORBIDDEN: 테스트 삭제·skip/xfail·assert 완화·main push/merge·force/reset/clean·기능/데이터구조 변경
+
 ### 8-6. KEEP — 유지
 
 - [ ] 기존 DomainRouter / Pipeline / LRule / Finalizer
