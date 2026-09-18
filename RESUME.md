@@ -412,3 +412,10 @@ py -3.11 auto_write_hub.py env
 - `output.docx` cleanup lock은 현재 branch의 관련 ProjectService/submission 회귀에서 재현되지 않았다. 별도 코드 수정 없이 `BASELINE_UNREPRODUCED`로 남긴다.
 - `python -m compileall -q app` 및 `git diff --check`는 PASS. branch `codex/stabilize-0918-20260918`, HEAD `57c649d`, origin branch push 완료, main merge/push는 전체 회귀 실패로 보류.
 - 전체 실패 분류: lessons L152~L167/L163/L164 baseline mismatch, Hancom/변환 환경 차단, cp949 portability 및 기존 runtime compatibility. 다음 작업은 이 baseline 목록을 TASK별로 분리하거나, 사용자 승인 없이 가능한 compatibility 후속만 선택한다.
+
+## 2026-09-18 AW-001 stabilization — 22-failure triage requested
+
+- 사용자 지시: 전체 pytest 22건을 `BASELINE` / `ENVIRONMENT` / `NEW_REGRESSION`으로 정확히 분류하고, 안전한 안정화 수정만 적용한 뒤 main 통합 가능 여부를 재판정한다.
+- 확정 baseline evidence: origin/main rename-lock `2 failed`; private-helper 대상 수집 `2 collection errors`; stabilization branch rename-lock `2 passed`, 관련 ProjectService/gate 회귀 `73 passed, 23 subtests passed`.
+- 전체 결과는 여전히 `1771 passed, 22 failed, 5 skipped, 23 subtests passed`; `output.docx` lock은 재현되지 않았다. main merge/push는 보류 상태다.
+- 다음 실행: 현재 branch/작업트리 재확인 → 22건을 테스트 파일별로 origin/main 또는 환경 조건과 대조 → 안전한 compatibility/encoding 수정만 TASK 귀속으로 적용 → targeted/regression 재실행 → merge readiness 재판정.

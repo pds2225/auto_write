@@ -545,6 +545,7 @@ STATUS_THIS_TURN: `IN_PROGRESS`. 통합 검토에서 확인된 기존 안정화 
 - [~] Windows `output.docx` cleanup lock 1건: 현재 stabilization 기준에서 동일 failure fixture의 정확한 재현 경로를 분리 중이다. AW-001 feature branch의 ProjectService publish/cleanup 회귀는 `28 passed, 23 subtests passed`로 재현되지 않아 full 회귀 결과를 추가 확인한다.
 - [~] 전체 회귀 재분류: stabilization branch의 `pytest -q`는 `1771 passed, 22 failed, 5 skipped, 23 subtests passed`로 종료했다. 22건은 lessons L152~L167 baseline mismatch, Hancom/변환 환경, cp949 출력, 기존 runtime 호환성 등으로 분류되며 `output.docx` cleanup lock은 재현되지 않았다. 전체 PASS가 아니므로 main 통합은 보류한다.
 - [x] 변경 영향 대조: origin/main에서 rename-lock은 `2 failed`, private-helper 관련 대상 수집은 `2 collection errors`로 재현되었고 stabilization branch에서는 rename-lock `2 passed`, 관련 서비스/ProjectService 회귀 `73 passed, 23 subtests passed`다. `compileall=PASS`, `git diff --check=PASS`.
+- [ ] 22건 triage 안전 수정: legacy/canonical 모듈 호환성(`bizplan_autopilot`, `hwp_docx_convert`, `resume_fill_service`, `generation_store`)만 최소 alias/shim으로 보강하고 각 실패를 재검증한다.
 - MAIN_INTEGRATION: `NOT_READY` — 전체 회귀 baseline/environment 실패가 남아 있고, main 직접 merge/push는 수행하지 않았다.
 - [ ] lessons L152~L167 및 L163/L164 중복은 외부 baseline mismatch로 이번 안정화에서 수정하지 않는다.
 - WORK_BRANCH: `codex/stabilize-0918-20260918` (origin/main 기준 별도 worktree)
