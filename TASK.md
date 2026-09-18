@@ -15,7 +15,7 @@ TASK 1개 = 반드시 1줄. LIST의 TASK_ID와 DETAILS의 TASK_ID는 반드시 1
 REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 -->
 
-[ ] AW-001 | 문서 작성이 정해진 검사 경로를 거쳐 끝나게 한다
+[~] AW-001 | 문서 작성이 정해진 검사 경로를 거쳐 끝나게 한다
 [ ] AW-002 | GitHub와 작업 상태를 안전하게 주고받게 한다
 [ ] AW-003 | L 규칙을 한 화면에서 보고 고칠 수 있게 한다
 [ ] AW-004 | 문서 작성 진행 상태를 한 화면에서 보게 한다
@@ -435,7 +435,7 @@ TASK_ID: AW-001
 TASK_START_SHA: d6b96b86a0015f53141054c27517607923a596a8
 TASK_BLOB_SHA: f6f8023b0dd47d301acedc75a5d4957edd147d4e
 WORK_BRANCH: cursor/overnight-aw-001-2cb9
-STATUS_THIS_TURN: mechanized 가드(`build_lrule_guards`)를 `run_to_final`/autopilot에 연결. mechanized unverifiable=0, L009 실 FAIL. LIST `[~]`. REQUEST_SOLVED=NO(judgment/gap REVIEW_REQUIRED로 FINAL 차단 유지·HWPX `submit_hwpx`는 R9 수용검사 KEEP).
+STATUS_THIS_TURN: mechanized 가드(`build_lrule_guards`)를 `run_to_final`/autopilot에 연결. mechanized unverifiable=0, L009 실 FAIL. LIST `[~]`. REQUEST_SOLVED=NO(judgment/gap REVIEW_REQUIRED로 FINAL 차단 유지·HWPX `submit_hwpx`는 R9 수용검사 KEEP). 2026-09-18부터 HWPX R9 Acceptance와 Common Final Gate 연결을 별도 후속으로 진행한다.
 
 ### 8-1. 사용자 원문 요청
 
@@ -494,6 +494,22 @@ INPUT
 - [x] artifact/registry hash가 검사 이후 변경되면 FINAL 금지
 - [ ] legacy direct FINAL 우회경로 차단 (HWPX `submit_hwpx` 는 R9 수용검사 KEEP — LRule 미연결)
 - [x] business_plan / consultant_application 실제 E2E (synthetic fixture)
+
+### HWPX R9 Acceptance / Common Final Gate — 2026-09-18
+
+상태: `IN_PROGRESS` / `REQUEST_SOLVED=NO`
+
+- [ ] R9 정의 및 현재 구현 위치 조사
+- [ ] `submit_hwpx` acceptance 경로 조사
+- [ ] common final gate 연결 조사
+- [ ] non-COM failing fixture 작성
+- [ ] R9 FAIL → final output 차단 테스트
+- [ ] R9 PASS → 정상 제출 테스트
+- [ ] gate bypass 여부 확인
+- [ ] 관련 회귀 테스트
+- [ ] TASK / RESUME 동기화
+
+완료 조건: R9 실패 문서가 `FINAL` 또는 `submittable=true`로 사용자에게 전달되지 않고, 정상 R9 문서는 기존 제출 경로를 통과해야 한다. Hancom COM 실제 렌더는 별도 `ENVIRONMENT_BLOCKED`로 유지한다.
 
 ### 8-6. KEEP — 유지
 
