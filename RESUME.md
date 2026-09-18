@@ -382,3 +382,10 @@ py -3.11 auto_write_hub.py env
 - LRule/lessons `37 passed, 3 baseline data mismatch`; 전체 pytest `25 collection ImportError`는 legacy/private-helper re-export 인프라 실패로 분류했다. `compileall`·`git diff --check` 통과.
 - 통합 판정: `READY_WITH_KNOWN_ENV_BLOCK`(non-COM P0/R9 통과, Hancom COM/실제 시각 렌더만 `ENVIRONMENT_BLOCKED`). main merge/push 및 COM 재시도는 하지 않는다.
 - 다음 작업: 사람 승인 없이 가능한 별도 baseline private-helper re-export 정리 또는 P0 통합 branch PR 검토 중 하나를 TASK 기준으로 선택한다. 실제 main 통합은 사용자 승인 대상이다.
+
+## 2026-09-18 AW-001 stabilization — collection recovery checkpoint
+
+- 실제 개발 worktree: `D:\auto_write\_work\stabilize-0918`, branch `codex/stabilize-0918-20260918`, `origin/main=7951360` 기준. root `master`와 기존 feature worktree는 보존한다.
+- 전체 pytest baseline은 26개 collection `ImportError`였다. legacy `auto_write.services.*` wrapper의 private helper re-export 누락이 원인으로 확인되어 canonical `core.docx.services.*`를 재사용하는 동적 private export를 최소 추가했고 `82e450a`로 커밋했다.
+- 현재 검증: `python -m pytest --collect-only -q`는 `2248 tests collected`, exit 0으로 collection 오류가 해소됐다. 실제 전체 실행은 별도 기존/호환성 테스트 실패에서 중단되어 전체 PASS로 표현하지 않는다.
+- 다음 즉시 작업: rename-lock 2건과 Windows `output.docx` cleanup lock 1건을 targeted test로 재현하고, 원인 확인 후 최소 파일 핸들/rename 안정화만 추가한다. Hancom COM은 재시도하지 않는다.
