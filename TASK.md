@@ -546,6 +546,9 @@ STATUS_THIS_TURN: `IN_PROGRESS`. 통합 검토에서 확인된 기존 안정화 
 - [~] 전체 회귀 재분류: stabilization branch의 `pytest -q`는 `1771 passed, 22 failed, 5 skipped, 23 subtests passed`로 종료했다. 22건은 lessons L152~L167 baseline mismatch, Hancom/변환 환경, cp949 출력, 기존 runtime 호환성 등으로 분류되며 `output.docx` cleanup lock은 재현되지 않았다. 전체 PASS가 아니므로 main 통합은 보류한다.
 - [x] 변경 영향 대조: origin/main에서 rename-lock은 `2 failed`, private-helper 관련 대상 수집은 `2 collection errors`로 재현되었고 stabilization branch에서는 rename-lock `2 passed`, 관련 서비스/ProjectService 회귀 `73 passed, 23 subtests passed`다. `compileall=PASS`, `git diff --check=PASS`.
 - [ ] 22건 triage 안전 수정: legacy/canonical 모듈 호환성(`bizplan_autopilot`, `hwp_docx_convert`, `resume_fill_service`, `generation_store`)만 최소 alias/shim으로 보강하고 각 실패를 재검증한다.
+- [ ] 22건 triage portability: `session_resume_hook.js`의 JSON stdout을 Windows cp949 부모 프로세스에서도 손실 없이 읽을 수 있는 ASCII-safe 직렬화로 보강하고 회귀를 확인한다.
+- [ ] 22건 triage HWP compatibility: `hancom_com_guard` module alias와 `hwp_docx_convert`의 legacy `document_ingest` patch 경로를 정렬하고 HWP/HWPX fixture 회귀를 확인한다.
+- [ ] 22건 triage HWP fill compatibility: legacy `hwp_fill` 호출자가 canonical 변환 함수 전역을 공유하도록 module alias를 정렬하고 HWPX fixture 회귀를 확인한다.
 - MAIN_INTEGRATION: `NOT_READY` — 전체 회귀 baseline/environment 실패가 남아 있고, main 직접 merge/push는 수행하지 않았다.
 - [ ] lessons L152~L167 및 L163/L164 중복은 외부 baseline mismatch로 이번 안정화에서 수정하지 않는다.
 - WORK_BRANCH: `codex/stabilize-0918-20260918` (origin/main 기준 별도 worktree)

@@ -419,3 +419,10 @@ py -3.11 auto_write_hub.py env
 - 확정 baseline evidence: origin/main rename-lock `2 failed`; private-helper 대상 수집 `2 collection errors`; stabilization branch rename-lock `2 passed`, 관련 ProjectService/gate 회귀 `73 passed, 23 subtests passed`.
 - 전체 결과는 여전히 `1771 passed, 22 failed, 5 skipped, 23 subtests passed`; `output.docx` lock은 재현되지 않았다. main merge/push는 보류 상태다.
 - 다음 실행: 현재 branch/작업트리 재확인 → 22건을 테스트 파일별로 origin/main 또는 환경 조건과 대조 → 안전한 compatibility/encoding 수정만 TASK 귀속으로 적용 → targeted/regression 재실행 → merge readiness 재판정.
+
+## 2026-09-18 AW-001 stabilization — post-compression continuation
+
+- 현재 구현 worktree: `D:\auto_write\_work\stabilize-0918`, branch `codex/stabilize-0918-20260918`; latest pushed commit `d52201e`.
+- 안전 수정 반영: legacy service module aliases 및 canonical/legacy ingest compatibility, session resume hook의 cp949-safe JSON 직렬화. 최신 전체 회귀는 `1780 passed, 13 failed, 5 skipped, 23 subtests passed`.
+- 현재 미커밋 후보: `app/auto_write/services/hancom_com_guard.py` module alias와 `app/core/docx/services/hwp_docx_convert.py` legacy ingest seam. Hancom guard·hwp_docx_convert targeted는 통과했으나 hwp_fill 3건은 아직 원인 확인 중이다.
+- 다음: hwp_fill caller/module identity와 fixture 변환 결과를 직접 확인 → 안전한 compatibility 수정 여부 결정 → targeted/regression/full pytest → TASK 동기화 및 main integration readiness 재판정.
