@@ -541,8 +541,8 @@ R9 판정:
 STATUS_THIS_TURN: `IN_PROGRESS`. 통합 검토에서 확인된 기존 안정화 범위의 테스트 인프라/Windows 파일 핸들 실패를 최소 수정으로 복구한다. 새 기능·PRD·데이터 구조는 만들지 않는다.
 
 - [x] 전체 pytest collection ImportError: legacy/private-helper re-export 계약을 canonical 구현 기준으로 복구하고 테스트 삭제/skip/xfail 없이 전체 수집 실패를 줄인다. Baseline `26 collection ImportError` → `pytest --collect-only -q` `2248 collected`, exit 0. 실제 전체 실행은 별도 기존 호환성 테스트 실패가 있어 전체 PASS로 표시하지 않는다. Commit `82e450a`.
-- [~] DOCX autopilot rename-lock 2건: 파일 핸들 수명과 원자적 rename/예외처리를 재현 테스트 근거로 최소 보강한다. 현재 targeted 재현 단계.
-- [ ] Windows `output.docx` cleanup lock 1건: 2순위와 원인이 같으면 함께 수정하고, 다르면 별도 최소 수정한다.
+- [x] DOCX autopilot rename-lock 2건: legacy `auto_write.services.autopilot_pipeline`가 canonical 함수의 전역을 공유하지 않아 잠금 fixture monkeypatch가 무시되던 호환성 결함을 모듈 alias로 최소 보강했다. `test_gate_faildraft_invariant.py -k rename_lock` `2 passed`, 전체 `14 passed`. Commit `755abf0`.
+- [~] Windows `output.docx` cleanup lock 1건: 현재 stabilization 기준에서 동일 failure fixture의 정확한 재현 경로를 분리 중이다. AW-001 feature branch의 ProjectService publish/cleanup 회귀는 `28 passed, 23 subtests passed`로 재현되지 않아 full 회귀 결과를 추가 확인한다.
 - [ ] lessons L152~L167 및 L163/L164 중복은 외부 baseline mismatch로 이번 안정화에서 수정하지 않는다.
 - WORK_BRANCH: `codex/stabilize-0918-20260918` (origin/main 기준 별도 worktree)
 - VERIFY: 수정 전/후 전체 pytest 결과, 해당 targeted 회귀, compileall, diff audit

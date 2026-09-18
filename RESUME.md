@@ -389,3 +389,11 @@ py -3.11 auto_write_hub.py env
 - 전체 pytest baseline은 26개 collection `ImportError`였다. legacy `auto_write.services.*` wrapper의 private helper re-export 누락이 원인으로 확인되어 canonical `core.docx.services.*`를 재사용하는 동적 private export를 최소 추가했고 `82e450a`로 커밋했다.
 - 현재 검증: `python -m pytest --collect-only -q`는 `2248 tests collected`, exit 0으로 collection 오류가 해소됐다. 실제 전체 실행은 별도 기존/호환성 테스트 실패에서 중단되어 전체 PASS로 표현하지 않는다.
 - 다음 즉시 작업: rename-lock 2건과 Windows `output.docx` cleanup lock 1건을 targeted test로 재현하고, 원인 확인 후 최소 파일 핸들/rename 안정화만 추가한다. Hancom COM은 재시도하지 않는다.
+
+## 2026-09-18 AW-001 stabilization — rename compatibility checkpoint
+
+- rename-lock 원인은 실제 rename retry 부족이 아니라 legacy `auto_write.services.autopilot_pipeline`의 함수 전역 분리였다. 테스트가 legacy 모듈의 `force_draft_name`을 patch해도 canonical `run_autopilot`에는 전달되지 않아 잠금 실패가 성공처럼 보였다.
+- `app/auto_write/services/autopilot_pipeline.py`를 canonical 모듈 alias로 바꾸고 `755abf0`에 커밋·push했다. `test_gate_faildraft_invariant.py -k rename_lock`: `2 passed`; 전체 fail-draft invariant: `14 passed`.
+- 같은 호환성 패턴으로 `hwp_com_fill.py`와 `infographic_suggest.py`도 alias 보강했고 관련 테스트 `36 passed`; 커밋 `57c649d`에 포함·push했다.
+- `test_submission_pipeline.py` 관련 gate/format/submit-clean 회귀는 `10 passed`; ProjectService 안전 테스트는 개별 핵심 및 AW-001 feature branch 기준 `28 passed, 23 subtests passed`다. `output.docx` cleanup lock은 현재 stabilization에서 직접 재현되지 않아 전체 회귀에서 재분류한다.
+- 다음: collection 재확인 → 단계적 전체 pytest 실행 및 hang/기존 실패 분류 → 필요 시 `output.docx` 파일 핸들 원인만 최소 수정한다.
