@@ -13,6 +13,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from docx import Document
 
@@ -175,6 +176,11 @@ class GenerateProvenanceE2ETests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
+        self._com_patch = patch(
+            "core.docx.services.hwp_docx_convert.hancom_com_available",
+            return_value=False,
+        )
+        self._com_patch.start()
         self.settings = Settings(
             app_root=root / "app",
             workspace_root=root / "workspace",
@@ -206,6 +212,7 @@ class GenerateProvenanceE2ETests(unittest.TestCase):
         )
 
     def tearDown(self) -> None:
+        self._com_patch.stop()
         self.tmp.cleanup()
 
     def test_generate_writes_sft_snapshots_without_crash(self) -> None:
