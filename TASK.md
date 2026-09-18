@@ -426,7 +426,7 @@ TASK_ID: AW-001
 TASK_START_SHA: d6b96b86a0015f53141054c27517607923a596a8
 TASK_BLOB_SHA: f6f8023b0dd47d301acedc75a5d4957edd147d4e
 WORK_BRANCH: cursor/overnight-aw-001-2cb9
-STATUS_THIS_TURN: 기존 `ProjectService.generate → _publish_results_bundle`에 공통 `run_to_final` 수렴과 `final_gate_report.json` 기록을 연결했다. 게이트 실행·예외·malformed 결과 모두 `DRAFT`/비제출 상태로 남긴다. 추가로 rename-lock fail-closed 테스트 주입 오류와 legacy private-helper re-export 누락을 보정했다. feature branch `codex/overnight-aw-001-20260918`에 `da81c5a`, `2c316fe`, `2a5117b`, `a60327a`, `e0723af`를 push했다. 관련 회귀 `71 passed`, 적용·품질·제출 통합 `96 passed`. LIST `[~]`. REQUEST_SOLVED=NO(HWPX `submit_hwpx`의 별도 R9 수용검사 계약과 실제 렌더 검증은 별도 blocker).
+STATUS_THIS_TURN: 기존 `ProjectService.generate → _publish_results_bundle`에 공통 `run_to_final` 수렴과 `final_gate_report.json` 기록을 연결했다. 게이트 실행·예외·malformed 결과 모두 `DRAFT`/비제출 상태로 남긴다. 추가로 rename-lock fail-closed 테스트 주입 오류와 legacy private-helper re-export 누락을 보정했다. feature branch `codex/overnight-aw-001-20260918`에 `da81c5a`, `2c316fe`, `2a5117b`, `a60327a`, `e0723af`를 push했다. 관련 회귀 `71 passed`, 적용·품질·제출 통합 `96 passed`. 2026-09-18 HWPX R9 후속은 P0 공통 `run_hwpx_integrity_gate`에 R9 수용검사를 연결한 feature branch `codex/hwpx-r9-gate-p0-20260918`의 최신 `ce8cd62`로 non-COM FAIL/PASS/bypass와 JSON 상태 직렬화를 검증했다. LIST `[~]`. REQUEST_SOLVED=NO(실제 Hancom 렌더 `ENVIRONMENT_BLOCKED`, R9 feature branch의 main 통합 전).
 
 ### 2026-09-18 FOLLOWUP LONG RUN 2 상태 동기화
 
@@ -492,6 +492,39 @@ INPUT
 - [x] artifact/registry hash가 검사 이후 변경되면 FINAL 금지
 - [~] legacy direct FINAL 우회경로 차단 (ProjectService DOCX bundle은 공통 gate 연결 완료; HWPX `submit_hwpx`는 R9 수용검사 KEEP — LRule 미연결)
 - [x] business_plan / consultant_application 실제 E2E (synthetic fixture)
+
+### HWPX R9 Acceptance / Common Final Gate — 2026-09-18
+
+상태: `PARTIAL` / `REQUEST_SOLVED=NO`
+
+- [x] R9 정의 및 현재 구현 위치 조사: `app/auto_write/services/hwpx_acceptance.py`의 XML 수용검사(`run_hwpx_acceptance`)
+- [x] `submit_hwpx` acceptance 경로 및 공통 gate 연결 조사
+- [x] non-COM R9 FAIL fixture: 유색 `charPr` HWPX
+- [x] R9 FAIL → `HARD_FAIL` → `_DRAFT`/최종 출력 차단 테스트
+- [x] R9 PASS → 정상 final/submittable 테스트
+- [x] `acceptance_gate=False` 우회 요청도 공통 gate를 거치고 최종 제출을 허용하지 않는 테스트
+- [x] `SubmitReport`에 `final_output_allowed`/`submittable`을 명시적으로 기록하는 최소 보강
+- [x] 관련 회귀: R9/submit/gate/acceptance/cleanup `45 passed, 2 skipped`; HWPX/LRule 보조 회귀 `19 passed`
+- [x] feature branch push: `codex/hwpx-r9-gate-p0-20260918` / `ce8cd62`
+- [~] main 통합 전 상태와 실제 Hancom COM/시각 렌더: 기존 정책대로 `ENVIRONMENT_BLOCKED`
+- 최종 audit: `origin/main=7951360`으로 갱신되었으나 현재 R9 branch는 P0 base `2ebf550` 위에 보존했고 rebase/merge하지 않았다. root `master`는 기존 dirty 변경을 보존한 채 `origin/main`보다 17개 뒤다.
+
+R9 판정:
+
+- 기존 자동검출 수준: `PARTIAL` → feature branch non-COM 범위는 `FULL` 조건 충족
+- R9 invariant: 유색 예시 `charPr` 등 제출 전 허용되지 않는 HWPX 구조가 없어야 하며, 위반 시 `run_hwpx_acceptance`가 실패한다.
+- 공통 흐름: `submit_hwpx → run_hwpx_integrity_gate → run_hwpx_acceptance → severity aggregation → _DRAFT/final_output_allowed=false/submittable=false`
+- 다음 1개: 최신 feature branch `ce8cd62`를 P0/AW-001 통합 기준과 대조한 뒤 별도 통합 절차에서 검토하고, Hancom COM이 가능한 환경에서 실제 시각 smoke를 별도 검증한다.
+
+### R9 Integration Readiness / P0 Release Gate — 2026-09-18
+
+- `origin/main=7951360`, root `master=2130493`(17 behind, dirty 보존), P0 base=`2ebf550`, R9 최신=`ce8cd62`(`8699f20` production + 상태 JSON assertion).
+- ancestry: P0 base는 R9에 포함됨. AW-001 `24104fd`/`bc64e96`는 R9 branch의 조상이 아니므로, AW-001/P0를 함께 배포할 때 별도 통합 검토가 필요하다. main 직접 merge/push는 하지 않았다.
+- R9 diff audit: P0 기준 변경은 `app/auto_write/services/hwpx_submit.py`와 `app/tests/test_hwpx_r9_common_gate.py` 2개뿐이다. production 12줄 + R9 fixture/test이며 unrelated 변경은 없다.
+- P0 Release Gate: HWPX 구조/제출/R9/cleanup/default-output 묶음 `176 passed, 2 skipped`; D1-D6/L154-L156 corpus `28 passed, 1 skipped`; lessons registry `29 passed, 3 failed`(외부 L152~L167 및 L163/L164 중복 `BASELINE_DATA_MISMATCH`).
+- 기존 실패 분리: DOCX autopilot rename-lock 2건은 R9와 무관한 기존 baseline failure, ProjectService broad 회귀의 Windows `output.docx` cleanup 잠금 1건은 environment/baseline failure, 전체 pytest 26개 collection ImportError는 기존 legacy/private-helper 테스트 인프라 불일치다. R9 변경으로 새로 발생한 실패는 확인되지 않았다.
+- gate 중복/성능 정적 점검: `submit_hwpx`는 공통 gate를 1회 호출하고 gate 내부에서 R9 acceptance를 1회 집계한다. 불필요한 중복 acceptance 호출은 확인되지 않았으며 이번에는 대규모 최적화를 하지 않는다.
+- Release 판정: `REVIEW_REQUIRED` — R9 non-COM/P0 범위는 통과했지만 branch가 최신 `origin/main`과 4 ahead/1 behind로 갈라져 있고 AW-001 별도 커밋 통합 및 실제 Hancom 렌더가 남아 있다. `READY_WITH_KNOWN_ENV_BLOCK`로 과장하지 않는다.
 
 ### 8-6. KEEP — 유지
 

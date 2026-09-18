@@ -332,3 +332,37 @@ py -3.11 auto_write_hub.py env
 - 문서 작업 등록은 별도 branch `docs/task-hwpx-r9-20260918`의 커밋 `9ea814e`로 완료·push했다. 코드 작업은 P0 공통 gate가 포함된 별도 R9 feature worktree에서 진행한다.
 - 현재 계획: R9 FAIL/PASS/bypass 회귀를 먼저 failing test로 고정하고, 필요한 경우 `SubmitReport`의 final/submittable 상태 전달만 최소 보강한 뒤 관련 gate 회귀를 실행한다.
 - Hancom COM과 실제 HWP 시각 렌더는 이번 작업에서도 재시도하지 않는다. 임시 창/프로세스는 검증 후 점검하고 사용자 원래 창과 파일은 보존한다.
+
+## 2026-09-18 HWPX R9 Acceptance / Common Final Gate — 검증 완료 checkpoint
+
+- R9 non-COM fixture 3종을 추가했다: R9 FAIL, R9 PASS, `acceptance_gate=False` bypass.
+- 최소 production 보강: `SubmitReport`에 `final_output_allowed`와 `submittable`을 추가하고, 공통 gate PASS에서만 true가 되도록 fail-closed 상태를 명시했다. JSON `as_dict()`에도 두 필드를 보존한다.
+- 검증: 신규 R9 `3 passed`; R9/submit/integrity/acceptance/cleanup/bypass `45 passed, 2 skipped`; HWPX/LRule 보조 회귀 `19 passed`; py_compile/diff check 통과.
+- 결과 commit/push: `codex/hwpx-r9-gate-p0-20260918` / 최신 `ce8cd62` (`8699f20`의 JSON assertion 보강 포함) / `origin` push 완료. P0 base `2ebf550` 위의 feature branch이며 main 직접 push/merge는 하지 않았다.
+- 별도 ProjectService broad regression은 R9와 무관한 Windows `output.docx` 파일 잠금 cleanup 1건으로 실패해 baseline/environment failure로 분류했다. Hancom COM/실제 시각 렌더는 재시도하지 않고 `ENVIRONMENT_BLOCKED` 유지.
+- TASK.md에는 기존 AW-001을 확장해 R9 결과와 branch/SHA/다음 통합·실제 렌더 검증을 기록했다. 다음은 최신 `ce8cd62` feature branch의 P0/main 통합 검토와 Hancom 가능한 환경의 시각 smoke다.
+
+## 2026-09-18 HWPX R9 — final audit
+
+- 최종 코드 branch `codex/hwpx-r9-gate-p0-20260918`는 clean이며 `origin`의 `ce8cd62`와 일치한다. TASK 문서 branch는 `f6b7be7`과 원격이 일치한다.
+- 종료 점검에서 pytest/Hancom/HWP/Word/LibreOffice/미리보기 임시 프로세스는 0건이었다. 기존 사용자 창은 닫지 않았다.
+- `git fetch --all --prune` 중 저장소에 이미 등록된 보조 remote `nightcopy`의 `D:\_night_pilot\auto_write-copy` 경로가 git repository가 아니어서 fetch만 실패했다. `origin/main`은 `7951360`으로 갱신됐고, R9 branch는 P0 base `2ebf550` 위에 보존했다. 이 보조 remote 문제는 R9 코드 실패가 아니며 수정/삭제하지 않는다.
+- root `master`는 기존 dirty 변경을 보존한 채 `origin/main`보다 17개 뒤이고 직접 push/merge하지 않았다. R9는 non-COM 범위에서 PASS, 실제 Hancom 시각 렌더와 main 통합은 별도 `ENVIRONMENT_BLOCKED`/통합 검토 상태다.
+
+## 2026-09-18 R9 Integration Readiness / P0 Release Gate
+
+- 기준: `origin/main=7951360`, P0 base `2ebf550`, R9 `ce8cd62`(사용자가 제시한 production 기준 `8699f20` 포함). R9는 P0 base를 포함하지만 AW-001 `24104fd`/`bc64e96`를 포함하지 않는다.
+- 변경 범위: P0 기준 R9 branch diff는 production `hwpx_submit.py` 12줄과 신규 `test_hwpx_r9_common_gate.py`뿐이며 unrelated 변경은 없다.
+- Release Gate: HWPX 구조/제출/R9/cleanup/default-output `176 passed, 2 skipped`; D1-D6/L154-L156 `28 passed, 1 skipped`; lessons registry `29 passed, 3 failed`는 기존 `BASELINE_DATA_MISMATCH`다.
+- 전체 pytest는 26개 collection ImportError로 중단됐다. 실패 모듈은 R9 변경 파일과 무관한 legacy/private-helper re-export 불일치이며 `BASELINE_FAILURE/TEST_INFRA_FAILURE`로 분류한다. DOCX autopilot rename-lock 2건과 Windows output.docx cleanup lock 1건도 R9 regression이 아니다.
+- `submit_hwpx`→common gate→R9 acceptance 호출은 정적 기준 1회씩이며 중복 validator 실행은 확인되지 않았다. 별도 성능 최적화는 하지 않았다.
+- 최종 merge readiness: `REVIEW_REQUIRED`. 이유는 R9 branch가 `origin/main`과 4 ahead/1 behind로 drift했고 AW-001 별도 통합 및 Hancom COM 실제 렌더가 남았기 때문이다. main merge/push는 하지 않았다.
+- 다음 TASK 1개: AW-001/P0 통합 후보를 최신 `origin/main` 기준으로 안전하게 조합하고 관련 release subset을 재실행하는 통합 review. 실제 COM이 불가능한 동안 COM 재시도는 하지 않는다.
+
+## 2026-09-18 모바일 원격 연결 문의
+
+- 현재 auto_write 개발 상태는 R9/P0 통합 검토(`REVIEW_REQUIRED`)이며 코드 변경·main 병합은 하지 않았다.
+- 모바일에서 집 PC를 조작하는 방법을 안내한다. 추천 기본 경로는 Chrome Remote Desktop 또는 Tailscale+원격 데스크톱이며, 비밀번호·OAuth·권한 승인은 사용자가 직접 처리해야 한다.
+- 다음 개발 액션은 모바일 연결과 별개로 AW-001/P0/R9 통합 worktree 검토다.
+- Codex 모바일 원격 연결은 ChatGPT 모바일 앱의 `Remote`에서 지원되며, 데스크톱 ChatGPT 앱 `Settings > Connections > Control this PC`의 QR pairing이 필요하다.
+- 새 개발 작업은 root `TASK.md` 전체 확인·기존 TASK 귀속 또는 신규 ID 등록·TODO/IN_PROGRESS 기록 후에만 코드/테스트/fixture를 수정한다. 이번 턴은 규칙 적용만 했고 코드 수정은 없다.
