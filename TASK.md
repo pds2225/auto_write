@@ -1,6 +1,9 @@
 # auto_write
 
-> 이 파일은 이 GitHub 레포의 유일한 AI 작업지시 기준이다.
+> 이 파일은 이 GitHub 레포의 유일한 AI 작업지시 기준(개발 TASK SSOT)이다.
+> 공식 기준은 `origin/main:TASK.md`이며, 작업 브랜치의 TASK 변경은 main에 머지된 뒤 공식 상태가 된다.
+> `RESUME.md`는 세션 체크포인트일 뿐 TASK 우선순위·상태의 정본이 아니다.
+> Google Drive는 필요 시 백업/열람용 미러만 허용하며, Drive 복사본을 병행 편집 원본으로 사용하지 않는다.
 > Google Tasks와는 완전히 별개이며 Google Tasks의 항목을 조회·복사·동기화하지 않는다.
 
 ---
@@ -39,6 +42,7 @@ REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 [x] T-20260825-01 | 다른 폴더에만 남아 있던 빠진 그림 생성 코드를 지금 저장소로 옮긴다
 [x] T-20260831-01 | 문서가 다시 깨지는 오류부터 우선순위 A→B→C로 기계 검사에 넣는다
 [x] T-20260831-02 | 신청서 작성을 TASK에 등록 금지 — 파일에서 사업명 삭제 아님. 원장 C가 제일 중요
+[x] T-20260918-01 | TASK.md를 유일한 개발 작업 SSOT로 고정하고 모든 에이전트가 시작·종료 시 같은 파일을 갱신한다
 
 에이전트 본문 금지: `# 0` LIST + 열린(`[ ]`/`[~]`) `8-1`만. T-20260814-02 8-1 전문은 생략. 제품 목표=`AW-005` 8-1 + `최우선 사용 케이스`. 웹앱 실행 정본=`웹앱 최종 요구사항_20260816`(승인 전 웹앱 코드 대기). 원장 **C가 최우선**. 신청서 작성을 TASK에 등록 금지 — 파일에서 사업명 삭제 아님. TASK 통째·CHANGELOG·닫힌 `[x]` DETAILS 금지.
 
@@ -54,7 +58,12 @@ REMOTE: https://github.com/pds2225/auto_write
 
 실행 기준은 이 파일 하나뿐이다.
 
-- `TASK.md`만 작업지시 파일로 사용한다.
+- `TASK.md`만 개발 작업지시·상태·우선순위의 SSOT로 사용한다.
+- 공식 정본은 `origin/main:TASK.md`다. 작업 브랜치에서 수정한 TASK는 main 머지 전까지 제안 상태다.
+- 모든 에이전트는 세션 시작 시 `git fetch origin --prune` 후 TASK.md의 `# 0` LIST와 열린(`[ ]`/`[~]`/`[!]`) TASK의 `8-1`을 먼저 확인한다.
+- `RESUME.md`는 중단 지점·실행 로그·재개 힌트용 세션 체크포인트다. TASK.md와 충돌하면 TASK.md가 우선한다.
+- 작업 종료 시 실제 결과에 맞춰 같은 작업 브랜치의 TASK.md 상태·검증·차단·다음 작업을 갱신하고, main에 머지된 상태를 공식 기록으로 본다.
+- Google Drive 복사본은 백업/열람용 미러만 허용한다. Drive와 GitHub를 동시에 편집 가능한 이중 정본으로 운영하지 않는다.
 - `NEXT_TASK.md`는 없다. 실행 기준은 TASK.md만.
 - 별도의 CURRENT_TASK.md / NEW_TASK.md / NEXT_TASK.md를 만들지 않는다.
 - 다른 레포 TASK, Google Tasks, 과거 채팅 내용을 임의 실행하지 않는다.
@@ -107,7 +116,7 @@ AW DETAILS에는 「원칙」 칸이 없다. 칸은 MUST / KEEP / FORBIDDEN이�
 | ID | 사용자 원문 (한 줄) |
 |---|---|
 | AW-001 | 문서 생성이 DomainRouter → Pipeline → LRule → Hash → Finalizer로 끝나게. business_plan / consultant_application 실제 검증 |
-| AW-002 | GitHub와 작업상태를 안전하게 쌍방향 sync. 비개발자도 상태 파악. master를 원격에 강제 맞추기 버튼 금지 |
+| AW-002 | GitHub와 작업상태를 안전하게 쌍방향 sync. 비개발자도 상태 파악. 기준 브랜치를 원격에 강제 맞추기 버튼 금지 |
 | AW-003 | 전체 L 규칙을 한 화면에서 조회·관리·수정. UI가 runtime 검사를 우회하면 안 됨 |
 | AW-004 | 비개발자가 이해할 아키텍처·업무흐름 모니터 한 화면 |
 | AW-005 | 새 작성과 기존자료→새양식을 별도 제품으로 쪼개지 말 것. 출처=`파일명+페이지` |
@@ -164,7 +173,7 @@ Google Tasks는 이 개발 TASK 시스템과 무관하다.
 
 작업 시작 전 반드시:
 
-1. `git fetch --all --prune`
+1. `git fetch origin --prune` — 작업 기준 원격은 origin이다. 폐기·로컬 전용 remote 장애가 세션 시작을 막지 않게 한다.
 2. `git remote get-url origin` — 이 파일 `# 1. REPOSITORY`의 REPO와 일치하는지 확인
 3. `git branch --show-current`
 4. `git status --short`
@@ -185,7 +194,7 @@ Google Tasks는 이 개발 TASK 시스템과 무관하다.
 
 ## 판정 (fetch 후, AI가 그대로 실행)
 
-`<BASE>`는 `# 1. REPOSITORY`의 BASE다. 이 레포는 `master`.
+`<BASE>`는 `# 1. REPOSITORY`의 BASE다. 이 레포의 BASE는 `main`.
 
 동기화됨(ahead=0, behind=0, clean)이면 그대로 작업을 시작한다.
 
@@ -362,6 +371,39 @@ TASK-A
 ---
 
 # 8. TASK DETAILS
+
+## T-20260918-01
+
+### 8-1. 사용자 원문
+task.md를 드라이브나 레포에 저장하고 계속 거기서 수정하면 안됨?? / 그렇게 셋팅해
+
+### 최종 결과
+개발 작업의 유일한 공식 SSOT를 `origin/main:TASK.md`로 고정한다. 모든 에이전트는 TASK를 먼저 읽고, 작업 브랜치에서 TASK를 갱신한 뒤 main 머지로 공식화한다. `RESUME.md`는 세션 체크포인트, Google Drive는 백업/열람용 미러만 사용한다.
+
+### MUST
+- TASK 상태·우선순위·다음 작업의 공식 정본은 `origin/main:TASK.md`
+- 세션 시작 시 `git fetch origin --prune` 후 TASK LIST + 열린 8-1 먼저 확인
+- 작업 종료 시 실제 결과를 TASK.md에 반영
+- `RESUME.md`는 세션 중단/재개 보조 정보로만 사용
+- Drive 복사본은 백업/열람 전용
+
+### FORBIDDEN
+- TASK.md와 Drive를 동시에 편집 가능한 이중 정본으로 운영
+- RESUME.md가 TASK 우선순위나 상태를 덮어씀
+- 고장 난 보조 remote 때문에 `git fetch --all`이 전체 세션을 막게 함
+- 별도 CURRENT_TASK.md / NEW_TASK.md / NEXT_TASK.md 생성
+
+### VERIFY
+- TASK.md 헤더·작업지시·Git 동기화 규칙이 main/TASK SSOT와 일치
+- AGENTS.md / CLAUDE.md / session-resume / session-closeout-all이 TASK-first로 일치
+- BASE=main, 기본 fetch=origin only
+
+### DONE
+REQUEST_SOLVED=YES
+- TASK SSOT 정책 문서화 완료
+- 에이전트 진입 문서와 세션 스킬의 RESUME 우선 규칙 제거
+- Drive 이중정본 금지 및 origin-only fetch 규칙 반영
+
 
 <!--
 TASK LIST 한 줄 요약과 아래 상세 TASK는 TASK_ID로 연결한다.
