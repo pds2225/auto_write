@@ -254,3 +254,31 @@ py -3.11 auto_write_hub.py env
 - 최종 추가 검증: AW-003 operator console `28 passed`; AW-001 한글 기본 출력 `19 passed`, service resilience `12 passed`, architecture boundary `3 passed`, document ingest `7 passed`.
 - 남은 baseline: generation store `5 passed, 2 failed` — `core.docx.services`에 기존 `generation_store` shim이 없어 trace 기록 테스트가 실패한다. AW-001 final-gate 범위 밖이라 이번 branch에 섞지 않았다.
 - 최종 원격 확인: `origin/main=f220d2d3004e058c7a167d2f38174bb6f2b385d0`; 네 feature branch 모두 clean/원격 동기화. `nightcopy` remote는 `D:\_night_pilot\auto_write-copy`가 repo가 아니어서 fetch 실패했으며, origin 동기화에는 영향이 없다.
+
+## 2026-09-18 FOLLOWUP LONG RUN 2 — start checkpoint
+
+- 목표 순서: generation_store compatibility shim → 실제 caller 회귀 → AW-001 fault injection → AW-008 deterministic 후보 → lessons coverage 불일치 → cp949 portability → 단계적 full pytest.
+- 기준 상태: AW-001 ProjectService gate와 AW-003 registry failure handling은 원격 feature branch에 반영됨. AW-008은 151건(`66/84/1`), 신규 CLOSED 0건. P0 Hancom COM은 기존 2회 timeout으로 재시도 금지.
+- 이번 실행 1순위 baseline: `app/tests/test_generation_store.py`의 2개 실패. 기존 canonical implementation은 `app/auto_write/services/generation_store.py`, core caller의 `.generation_store` import shim 누락이 의심되며 로직 복제 금지.
+- 현재 branch/worktree는 작업 시작 전 `origin/main`, dirty 사용자 변경, TASK/REQUEST_LEDGER를 확인하고 별도 feature branch를 사용한다. main push/merge·COM 재시도·AW-009 웹앱 코드는 금지.
+- 다음 재개 명령: `py -3.11 -m pytest app/tests/test_generation_store.py -q --tb=short` 후 canonical/shim caller를 확인하고, 수정마다 targeted → related regression → commit → push.
+
+## 2026-09-18 FOLLOWUP LONG RUN 2 — restored checkpoint
+
+- 컨텍스트 복원 후 확인: 이번 후속의 1순위는 `app/tests/test_generation_store.py`의 남은 2개 실패이며, 원인은 `app/core/docx/services/openai_client.py`가 참조하는 `core.docx.services.generation_store` 호환 경로 누락으로 기록되어 있다.
+- 기존 canonical 구현(`app/auto_write/services/generation_store.py`)을 재사용하는 최소 shim만 검토한다. 로직 복제·새 저장소 엔진·테스트 우회는 금지한다.
+- 다음 실행: 현재 시각/branch/status를 기록하고, canonical API와 기존 compatibility shim 패턴을 확인한 뒤 failing test를 재현한다.
+
+## 2026-09-18 FOLLOWUP LONG RUN 2 — continued after accidental pause
+
+- 사용자가 승인 대기 중단을 정정했다. `generation_store` 호환 shim과 관련 회귀 수정은 Secret/OAuth/결제/배포가 아닌 기존 엔진의 안전한 코드 작업이므로 별도 승인을 요구하지 않는다.
+- 직전 명령은 `git fetch`와 pytest 시작뿐이며 GUI/COM 호출은 없었다. 실행 중인 pytest가 남았는지는 다음 상태 점검에서 확인한다.
+- 즉시 다음 액션: 현재 branch/worktree와 pytest 상태 확인 → generation_store 실패 재현 → canonical implementation을 재사용하는 최소 shim 구현.
+
+## 2026-09-18 FOLLOWUP LONG RUN 2 — CP2 generation_store complete
+
+- 실제 재현: `app/tests/test_generation_store.py`에서 `core.docx.services.generation_store` ImportError로 2건 실패.
+- 수정: `app/core/docx/services/generation_store.py`를 추가해 canonical `auto_write.services.generation_store`와 동일 모듈 객체를 alias한다. 로직 복제·새 저장소 구현 없음. import identity 회귀 테스트를 추가했다.
+- 검증: generation store/SFT/ProjectService/fail-draft 관련 `56 passed, 23 subtests passed`; `py_compile` 성공; `git diff --check` 경고 없음(라인엔딩 안내만 있음).
+- 커밋/원격: `24104fd fix(compat): alias core generation store to canonical`, `codex/overnight-aw-001-20260918` push 완료, worktree clean.
+- 다음: generation_store 실제 caller audit 및 ProjectService final-gate fault injection으로 진행한다.
