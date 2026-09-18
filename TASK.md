@@ -543,13 +543,14 @@ STATUS_THIS_TURN: `IN_PROGRESS`. 통합 검토에서 확인된 기존 안정화 
 - [x] 전체 pytest collection ImportError: legacy/private-helper re-export 계약을 canonical 구현 기준으로 복구하고 테스트 삭제/skip/xfail 없이 전체 수집 실패를 줄인다. Baseline `26 collection ImportError` → `pytest --collect-only -q` `2248 collected`, exit 0. 실제 전체 실행은 별도 기존 호환성 테스트 실패가 있어 전체 PASS로 표시하지 않는다. Commit `82e450a`.
 - [x] DOCX autopilot rename-lock 2건: legacy `auto_write.services.autopilot_pipeline`가 canonical 함수의 전역을 공유하지 않아 잠금 fixture monkeypatch가 무시되던 호환성 결함을 모듈 alias로 최소 보강했다. `test_gate_faildraft_invariant.py -k rename_lock` `2 passed`, 전체 `14 passed`. Commit `755abf0`.
 - [~] Windows `output.docx` cleanup lock 1건: 현재 stabilization 기준에서 동일 failure fixture의 정확한 재현 경로를 분리 중이다. AW-001 feature branch의 ProjectService publish/cleanup 회귀는 `28 passed, 23 subtests passed`로 재현되지 않아 full 회귀 결과를 추가 확인한다.
-- [~] 전체 회귀 재분류: stabilization branch의 `pytest -q`는 `1771 passed, 22 failed, 5 skipped, 23 subtests passed`로 종료했다. 22건은 lessons L152~L167 baseline mismatch, Hancom/변환 환경, cp949 출력, 기존 runtime 호환성 등으로 분류되며 `output.docx` cleanup lock은 재현되지 않았다. 전체 PASS가 아니므로 main 통합은 보류한다.
+- [~] 전체 회귀 재분류: stabilization branch 최신 `pytest -q`는 `1788 passed, 5 failed, 5 skipped, 23 subtests passed`로 종료했다. 호환성/portability 안전 수정으로 17건을 줄였고, 남은 5건은 lessons L152~L167 baseline mismatch 3건과 fail-closed `_DRAFT` 출력 계약을 기대하지 않는 기존 resume CLI 테스트 2건이다. `output.docx` cleanup lock은 재현되지 않았다. 전체 PASS가 아니므로 main 통합은 보류한다.
 - [x] 변경 영향 대조: origin/main에서 rename-lock은 `2 failed`, private-helper 관련 대상 수집은 `2 collection errors`로 재현되었고 stabilization branch에서는 rename-lock `2 passed`, 관련 서비스/ProjectService 회귀 `73 passed, 23 subtests passed`다. `compileall=PASS`, `git diff --check=PASS`.
-- [ ] 22건 triage 안전 수정: legacy/canonical 모듈 호환성(`bizplan_autopilot`, `hwp_docx_convert`, `resume_fill_service`, `generation_store`)만 최소 alias/shim으로 보강하고 각 실패를 재검증한다.
-- [ ] 22건 triage portability: `session_resume_hook.js`의 JSON stdout을 Windows cp949 부모 프로세스에서도 손실 없이 읽을 수 있는 ASCII-safe 직렬화로 보강하고 회귀를 확인한다.
-- [ ] 22건 triage HWP compatibility: `hancom_com_guard` module alias와 `hwp_docx_convert`의 legacy `document_ingest` patch 경로를 정렬하고 HWP/HWPX fixture 회귀를 확인한다.
+- [x] 22건 triage 안전 수정: legacy/canonical 모듈 호환성(`bizplan_autopilot`, `hwp_docx_convert`, `resume_fill_service`, `generation_store`)을 최소 alias/shim으로 보강했다. 관련 targeted `45 + 9 + 7`건은 통과했고 resume CLI의 초기 import 오류는 제거했으나 기존 `_DRAFT` 출력 계약 테스트 2건은 잔여 baseline으로 남겼다. Commits `45cead0`, `6d2f820`.
+- [x] 22건 triage portability: `session_resume_hook.js`의 JSON stdout을 Windows cp949 부모 프로세스에서도 손실 없이 읽도록 ASCII-safe 직렬화로 보강했다. `test_session_resume.py` `4 passed`, commit `d52201e`.
+- [x] 22건 triage HWP compatibility: `hancom_com_guard`/`hwp_fill` module alias와 `hwp_docx_convert`의 legacy `document_ingest` patch 경로를 정렬했다. HWP/HWPX 관련 targeted `26 passed`, commit `6d2f820`.
+- [~] 22건 잔여 baseline: lessons registry 3건은 origin/main baseline에서도 동일 실패했고, resume CLI 2건은 baseline의 import 오류 뒤 현재 fail-closed `_DRAFT` 출력 계약 불일치가 노출된다. 테스트 완화·DRAFT 복사는 하지 않고 후속 계약 정합성 작업으로 남긴다.
 - [ ] 22건 triage HWP fill compatibility: legacy `hwp_fill` 호출자가 canonical 변환 함수 전역을 공유하도록 module alias를 정렬하고 HWPX fixture 회귀를 확인한다.
-- MAIN_INTEGRATION: `NOT_READY` — 전체 회귀 baseline/environment 실패가 남아 있고, main 직접 merge/push는 수행하지 않았다.
+- MAIN_INTEGRATION: `NOT_READY` — 최신 전체 회귀가 `1788 passed, 5 failed, 5 skipped`이며 baseline/기존 계약 실패가 남아 있어 main 직접 merge/push는 수행하지 않았다. 최신 branch HEAD `6d2f820`.
 - [ ] lessons L152~L167 및 L163/L164 중복은 외부 baseline mismatch로 이번 안정화에서 수정하지 않는다.
 - WORK_BRANCH: `codex/stabilize-0918-20260918` (origin/main 기준 별도 worktree)
 - VERIFY: 수정 전/후 전체 pytest 결과, 해당 targeted 회귀, compileall, diff audit

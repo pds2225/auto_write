@@ -426,3 +426,10 @@ py -3.11 auto_write_hub.py env
 - 안전 수정 반영: legacy service module aliases 및 canonical/legacy ingest compatibility, session resume hook의 cp949-safe JSON 직렬화. 최신 전체 회귀는 `1780 passed, 13 failed, 5 skipped, 23 subtests passed`.
 - 현재 미커밋 후보: `app/auto_write/services/hancom_com_guard.py` module alias와 `app/core/docx/services/hwp_docx_convert.py` legacy ingest seam. Hancom guard·hwp_docx_convert targeted는 통과했으나 hwp_fill 3건은 아직 원인 확인 중이다.
 - 다음: hwp_fill caller/module identity와 fixture 변환 결과를 직접 확인 → 안전한 compatibility 수정 여부 결정 → targeted/regression/full pytest → TASK 동기화 및 main integration readiness 재판정.
+
+## 2026-09-18 AW-001 stabilization — final triage checkpoint
+
+- `hwp_fill` 레거시 star-reexport가 canonical 함수 전역을 공유하지 않던 문제를 module alias로 수정했고, `hancom_com_guard` alias 및 `hwp_docx_convert`의 legacy `auto_write.document_ingest` patch seam과 함께 `6d2f820`으로 커밋·feature branch push했다.
+- HWP/HWPX 및 resume hook targeted 회귀: `26 passed`; 전체 pytest 최신 결과: `1788 passed, 5 failed, 5 skipped, 23 subtests passed` in `350.50s`.
+- 남은 5건: lessons registry 3건은 origin/main에서도 동일한 L152~L167/L163/L164 mismatch; resume CLI 2건은 baseline에서 import 오류 후 현재 fail-closed `_DRAFT.hwpx` 출력과 구 테스트의 `out.hwpx` 기대가 불일치한다. 테스트 완화·DRAFT 복사는 하지 않는다.
+- 통합 판정: `NOT_READY` (새 회귀 증거 없음, 그러나 전체 pytest가 red). Hancom COM/실제 HWP 렌더는 기존 `ENVIRONMENT_BLOCKED` 유지. 다음 작업은 resume CLI 테스트/계약 정합성의 별도 안전 검토다.
