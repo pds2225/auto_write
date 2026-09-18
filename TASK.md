@@ -15,14 +15,14 @@ TASK 1개 = 반드시 1줄. LIST의 TASK_ID와 DETAILS의 TASK_ID는 반드시 1
 REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 -->
 
-[ ] AW-001 | 문서 작성이 정해진 검사 경로를 거쳐 끝나게 한다
+[~] AW-001 | 문서 작성이 정해진 검사 경로를 거쳐 끝나게 한다
 [ ] AW-002 | GitHub와 작업 상태를 안전하게 주고받게 한다
 [ ] AW-003 | L 규칙을 한 화면에서 보고 고칠 수 있게 한다
 [ ] AW-004 | 문서 작성 진행 상태를 한 화면에서 보게 한다
 [ ] AW-005 | 새 작성과 기존 자료 작성을 한 흐름으로 단순화한다
 [ ] AW-006 | 루트 파일을 역할별로 정리한다
 [ ] AW-007 | 중복·미사용 코드를 찾아 정리한다
-[ ] AW-008 | 남은 L 규칙 빈칸을 실제 검사로 채운다
+[~] AW-008 | 남은 L 규칙 빈칸을 실제 검사로 채운다
 [ ] AW-009 | 요구사항 문서로 운영 웹앱 P0를 만든다
 [x] T-20260814-01 | 기본 브랜치(main) 보호가 켜져 있고, 문서 머지는 docs-gate를 거친다
 [ ] T-20260814-02 | AIMY급 사업계획서를 공고·양식·기업사실에 맞춰 자동 작성하는 통합 과업을 명세한다
@@ -1357,6 +1357,7 @@ DEPENDS_ON:
 - 이번 실측에서는 재발 이력·낮은 오탐 위험·실패 fixture·runtime 차단 증거를 동시에 만족하는 신규 규칙이 없어 mechanized 전환 0건, AW-008은 `PARTIAL`이다.
 - 외부 정본 `D:\.omc\agent-learning\lessons.md`에는 L152~L167이 있으나 repo coverage registry에는 없다. registry integrity 관련 검사는 `10 passed, 3 failed`이며 외부 문서 내부에서 L163/L164 중복도 확인됐다. L154~L156은 기존 skill-only 규약으로 JSON registry에 무조건 편입하지 않는다.
 - 위 차이는 코드 결함이 아닌 `BASELINE_DATA_MISMATCH`로 기록한다. 숫자 맞추기용 registry 확장이나 judgment 규칙의 억지 mechanization은 하지 않는다. AW-008은 신규 CLOSED 0건, `PARTIAL`, `REQUEST_SOLVED=NO`로 유지한다.
+- 관련 LRule 회귀는 `15 passed, 3 failed`(coverage/registry 불일치 3건)으로 확인했다. 실패를 신규 mechanization의 성공으로 세지 않으며, 현재 registry 후보 L005/L008은 HUMAN_GATE·정책 예외가 있어 자동화하지 않는다.
 
 문서의 DONE 표시만 믿지 말고 실제 코드/runtime을 확인한다.
 

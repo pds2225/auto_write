@@ -311,3 +311,24 @@ py -3.11 auto_write_hub.py env
 - cp949 재현: 기본 Windows 인코딩에서 `test_session_resume.py::test_close_prompt_injects_skill`가 Node UTF-8 출력 해석 오류로 실패했다. `subprocess.run(..., encoding="utf-8")`를 테스트 하네스에 최소 적용한 `04a4750 test(session): decode hook output as UTF-8`을 별도 branch `codex/overnight-encoding-20260918`에 커밋·push했다. 기본 인코딩에서 session-resume/closeout `11 passed`, py_compile 통과.
 - AW-001 별도 branch 재검증: ProjectService safety `28 passed, 23 subtests passed`; generation_store `8 passed`; domain/LRule/finalizer `41 passed`. HWPX acceptance 재실행은 점 출력에서 종료 증거가 남지 않아 `UNVERIFIED/HANG`으로 분류하고 같은 명령을 반복하지 않는다. COM은 재시도하지 않았다.
 - 다음: root dirty 변경을 보존한 채 최종 diff/status, branch push, 임시 테스트 프로세스 잔존 여부를 확인하고 최종 TASK/RESUME 상태를 보고한다.
+
+## 2026-09-18 FOLLOWUP LONG RUN 2 — CP7 final audit
+
+- 최종 root 상태: `master`는 `origin/main` 대비 `16 behind / 0 ahead`, 기존 dirty 파일과 `_work/`를 보존했다. main/master push·merge는 하지 않았다.
+- feature branch 원격 증명: AW-001 `bc64e96`, AW-008 `6098240`, encoding portability `04a4750`, P0 `2ebf550`; 네 worktree 모두 clean이며 원격 SHA와 일치한다.
+- AW-008 신규 CLOSED는 0건이다. LRule 관련 검사는 `15 passed, 3 failed`; 3건은 외부 lessons source와 repo registry의 baseline mismatch로 분류했다. deterministic 조건을 충족하지 않는 L005/L008은 HUMAN_GATE/정책 예외로 유지한다.
+- 임시 `pytest`/HWP/Hancom/Word/LibreOffice 프로세스는 최종 점검에서 0건이었다. 파일 삭제 없이 정리했고, 실제 COM은 재시도하지 않았다.
+- 최종 판정: AW-001 구조/fail-closed는 MATCH, 실제 Hancom 렌더는 `ENVIRONMENT_BLOCKED`, AW-008은 `PARTIAL`, 전체 상태는 `PARTIAL`이다.
+
+## 2026-09-18 파일/창 정리 checkpoint
+
+- 상태: 코드 작업은 완료 보고 상태이며 root `master`의 기존 dirty 변경, feature worktree, 생성 파일을 보존한다.
+- 결정: 조사·검증용 임시 파일은 삭제하지 않고, 임시 프로세스/뷰어만 확인 후 불필요한 경우 종료한다. 사용자 원래 창과 저장되지 않은 변경은 닫지 않는다.
+- 확인: `D:\auto_write` 관련 pytest/Hancom/Word/LibreOffice/미리보기 프로세스는 남아 있지 않았다. 기존 Chrome/Notepad 창은 사용자 원래 창인지 구분할 수 없어 닫지 않았다.
+
+## 2026-09-18 HWPX R9 Acceptance / Common Final Gate — 시작 checkpoint
+
+- 사용자 요청으로 R9 수용검사와 공통 HWPX final gate 연결을 non-COM fixture로 검증·보강한다. 기존 AW-001 fail-closed, P0 gate, COM `ENVIRONMENT_BLOCKED`, AW-008 baseline mismatch는 유지하고 재작업하지 않는다.
+- 문서 작업 등록은 별도 branch `docs/task-hwpx-r9-20260918`의 커밋 `9ea814e`로 완료·push했다. 코드 작업은 P0 공통 gate가 포함된 별도 R9 feature worktree에서 진행한다.
+- 현재 계획: R9 FAIL/PASS/bypass 회귀를 먼저 failing test로 고정하고, 필요한 경우 `SubmitReport`의 final/submittable 상태 전달만 최소 보강한 뒤 관련 gate 회귀를 실행한다.
+- Hancom COM과 실제 HWP 시각 렌더는 이번 작업에서도 재시도하지 않는다. 임시 창/프로세스는 검증 후 점검하고 사용자 원래 창과 파일은 보존한다.
