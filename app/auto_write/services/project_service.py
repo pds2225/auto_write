@@ -628,18 +628,12 @@ class ProjectService:
         results_dir.mkdir(parents=True, exist_ok=True)
         dated_name = self._results_docx_name(project_input)
         results_docx = results_dir / dated_name
-        shutil.copy2(output_path, results_docx)
-        shutil.copy2(output_path, results_dir / "output.docx")
 
-        output_gate_path = output_path.parent / "final_gate_report.json"
-        write_json(output_gate_path, final_gate_report)
-        results_gate_report = dict(final_gate_report)
-        results_gate_report["published_artifact"] = str(results_docx)
-        results_gate_path = results_dir / "final_gate_report.json"
-        write_json(results_gate_path, results_gate_report)
-
+        # 사용자 기본 산출물은 HWPX다. DOCX는 내부 중간본으로 유지하되,
+        # HWPX 변환에 실패한 결과를 FINAL처럼 발행하지 않는다.
         results_hwpx = ""
         output_hwpx = ""
+        hangul_output_error = ""
         try:
             from .hangul_default import emit_hangul_file
 
@@ -649,10 +643,44 @@ class ProjectService:
             emit_res = emit_hangul_file(output_path, res_hwpx)
             if emit_out.ok:
                 output_hwpx = emit_out.output
+            else:
+                hangul_output_error = "output.hwpx emission failed"
             if emit_res.ok:
                 results_hwpx = emit_res.output
-        except Exception as exc:  # noqa: BLE001 — 한글 산출 실패가 생성 전체를 막지 않음
-            log_line(f"[WARN] 한글 산출 실패(DOCX 작업본은 유지): {exc}")
+            else:
+                hangul_output_error = hangul_output_error or "results HWPX emission failed"
+        except Exception as exc:  # noqa: BLE001 — HWPX 실패는 FINAL로 승격하지 않음
+            hangul_output_error = f"{type(exc).__name__}: {exc}"
+
+        if hangul_output_error:
+            final_gate_report = dict(final_gate_report)
+            final_gate_report.update(
+                {
+                    "status": "DRAFT",
+                    "final_output_allowed": False,
+                    "submittable": False,
+                    "hangul_output_allowed": False,
+                    "blocked_reason": (
+                        final_gate_report.get("blocked_reason")
+                        or f"hangul_output_error:{hangul_output_error}"
+                    ),
+                }
+            )
+        else:
+            final_gate_report = dict(final_gate_report)
+            final_gate_report["hangul_output_allowed"] = True
+
+        output_gate_path = output_path.parent / "final_gate_report.json"
+        write_json(output_gate_path, final_gate_report)
+        results_gate_report = dict(final_gate_report)
+        results_gate_report["published_artifact"] = str(results_docx)
+        results_gate_path = results_dir / "final_gate_report.json"
+        write_json(results_gate_path, results_gate_report)
+
+        # 두 gate report가 모두 기록된 뒤에만 결과 DOCX를 공개 폴더로 복사한다.
+        # report 기록 실패 시 부분 FINAL 산출물이 남아 gate를 우회하지 않게 한다.
+        shutil.copy2(output_path, results_docx)
+        shutil.copy2(output_path, results_dir / "output.docx")
 
         hwp_text = self._build_hwp_paste_text(
             profile,
