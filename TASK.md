@@ -513,7 +513,7 @@ INPUT
 증거:
 
 - 코드 branch: `codex/hwpx-r9-gate-p0-20260918`
-- commit: `8699f20`
+- commit: `ce8cd62` (R9 상태 JSON 직렬화 assertion 포함)
 - COM/실제 Hancom 시각 렌더: `ENVIRONMENT_BLOCKED`
 - 다음: feature branch의 P0/main 통합 검토 후 실제 시각 smoke 검증
 
