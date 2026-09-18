@@ -282,3 +282,32 @@ py -3.11 auto_write_hub.py env
 - 검증: generation store/SFT/ProjectService/fail-draft 관련 `56 passed, 23 subtests passed`; `py_compile` 성공; `git diff --check` 경고 없음(라인엔딩 안내만 있음).
 - 커밋/원격: `24104fd fix(compat): alias core generation store to canonical`, `codex/overnight-aw-001-20260918` push 완료, worktree clean.
 - 다음: generation_store 실제 caller audit 및 ProjectService final-gate fault injection으로 진행한다.
+
+## 2026-09-18 FOLLOWUP LONG RUN 2 — CP3 AW-001 HWPX fail-closed complete
+
+- ProjectService의 기존 DOCX는 내부 중간본으로 유지하고, 기본 사용자 산출물 HWPX 생성 결과를 별도로 확인하도록 `_publish_results_bundle` 순서를 보강했다. 두 gate report 기록 전 결과 DOCX를 공개 폴더에 복사하지 않으며, HWPX emit 실패 시 gate report를 `DRAFT`, `final_output_allowed=false`, `submittable=false`로 강등한다.
+- 테스트는 core converter 경로의 `hancom_com_available`을 false로 고정해 실제 COM 창을 띄우지 않는 XML HWPX fallback을 검증한다. COM/Hancom 실제 smoke는 기존 `ENVIRONMENT_BLOCKED` 정책으로 재시도하지 않는다.
+- 검증: generation store + ProjectService `36 passed, 23 subtests passed`; HWPX default output `19 passed`; GUI 프로세스 잔존 없음. 커밋 `bc64e96 fix(project): fail closed when Hangul output is unavailable`, AW-001 branch push 완료.
+- 다음: AW-008 registry의 judgment deterministic 후보를 실제 코드 근거로 판별하고, 조건을 모두 만족하는 경우에만 최대 2개 mechanization을 구현한다.
+
+## 2026-09-18 FOLLOWUP LONG RUN 2 — CP4 AW-008 census / source mismatch
+
+- `app/tests/lessons_coverage.json` 실측: total 151, mechanized 66, judgment 84, gap 1(L050). judgment 중 `mechanizable != no` 후보는 L005/L008뿐이며 각각 픽셀 검증·서식 정책 의존 `partial`이라 guard + fixture + runtime/final gate + metadata + 차단 증거 5조건을 충족할 수 없어 신규 CLOSED 0건을 유지한다.
+- 외부 정본 `D:\.omc\agent-learning\lessons.md`에는 L152~L167이 있으나 repo registry에는 없다. registry integrity 테스트는 `10 passed, 3 failed`로 재현되었고, L163/L164는 외부 정본 내부 중복도 확인됐다. L154~L156은 기존 lockdown 규약상 JSON 미수록 skill-only다. 이 PHASE는 `BASELINE_DATA_MISMATCH`로 기록하며 숫자 맞추기용 registry 확장은 하지 않는다.
+- 조사 파일·GUI·임시 프로세스는 생성하지 않았고, 파일 삭제도 하지 않았다.
+- 다음: cp949/UTF-8 portability의 실제 실패 테스트와 production 파일 I/O 경계를 확인한다.
+
+## 2026-09-18 FOLLOWUP LONG RUN 2 — compression restore checkpoint
+
+- 압축 후 최신 기준을 복원했다. root `master`의 기존 dirty 변경과 AW-001/AW-008 전용 worktree를 보존하며, `origin/main=f220d2d`와 실제 branch/commit 상태를 기준으로 계속한다.
+- AW-001 실제 구현 커밋 `24104fd`(generation_store compatibility alias), `bc64e96`(HWPX emit fail-closed)는 별도 feature branch에 존재하고 관련 테스트 근거가 있다. Hancom COM은 재시도하지 않고 `ENVIRONMENT_BLOCKED`를 유지한다.
+- 현재 실행 목표: TASK.md와 코드/RESUME 동기화 감사 → cp949/UTF-8 portability 실패의 production/test 경계 판정 → 안전한 경우 별도 branch에서 최소 수정 및 회귀 검증. AW-008은 deterministic 조건을 충족하는 후보가 없으면 0 CLOSED로 유지한다.
+- 다음 실행: `TASK.md` 관련 항목을 실제 코드/커밋 상태에 맞게 갱신한 뒤, session-resume 관련 실패를 기본 인코딩 환경에서 재현한다.
+
+## 2026-09-18 FOLLOWUP LONG RUN 2 — CP5 TASK sync / CP6 portability
+
+- TASK 동기화 감사: AW-001은 최신 코드/커밋(`24104fd`, `bc64e96`)이 기존 상세 기록보다 앞서 있어 처음에는 `CODE_AHEAD_OF_TASK`였고, 기존 항목에 검증 근거를 추가했다. 이후 AW-001의 구조/fail-closed 범위는 MATCH이며, HWPX R9/LRule 및 실제 Hancom 렌더는 `PARTIAL`/`ENVIRONMENT_BLOCKED`로 유지한다.
+- AW-008은 registry `151 = mechanized 66 + judgment 84 + gap 1`과 일치한다. 외부 lessons 정본 `D:\.omc\agent-learning\lessons.md`의 L152~L167 미편입 및 L163/L164 내부 중복은 `BASELINE_DATA_MISMATCH`로 기록했고 registry 숫자 맞추기용 변경은 하지 않았다. 관련 검사는 `15 passed, 3 failed`이며 실패 3건은 이 baseline 불일치다.
+- cp949 재현: 기본 Windows 인코딩에서 `test_session_resume.py::test_close_prompt_injects_skill`가 Node UTF-8 출력 해석 오류로 실패했다. `subprocess.run(..., encoding="utf-8")`를 테스트 하네스에 최소 적용한 `04a4750 test(session): decode hook output as UTF-8`을 별도 branch `codex/overnight-encoding-20260918`에 커밋·push했다. 기본 인코딩에서 session-resume/closeout `11 passed`, py_compile 통과.
+- AW-001 별도 branch 재검증: ProjectService safety `28 passed, 23 subtests passed`; generation_store `8 passed`; domain/LRule/finalizer `41 passed`. HWPX acceptance 재실행은 점 출력에서 종료 증거가 남지 않아 `UNVERIFIED/HANG`으로 분류하고 같은 명령을 반복하지 않는다. COM은 재시도하지 않았다.
+- 다음: root dirty 변경을 보존한 채 최종 diff/status, branch push, 임시 테스트 프로세스 잔존 여부를 확인하고 최종 TASK/RESUME 상태를 보고한다.

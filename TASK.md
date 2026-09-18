@@ -428,6 +428,13 @@ TASK_BLOB_SHA: f6f8023b0dd47d301acedc75a5d4957edd147d4e
 WORK_BRANCH: cursor/overnight-aw-001-2cb9
 STATUS_THIS_TURN: 기존 `ProjectService.generate → _publish_results_bundle`에 공통 `run_to_final` 수렴과 `final_gate_report.json` 기록을 연결했다. 게이트 실행·예외·malformed 결과 모두 `DRAFT`/비제출 상태로 남긴다. 추가로 rename-lock fail-closed 테스트 주입 오류와 legacy private-helper re-export 누락을 보정했다. feature branch `codex/overnight-aw-001-20260918`에 `da81c5a`, `2c316fe`, `2a5117b`, `a60327a`, `e0723af`를 push했다. 관련 회귀 `71 passed`, 적용·품질·제출 통합 `96 passed`. LIST `[~]`. REQUEST_SOLVED=NO(HWPX `submit_hwpx`의 별도 R9 수용검사 계약과 실제 렌더 검증은 별도 blocker).
 
+### 2026-09-18 FOLLOWUP LONG RUN 2 상태 동기화
+
+- 실제 AW-001 feature branch `codex/overnight-aw-001-20260918`의 추가 커밋은 `24104fd`(canonical `generation_store`에 대한 `core.docx.services` compatibility alias)와 `bc64e96`(HWPX emit 실패 시 fail-closed)이다. 기존 canonical 구현을 복제하지 않았고 branch push 및 worktree clean을 확인했다.
+- `bc64e96` 검증: generation store + ProjectService 관련 `36 passed, 23 subtests passed`, HWPX default output `19 passed`; ProjectService 결과는 HWPX 오류 시 `status=DRAFT`, `final_output_allowed=false`, `submittable=false`, `hangul_output_allowed=false`로 남는다. DOCX는 내부 중간본이며 기본 사용자 산출물 계약은 HWPX이다.
+- 실제 Hancom COM smoke는 기존 동일 환경 무응답 2회로 `ENVIRONMENT_BLOCKED` 유지한다. 따라서 실제 시각 렌더링 `FULL/PASS`로 표시하지 않는다. `REQUEST_SOLVED=NO`를 유지한다.
+- 상태 판정: 코드/커밋은 기존 TASK 기록보다 앞서 있었으므로 이 블록 추가 전에는 `CODE_AHEAD_OF_TASK`; 본 동기화 후 AW-001 완료 근거는 MATCH이나 HWPX R9/LRule 계약 및 실제 렌더는 PARTIAL/ENVIRONMENT_BLOCKED이다.
+
 ### 8-1. 사용자 원문 요청
 
 > 실제 문서 생성 경로가 DomainRouter → DomainPipeline → LRuleEnforcer → Hash 검증 → Finalizer로 수렴하게 하고, business_plan / consultant_application을 실제로 검증한다.
@@ -1348,6 +1355,8 @@ DEPENDS_ON:
 - 2026-09-18 실측: `app/tests/lessons_coverage.json` 151건, `mechanized=66`, `judgment=84`, `gap=1`로 합계가 일치한다. 과거 `44/86/21` 수치는 stale이며 현재 판정에 사용하지 않는다.
 - 현재 gap은 L050(HWP+PDF 쌍 생성) 하나이며 rhwp/한글 렌더러 환경 의존으로 `partial` 유지한다. L005(픽셀 눈검증)·L008(폰트 위계)는 사람 판단/정책 예외가 있어 deterministic mechanization 후보로 닫지 않는다.
 - 이번 실측에서는 재발 이력·낮은 오탐 위험·실패 fixture·runtime 차단 증거를 동시에 만족하는 신규 규칙이 없어 mechanized 전환 0건, AW-008은 `PARTIAL`이다.
+- 외부 정본 `D:\.omc\agent-learning\lessons.md`에는 L152~L167이 있으나 repo coverage registry에는 없다. registry integrity 관련 검사는 `10 passed, 3 failed`이며 외부 문서 내부에서 L163/L164 중복도 확인됐다. L154~L156은 기존 skill-only 규약으로 JSON registry에 무조건 편입하지 않는다.
+- 위 차이는 코드 결함이 아닌 `BASELINE_DATA_MISMATCH`로 기록한다. 숫자 맞추기용 registry 확장이나 judgment 규칙의 억지 mechanization은 하지 않는다. AW-008은 신규 CLOSED 0건, `PARTIAL`, `REQUEST_SOLVED=NO`로 유지한다.
 
 문서의 DONE 표시만 믿지 말고 실제 코드/runtime을 확인한다.
 
