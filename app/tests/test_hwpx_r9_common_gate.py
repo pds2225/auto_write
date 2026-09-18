@@ -63,6 +63,8 @@ def test_r9_failure_reaches_common_gate_and_blocks_final_output(tmp_path: Path):
     assert report.acceptance["ok"] is False
     assert report.final_output_allowed is False
     assert report.submittable is False
+    assert report.as_dict()["final_output_allowed"] is False
+    assert report.as_dict()["submittable"] is False
     assert Path(report.final).name == "result_DRAFT.hwpx"
     assert Path(report.final).exists()
     assert not requested.exists()
@@ -78,6 +80,8 @@ def test_r9_pass_keeps_normal_final_output(tmp_path: Path):
     assert report.integrity["final_status"] == PASS
     assert report.final_output_allowed is True
     assert report.submittable is True
+    assert report.as_dict()["final_output_allowed"] is True
+    assert report.as_dict()["submittable"] is True
     assert Path(report.final) == requested
     assert requested.exists()
     assert report.acceptance["ok"] is True
