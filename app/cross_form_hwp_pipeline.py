@@ -481,7 +481,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--document-type",
         default=None,
-        help="최종 파일명 문서종류(미지정 시 --form-prefix)",
+        help="최종 파일명 문서종류(미지정 시 원본 파일명에서 추정)",
     )
     parser.add_argument(
         "--version",
