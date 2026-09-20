@@ -1,0 +1,29 @@
+name: temp-output-path-verify
+
+on:
+  push:
+    branches:
+      - codex/user-output-source-dir-20260920
+
+permissions:
+  contents: read
+
+jobs:
+  targeted-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install minimal test dependencies
+        run: python -m pip install -q pytest python-docx lxml pypdf Pillow
+      - name: Syntax check modified Python
+        run: |
+          python -m py_compile             app/core/docx/services/hangul_default.py             app/core/docx/services/bizplan_autopilot.py             app/bizplan_autopilot.py             app/hwp_fill_direct.py             app/hwpx_submit.py             app/cross_form_hwp_pipeline.py             app/auto_write_hub.py
+      - name: Targeted output-path tests
+        env:
+          PYTHONPATH: app
+        run: |
+          pytest -q             app/tests/test_hangul_default_output.py::test_default_auto_create_and_fill_paths             app/tests/test_hangul_default_output.py::test_source_adjacent_output_name_and_version_increment             app/tests/test_hangul_default_output.py::test_source_adjacent_output_infers_program_and_document_type             app/tests/test_hangul_default_output.py::test_source_adjacent_output_respects_explicit_output             app/tests/test_hangul_default_output.py::test_hwpx_submit_cli_default_suffix_is_hwpx             app/tests/test_hwpx_fill.py::test_cli_default_output_is_source_adjacent             app/tests/test_hwpx_fill.py::test_cli_explicit_output_still_wins             app/tests/test_hwpx_submit.py::test_cli_default_output_is_source_adjacent
