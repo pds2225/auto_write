@@ -131,10 +131,12 @@ def _extract_text(doc: Document, *, limit: int = 30000) -> str:
     return "\n".join(parts)
 
 
-def check_psst(doc: Document) -> PSSTReport:
-    """Document 에 대해 PSST 4영역 충실도를 검사한다."""
-    text = _extract_text(doc)
+def check_psst_text(text: str) -> PSSTReport:
+    """Plain text에 대해 PSST 4영역 충실도를 검사한다.
 
+    파일 형식별 어댑터가 이 함수에 텍스트를 전달하므로, 판정 로직은
+    DOCX/HWPX에 공통으로 유지된다.
+    """
     # 섹션 헤더 존재 여부 (기존 정규식 재사용)
     section_flags = {
         "problem": bool(PSST_PROBLEM_RE.search(text)),
@@ -175,5 +177,17 @@ def check_psst(doc: Document) -> PSSTReport:
     return PSSTReport(applicable=True, areas=areas, overall_ratio=overall, summary=summary)
 
 
+def check_psst(doc: Document) -> PSSTReport:
+    """python-docx Document에 대해 PSST 4영역 충실도를 검사한다."""
+    return check_psst_text(_extract_text(doc))
+
+
 def check_psst_docx(path: str | Path) -> PSSTReport:
     return check_psst(Document(str(Path(path))))
+
+
+def check_psst_hwpx(path: str | Path) -> PSSTReport:
+    """HWPX를 변환하지 않고 직접 읽어 기존 PSST 판정 로직을 재사용한다."""
+    from .hwpx_analysis_adapter import read_hwpx_analysis
+
+    return check_psst_text(read_hwpx_analysis(path).text)
