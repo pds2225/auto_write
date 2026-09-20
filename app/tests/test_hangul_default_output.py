@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import inspect
 import zipfile
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -28,6 +29,10 @@ from auto_write.services.hangul_default import (
     emit_hangul_file,
     is_explicit_docx,
     is_hangul_default_combo,
+    infer_document_type,
+    infer_program_name,
+    resolve_user_output_path,
+    user_output_filename,
     write_text_hwpx,
 )
 from auto_write_hub import main as hub_main
@@ -72,9 +77,57 @@ def test_default_auto_create_and_fill_paths(tmp_path: Path) -> None:
         "초안", tmp_path, kind="bizplan", output_path=tmp_path / "out.docx"
     )
     assert explicit.suffix == ".docx"
-    src = tmp_path / "양식.hwpx"
-    assert default_fill_output(src).name == "양식_제출.hwpx"
-    assert default_fill_output(src, tmp_path / "지정.hwpx").name == "지정.hwpx"
+    src = tmp_path / "GovTech_아이디어기획서_원본.hwpx"
+    when = datetime(2026, 9, 20, 21, 17)
+    auto = default_fill_output(src, when=when)
+    assert auto.parent == src.parent
+    assert auto.name == "GovTech_아이디어기획서_092021 v1.hwpx"
+    assert default_fill_output(src, tmp_path / "지정.hwpx", when=when).name == "지정.hwpx"
+
+
+def test_source_adjacent_output_name_and_version_increment(tmp_path: Path) -> None:
+    src = tmp_path / "GovTech_사업계획서_원본.hwpx"
+    src.write_bytes(b"src")
+    when = datetime(2026, 9, 20, 21, 17)
+
+    assert (
+        user_output_filename("2026 GovTech", "사업 계획서", when=when, version=1)
+        == "2026GovTech_사업계획서_092021 v1.hwpx"
+    )
+    first = resolve_user_output_path(
+        src,
+        program_name="2026 GovTech",
+        document_type="사업계획서",
+        when=when,
+    )
+    assert first.parent == src.parent
+    assert first.name == "2026GovTech_사업계획서_092021 v1.hwpx"
+    first.write_bytes(b"v1")
+
+    second = resolve_user_output_path(
+        src,
+        program_name="2026 GovTech",
+        document_type="사업계획서",
+        when=when,
+    )
+    assert second.name == "2026GovTech_사업계획서_092021 v2.hwpx"
+
+
+def test_source_adjacent_output_infers_program_and_document_type(tmp_path: Path) -> None:
+    src = tmp_path / "04_[아이디어_기획서]_2026년_GovTech_창업경진대회_0820_최종.hwpx"
+    when = datetime(2026, 9, 20, 21, 17)
+    assert infer_document_type(src) == "아이디어기획서"
+    assert infer_program_name(src, document_type="아이디어기획서") == "2026년_GovTech_창업경진대회"
+
+    out = resolve_user_output_path(src, when=when)
+    assert out.parent == src.parent
+    assert out.name == "2026년_GovTech_창업경진대회_아이디어기획서_092021 v1.hwpx"
+
+
+def test_source_adjacent_output_respects_explicit_output(tmp_path: Path) -> None:
+    src = tmp_path / "원본.hwpx"
+    explicit = tmp_path / "직접지정.hwpx"
+    assert resolve_user_output_path(src, output_path=explicit) == explicit
 
 
 def test_hangul_default_combo() -> None:
@@ -199,6 +252,9 @@ def test_bizplan_default_output_is_hwpx(tmp_path: Path, monkeypatch) -> None:
     out = Path(report.output_docx)
     assert out.suffix.lower() == ".hwpx"
     assert out.is_file()
+    assert out.parent == src.parent
+    assert "_사업계획서_" in out.name
+    assert " v1" in out.name
     assert src.suffix == ".docx"  # 원본은 워드 그대로
 
 
@@ -212,10 +268,12 @@ def test_bizplan_explicit_docx_stays_docx(tmp_path: Path) -> None:
     assert Path(report.output_docx).suffix.lower() == ".docx"
 
 
-def test_hwpx_submit_cli_default_suffix_is_hwpx() -> None:
-    src = Path("양식.hwpx")
-    assert default_fill_output(src).name.endswith(".hwpx")
-    assert ".docx" not in default_fill_output(src).name
+def test_hwpx_submit_cli_default_suffix_is_hwpx(tmp_path: Path) -> None:
+    src = tmp_path / "지원사업_신청서_원본.hwpx"
+    out = default_fill_output(src, when=datetime(2026, 9, 20, 21, 17))
+    assert out.parent == src.parent
+    assert out.name == "지원사업_신청서_092021 v1.hwpx"
+    assert ".docx" not in out.name
 
 
 def test_skill_hooks_include_hangul_request() -> None:
