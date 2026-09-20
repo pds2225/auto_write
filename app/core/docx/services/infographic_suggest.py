@@ -93,20 +93,20 @@ def _count_existing_images(doc: Document) -> int:
     return len(doc.element.body.findall(".//" + qn("w:drawing")))
 
 
-def suggest_images(doc: Document, *, max_suggestions: int = 8) -> InfographicReport:
-    """문서 단락을 훑어 도식 삽입 제안을 생성한다(중복 유형은 1회만)."""
-    report = InfographicReport(existing_images=_count_existing_images(doc))
+def _suggest_images_from_texts(
+    paragraphs: list[str] | tuple[str, ...],
+    *,
+    existing_images: int = 0,
+    max_suggestions: int = 8,
+) -> InfographicReport:
+    """파일 형식과 무관한 키워드 기반 시각자료 추천 핵심 로직."""
+    report = InfographicReport(existing_images=existing_images)
     used_types: set[str] = set()
 
-    paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
-    # 표 헤더 텍스트도 앵커 후보에 포함
-    for table in doc.tables:
-        if table.rows:
-            header = " ".join(c.text.strip() for c in table.rows[0].cells if c.text.strip())
-            if header:
-                paragraphs.append(header)
-
     for text in paragraphs:
+        text = str(text or "").strip()
+        if not text:
+            continue
         if len(report.suggestions) >= max_suggestions:
             break
         for keywords, vtype, caption, prompt in _SUGGESTION_RULES:
@@ -127,8 +127,40 @@ def suggest_images(doc: Document, *, max_suggestions: int = 8) -> InfographicRep
     return report
 
 
+def _docx_suggestion_texts(doc: Document) -> list[str]:
+    paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
+    # 기존 동작 보존: 표 첫 행 텍스트를 앵커 후보에 포함한다.
+    for table in doc.tables:
+        if table.rows:
+            header = " ".join(c.text.strip() for c in table.rows[0].cells if c.text.strip())
+            if header:
+                paragraphs.append(header)
+    return paragraphs
+
+
+def suggest_images(doc: Document, *, max_suggestions: int = 8) -> InfographicReport:
+    """DOCX 문서를 훑어 도식 삽입 제안을 생성한다(기존 API 유지)."""
+    return _suggest_images_from_texts(
+        _docx_suggestion_texts(doc),
+        existing_images=_count_existing_images(doc),
+        max_suggestions=max_suggestions,
+    )
+
+
 def suggest_images_docx(path: str | Path, *, max_suggestions: int = 8) -> InfographicReport:
     return suggest_images(Document(str(Path(path))), max_suggestions=max_suggestions)
+
+
+def suggest_images_hwpx(path: str | Path, *, max_suggestions: int = 8) -> InfographicReport:
+    """HWPX를 DOCX로 변환하지 않고 기존 추천 로직을 재사용한다."""
+    from .hwpx_analysis_adapter import read_hwpx_analysis
+
+    analysis = read_hwpx_analysis(path)
+    return _suggest_images_from_texts(
+        analysis.paragraphs,
+        existing_images=analysis.existing_images,
+        max_suggestions=max_suggestions,
+    )
 
 
 # --------------------------------------------------------------------------- 슬라이드 프롬프트
@@ -208,24 +240,21 @@ _AI_SYSTEM_PROMPT = (
 )
 
 
-def suggest_images_ai(
-    doc: Document,
+def _suggest_images_ai_from_texts(
+    para_texts: list[str] | tuple[str, ...],
     *,
+    existing_images: int,
     openai_service: Optional[Any] = None,
     max_suggestions: int = 8,
+    fallback,
 ) -> InfographicReport:
-    """Claude 로 그림 위치·유형·슬라이드 프롬프트를 제안한다.
-
-    ``openai_service`` 가 없거나(키 미연결) 호출/파싱에 실패하면 ``suggest_images``
-    (키워드 규칙)로 자동 폴백한다 — 따라서 키가 없어도 항상 동작한다.
-    """
+    """파일 형식과 무관한 AI 추천 핵심 로직."""
+    clean_texts = [str(t).strip() for t in para_texts if str(t).strip()]
     available = bool(openai_service is not None and getattr(openai_service, "available", False))
     if not available:
-        return suggest_images(doc, max_suggestions=max_suggestions)
+        return fallback()
 
-    para_texts = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
-    doc_text = "\n".join(para_texts)[:6000]
-
+    doc_text = "\n".join(clean_texts)[:6000]
     system = _AI_SYSTEM_PROMPT.replace("{max}", str(max_suggestions))
     user = json.dumps(
         {"max_suggestions": max_suggestions, "document": doc_text},
@@ -237,9 +266,9 @@ def suggest_images_ai(
         result = None
 
     if not isinstance(result, dict) or not isinstance(result.get("suggestions"), list):
-        return suggest_images(doc, max_suggestions=max_suggestions)
+        return fallback()
 
-    report = InfographicReport(existing_images=_count_existing_images(doc))
+    report = InfographicReport(existing_images=existing_images)
     for item in result["suggestions"]:
         if len(report.suggestions) >= max_suggestions:
             break
@@ -251,9 +280,9 @@ def suggest_images_ai(
             continue
         anchor = str(item.get("anchor", "")).strip()
         caption = str(item.get("caption", "")).strip() or f"[그림] {vtype}"
-        if DESIGN_GUIDE_ENABLED:                 # 기본 OFF — 내용만(디자인 제외 지시)
+        if DESIGN_GUIDE_ENABLED:
             slide_prompt = _append_design_guide(slide_prompt)
-        matched = _match_anchor(anchor, para_texts)
+        matched = _match_anchor(anchor, clean_texts)
         report.suggestions.append(ImageSuggestion(
             anchor_text=matched or anchor,
             visual_type=vtype,
@@ -263,10 +292,24 @@ def suggest_images_ai(
             slide_prompt=slide_prompt,
         ))
 
-    # AI 가 빈 제안을 돌려주면 키워드 폴백으로 대체
-    if not report.suggestions:
-        return suggest_images(doc, max_suggestions=max_suggestions)
-    return report
+    return report if report.suggestions else fallback()
+
+
+def suggest_images_ai(
+    doc: Document,
+    *,
+    openai_service: Optional[Any] = None,
+    max_suggestions: int = 8,
+) -> InfographicReport:
+    """DOCX 문서의 이미지 위치·유형·슬라이드 프롬프트를 제안한다."""
+    para_texts = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
+    return _suggest_images_ai_from_texts(
+        para_texts,
+        existing_images=_count_existing_images(doc),
+        openai_service=openai_service,
+        max_suggestions=max_suggestions,
+        fallback=lambda: suggest_images(doc, max_suggestions=max_suggestions),
+    )
 
 
 def suggest_images_ai_docx(
@@ -280,3 +323,27 @@ def suggest_images_ai_docx(
         openai_service=openai_service,
         max_suggestions=max_suggestions,
     )
+
+
+def suggest_images_ai_hwpx(
+    path: str | Path,
+    *,
+    openai_service: Optional[Any] = None,
+    max_suggestions: int = 8,
+) -> InfographicReport:
+    """HWPX 직접 분석 + 기존 AI/키워드 추천 로직. DOCX 변환은 하지 않는다."""
+    from .hwpx_analysis_adapter import read_hwpx_analysis
+
+    analysis = read_hwpx_analysis(path)
+    return _suggest_images_ai_from_texts(
+        analysis.paragraphs,
+        existing_images=analysis.existing_images,
+        openai_service=openai_service,
+        max_suggestions=max_suggestions,
+        fallback=lambda: _suggest_images_from_texts(
+            analysis.paragraphs,
+            existing_images=analysis.existing_images,
+            max_suggestions=max_suggestions,
+        ),
+    )
+
