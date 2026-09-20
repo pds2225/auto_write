@@ -524,6 +524,7 @@ AW-009(2026-08-14): 웹앱 최종 사양서 실행 TASK. AW-001에 합치지 않
 ### 8-4. 현재상태
 
 - STATUS: READY
+- 2026-09-20 incremental slice: `psst_check`와 `infographic_suggest`에 HWPX direct-read 어댑터를 연결하고 회귀 테스트를 추가함. DOCX 엔진/기존 API는 유지. 전체 AW-010(DOCX/HWPX 이미지 생성·삽입 E2E)은 계속 미완료.
 - 기존 HWP/HWPX/DOCX renderer/fill 및 HWPX integrity gate를 우선 재사용한다.
 - 기존 그림 생성 코드 복구 작업(T-20260825-01)은 완료되어 있으므로 중복 엔진을 만들지 않는다.
 - BPQ 이미지 3종 원칙(Evidence / Data viz / Generated illustration)을 유지한다.
