@@ -371,6 +371,43 @@ def test_standalone_declaration_preserved(tmp_path):
     assert b"standalone='no'" in head or b'standalone="no"' in head
 
 
+def test_cli_default_output_is_source_adjacent(src_hwpx, tmp_path):
+    """-o 미지정 시 직접 채움 결과는 원본 폴더의 통일 파일명으로 생성된다."""
+    from hwp_fill_direct import main
+
+    src = tmp_path / "GovTech_아이디어기획서_원본.hwpx"
+    src.write_bytes(src_hwpx.read_bytes())
+
+    rc = main([
+        str(src),
+        "--program-name", "2026 GovTech",
+        "--document-type", "아이디어기획서",
+        "--set", "기업명=x(주)",
+    ])
+
+    assert rc == 0
+    outputs = list(tmp_path.glob("2026GovTech_아이디어기획서_* v1.hwpx"))
+    assert len(outputs) == 1
+    assert outputs[0].parent == src.parent
+    assert src.exists()
+
+
+def test_cli_explicit_output_still_wins(src_hwpx, tmp_path):
+    """직접 지정한 -o 경로는 새 기본 규칙보다 우선한다."""
+    from hwp_fill_direct import main
+
+    explicit = tmp_path / "내가지정.hwpx"
+    rc = main([
+        str(src_hwpx),
+        "-o", str(explicit),
+        "--set", "기업명=x(주)",
+    ])
+
+    assert rc == 0
+    assert explicit.exists()
+
+
+
 def test_cli_returns_2_on_bad_input(tmp_path):
     """MEDIUM: CLI 가 잘못된 입력에 크래시 대신 종료코드 2 를 낸다."""
     from hwp_fill_direct import main
