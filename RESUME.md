@@ -433,3 +433,87 @@ py -3.11 auto_write_hub.py env
 - HWP/HWPX 및 resume hook targeted 회귀: `26 passed`; 전체 pytest 최신 결과: `1788 passed, 5 failed, 5 skipped, 23 subtests passed` in `350.50s`.
 - 남은 5건: lessons registry 3건은 origin/main에서도 동일한 L152~L167/L163/L164 mismatch; resume CLI 2건은 baseline에서 import 오류 후 현재 fail-closed `_DRAFT.hwpx` 출력과 구 테스트의 `out.hwpx` 기대가 불일치한다. 테스트 완화·DRAFT 복사는 하지 않는다.
 - 통합 판정: `NOT_READY` (새 회귀 증거 없음, 그러나 전체 pytest가 red). Hancom COM/실제 HWP 렌더는 기존 `ENVIRONMENT_BLOCKED` 유지. 다음 작업은 resume CLI 테스트/계약 정합성의 별도 안전 검토다.
+- Windows 기본 cp949 재검증: `test_step3a_golden.py::test_cli_prints_same_human_report`는 기본 환경에서 `UnicodeEncodeError(cp949, U+2014)`가 재현되고 `PYTHONUTF8=1`에서는 통과했다. 출력 의미를 바꾸지 않는 공통 콘솔 계약이 필요해 `ENVIRONMENT_BLOCKED/FOLLOWUP`으로 남겼다.
+
+## 2026-09-18 K-tour/K-Navi PSST HWPX 요청
+
+- 사용자 요청: 최신 케이투어(케이네비) 자료 기준 PSST 버전을 HWPX로 작성한다.
+- 현재 단계: 로컬 저장소의 최신 케이투어/케이네비 원자료와 PSST 빈 양식을 확인 중. 확인되지 않은 사업정보·수치·선택항목은 생성하지 않는다.
+- 산출 원칙: 확인된 원자료를 기준으로 별도 HWPX를 만들고, 원본 양식은 보존한다. 생성 후 HWPX 구조·필수값·렌더링 가능 범위를 별도로 검증한다.
+
+## 2026-09-18 K-tour/K-Navi PSST source correction
+
+- 사용자 정정: 최신 기준은 KICXUP가 아니라 `모두의창업 2차`다.
+- 방금 생성된 `results/KICXUP_2026_도보네비_한국케이블텔레콤/케이네비_PSST_v1.hwpx`는 잘못된 공고 기준의 임시 산출물로 최종 전달하지 않는다. 원본 삭제 없이 보존한다.
+- 다음: `모두의창업 2차` 공고·빈 양식·케이네비 최신 사실자료를 확인하고, 해당 양식 기준 PSST HWPX를 별도 파일로 생성·검증한다.
+
+## 2026-09-18 K-tour/K-Navi PSST source correction — continuation checkpoint
+
+- 현재 사용자 기준: 최신 공고/양식은 `모두의창업 2차`이며 KICXUP 기준 산출물은 최종본으로 사용하지 않는다.
+- 현재 상태: 코드 수정 없음. KICXUP 임시 HWPX는 삭제하지 않고 보존하며 전달 대상에서 제외한다.
+- 다음 실행: 사용자 확인 후 `모두의창업 2차` 관련 공고·빈 양식·케이네비 사실자료를 지정된 사용자 폴더에서 검색하고, 확인된 자료가 있을 때만 별도 HWPX를 생성한다.
+- 검증 제한: Hancom COM/실제 시각 렌더가 필요하면 기존 정책대로 `ENVIRONMENT_BLOCKED`로 기록하며, 구조 검증 결과와 혼동하지 않는다.
+
+## 2026-09-19 K-tour/K-Navi PSST execution checkpoint
+
+- 사용자 확정: 최신 기준은 `모두의창업 2차`이며, 해당 기준으로 실제 자료 검색과 HWPX 작성·검증을 실행한다.
+- KICXUP 기반 임시 HWPX는 최종 산출물로 사용하지 않고 원본 파일도 삭제하지 않는다.
+- 진행 순서: 자료 검색 → 공고/양식 및 케이네비 사실자료 대조 → 확인값만 PSST HWPX 작성 → 구조/텍스트 검증 → 실제 렌더 제한 기록.
+- 실행 중 확인되지 않은 정보는 임의 작성하지 않고 `[확인필요]`로 남긴다.
+
+## 2026-09-19 K-tour/K-Navi PSST HWPX output
+
+- 최신 기준 자료: `C:\Users\ekth3\Downloads\(붙임) 제2026-511호「모두의_창업_프로젝트」 통합 모집공고 2차.hwpx` 및 최신 케이네비 발표/사업계획 자료를 대조했다.
+- 최종 산출물: `results/모두의창업2차_케이투어_케이네비/케이투어_케이네비_PSST_v3.hwpx`.
+- 내용 범위: PSST Problem/Solution/Scale-up/Team, 8주 PoC 목표, 모두의 창업 2차 2R 연계, 제출 전 `[확인필요]` 항목. 매출·투자·계약·사업자 정보는 임의 작성하지 않았다.
+- 구조 검증: `rhwp info` 11쪽·14표, `app/hwpx_doctor.py diagnose` 정상, `hwpx` 패키지 validate 이슈 없음, PSST 핵심 섹션·모두의 창업 표기 확인. 기존 `hwpx_self_diagnose.py`는 legacy `_same_file` re-export ImportError로 별도 미해결.
+- 실제 Hancom/HWP 시각 렌더는 기존 환경 정책에 따라 시도하지 않았으며 `ENVIRONMENT_BLOCKED`로 유지한다. 이전 KICXUP 임시 산출물은 최종본이 아니다.
+
+## 2026-09-19 overnight runner retry checkpoint
+
+- 직전 야간 실행 요청은 `D:\_night_pilot`의 auto_write runner와 격리 복사본이 없어 시작되지 않았다.
+- 사용자 재요청에 따라 원본 저장소와 기존 산출물을 보존한 상태에서 실행기 위치를 다시 확인하고, 존재하는 안전한 격리 실행 경로를 즉시 사용한다.
+- 현재 확인된 제한: 원래 지정된 `run_night_autowrite.ps1`·`auto_write-copy`·예약 작업은 부재. 없는 실행기를 추측해 만들거나 원본 repo에 무인 자동개발을 직접 걸지 않는다.
+- 다음: 대체 가능한 기존 night runner/isolated worktree를 확인한 뒤, 있으면 포그라운드 실행하고 없으면 정확한 차단 원인을 기록한다.
+
+## 2026-09-19 overnight runner result
+
+- 보관된 `D:\보관함\밤자동실행\run_night_autowrite_loop.ps1`를 격리 복사본 대상으로 2시간 설정으로 실행했다.
+- 실제 실행은 01:25:41~01:27:59, 4개 cycle 모두 `OAuth session expired and could not be refreshed`로 실패했고, 동일 실패 4회 제한에 따라 자동 중단됐다.
+- 코드 수정·테스트·원본 저장소 변경은 없었다. 복사본의 기존 dirty 파일 3개는 보존했고, push/merge는 하지 않았다.
+- 로컬 백업 bundle은 `D:\보관함\밤자동실행\backups\autowrite-20260919_012541.bundle`에 생성됐다.
+- 다음 실행 조건: OAuth 구독 인증을 사용자가 복구한 뒤 동일 runner를 재시작한다. Secret/API key를 자동 입력하거나 노출하지 않는다.
+
+## 2026-09-19 overnight retry requested
+
+- 사용자 재개 응답(`ㅇㅇ`)을 받아 OAuth 상태를 먼저 확인한다.
+- 인증이 복구된 경우에만 격리 auto_write runner를 다시 실행한다. 인증 실패가 반복되면 동일 시도를 무한 반복하지 않고 중단한다.
+- 대상은 계속 `D:\보관함\밤자동실행\auto_write-copy`이며 원본 저장소·main·기존 dirty 파일은 보존한다.
+
+## 2026-09-19 direct isolated overnight development requested
+
+- 사용자는 OAuth runner가 막혀도 중단하지 말고 `D:\_night_pilot\auto_write-overnight-20260919` 격리 worktree에서 실제 TASK 기반 개발을 시작하도록 지시했다.
+- 원본 `D:\auto_write`의 사용자 변경은 보존하고, 새 worktree에서만 코드·테스트를 수정한다. main/master push·merge와 destructive 작업은 금지한다.
+- 시작 절차: root `TASK.md`·`RESUME.md`·Git 상태 확인 → 기존 TASK 귀속 → 작은 수정·targeted test·회귀·commit → `NIGHT_REPORT.md` 작성.
+- Hancom/HWP 실제 렌더는 기존 `ENVIRONMENT_BLOCKED`를 유지하며, 시각 문제는 원인 특정 없는 추측 패치를 하지 않는다.
+
+## 2026-09-19 overnight implementation checkpoint
+
+- 격리 worktree `D:\_night_pilot\auto_write-overnight-20260919-stabilize`에서 AW-001 안전 안정화를 실제 구현했다. 코드/테스트 커밋 `2b8807e`, checkpoint 문서 커밋 `904c844`.
+- 관련 회귀 `197 passed`; 전체 pytest `3 failed, 2240 passed, 5 skipped, 23 subtests passed` (14분 43초). 남은 3건은 lessons source/coverage baseline mismatch로 분류했고 registry를 임의 수정하지 않았다.
+- `NIGHT_REPORT.md`가 active worktree root에 생성됐다. main/root 사용자 변경은 보존했고 push/merge하지 않았다.
+
+## 2026-09-19 overnight autonomous development checkpoint
+
+- 사용자 요청: 승인 대기 없이 안전한 기존 TASK를 기준으로 정상 개발 분량의 장시간 야간 작업을 수행한다.
+- 시작 기준: 현재 저장소 상태·root `TASK.md`·기존 worktree를 먼저 확인하고, 사용자 변경과 기존 HWPX 산출물을 보존한다.
+- 현재 알려진 blocker: Hancom/HWP 실제 시각 렌더 `ENVIRONMENT_BLOCKED`; 기존 전체 pytest 5건은 baseline/환경성 실패로 분류된 상태다.
+- 실행 원칙: TASK에 귀속된 최소 안정화 수정만 수행하고, 작은 변경→targeted test→회귀→commit 순서로 진행한다. main 직접 push/merge와 destructive 작업은 하지 않는다.
+- 다음: `night-autodev` 규칙과 TASK SSOT를 확인한 뒤, 안전하게 구현 가능한 기존 TASK를 선택하여 즉시 실행한다.
+
+## 2026-09-19 overnight development resumed after context compaction
+
+- 활성 worktree: `D:\_night_pilot\auto_write-overnight-20260919-stabilize`, branch `codex/overnight-20260919-stabilize`, 기준 HEAD `6d2f820`.
+- baseline 전체 테스트: `13 failed, 2230 passed, 5 skipped, 23 subtests passed`. 실패는 cross-form CLI 경로 테스트 5건, fail-closed DRAFT 출력명을 반영하지 않은 resume 테스트 4건(중복 수집 포함), cp949 CLI 출력 1건, 기존 lessons registry 불일치 3건으로 분류했다.
+- 다음 구현 순서: cross-form 테스트의 실제 CLI 경로 복구 → DRAFT 산출물 계약 테스트 정정 → step3a UTF-8 콘솔 출력 보강 → 관련 회귀 및 전체 테스트 재실행.
+- 원본 worktree의 사용자 변경·main 브랜치는 보존하며, Hancom COM 실제 렌더는 기존 `ENVIRONMENT_BLOCKED`를 유지한다.

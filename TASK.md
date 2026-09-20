@@ -549,10 +549,11 @@ STATUS_THIS_TURN: `IN_PROGRESS`. 통합 검토에서 확인된 기존 안정화 
 - [x] 22건 triage portability: `session_resume_hook.js`의 JSON stdout을 Windows cp949 부모 프로세스에서도 손실 없이 읽도록 ASCII-safe 직렬화로 보강했다. `test_session_resume.py` `4 passed`, commit `d52201e`.
 - [x] 22건 triage HWP compatibility: `hancom_com_guard`/`hwp_fill` module alias와 `hwp_docx_convert`의 legacy `document_ingest` patch 경로를 정렬했다. HWP/HWPX 관련 targeted `26 passed`, commit `6d2f820`.
 - [~] 22건 잔여 baseline: lessons registry 3건은 origin/main baseline에서도 동일 실패했고, resume CLI 2건은 baseline의 import 오류 뒤 현재 fail-closed `_DRAFT` 출력 계약 불일치가 노출된다. 테스트 완화·DRAFT 복사는 하지 않고 후속 계약 정합성 작업으로 남긴다.
+- [~] Windows 기본 cp949 portability: `test_step3a_golden.py::test_cli_prints_same_human_report`는 `PYTHONUTF8=1`에서 통과하지만 기본 cp949 자식 CLI 출력의 UnicodeEncodeError가 재현된다. 보고서 Unicode 의미를 바꾸지 않는 안전한 공통 출력계약이 필요하므로 `ENVIRONMENT_BLOCKED/FOLLOWUP`으로 남긴다.
 - [ ] 22건 triage HWP fill compatibility: legacy `hwp_fill` 호출자가 canonical 변환 함수 전역을 공유하도록 module alias를 정렬하고 HWPX fixture 회귀를 확인한다.
 - MAIN_INTEGRATION: `NOT_READY` — 최신 전체 회귀가 `1788 passed, 5 failed, 5 skipped`이며 baseline/기존 계약 실패가 남아 있어 main 직접 merge/push는 수행하지 않았다. 최신 branch HEAD `6d2f820`.
 - [ ] lessons L152~L167 및 L163/L164 중복은 외부 baseline mismatch로 이번 안정화에서 수정하지 않는다.
-- WORK_BRANCH: `codex/stabilize-0918-20260918` (origin/main 기준 별도 worktree)
+- WORK_BRANCH: `codex/stabilize-0918-20260918` (origin/main 기준 별도 worktree), HEAD `6d2f820`, feature branch push 완료
 - VERIFY: 수정 전/후 전체 pytest 결과, 해당 targeted 회귀, compileall, diff audit
 - FORBIDDEN: 테스트 삭제·skip/xfail·assert 완화·main push/merge·force/reset/clean·기능/데이터구조 변경
 
