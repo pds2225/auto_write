@@ -80,6 +80,10 @@ def main(argv: list[str] | None = None) -> int:
 
     brief = args.brief or _read_text(args.brief_file)
     announcement = _read_text(args.announcement_file) or None
+    program_name = args.program_name
+    if not program_name and args.announcement_file:
+        from auto_write.services.hangul_default import infer_program_name
+        program_name = infer_program_name(args.announcement_file, document_type="")
 
     report = run_bizplan_autopilot(
         args.input,
@@ -95,7 +99,7 @@ def main(argv: list[str] | None = None) -> int:
         required_format=args.required_format,
         submit_clean=args.submit_clean,
         write_report=not args.no_report,
-        program_name=args.program_name,
+        program_name=program_name,
         document_type=args.document_type,
     )
 
