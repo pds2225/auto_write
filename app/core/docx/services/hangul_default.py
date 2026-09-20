@@ -207,7 +207,9 @@ def resolve_user_output_path(
         )
         if candidate.resolve() == src.resolve():
             continue
-        if not candidate.exists():
+        draft = candidate.with_name(f"{candidate.stem}_DRAFT{candidate.suffix}")
+        draft2 = candidate.with_name(f"{candidate.stem}_DRAFT2{candidate.suffix}")
+        if not candidate.exists() and not draft.exists() and not draft2.exists():
             return candidate
     raise RuntimeError("동일 시간대 결과 파일 v1~v999가 모두 존재합니다.")
 
