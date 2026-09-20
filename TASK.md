@@ -101,6 +101,7 @@ REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 [ ] AW-007 | 중복·미사용 코드를 찾아 정리한다
 [ ] AW-008 | 남은 L 규칙 빈칸을 실제 검사로 채운다
 [ ] AW-009 | 요구사항 문서로 운영 웹앱 P0를 만든다
+[ ] AW-010 | 원본 문서 형식을 유지하고 이미지 생성·삽입까지 자동화한다
 [x] T-20260814-01 | 기본 브랜치(main) 보호가 켜져 있고, 문서 머지는 docs-gate를 거친다
 [ ] T-20260814-02 | AIMY급 사업계획서를 공고·양식·기업사실에 맞춰 자동 작성하는 통합 과업을 명세한다
 [x] T-20260814-03 | 야간 A~H 미머지 브랜치를 최신 main에 체리픽 이식 준비한다
@@ -486,6 +487,93 @@ TASK LIST 한 줄 요약과 아래 상세 TASK는 TASK_ID로 연결한다.
 NEXT_TASK.md 이관(2026-08-13): A/B/C/D/E→AW-001, H→§12 테스트. F→AW-006, G→AW-007, I→AW-008. ACTIVE(AW-001)에 내용 합치지 않음. 파일 삭제.
 AW-009(2026-08-14): 웹앱 최종 사양서 실행 TASK. AW-001에 합치지 않음. AW-002~005는 사양서 부분 요구.
 -->
+
+## AW-010
+
+### 8-1. 사용자 원문 요청
+
+> 원본이 HWPX면 HWPX, DOCX면 DOCX 유지 + 실제 이미지 생성/삽입, 생성 불가 시 이미지 프롬프트를 추가한다.
+
+### 8-2. 비개발자용 1줄 요약
+
+원본 문서 형식을 그대로 유지하면서 필요한 이미지를 실제 생성·삽입하고, 생성할 수 없으면 바로 쓸 수 있는 이미지 프롬프트를 남긴다.
+
+### 8-3. 사용자가 원하는 최종 결과
+
+- 입력이 HWPX면 최종 산출물도 HWPX다.
+- 입력이 DOCX면 최종 산출물도 DOCX다.
+- 기존 원본 양식·표·셀·문단·페이지 구조를 가능한 범위에서 보존한다.
+- 문서 계획상 이미지가 필요한 위치를 판단하고, 실제 이미지 생성 capability가 사용 가능하면 이미지를 생성해 원본 형식 안에 삽입한다.
+- 이미지 생성/삽입이 환경·권한·provider 문제로 불가능하면 문서 전체를 실패시키지 않고 해당 슬롯을 REVIEW_REQUIRED로 남기며 고품질 생성 프롬프트를 산출한다.
+- 프롬프트에는 최소 삽입 위치, 목적, 구성, 스타일, 필수 객체/텍스트, 권장 비율·크기를 포함한다.
+- Evidence / Data visualization / Generated illustration을 구분하고, 생성형 이미지를 증빙처럼 사용하지 않는다.
+- 정상 양식 작성과 서식 깨짐 복구 경로를 구분해 기존 integrity/acceptance gate와 연결한다.
+
+### 8-4. 현재상태
+
+- STATUS: READY
+- 기존 HWP/HWPX/DOCX renderer/fill 및 HWPX integrity gate를 우선 재사용한다.
+- 기존 그림 생성 코드 복구 작업(T-20260825-01)은 완료되어 있으므로 중복 엔진을 만들지 않는다.
+- BPQ 이미지 3종 원칙(Evidence / Data viz / Generated illustration)을 유지한다.
+
+### 8-5. MUST
+
+- [ ] 입력 파일 형식을 감지하고 동일 형식 출력 계약을 강제한다: HWPX→HWPX, DOCX→DOCX.
+- [ ] 형식 변환이 필요한 내부 처리 과정이 있더라도 사용자 최종 산출물은 원본 형식으로 복원되고 구조 보존 검사를 통과해야 한다.
+- [ ] 기존 HWPX/HWP/DOCX renderer/fill 엔진을 전수 조사해 재사용하고 새 병렬 renderer를 만들지 않는다.
+- [ ] DocumentPlan/이미지 슬롯에서 실제 이미지 필요 위치와 유형을 결정한다.
+- [ ] 이미지 생성 provider/capability가 있으면 실제 이미지를 생성하고 원본 문서의 지정 슬롯에 삽입한다.
+- [ ] 실제 삽입 후 표/셀 크기, 비율, overflow, 페이지 깨짐을 artifact QA로 확인한다.
+- [ ] 이미지 생성이 불가하면 구조화된 이미지 프롬프트를 산출하고 해당 위치를 REVIEW_REQUIRED로 표시한다.
+- [ ] 생성 프롬프트 필수 필드: section/anchor, 목적, 이미지 유형, 핵심 메시지, 구성, 스타일, 필수 객체, 금지 요소, 포함 텍스트, 권장 aspect ratio, 권장 px/mm.
+- [ ] Evidence는 원본 증빙 파일만 사용하고 생성형 대체 금지.
+- [ ] Data visualization은 실제 근거 데이터와 source/provenance가 있을 때만 생성한다.
+- [ ] Generated illustration은 설명용으로만 사용하며 증빙 라벨을 붙이지 않는다.
+- [ ] 정상 작성 경로와 서식 깨짐 복구 경로를 구분한다. format/integrity gate 실패 시 자동 PASS 금지.
+- [ ] 최종 문서가 원본과 다른 형식으로만 남으면 DONE 금지.
+
+### 8-6. KEEP
+
+- DomainRouter / LRuleEnforcer / Finalizer
+- HWPX integrity gate 및 acceptance gate
+- RenderService, hwpx_fill, hwp_fill, hwp_com_fill, DOCX renderer 기존 경로
+- 원본 덮어쓰기 금지
+- 생성형 이미지를 증빙으로 사용 금지
+- 실제 사실/수치 provenance 정책
+- AW-001 검사 경로와 BPQ renderer/QA 계획
+
+### 8-7. REMOVE
+
+- 원본 HWPX를 DOCX만으로 출력하거나 DOCX를 HWPX만으로 바꾸는 임의 형식변환
+- 이미지 슬롯이 필요한데 아무 표시 없이 비워두는 silent fallback
+- 생성 실패를 숨기고 placeholder를 실제 이미지처럼 처리하는 동작
+- 기존 renderer와 같은 역할의 새 병렬 엔진
+
+### 8-8. FORBIDDEN
+
+- 원본 파일 overwrite
+- 생성형 이미지를 특허증·계약서·실화면·증빙으로 위장
+- 출처 없는 데이터 차트 생성
+- 형식 보존 검증 없이 FINAL 처리
+- 테스트 실패 skip/delete로 DONE 처리
+- Secret/유료 provider 무단 사용
+
+### 8-9. VERIFY
+
+- [ ] 실제 HWPX 샘플 1건: 작성 → 이미지 생성/삽입 → HWPX 유지 → integrity/acceptance PASS
+- [ ] 실제 DOCX 샘플 1건: 작성 → 이미지 생성/삽입 → DOCX 유지 → 구조/레이아웃 QA PASS
+- [ ] 이미지 provider unavailable 시 프롬프트 fallback + REVIEW_REQUIRED 확인
+- [ ] generated illustration이 evidence 슬롯에 들어가면 FAIL
+- [ ] 이미지 삽입 전후 표/필수 라벨/section 구조 보존
+- [ ] format mismatch 출력은 fail-closed
+- [ ] 기존 HWPX/DOCX 관련 회귀테스트 PASS
+- [ ] 실제 사용자 E2E에서 입력 형식=출력 형식 확인
+
+### 8-10. DONE
+
+REQUEST_SOLVED=NO — HWPX와 DOCX 각각 실제 산출물 E2E에서 원본 형식 유지, 이미지 실제 삽입 또는 구조화 프롬프트 fallback, artifact QA를 모두 확인한 뒤 YES.
+
+---
 
 ## T-20260814-01
 
