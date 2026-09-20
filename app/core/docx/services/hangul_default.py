@@ -148,7 +148,8 @@ def infer_program_name(
         if token:
             work = re.sub(re.escape(token), "_", work, flags=re.IGNORECASE)
     work = re.sub(r"^\s*\d{1,3}\s*[_-]+", "", work)
-    work = re.sub(r"[_-](?:0[1-9]|1[0-2])(?:[0-3]\d)$", "", work)
+    work = re.sub(r"[_-](?:0[1-9]|1[0-2])(?:[0-3]\d)(?=[_\s-]*$)", "", work)
+    work = re.sub(r"[\[\](){}]+", "_", work)
     work = re.sub(r"[_\s-]+", "_", work).strip("_-[]() ")
     return _sanitize_output_part(work, fallback=fallback)
 
