@@ -32,7 +32,7 @@ from auto_write.services.cross_form_output_policy import (
     OutputPolicyError,
     validate_output_plan,
 )
-from auto_write.services.hangul_default import resolve_user_output_path
+from auto_write.services.hangul_default import infer_document_type, resolve_user_output_path
 from auto_write.services.cross_form_autofill import extract_source_fields
 from auto_write.services.hwp_docx_convert import hwp_to_docx
 from auto_write.services.hwpx_fill import fill_hwpx
@@ -376,10 +376,11 @@ def run_pipeline(
                 try_generate_sibling_pdf,
             )
 
+            output_source = hwpx_base if hwpx_base is not None else target
             named = resolve_user_output_path(
-                target,
+                output_source,
                 program_name=program_name or notice_folder.name,
-                document_type=document_type or form_prefix,
+                document_type=document_type or infer_document_type(output_source, fallback="신청서"),
                 requested_format="hwpx",
             )
             shutil.copyfile(hwpx_src, named)
