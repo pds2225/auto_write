@@ -1,13 +1,13 @@
 ---
 description: PSST 4영역(문제·실현·성장·팀)을 검사(기본)하거나 --apply 로 누락/미흡 영역에 작성 뼈대+가이드를 삽입한다.
-argument-hint: <input.docx> [--apply] [--out 결과.docx] [--json]
+argument-hint: <input.docx|input.hwpx> [--apply] [--out 결과.docx] [--json]
 ---
 
 # /auto-write-psst
 
 ## 사용 목적
 
-사업계획서/발표평가 유형 DOCX 의 **PSST 4영역 구조 충실도**를 다룬다.
+사업계획서/발표평가 유형 DOCX/HWPX 의 **PSST 4영역 구조 충실도**를 다룬다. HWPX는 직접 ZIP/XML을 읽으며 DOCX 변환을 하지 않는다.
 PSST = Problem(문제인식) / Solution(실현가능성) / Scale-up(성장전략) / Team(팀구성).
 
 두 가지 모드가 있다.
@@ -24,7 +24,7 @@ PSST = Problem(문제인식) / Solution(실현가능성) / Scale-up(성장전략
 
 ## 입력값
 
-- `input.docx` (필수): DOCX 절대경로 또는 `app` 기준 상대경로.
+- `input.docx|input.hwpx` (필수): DOCX 또는 HWPX 절대경로/상대경로. HWPX는 검사 모드만 지원.
 - `--apply` (선택): 누락/미흡 영역에 작성 가이드를 삽입(미지정 시 검사만).
 - `--out` / `-o` (선택, `--apply` 와 함께): 결과 DOCX. 미지정 시 `results\<원본>_psst.docx`.
 - `--json` (선택): 결과 JSON 출력.
@@ -35,8 +35,8 @@ PSST = Problem(문제인식) / Solution(실현가능성) / Scale-up(성장전략
 ## 실행 워크플로우(단계)
 
 1. **유형 확인(권장)**: `classify_docx(path)` 가 business_plan/pitch_deck 이 아니면 사용자 확인.
-2. **검사 모드(`--apply` 없음)**: `check_psst(doc)` → 영역별 등급/빠진 항목/전체 충족률 보고.
-3. **보강 모드(`--apply`)**: `apply_psst_scaffold(in, out)` →
+2. **검사 모드(`--apply` 없음)**: DOCX는 `check_psst_docx(path)`, HWPX는 `check_psst_hwpx(path)` → 영역별 등급/빠진 항목/전체 충족률 보고.
+3. **보강 모드(`--apply`)**: 현재 DOCX 전용. HWPX에 `--apply`를 주면 사용하지 말고 검사 결과만 보고한다. DOCX는 `apply_psst_scaffold(in, out)` →
    - 등급이 '누락' 또는 '미흡' 인 영역마다 문서 끝에 헤더 + 빠진 항목 체크리스트 삽입.
    - 보강 영역 수 / 추가 항목 수 / 출력 DOCX 경로 보고. 원본 보존(out ≠ in).
 4. 보강 후 실제 내용은 사용자가 채워야 함을 명확히 안내한다(가이드는 점수에 반영 안 됨).
@@ -51,8 +51,11 @@ PSST = Problem(문제인식) / Solution(실현가능성) / Scale-up(성장전략
 ```powershell
 cd D:\auto_write\app
 
-# 1) 검사만(읽기 전용)
-python -c "from docx import Document; from auto_write.services.psst_check import check_psst; r=check_psst(Document(r'C:\제출\사업계획서.docx')); print(r.summary); [print(a.label, a.grade, '누락:', a.missing_items) for a in r.areas]"
+# 1) DOCX 검사만(읽기 전용)
+python -c "from auto_write.services.psst_check import check_psst_docx; r=check_psst_docx(r'C:\제출\사업계획서.docx'); print(r.summary); [print(a.label, a.grade, '누락:', a.missing_items) for a in r.areas]"
+
+# 1-1) HWPX 검사만(변환 없음)
+python -c "from auto_write.services.psst_check import check_psst_hwpx; r=check_psst_hwpx(r'C:\제출\사업계획서.hwpx'); print(r.summary); [print(a.label, a.grade, '누락:', a.missing_items) for a in r.areas]"
 
 # 2) 누락/미흡 영역에 작성 가이드 삽입(원본 보존)
 python -c "from auto_write.services.psst_fill import apply_psst_scaffold; r=apply_psst_scaffold(r'C:\제출\사업계획서.docx', r'D:\auto_write\results\사업계획서_psst.docx'); print('보강영역', r.areas_scaffolded, '| 추가항목', r.items_added, '| 출력', r.output_docx)"

@@ -494,6 +494,18 @@ AW-009(2026-08-14): 웹앱 최종 사양서 실행 TASK. AW-001에 합치지 않
 
 > 원본이 HWPX면 HWPX, DOCX면 DOCX 유지 + 실제 이미지 생성/삽입, 생성 불가 시 이미지 프롬프트를 추가한다.
 
+나중 요청 (2026-09-20):
+
+> DOCX 엔진은 그대로 유지하되, HWPX에서도 재사용할 수 있는 것 중 구현 리소스가 작은 것만 우선 개발해서 main에 병합한다.
+
+이번 턴 범위:
+- 기존 DOCX 엔진 삭제/대체 금지.
+- 공통 판단 로직은 재사용하고 HWPX 입력 어댑터만 최소 추가.
+- 저비용 후보 중 직접 재사용성이 높은 `psst_check`와 `infographic_suggest`를 우선.
+- DOCX 구조를 직접 수정하는 대규모 품질/렌더 엔진의 HWPX 포팅은 이번 턴 제외.
+- HWPX→DOCX→HWPX 왕복 변환으로 기능을 흉내내지 않는다.
+
+
 ### 8-2. 비개발자용 1줄 요약
 
 원본 문서 형식을 그대로 유지하면서 필요한 이미지를 실제 생성·삽입하고, 생성할 수 없으면 바로 쓸 수 있는 이미지 프롬프트를 남긴다.
@@ -512,6 +524,7 @@ AW-009(2026-08-14): 웹앱 최종 사양서 실행 TASK. AW-001에 합치지 않
 ### 8-4. 현재상태
 
 - STATUS: READY
+- 2026-09-20 incremental slice: `psst_check`와 `infographic_suggest`에 HWPX direct-read 어댑터를 연결하고 회귀 테스트를 추가함. DOCX 엔진/기존 API는 유지. 전체 AW-010(DOCX/HWPX 이미지 생성·삽입 E2E)은 계속 미완료.
 - 기존 HWP/HWPX/DOCX renderer/fill 및 HWPX integrity gate를 우선 재사용한다.
 - 기존 그림 생성 코드 복구 작업(T-20260825-01)은 완료되어 있으므로 중복 엔진을 만들지 않는다.
 - BPQ 이미지 3종 원칙(Evidence / Data viz / Generated illustration)을 유지한다.
