@@ -96,7 +96,7 @@ def default_user_facing_suffix(
     return DEFAULT_AUTO_CREATE_EXT
 
 
-_INVALID_OUTPUT_PART = re.compile(r'[<>:"/\\\\|?*\\x00-\\x1f]')
+_INVALID_OUTPUT_PART = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 _DOC_TYPE_HINTS = (
     ("아이디어_기획서", "아이디어기획서"),
     ("아이디어기획서", "아이디어기획서"),
@@ -114,7 +114,7 @@ def _sanitize_output_part(text: str | None, *, fallback: str) -> str:
     """파일명 조각에서 Windows 금지문자/공백을 제거한다."""
     value = (text or "").strip()
     value = _INVALID_OUTPUT_PART.sub("", value)
-    value = re.sub(r"\\s+", "", value)
+    value = re.sub(r"\s+", "", value)
     value = value.strip("._-[]()")
     return value or fallback
 
@@ -147,9 +147,9 @@ def infer_program_name(
     for token in drop_tokens:
         if token:
             work = re.sub(re.escape(token), "_", work, flags=re.IGNORECASE)
-    work = re.sub(r"^\\s*\\d{1,3}\\s*[_-]+", "", work)
-    work = re.sub(r"[_-](?:0[1-9]|1[0-2])(?:[0-3]\\d)$", "", work)
-    work = re.sub(r"[_\\-\\s]+", "_", work).strip("_-[]() ")
+    work = re.sub(r"^\s*\d{1,3}\s*[_-]+", "", work)
+    work = re.sub(r"[_-](?:0[1-9]|1[0-2])(?:[0-3]\d)$", "", work)
+    work = re.sub(r"[_\s-]+", "_", work).strip("_-[]() ")
     return _sanitize_output_part(work, fallback=fallback)
 
 
