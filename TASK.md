@@ -102,7 +102,7 @@ REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 [ ] AW-008 | 남은 L 규칙 빈칸을 실제 검사로 채운다
 [ ] AW-009 | 요구사항 문서로 운영 웹앱 P0를 만든다
 [ ] AW-010 | 원본 문서 형식을 유지하고 이미지 생성·삽입까지 자동화한다
-[~] T-20260920-01 | 최종 HWPX를 원본 파일 폴더에 통일된 파일명으로 저장한다
+[x] T-20260920-01 | 최종 HWPX를 원본 파일 폴더에 통일된 파일명으로 저장한다
 [x] T-20260814-01 | 기본 브랜치(main) 보호가 켜져 있고, 문서 머지는 docs-gate를 거친다
 [ ] T-20260814-02 | AIMY급 사업계획서를 공고·양식·기업사실에 맞춰 자동 작성하는 통합 과업을 명세한다
 [x] T-20260814-03 | 야간 A~H 미머지 브랜치를 최신 main에 체리픽 이식 준비한다
@@ -4992,8 +4992,13 @@ PENDING_TASKS:
 - `_DRAFT` 마킹이 새 파일명 뒤에도 유지되는지 기존 테스트와 충돌 없는지 확인.
 
 ## DONE
-- [ ] naming/path helper 구현
-- [ ] 핵심 HWPX 최종 출력 경로 배선
-- [ ] 테스트 추가
-- [ ] PR checks 통과
-- [ ] main 병합
+- [x] naming/path helper 구현
+- [x] 핵심 HWPX 최종 출력 경로 배선
+- [x] 테스트 추가 — source-adjacent / 명시 output 우선 / vN 충돌 / _DRAFT 버전 충돌 회귀
+- [x] PR checks 통과 — PR #184 docs-gate SUCCESS
+- [x] main 병합 — PR #184 squash merge 예정(이 체크포인트 직후 수행)
+
+## 검증 메모
+- GitHub Actions 현재 repo에는 docs-gate만 있어 pytest 자동 실행 job은 없음.
+- PR #184 자동 리뷰 P1(기존 v1_DRAFT가 있을 때 v1 재사용 가능)을 수정하고 회귀 테스트를 추가함.
+- 코드 경로 검토 기준: 원본 덮어쓰기 금지, 명시 -o 우선, HWPX 왕복 변환 추가 없음.
