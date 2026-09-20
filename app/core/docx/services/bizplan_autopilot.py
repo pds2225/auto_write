@@ -33,7 +33,7 @@ from ..config import ensure_directories, get_settings
 from .autopilot_pipeline import run_autopilot
 from .bizplan_ai_writer import ai_write_areas
 from .evaluation_service import EvaluationService
-from .hangul_default import default_auto_create_path, emit_hangul_file, is_hangul_ext
+from .hangul_default import emit_hangul_file, is_hangul_ext, resolve_user_output_path
 
 
 @dataclass
@@ -180,12 +180,15 @@ def run_bizplan_autopilot(
     required_format: Optional[str] = None,
     submit_clean: bool = False,
     write_report: bool = True,
+    program_name: Optional[str] = None,
+    document_type: str = "사업계획서",
 ) -> BizplanReport:
     """초안 DOCX 를 목표 점수까지 생성·완성한다.
 
     Args:
         input_docx: 초안/메모 DOCX(원본, 자동 백업).
-        output_docx: 최종 출력. 미지정 시 results/{stem}_bizplan.hwpx (한글 기본).
+        output_docx: 최종 출력. 미지정 시 입력 원본 폴더에
+            ``지원사업명_문서종류_MMDDHH vN.hwpx`` 로 저장한다.
             ``*.docx`` 를 직접 주면 워드로 남긴다.
         brief: 사업 브리프(아이디어·팀·수치 등 자유 텍스트). AI 작성에 사용.
         announcement_text: 공고 평가기준 텍스트. 있으면 채점·목표 반복 수행.
@@ -193,6 +196,8 @@ def run_bizplan_autopilot(
         max_loops: 최대 반복 횟수(기본 3).
         use_ai: AI 본문 작성·채점 사용 여부(키 없으면 자동 비활성).
         placeholder_only: 이미지를 차트 없이 자리표시만.
+        program_name: 파일명에 쓸 지원사업명. 없으면 원본 파일명에서 추정.
+        document_type: 파일명에 쓸 문서종류(기본 사업계획서).
 
     Returns:
         BizplanReport — 점수 추이·확인필요·산출 경로 통합.
@@ -206,8 +211,12 @@ def run_bizplan_autopilot(
     if not in_path.exists():
         raise FileNotFoundError(f"입력 DOCX 가 없습니다: {input_docx}")
     stem = in_path.stem
-    final_path = default_auto_create_path(
-        stem, results_root, kind="bizplan", output_path=output_docx
+    final_path = resolve_user_output_path(
+        in_path,
+        program_name=program_name,
+        document_type=document_type,
+        requested_format="hwpx",
+        output_path=output_docx,
     )
     if in_path.resolve() == final_path.resolve():
         raise ValueError("출력이 입력과 같습니다. 원본 덮어쓰기는 금지입니다.")

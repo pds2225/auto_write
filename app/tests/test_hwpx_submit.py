@@ -199,6 +199,52 @@ def test_submit_original_untouched(colored_hwpx, tmp_path):
 # --------------------------------------------------------------------------- #
 
 
+def test_cli_default_output_is_source_adjacent(clean_hwpx, tmp_path):
+    """-o 미지정 제출 결과는 원본 HWPX와 같은 폴더에 생성된다."""
+    from hwpx_submit import main
+
+    src = tmp_path / "GovTech_아이디어기획서_원본.hwpx"
+    src.write_bytes(clean_hwpx.read_bytes())
+
+    rc = main([
+        str(src),
+        "--program-name", "2026 GovTech",
+        "--document-type", "아이디어기획서",
+        "--set", "기업명=x(주)",
+    ])
+
+    assert rc == 0
+    outputs = list(tmp_path.glob("2026GovTech_아이디어기획서_* v1.hwpx"))
+    assert len(outputs) == 1
+    assert outputs[0].parent == src.parent
+    assert src.exists()
+
+
+
+def test_cli_default_output_fail_closed_draft_is_source_adjacent(colored_hwpx, tmp_path):
+    """기본 경로에서도 게이트 fail이면 같은 원본 폴더의 _DRAFT로만 남는다."""
+    from hwpx_submit import main
+
+    src = tmp_path / "GovTech_아이디어기획서_원본.hwpx"
+    src.write_bytes(colored_hwpx.read_bytes())
+
+    rc = main([
+        str(src),
+        "--program-name", "2026 GovTech",
+        "--document-type", "아이디어기획서",
+        "--set", "기업명=x(주)",
+        "--no-normalize-colors",
+    ])
+
+    assert rc == 2
+    clean = list(tmp_path.glob("2026GovTech_아이디어기획서_* v1.hwpx"))
+    drafts = list(tmp_path.glob("2026GovTech_아이디어기획서_* v1_DRAFT.hwpx"))
+    assert clean == []
+    assert len(drafts) == 1
+    assert drafts[0].parent == src.parent
+
+
+
 def test_cli_exit_codes(clean_hwpx, colored_hwpx, tmp_path, monkeypatch):
     from hwpx_submit import main
 

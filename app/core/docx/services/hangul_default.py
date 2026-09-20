@@ -17,8 +17,10 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import zipfile
+from datetime import datetime
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -94,6 +96,123 @@ def default_user_facing_suffix(
     return DEFAULT_AUTO_CREATE_EXT
 
 
+_INVALID_OUTPUT_PART = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+_DOC_TYPE_HINTS = (
+    ("아이디어_기획서", "아이디어기획서"),
+    ("아이디어기획서", "아이디어기획서"),
+    ("사업계획서", "사업계획서"),
+    ("개발보고서", "개발보고서"),
+    ("참가신청서", "참가신청서"),
+    ("참여신청서", "참여신청서"),
+    ("신청서", "신청서"),
+    ("제안서", "제안서"),
+    ("이력서", "이력서"),
+)
+
+
+def _sanitize_output_part(text: str | None, *, fallback: str) -> str:
+    """파일명 조각에서 Windows 금지문자/공백을 제거한다."""
+    value = (text or "").strip()
+    value = _INVALID_OUTPUT_PART.sub("", value)
+    value = re.sub(r"\s+", "", value)
+    value = value.strip("._-[]()")
+    return value or fallback
+
+
+def infer_document_type(source: str | Path, *, fallback: str = "문서") -> str:
+    """원본 파일명에서 문서종류를 보수적으로 추정한다."""
+    stem = Path(source).stem
+    for needle, label in _DOC_TYPE_HINTS:
+        if needle in stem:
+            return label
+    return fallback
+
+
+def infer_program_name(
+    source: str | Path,
+    *,
+    document_type: str | None = None,
+    fallback: str = "지원사업",
+) -> str:
+    """원본 stem에서 문서종류/원본 표식을 빼 지원사업명 후보를 만든다."""
+    stem = Path(source).stem
+    doc_type = document_type or infer_document_type(source, fallback="")
+    drop_tokens = [
+        doc_type,
+        "아이디어_기획서", "아이디어기획서", "사업계획서", "개발보고서",
+        "참가신청서", "참여신청서", "신청서", "제안서", "이력서",
+        "원본", "최종본", "최종", "빈양식", "양식", "제출본", "제출", "완성본", "채움",
+        "모집공고", "공고문", "공고",
+    ]
+    work = stem
+    for token in drop_tokens:
+        if token:
+            work = re.sub(re.escape(token), "_", work, flags=re.IGNORECASE)
+    work = re.sub(r"^\s*\d{1,3}\s*[_-]+", "", work)
+    work = re.sub(r"[_-](?:0[1-9]|1[0-2])(?:[0-3]\d)(?=[_\s-]*$)", "", work)
+    work = re.sub(r"[\[\](){}]+", "_", work)
+    work = re.sub(r"[_\s-]+", "_", work).strip("_-[]() ")
+    return _sanitize_output_part(work, fallback=fallback)
+
+
+def user_output_filename(
+    program_name: str,
+    document_type: str,
+    *,
+    when: datetime | None = None,
+    version: int = 1,
+    ext: str = ".hwpx",
+) -> str:
+    """사용자 최종 파일명: 지원사업명_문서종류_MMDDHH vN.ext."""
+    if version < 1:
+        raise ValueError("version은 1 이상이어야 합니다.")
+    suffix = ext if str(ext).startswith(".") else f".{ext}"
+    program = _sanitize_output_part(program_name, fallback="지원사업")
+    doc_type = _sanitize_output_part(document_type, fallback="문서")
+    stamp = (when or datetime.now()).strftime("%m%d%H")
+    return f"{program}_{doc_type}_{stamp} v{version}{suffix}"
+
+
+def resolve_user_output_path(
+    source: str | Path,
+    *,
+    program_name: str | None = None,
+    document_type: str | None = None,
+    requested_format: str | None = None,
+    output_path: str | Path | None = None,
+    when: datetime | None = None,
+) -> Path:
+    """최종 사용자 파일을 원본 파일과 같은 폴더에 잡고 충돌 시 vN을 올린다.
+
+    output_path를 명시한 경우에는 그 경로를 그대로 존중한다.
+    """
+    if output_path is not None:
+        return Path(output_path)
+    src = Path(source)
+    doc_type = _sanitize_output_part(
+        document_type or infer_document_type(src), fallback="문서"
+    )
+    program = _sanitize_output_part(
+        program_name or infer_program_name(src, document_type=doc_type),
+        fallback="지원사업",
+    )
+    ext = default_user_facing_suffix(requested_format=requested_format)
+    for version in range(1, 1000):
+        candidate = src.parent / user_output_filename(
+            program,
+            doc_type,
+            when=when,
+            version=version,
+            ext=ext,
+        )
+        if candidate.resolve() == src.resolve():
+            continue
+        draft = candidate.with_name(f"{candidate.stem}_DRAFT{candidate.suffix}")
+        draft2 = candidate.with_name(f"{candidate.stem}_DRAFT2{candidate.suffix}")
+        if not candidate.exists() and not draft.exists() and not draft2.exists():
+            return candidate
+    raise RuntimeError("동일 시간대 결과 파일 v1~v999가 모두 존재합니다.")
+
 def default_auto_create_path(
     stem: str,
     directory: str | Path,
@@ -110,13 +229,25 @@ def default_auto_create_path(
     return Path(directory) / f"{stem}{suffix}{ext}"
 
 
-def default_fill_output(src: str | Path, output: str | Path | None = None) -> Path:
-    """채움 CLI 기본 출력. 입력 한글 확장자를 유지하고, 없으면 .hwpx."""
+def default_fill_output(
+    src: str | Path,
+    output: str | Path | None = None,
+    *,
+    program_name: str | None = None,
+    document_type: str | None = None,
+    when: datetime | None = None,
+) -> Path:
+    """채움 CLI 기본 출력도 원본 폴더 + 통일 파일명 규칙을 사용한다."""
     src_p = Path(src)
-    if output:
-        return Path(output)
-    ext = src_p.suffix.lower() if src_p.suffix.lower() in HANGUL_EXTS else DEFAULT_AUTO_CREATE_EXT
-    return src_p.with_name(f"{src_p.stem}_제출{ext}")
+    requested = src_p.suffix.lower().lstrip(".") if src_p.suffix.lower() in HANGUL_EXTS else "hwpx"
+    return resolve_user_output_path(
+        src_p,
+        program_name=program_name,
+        document_type=document_type or infer_document_type(src_p, fallback="제출본"),
+        requested_format=requested,
+        output_path=output,
+        when=when,
+    )
 
 
 def is_hangul_default_combo(outputs: list[str] | None, engine: str | None) -> bool:

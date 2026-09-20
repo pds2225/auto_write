@@ -52,8 +52,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--output",
         "-o",
-        help="최종 출력(미지정 시 results/{stem}_bizplan.hwpx). 워드가 필요하면 *.docx 를 명시",
+        help="최종 출력(미지정 시 입력 원본 폴더에 지원사업명_문서종류_MMDDHH vN.hwpx). 워드가 필요하면 *.docx 를 명시",
     )
+    parser.add_argument("--program-name", default=None,
+                        help="최종 파일명 지원사업명(미지정 시 원본 파일명에서 추정)")
+    parser.add_argument("--document-type", default="사업계획서",
+                        help="최종 파일명 문서종류(기본: 사업계획서)")
     parser.add_argument("--brief", default="", help="사업 브리프 텍스트(아이디어·팀·수치)")
     parser.add_argument("--brief-file", help="사업 브리프 텍스트 파일 경로")
     parser.add_argument("--announcement-file", help="공고 평가기준 텍스트 파일(있으면 채점·목표반복)")
@@ -76,6 +80,10 @@ def main(argv: list[str] | None = None) -> int:
 
     brief = args.brief or _read_text(args.brief_file)
     announcement = _read_text(args.announcement_file) or None
+    program_name = args.program_name
+    if not program_name and args.announcement_file:
+        from auto_write.services.hangul_default import infer_program_name
+        program_name = infer_program_name(args.announcement_file, document_type="")
 
     report = run_bizplan_autopilot(
         args.input,
@@ -91,6 +99,8 @@ def main(argv: list[str] | None = None) -> int:
         required_format=args.required_format,
         submit_clean=args.submit_clean,
         write_report=not args.no_report,
+        program_name=program_name,
+        document_type=args.document_type,
     )
 
     def _strict_exit() -> int:

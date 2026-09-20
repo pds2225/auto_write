@@ -32,7 +32,7 @@ from auto_write.services.cross_form_output_policy import (
     OutputPolicyError,
     validate_output_plan,
 )
-from auto_write.services.output_naming import resolve_submit_path
+from auto_write.services.hangul_default import infer_document_type, resolve_user_output_path
 from auto_write.services.cross_form_autofill import extract_source_fields
 from auto_write.services.hwp_docx_convert import hwp_to_docx
 from auto_write.services.hwpx_fill import fill_hwpx
@@ -183,6 +183,8 @@ def run_pipeline(
     submit_name: str | None = None,
     form_prefix: str = "전문상담위원_참여신청서",
     submit_version: str | None = None,
+    program_name: str | None = None,
+    document_type: str | None = None,
     write_submit_copy: bool = True,
 ) -> dict:
     validate_output_plan(plan)
@@ -364,32 +366,22 @@ def run_pipeline(
             if rp.is_file():
                 result["fill_report"] = json.loads(rp.read_text(encoding="utf-8"))
 
-    # 제출용 자동 파일명: 전문상담위원_참여신청서_{성명}.hwpx
+    # 최종 사용자 HWPX: 원본 양식과 같은 폴더 + 통일 파일명.
+    # submit_name/submit_version은 구 CLI 하위호환 인자로 남기되 새 기본명에는 사용하지 않는다.
     if write_submit_copy:
-        person = (submit_name or "").strip()
-        if not person:
-            try:
-                facts = json.loads((work / "01_source_facts.json").read_text(encoding="utf-8"))
-                person = ((facts.get("identity") or {}).get("성명") or "").strip()
-            except (OSError, json.JSONDecodeError, TypeError):
-                person = ""
-        person = person or "미상"
         hwpx_src = result.get("outputs", {}).get("hwpx")
         if hwpx_src and Path(hwpx_src).is_file():
             from auto_write.services.submission_gates import (
-                build_submit_layout_dir,
                 missing_pdf_pair,
                 try_generate_sibling_pdf,
             )
 
-            submit_dir = build_submit_layout_dir(notice_folder)
-            submit_dir.mkdir(parents=True, exist_ok=True)
-            named = resolve_submit_path(
-                submit_dir,
-                form_prefix=form_prefix,
-                name=person,
-                ext=".hwpx",
-                version=submit_version,
+            output_source = hwpx_base if hwpx_base is not None else target
+            named = resolve_user_output_path(
+                output_source,
+                program_name=program_name or notice_folder.name,
+                document_type=document_type or infer_document_type(output_source, fallback="신청서"),
+                requested_format="hwpx",
             )
             shutil.copyfile(hwpx_src, named)
             result["submit_copy"] = str(named)
@@ -474,22 +466,32 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--name",
         default=None,
-        help="제출 파일명용 성명. 없으면 identity 성명 → 전문상담위원_참여신청서_{성명}.hwpx",
+        help="레거시 호환 인자(새 기본 파일명에는 성명을 사용하지 않음)",
     )
     parser.add_argument(
         "--form-prefix",
         default="전문상담위원_참여신청서",
-        help="제출 파일명 접두",
+        help="레거시 호환/문서종류 폴백",
+    )
+    parser.add_argument(
+        "--program-name",
+        default=None,
+        help="최종 파일명 지원사업명(미지정 시 공고 폴더명)",
+    )
+    parser.add_argument(
+        "--document-type",
+        default=None,
+        help="최종 파일명 문서종류(미지정 시 원본 파일명에서 추정)",
     )
     parser.add_argument(
         "--version",
         default=None,
-        help="파일명 버전 접미사 (예: v1 → …_박다솜_v1.hwpx)",
+        help="레거시 호환 인자. 새 기본명은 동일 시간대 충돌 시 vN 자동 증가",
     )
     parser.add_argument(
         "--no-submit-copy",
         action="store_true",
-        help="제출/ 폴더 자동 파일명 복사 생략",
+        help="원본 양식 폴더의 최종 사용자 HWPX 복사 생략",
     )
     args = parser.parse_args(argv)
 
@@ -514,6 +516,8 @@ def main(argv: list[str] | None = None) -> int:
             submit_name=args.name,
             form_prefix=args.form_prefix,
             submit_version=args.version,
+            program_name=args.program_name,
+            document_type=args.document_type,
             write_submit_copy=not args.no_submit_copy,
         )
     except (OutputPolicyError, FileNotFoundError, RuntimeError) as exc:

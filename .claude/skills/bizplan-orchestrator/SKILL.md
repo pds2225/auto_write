@@ -23,7 +23,7 @@ description: >-
 ```powershell
 cd D:\auto_write\app
 py -3.11 bizplan_autopilot.py "<초안.docx>" --brief-file 브리프.txt --announcement-file 공고.txt
-# 기본 산출: results\{stem}_bizplan.hwpx  (워드가 필요하면 -o out.docx)
+# 기본 산출: 입력 원본 폴더\{지원사업명}_{문서종류}_{MMDDHH} vN.hwpx  (워드가 필요하면 -o out.docx)
 # 또는 Claude 커맨드: /auto-write-bizplan
 ```
 

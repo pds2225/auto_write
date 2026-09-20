@@ -31,13 +31,16 @@ from auto_write.services.hwp_com_fill import (  # noqa: E402
     fill_hwp_via_hwpx,
 )
 from auto_write.services.hwpx_fill import fill_hwpx  # noqa: E402
+from auto_write.services.hangul_default import default_fill_output  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description="원본 HWP/HWPX 양식을 변환 왕복 없이 직접 채운다(원본 미수정·날조0).")
     ap.add_argument("input", help="입력 양식(.hwpx 또는 .hwp)")
-    ap.add_argument("-o", "--output", help="출력 경로(미지정 시 <원본>_채움.<확장자>)")
+    ap.add_argument("-o", "--output", help="출력 경로(미지정 시 원본 폴더에 지원사업명_문서종류_MMDDHH vN.<확장자>)")
+    ap.add_argument("--program-name", default=None, help="최종 파일명 지원사업명(미지정 시 원본 파일명에서 추정)")
+    ap.add_argument("--document-type", default=None, help="최종 파일명 문서종류(미지정 시 원본 파일명에서 추정)")
     ap.add_argument("--set", dest="sets", action="append", default=[],
                     metavar="라벨=값", help="라벨-값 직접 지정(반복 가능)")
     ap.add_argument("--identity", help="라벨-값 JSON 파일 경로")
@@ -75,7 +78,9 @@ def main(argv: list[str] | None = None) -> int:
     from auto_write.utils import parse_kv
     identity.update(parse_kv(args.sets))  # --set 이 JSON 보다 우선
 
-    out = Path(args.output) if args.output else src.with_name(f"{src.stem}_채움{ext}")
+    out = default_fill_output(
+        src, args.output, program_name=args.program_name, document_type=args.document_type
+    )
     if out.resolve() == src.resolve():
         print("[오류] 출력이 입력과 같습니다(원본 덮어쓰기 금지).", file=sys.stderr)
         return 1
