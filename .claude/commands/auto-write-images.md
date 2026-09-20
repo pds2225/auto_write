@@ -1,13 +1,13 @@
 ---
 description: 그림 위치를 제안(기본)하거나 --apply 로 NotebookLM 슬라이드 생성 프롬프트를 DOCX 에 삽입한다.
-argument-hint: <입력DOCX경로> [--apply] [--out 결과.docx] [--max N] [--json]
+argument-hint: <입력DOCX|HWPX경로> [--apply] [--out 결과.docx] [--max N] [--json]
 ---
 
 # /auto-write-images
 
 ## 사용 목적
 
-완성된 DOCX 를 훑어 **어디에 / 어떤 시각화로** 인포그래픽·도식을 넣으면 좋은지 다룬다.
+완성된 DOCX/HWPX 를 훑어 **어디에 / 어떤 시각화로** 인포그래픽·도식을 넣으면 좋은지 다룬다. HWPX 제안 모드는 직접 ZIP/XML을 읽어 DOCX 변환 없이 동작한다.
 제안은 **Claude(AI 키가 있으면)** 또는 **키워드 규칙(폴백)** 으로 만든다. 두 가지 모드가 있다.
 
 - **기본(제안 모드, 읽기 전용)**: `infographic_suggest.suggest_images_ai` 로 "이 위치에 이런
@@ -24,7 +24,7 @@ argument-hint: <입력DOCX경로> [--apply] [--out 결과.docx] [--max N] [--jso
 
 ## 입력값
 
-- `$1` (필수): 입력 DOCX 절대경로. 예) `C:\제출\사업계획서.docx`
+- `$1` (필수): 입력 DOCX 또는 HWPX 절대경로. 예) `C:\제출\사업계획서.hwpx`
 - `--apply` (선택): 실제 삽입을 수행한다(미지정 시 제안만).
 - `--out` / `-o` (선택, `--apply` 와 함께): 결과 DOCX 경로. 미지정 시 `results\<원본>_images.docx`.
 - `--max N` (선택): 제안/적용 최대 개수. 기본 8.
@@ -36,9 +36,8 @@ argument-hint: <입력DOCX경로> [--apply] [--out 결과.docx] [--max N] [--jso
 ## 실행 워크플로우(단계)
 
 1. 입력 경로 존재 확인. 없으면 "실행 막힘" 보고.
-2. **제안 모드(`--apply` 없음)**: `suggest_images_ai_docx(path, openai_service=..., max_suggestions=N)`
-   실행 → 표/JSON 으로 정리(위치·유형·슬라이드 프롬프트). AI 키 없으면 키워드 규칙으로 폴백.
-3. **적용 모드(`--apply`)**: `apply_images(in, out, max_items=N, openai_service=...)` 실행.
+2. **제안 모드(`--apply` 없음)**: DOCX는 `suggest_images_ai_docx(...)`, HWPX는 `suggest_images_ai_hwpx(...)` 실행 → 표/JSON 으로 정리(위치·유형·슬라이드 프롬프트). AI 키 없으면 키워드 규칙으로 폴백.
+3. **적용 모드(`--apply`)**: 현재 `image_apply`는 DOCX 전용. HWPX는 제안까지만 이 커맨드에서 처리하고, 실제 PNG/JPG 삽입은 별도 `hwpx_pic_insert` 경로를 사용한다. DOCX는 `apply_images(in, out, max_items=N, openai_service=...)` 실행.
    - 그림 위치마다 NotebookLM 슬라이드 프롬프트 블록을 삽입. 결과 DOCX 와 삽입 집계(prompts_inserted)를 보고.
    - 원본 보존(out ≠ in). anchor 미발견 항목은 문서 끝에 추가됨을 보고.
 4. 사용자에게 "각 프롬프트를 NotebookLM 슬라이드 생성에 붙여넣고, 안내 블록은 삭제" 라고 안내한다.
@@ -54,8 +53,11 @@ argument-hint: <입력DOCX경로> [--apply] [--out 결과.docx] [--max N] [--jso
 ```powershell
 cd D:\auto_write\app
 
-# 1) 제안만 보기(읽기 전용, 키 없으면 키워드 폴백)
+# 1) DOCX 제안만 보기(읽기 전용, 키 없으면 키워드 폴백)
 python -c "import sys; sys.path.insert(0,'.'); from auto_write.services.infographic_suggest import suggest_images_ai_docx; r=suggest_images_ai_docx(r'C:\제출\사업계획서.docx', max_suggestions=8); print('기존이미지:', r.existing_images, '| 제안:', len(r.suggestions)); [print(f'- [{s.visual_type}] {s.caption}\n  프롬프트: {s.slide_prompt}') for s in r.suggestions]"
+
+# 1-1) HWPX 제안만 보기(변환 없음)
+python -c "import sys; sys.path.insert(0,'.'); from auto_write.services.infographic_suggest import suggest_images_ai_hwpx; r=suggest_images_ai_hwpx(r'C:\제출\사업계획서.hwpx', max_suggestions=8); print('기존이미지:', r.existing_images, '| 제안:', len(r.suggestions)); [print(f'- [{s.visual_type}] {s.caption}\n  프롬프트: {s.slide_prompt}') for s in r.suggestions]"
 
 # 2) 실제 삽입(그림 위치에 NotebookLM 슬라이드 프롬프트). 원본 보존
 python -c "import sys; sys.path.insert(0,'.'); from auto_write.services.image_apply import apply_images; r=apply_images(r'C:\제출\사업계획서.docx', r'D:\auto_write\results\사업계획서_images.docx'); print('프롬프트', r.prompts_inserted, '| anchor미발견', r.anchors_missing, '| 출력', r.output_docx)"
