@@ -113,6 +113,26 @@ def test_source_adjacent_output_name_and_version_increment(tmp_path: Path) -> No
     assert second.name == "2026GovTech_사업계획서_092021 v2.hwpx"
 
 
+def test_source_adjacent_output_skips_version_used_by_draft(tmp_path: Path) -> None:
+    """같은 시간의 v1_DRAFT가 있으면 깨끗한 v1을 재사용하지 않고 v2로 간다."""
+    src = tmp_path / "GovTech_사업계획서_원본.hwpx"
+    src.write_bytes(b"src")
+    when = datetime(2026, 9, 20, 21, 17)
+    draft = tmp_path / "2026GovTech_사업계획서_092021 v1_DRAFT.hwpx"
+    draft.write_bytes(b"draft-v1")
+
+    out = resolve_user_output_path(
+        src,
+        program_name="2026 GovTech",
+        document_type="사업계획서",
+        when=when,
+    )
+
+    assert out.name == "2026GovTech_사업계획서_092021 v2.hwpx"
+    assert draft.read_bytes() == b"draft-v1"
+
+
+
 def test_source_adjacent_output_infers_program_and_document_type(tmp_path: Path) -> None:
     src = tmp_path / "04_[아이디어_기획서]_2026년_GovTech_창업경진대회_0820_최종.hwpx"
     when = datetime(2026, 9, 20, 21, 17)
