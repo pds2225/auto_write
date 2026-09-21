@@ -37,6 +37,7 @@ from .quality_rules import resolve_ruleset
 _PSST_TYPES = {"business_plan", "pitch_deck"}
 _PASS_THRESHOLD = 85.0
 _MAX_ITERATIONS = 10
+_HEURISTIC_WORSE_EPS = 0.5
 
 
 @dataclass
@@ -54,6 +55,8 @@ class HarnessResult:
     manual_review: list[str] = field(default_factory=list)
     report_md: str = ""
     report_json: str = ""
+    score_before: float = 0.0
+    heuristic_rolled_back: bool = False
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -70,6 +73,8 @@ class HarnessResult:
             "manual_review": self.manual_review,
             "report_md": self.report_md,
             "report_json": self.report_json,
+            "score_before": round(self.score_before, 1),
+            "heuristic_rolled_back": self.heuristic_rolled_back,
         }
 
 
@@ -80,6 +85,26 @@ class DocumentQualityOrchestrator:
         self.openai_service = openai_service
         self.results_root.mkdir(parents=True, exist_ok=True)
         self.backup_root.mkdir(parents=True, exist_ok=True)
+
+    def _evaluate(self, doc: Document, doc_type: DocTypeResult) -> tuple[QualityScore, PSSTReport | None, InfographicReport]:
+        if doc_type.type_code in _PSST_TYPES:
+            psst_report = check_psst(doc)
+            psst_ratio = psst_report.overall_ratio
+        else:
+            psst_report = None
+            psst_ratio = None
+        info_report = suggest_images_ai(doc, openai_service=self.openai_service)
+        confirm_needed = self._count_confirm_markers(doc)
+        score = score_document(
+            doc,
+            doc_type=doc_type.type_code,
+            type_confidence=doc_type.confidence,
+            psst_ratio=psst_ratio,
+            image_suggestions=len(info_report.suggestions),
+            existing_images=info_report.existing_images,
+            empty_required_cells=confirm_needed,
+        )
+        return score, psst_report, info_report
 
     # ------------------------------------------------------------------
     # 백업 / 롤백
@@ -158,6 +183,8 @@ class DocumentQualityOrchestrator:
         iterations = 0
         prev_total = -1.0
         ops_report = dq.QualityOpsReport()
+        heuristic_rolled_back = False
+        score_before, _, _ = self._evaluate(Document(str(input_path)), doc_type)
 
         while iterations < _MAX_ITERATIONS:
             iterations += 1
@@ -180,28 +207,7 @@ class DocumentQualityOrchestrator:
             ops_report.paragraphs_unified += pass_ops.paragraphs_unified
             ops_report.colored_runs_normalized += pass_ops.colored_runs_normalized
 
-            # PSST (해당 유형만)
-            if doc_type.type_code in _PSST_TYPES:
-                psst_report = check_psst(doc)
-                psst_ratio = psst_report.overall_ratio
-            else:
-                psst_report = None
-                psst_ratio = None
-
-            # 이미지 제안(Claude 가용 시 AI, 아니면 키워드 폴백)
-            info_report = suggest_images_ai(doc, openai_service=self.openai_service)
-
-            # 점수 (미입력 필수칸 '[확인필요]' 수는 참고용 informational 로 전달)
-            confirm_needed = self._count_confirm_markers(doc)
-            score = score_document(
-                doc,
-                doc_type=doc_type.type_code,
-                type_confidence=doc_type.confidence,
-                psst_ratio=psst_ratio,
-                image_suggestions=len(info_report.suggestions),
-                existing_images=info_report.existing_images,
-                empty_required_cells=confirm_needed,
-            )
+            score, psst_report, info_report = self._evaluate(doc, doc_type)
 
             # 수렴 판정: 합격이거나 점수 개선이 없으면 종료
             if score.passed:
@@ -209,6 +215,20 @@ class DocumentQualityOrchestrator:
             if abs(score.total - prev_total) < 0.5:
                 break
             prev_total = score.total
+
+        # L072: 일괄 후처리가 원본보다 열등이면 백업본으로 원복한다.
+        if score.total < score_before.total - _HEURISTIC_WORSE_EPS:
+            bak_files = list(Path(backup_dir).glob("*.docx"))
+            if bak_files:
+                doc = Document(str(bak_files[0]))
+                score = score_before
+                if doc_type.type_code in _PSST_TYPES:
+                    psst_report = check_psst(doc)
+                else:
+                    psst_report = None
+                info_report = suggest_images_ai(doc, openai_service=self.openai_service)
+                ops_report = dq.QualityOpsReport()
+                heuristic_rolled_back = True
 
         # 4) 출력 저장 (원본 덮어쓰기 아님 — 위에서 보장)
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -240,6 +260,8 @@ class DocumentQualityOrchestrator:
             iterations=iterations,
             passed=score.passed,
             manual_review=manual_review,
+            score_before=score_before.total,
+            heuristic_rolled_back=heuristic_rolled_back,
         )
 
         # 6) 리포트

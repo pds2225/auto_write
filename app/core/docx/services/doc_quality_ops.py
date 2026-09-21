@@ -121,6 +121,7 @@ class QualityOpsReport:
     paragraphs_unified: int = 0
     colored_runs_normalized: int = 0
     square_headings_normalized: int = 0
+    bullet_paren_labels_bolded: int = 0
     notes: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict:
@@ -135,6 +136,7 @@ class QualityOpsReport:
             "paragraphs_unified": self.paragraphs_unified,
             "colored_runs_normalized": self.colored_runs_normalized,
             "square_headings_normalized": self.square_headings_normalized,
+            "bullet_paren_labels_bolded": self.bullet_paren_labels_bolded,
             "notes": list(self.notes),
         }
 
@@ -894,6 +896,52 @@ def normalize_square_headings(doc: Document) -> int:
     return changed
 
 
+# L080 — 글머리 직후 괄호 라벨은 괄호 포함 볼드. 문장 중간 괄호는 제외.
+_BULLET_PAREN_LABEL_RE = re.compile(
+    rf"^([ \t 　]*)([{re.escape(_BULLET_SYMBOLS)}]+)([ \t 　]*)(\([^)]+\))"
+)
+
+
+def bold_bullet_paren_labels(doc: Document) -> int:
+    """문단 선두 글머리 직후 '(라벨)' 만 굵게 한다. 문장 중간 괄호는 건드리지 않는다."""
+    changed = 0
+    seen: set[int] = set()
+    paras: list = list(doc.paragraphs)
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                paras.extend(cell.paragraphs)
+    for para in paras:
+        p_el = getattr(para, "_p", para)
+        pid = id(p_el)
+        if pid in seen:
+            continue
+        seen.add(pid)
+        text = para.text or ""
+        m = _BULLET_PAREN_LABEL_RE.match(text)
+        if not m:
+            continue
+        prefix = m.group(1) + m.group(2) + m.group(3)
+        label = m.group(4)
+        rest = text[m.end(4):]
+        _replace_para_runs(para, [(prefix, False), (label, True), (rest, False)])
+        changed += 1
+    return changed
+
+
+def _replace_para_runs(para, parts: list[tuple[str, bool]]) -> None:
+    """단락 런을 (텍스트, bold) 조각으로 갈아끼운다. pPr 은 유지."""
+    p = para._p
+    for child in list(p):
+        if child.tag == qn("w:r"):
+            p.remove(child)
+    for text, bold in parts:
+        if text == "":
+            continue
+        run = para.add_run(text)
+        run.bold = bold
+
+
 def run_all(
     doc: Document,
     *,
@@ -935,6 +983,7 @@ def run_all(
         # 표는 통째 제거되며 데이터 행은 보존된다.
         report.table_guide_rows_removed = remove_table_guide_rows(doc)
     report.bullet_spacing_fixed = normalize_bullet_spacing(doc)
+    report.bullet_paren_labels_bolded = bold_bullet_paren_labels(doc)
     report.table_cells_cleaned = cleanup_table_whitespace(doc)
     report.empty_paragraphs_removed = remove_empty_paragraphs(doc)
     report.paragraphs_unified = unify_paragraph_formatting(

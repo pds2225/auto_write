@@ -340,3 +340,89 @@ def insert_image_after_paragraph(
     image_paragraph.append(image_run)
     body.insert(base_index + max(1, insert_offset), image_paragraph)
     return True
+
+
+# ---------------------------------------------------------------------------
+# L014 — 우리가 *생성한* 표만 헤더/본문 서식을 나눈다. 폼 채움 표에는 쓰지 않는다.
+# ---------------------------------------------------------------------------
+
+GENERATED_TABLE_HEADER_FILL = "D9E2F3"
+
+
+def cell_shading_fill(cell) -> str:
+    """셀 w:shd fill (없으면 빈 문자열). 테스트·가드용."""
+    tc_pr = cell._tc.find(qn("w:tcPr"))
+    if tc_pr is None:
+        return ""
+    shd = tc_pr.find(qn("w:shd"))
+    if shd is None:
+        return ""
+    return _normalize_color_value(
+        shd.get(qn("w:fill")) or shd.get("w:fill") or shd.get("fill")
+    ).upper()
+
+
+def _set_cell_shading(cell, fill_hex: str | None) -> None:
+    tc = cell._tc
+    tc_pr = tc.get_or_add_tcPr()
+    shd = tc_pr.find(qn("w:shd"))
+    if not fill_hex:
+        if shd is not None:
+            tc_pr.remove(shd)
+        return
+    hex_color = re.sub(r"[^0-9A-Fa-f]", "", fill_hex).upper()
+    if shd is None:
+        shd = OxmlElement("w:shd")
+        tc_pr.append(shd)
+    shd.set(qn("w:val"), "clear")
+    shd.set(qn("w:fill"), hex_color)
+    shd.set(qn("w:color"), "auto")
+
+
+def _set_cell_runs_bold(cell, bold: bool) -> None:
+    for paragraph in cell.paragraphs:
+        for run in paragraph.runs:
+            run.bold = bold
+
+
+def style_generated_table(
+    table,
+    *,
+    header_rows: set[int] | None = None,
+    header_fill: str = GENERATED_TABLE_HEADER_FILL,
+) -> None:
+    """첫 행(또는 header_rows)=음영+굵게, 나머지=무음영+보통 (L014)."""
+    if header_rows is None:
+        header_rows = {0}
+    for i, row in enumerate(table.rows):
+        is_header = i in header_rows
+        seen: set[int] = set()
+        for cell in row.cells:
+            cid = id(cell._tc)
+            if cid in seen:
+                continue
+            seen.add(cid)
+            _set_cell_shading(cell, header_fill if is_header else None)
+            _set_cell_runs_bold(cell, is_header)
+
+
+def add_generated_table(
+    document: Document,
+    rows: list[list[str]],
+    *,
+    header_fill: str = GENERATED_TABLE_HEADER_FILL,
+):
+    """새 표 생성 + L014 헤더 서식. 기존 양식 표를 고치지 않는다."""
+    if not rows or not rows[0]:
+        raise ValueError("L014: 생성 표는 헤더 행이 필요합니다")
+    ncols = max(len(r) for r in rows)
+    table = document.add_table(rows=len(rows), cols=ncols)
+    try:
+        table.style = "Table Grid"
+    except Exception:
+        pass
+    for i, row in enumerate(rows):
+        for j, text in enumerate(row):
+            table.cell(i, j).text = str(text)
+    style_generated_table(table, header_fill=header_fill)
+    return table

@@ -43,6 +43,8 @@ __all__ = [
     "merge_profiles",
     "build_profile",
     "IDENTITY_KEYS",
+    "profile_to_json",
+    "format_build_korean",
 ]
 
 _CELL_SEP = "|"
@@ -168,13 +170,16 @@ class Project:
     name: Optional[str] = None
     content: Optional[str] = None
     client: Optional[str] = None
+    company_count: Optional[str] = None  # L038 업체수
+    is_total: bool = False  # L038 합계 행
 
     def as_dict(self) -> dict:
         return {"period": self.period, "name": self.name,
-                "content": self.content, "client": self.client}
+                "content": self.content, "client": self.client,
+                "company_count": self.company_count, "is_total": self.is_total}
 
     def key(self) -> tuple:
-        return (self.period, self.name, self.client)
+        return (self.period, self.name, self.client, self.is_total)
 
 
 @dataclass
@@ -245,6 +250,8 @@ def _match_section_header(cells: list[str]) -> Optional[str]:
     if "강의주제" in joined or ("주최기관명" in joined and "회차" in joined):
         return "lectures"
     if "프로젝트명" in joined and ("수행내용" in joined or "발주처" in joined):
+        return "projects"
+    if "업체수" in joined:
         return "projects"
     return None
 
@@ -371,10 +378,19 @@ def parse_profile_text(text: str, source: Optional[str] = None) -> ResumeProfile
                 continue
             # 날짜 선두가 아니면 섹션 종료 후보 → identity 로 넘김.
         elif section == "projects":
-            if _DATE_LEAD_RE.match(cells[0]):
+            first = _norm_label(cells[0]) if cells else ""
+            is_total = first in {"합계", "소계"} or (
+                len(cells) > 1 and _norm_label(cells[1]) in {"합계", "소계"}
+            )
+            if _DATE_LEAD_RE.match(cells[0]) or is_total:
                 prof.projects.append(Project(
-                    period=_val(cells, 0), name=_val(cells, 1),
-                    content=_val(cells, 2), client=_val(cells, 3)))
+                    period=_val(cells, 0) if not is_total else None,
+                    name=_val(cells, 1) if not is_total else "합계",
+                    content=_val(cells, 2),
+                    client=_val(cells, 3),
+                    company_count=_val(cells, 4) or (_val(cells, 1) if is_total else None),
+                    is_total=is_total,
+                ))
                 continue
 
         # identity 라벨-값 행(섹션 밖·섹션 시작 전·섹션 뒤 비데이터 행).
@@ -412,6 +428,9 @@ def extract_profile_from_file(path: str | Path) -> tuple[ResumeProfile, list[str
     text, notes = extract_text(p)
     if not text.strip():
         return ResumeProfile(sources=[str(p)]), notes
+    from .submission_gates import resume_layout_warnings
+
+    notes = list(notes) + resume_layout_warnings(text)
     return parse_profile_text(text, source=str(p)), notes
 
 
@@ -535,7 +554,7 @@ def build_profile(
     폴더가 주어지면 pick 스코어(rank_source_pool)로 상위 정렬 후 상위 ``limit`` 개만
     병합한다(``limit=None`` 이면 전체). 어떤 파일을 병합/생략했는지 리포트한다.
     """
-    from .source_pool_utils import list_source_pool, rank_source_pool
+    from auto_write.services.source_pool_utils import list_source_pool, rank_source_pool
 
     files: list[Path] = []
     for item in inputs:

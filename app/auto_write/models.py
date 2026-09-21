@@ -131,6 +131,8 @@ class ArtifactBundle(BaseModel):
     generated_assets: list[str] = Field(default_factory=list)
     results_dir: str = ""
     results_docx: str = ""
+    results_hwpx: str = ""
+    output_hwpx: str = ""
     hwp_paste: str = ""
     copy_blocks: str = ""
     fill_map: str = ""

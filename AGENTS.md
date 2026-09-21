@@ -1,10 +1,11 @@
 # AGENTS.md — auto_write 에이전트 협업 규약
 
 > AI 에이전트(Claude Code / Codex 등)가 `D:\auto_write` 에서 작업할 때의 규약.
-> 세션 재개: `RESUME.md` 먼저. 입구 맵: `docs/BIZDOC_HUB_MAP.md`.
+> 세션 시작·재개: `TASK.md` 먼저. `RESUME.md`는 세션 체크포인트만 읽는다. 입구 맵: `docs/BIZDOC_HUB_MAP.md`.
 > 상세 작업 지침은 `CLAUDE.md`, 하네스 설계는 `docs/HARNESS_TEAM_DESIGN.md` 참조.
 >
-> **세션 시작 시** `git pull` 후 `.session/closeout_due.json` 의 `due` 가 true 이면
+> **세션 시작 시** `git fetch origin --prune` 후 `origin/main:TASK.md`의 LIST와 열린 TASK를 먼저 확인한다.
+> 자동 `git pull`은 하지 않는다. 그 다음 `.session/closeout_due.json` 의 `due` 가 true 이면
 > (로컬 Claude 훅은 `python scripts/session_closeout.py sync-disk` 로 디스크 깃발 동기)
 > **이 (agent, location) 이 acks 에 없을 때만** `RESUME.md` 를 갱신하고
 > `python scripts/session_closeout.py ack --agent <cursor|claude|codex> --location <local|cloud|github>`
@@ -12,6 +13,18 @@
 > 다른 창 대화를 대신 저장했다고 말하지 않는다.
 > 깃발 예약(여기 클라우드에서도 가능): `python scripts/session_closeout.py plant --from <이창>` → 커밋·푸시.
 > 확인: `python scripts/session_closeout.py status`. 설명: `.session/README.md`.
+
+## TASK SSOT — 모든 에이전트 공통
+
+- 개발 작업의 유일한 공식 정본은 `origin/main:TASK.md`.
+- 시작 순서: `git fetch origin --prune` → TASK.md `# 0` LIST → 열린 TASK의 `8-1` → 필요 시 `RESUME.md`.
+- `RESUME.md`는 중단 지점·로그·재개 힌트만 보관하며 TASK 상태/우선순위를 변경하지 않는다.
+- 작업 중 TASK 변경은 현재 작업 브랜치의 `TASK.md`에 기록하고, main 머지 후 공식 상태가 된다.
+- Google Drive는 백업/열람용 미러만 허용한다. GitHub TASK와 Drive 문서를 병행 편집 원본으로 두지 않는다.
+- 별도 `CURRENT_TASK.md`, `NEW_TASK.md`, `NEXT_TASK.md`를 만들지 않는다.
+- 보조 remote 장애 때문에 전체 fetch가 실패하지 않도록 기본 fetch는 `origin`만 대상으로 한다.
+
+---
 
 ## 0. 프로젝트 구조 — 저장소 분리 진행 중
 
@@ -119,12 +132,20 @@ python -m pytest tests/test_document_quality_harness.py -q       # 테스트
 수확·신규 직후 확인: 요청 원문 구절이 `description`에 그대로 있는지. 없으면 미완.
 트리거 등록 위치는 위키 `frontmatter-yaml-5-2026-08-04`(5곳). 훅 **문구**는 이 절이 SSOT.
 
+예(2026-08-31 T-20260831-02, 스킬 `user-applications-memory`): description 훅 최우선에 원문 두 줄
+「특정지원사업은 저장하지마」「원장 씨가 제일 중요」
+과 정정
+「원장·파일에 사업명 저장 금지
+아예 제외하라는게아니라 특정지원사업신청서 작성하는일을 task에등록하지마라고」
+를 같이 둔다. 정리된 영문·정책 해석은 그 다음이다. 신청서 작성을 TASK에 등록하지 말라는 뜻이지, 파일에서 사업명을 지우라는 뜻이 아니다.
+
 ---
 
 **변경 이력**
 
 | 날짜 | 변경 내용 | 사유 |
 |------|----------|------|
+| 2026-08-31 | §7 훅 예: 원문 두 줄+정정. 신청서 작성 TASK 등록 금지(사업명 파일 삭제 아님) | 사용자 정정. 원장 A 유지 |
 | 2026-08-20 | 세션 마무리 깃발을 GitHub 파일(`.session/closeout_due.json`)로 공유 | 로컬/클라우드/다른 AI가 같은 신호를 보게 함 |
 | 2026-06-05 | 문서 품질 하네스 에이전트 12종 규약 신규 | 하네스 초기 구축 |
 | 2026-06-07 | §2 에이전트 표 12→6 동기화 | 실제 `.claude/agents/` 슬림화(12→6)와 본 규약 불일치 해소 |

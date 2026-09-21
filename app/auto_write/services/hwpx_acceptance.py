@@ -33,7 +33,7 @@ import re
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 from lxml import etree
 
@@ -46,6 +46,9 @@ _GUIDE_CORE = ("작성방법", "작성요령", "기재요령", "작성 요령")
 _GUIDE_AUX = ("삭제 후 제출", "삭제후 제출", "도식화", "항목 자율", "자율 변경", "유의사항")
 
 _SAMPLE_LIMIT = 5
+
+# D6: 정부양식 예시 이름. identity 로 채운 실값이면 허용(오탐 방지).
+TEMPLATE_DUMMY_NAMES = ("홍길동", "아무개")
 
 
 def _ln(el) -> str:
@@ -132,25 +135,51 @@ def count_linesegarray(section_root) -> int:
     return sum(1 for el in section_root.iter() if _ln(el) == "linesegarray")
 
 
+def count_template_dummy_names(
+    section_root,
+    *,
+    allowed: Sequence[str] = (),
+) -> tuple[int, list[str]]:
+    """양식 예시 이름(홍길동 등) 잔존 — D6.
+
+    ``allowed`` 에 그 문자열이 들어 있으면(채운 신원값) 세지 않는다.
+    반환: (더미 이름 종류 수, 샘플).
+    """
+    blob = "".join(section_root.itertext())
+    allow_blob = " ".join(str(a) for a in allowed if a)
+    n = 0
+    samples: list[str] = []
+    for name in TEMPLATE_DUMMY_NAMES:
+        if name in allow_blob:
+            continue
+        if name in blob:
+            n += 1
+            if len(samples) < _SAMPLE_LIMIT:
+                samples.append(name)
+    return n, samples
+
+
 @dataclass
 class HwpxAcceptanceReport:
     """HWPX 직접 점검 결과 — 세 fail 항목의 개수와 제출가능 여부.
 
-    colored/guides/linesegarray 는 결함 '개수'이고, ok 는 셋이 모두 0 일 때만 True.
-    ok=False 는 '제출 전 후처리(유색→검정·안내문구 삭제·linesegarray 제거)가 필요함'을
+    colored/guides/linesegarray/dummy_names 는 결함 '개수'이고, ok 는 모두 0 일 때만 True.
+    ok=False 는 '제출 전 후처리(유색→검정·안내문구 삭제·linesegarray 제거·예시이름 치환)가 필요함'을
     뜻한다(별도 후처리 모듈이 담당). 이 모듈은 판정·카운트만 한다.
     """
     source: str
     colored: int = 0
     guides: int = 0
     linesegarray: int = 0
+    dummy_names: int = 0
     colored_samples: list[str] = field(default_factory=list)
     guides_samples: list[str] = field(default_factory=list)
+    dummy_name_samples: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
     @property
     def fail_defects(self) -> int:
-        return self.colored + self.guides + self.linesegarray
+        return self.colored + self.guides + self.linesegarray + self.dummy_names
 
     @property
     def ok(self) -> bool:
@@ -169,8 +198,10 @@ class HwpxAcceptanceReport:
             "colored": self.colored,
             "guides": self.guides,
             "linesegarray": self.linesegarray,
+            "dummy_names": self.dummy_names,
             "colored_samples": list(self.colored_samples),
             "guides_samples": list(self.guides_samples),
+            "dummy_name_samples": list(self.dummy_name_samples),
             "notes": list(self.notes),
         }
 
@@ -182,14 +213,19 @@ def _extend_capped(dst: list, src: list, limit: int = _SAMPLE_LIMIT) -> None:
         dst.append(s)
 
 
-def run_hwpx_acceptance(path: str | Path) -> HwpxAcceptanceReport:
-    """HWPX 산출물을 변환 없이 직접 열어 유색·안내문구·linesegarray 결함을 센다.
+def run_hwpx_acceptance(
+    path: str | Path,
+    *,
+    allowed_names: Sequence[str] = (),
+) -> HwpxAcceptanceReport:
+    """HWPX 산출물을 변환 없이 직접 열어 유색·안내문구·linesegarray·예시이름을 센다.
 
     Args:
         path: 점검할 .hwpx(ZIP/OWPML). 읽기만 하고 절대 수정하지 않는다.
+        allowed_names: 채운 신원값. 이 안에 있는 더미 이름(홍길동 등)은 세지 않는다.
 
     Returns:
-        HwpxAcceptanceReport — colored/guides/linesegarray 개수 + ok(셋 다 0).
+        HwpxAcceptanceReport — colored/guides/linesegarray/dummy_names 개수 + ok(모두 0).
 
     Raises:
         FileNotFoundError: 파일이 없을 때.
@@ -224,6 +260,9 @@ def run_hwpx_acceptance(path: str | Path) -> HwpxAcceptanceReport:
                 report.guides += g
                 _extend_capped(report.guides_samples, gs)
                 report.linesegarray += count_linesegarray(root)
+                d, ds = count_template_dummy_names(root, allowed=allowed_names)
+                report.dummy_names += d
+                _extend_capped(report.dummy_name_samples, ds)
 
     if not any(_HEADER_RE.search(n) for n in names):
         report.notes.append("Contents/header.xml 을 찾지 못했습니다(유색 텍스트 점검 생략).")

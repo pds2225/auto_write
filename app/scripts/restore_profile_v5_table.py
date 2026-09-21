@@ -10,6 +10,9 @@ from pathlib import Path
 
 from lxml import etree
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from auto_write.services.hwpx_fill import _invalidate_lineseg  # noqa: E402
+
 _HP = "http://www.hancom.co.kr/hwpml/2011/paragraph"
 
 
@@ -55,20 +58,8 @@ def _set_cell(tc, value: str, *, char_pr: str | None = None) -> None:
             keep.remove(child)
     t = etree.SubElement(keep, _q("t"))
     t.text = value
-    lsa = p.find(_q("linesegarray"))
-    if lsa is None:
-        lsa = etree.SubElement(p, _q("linesegarray"))
-    if next(lsa.iter(_q("lineseg")), None) is None:
-        ls = etree.SubElement(lsa, _q("lineseg"))
-        ls.set("textpos", "0")
-        ls.set("vertpos", "0")
-        ls.set("vertsize", "1000")
-        ls.set("textheight", "1000")
-        ls.set("baseline", "850")
-        ls.set("spacing", "600")
-        ls.set("horzpos", "0")
-        ls.set("horzsize", "1000")
-        ls.set("flags", "393216")
+    # L002: 가짜 한 줄 캐시를 심지 않는다. 한글이 열 때 줄위치를 다시 계산한다.
+    _invalidate_lineseg(tc)
 
 
 def _cell_text(tc) -> str:
@@ -94,17 +85,7 @@ def _text_para(text: str, *, template: etree._Element | None = None) -> etree._E
     run.set("charPrIDRef", "2")
     t = etree.SubElement(run, _q("t"))
     t.text = text
-    lsa = etree.SubElement(p, _q("linesegarray"))
-    ls = etree.SubElement(lsa, _q("lineseg"))
-    ls.set("textpos", "0")
-    ls.set("vertpos", "0")
-    ls.set("vertsize", "1000")
-    ls.set("textheight", "1000")
-    ls.set("baseline", "850")
-    ls.set("spacing", "600")
-    ls.set("horzpos", "0")
-    ls.set("horzsize", "1000")
-    ls.set("flags", "393216")
+    _invalidate_lineseg(p)
     return p
 
 

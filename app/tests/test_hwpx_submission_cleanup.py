@@ -58,7 +58,10 @@ def test_finalize_idempotent(tmp_path):
     b = tmp_path / "b.hwpx"
     finalize_submission_hwpx(SRC, a)
     stats2 = finalize_submission_hwpx(a, b)       # 두 번째 적용은 변화 0이어야(멱등)
-    assert stats2 == {"linesegarray_removed": 0, "guides_removed": 0, "charpr_blacked": 0}
+    assert stats2["linesegarray_removed"] == 0
+    assert stats2["guides_removed"] == 0
+    assert stats2["charpr_blacked"] == 0
+    assert stats2.get("spacing_clamped", 0) == 0
 
 
 def test_finalize_rejects_inplace(tmp_path):
@@ -73,7 +76,9 @@ def _write_mini_hwpx(path: Path) -> None:
     ns = "http://www.hancom.co.kr/hwpml/2011/paragraph"
     header = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <hh:head xmlns:hh="http://www.hancom.co.kr/hwpml/2011/head">
-  <hh:charPr id="1" textColor="#000000"/>
+  <hh:charPr id="1" textColor="#000000">
+    <hh:spacing hangul="-50" latin="-10"/>
+  </hh:charPr>
   <hh:charPr id="2" textColor="#FF0000"/>
   <hh:charPr id="3" textColor="#FFFFFF"/>
 </hh:head>
@@ -105,6 +110,7 @@ def test_finalize_mini_hwpx_removes_guides_colors_lineseg(tmp_path):
     assert stats["guides_removed"] >= 1
     assert stats["charpr_blacked"] >= 1
     assert stats["linesegarray_removed"] >= 1
+    assert stats["spacing_clamped"] >= 1
     txt, bad, lineseg = _doc_text_and_colors(out)
     assert "작성방법" not in txt
     assert "본문 유지" in txt

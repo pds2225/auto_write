@@ -1,18 +1,18 @@
 """cross_form_hwp_pipeline.py — 공고 HWP/HWPX 양식 채움 단일 진입점 (Sprint 1).
 
 재발 방지:
-- ``--output`` + ``--engine`` + ``--confirm-output-plan`` 필수 (암묵적 DOCX 우회 금지)
+- 기본 산출 = HWPX (rhwp-hwpx-fill). 한글 기본은 --confirm-output-plan 불필요.
+- DOCX·엔진 변경은 ``--confirm-output-plan`` 필수 (암묵적 DOCX 우회 금지)
 - COM 은 ``hancom_com_guard`` 가 2024(HOffice130) 기동을 차단
 - 본선 산출은 HWPX(서식만). DOCX는 명시적 ``docx-crossform`` 만.
 - 구 스크립트 ``_finish_minwon_rhwp.py`` / ``_complete_minwon_job.py`` 사용 금지
+- 이진 .hwp 는 Windows+한글 COM 전용. 이 환경은 .hwpx XML 채움.
 
 사용 예 (PowerShell)::
 
     cd D:\\auto_write\\app
     py -3.11 cross_form_hwp_pipeline.py ^
-        --notice-folder "C:\\...\\21_기업민원..." ^
-        --engine rhwp-hwpx-fill --output hwpx --confirm-output-plan ^
-        --extract-forms --supplement-resume --facts-json facts.json
+        --notice-folder "C:\\...\\21_기업민원..."
 """
 
 from __future__ import annotations
@@ -23,7 +23,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from datetime import datetime
 from pathlib import Path
 
 from auto_write.services.cross_form_output_policy import (
@@ -33,11 +32,12 @@ from auto_write.services.cross_form_output_policy import (
     OutputPolicyError,
     validate_output_plan,
 )
-from auto_write.services.output_naming import resolve_submit_path
+from auto_write.services.hangul_default import infer_document_type, resolve_user_output_path
 from auto_write.services.cross_form_autofill import extract_source_fields
 from auto_write.services.hwp_docx_convert import hwp_to_docx
 from auto_write.services.hwpx_fill import fill_hwpx
 from auto_write.services.hwpx_form_extract import extract_forms_only, looks_like_notice_blob
+from auto_write.services.hwpx_resume_supplement import canonical_sign_date
 
 APP = Path(__file__).resolve().parent
 
@@ -143,7 +143,7 @@ def _ensure_forms_base(work: Path, raw_base: Path, *, extract: bool) -> tuple[Pa
 
 def _default_facts(identity: dict[str, str]) -> dict:
     """하드코딩 금지 대체: 파이프라인 기본 facts(모집분야 체크 없음)."""
-    today = datetime.now().strftime("%Y년  %m월  %d일").replace(" 0", " ")
+    today = canonical_sign_date()
     return {
         "education": [
             ["2025년 8월 (졸업)", "한양대학교 대학원", "경영컨설팅학과 (석사)"],
@@ -183,6 +183,8 @@ def run_pipeline(
     submit_name: str | None = None,
     form_prefix: str = "전문상담위원_참여신청서",
     submit_version: str | None = None,
+    program_name: str | None = None,
+    document_type: str | None = None,
     write_submit_copy: bool = True,
 ) -> dict:
     validate_output_plan(plan)
@@ -364,26 +366,22 @@ def run_pipeline(
             if rp.is_file():
                 result["fill_report"] = json.loads(rp.read_text(encoding="utf-8"))
 
-    # 제출용 자동 파일명: 전문상담위원_참여신청서_{성명}.hwpx
+    # 최종 사용자 HWPX: 원본 양식과 같은 폴더 + 통일 파일명.
+    # submit_name/submit_version은 구 CLI 하위호환 인자로 남기되 새 기본명에는 사용하지 않는다.
     if write_submit_copy:
-        person = (submit_name or "").strip()
-        if not person:
-            try:
-                facts = json.loads((work / "01_source_facts.json").read_text(encoding="utf-8"))
-                person = ((facts.get("identity") or {}).get("성명") or "").strip()
-            except (OSError, json.JSONDecodeError, TypeError):
-                person = ""
-        person = person or "미상"
         hwpx_src = result.get("outputs", {}).get("hwpx")
         if hwpx_src and Path(hwpx_src).is_file():
-            submit_dir = notice_folder / "제출"
-            submit_dir.mkdir(parents=True, exist_ok=True)
-            named = resolve_submit_path(
-                submit_dir,
-                form_prefix=form_prefix,
-                name=person,
-                ext=".hwpx",
-                version=submit_version,
+            from auto_write.services.submission_gates import (
+                missing_pdf_pair,
+                try_generate_sibling_pdf,
+            )
+
+            output_source = hwpx_base if hwpx_base is not None else target
+            named = resolve_user_output_path(
+                output_source,
+                program_name=program_name or notice_folder.name,
+                document_type=document_type or infer_document_type(output_source, fallback="신청서"),
+                requested_format="hwpx",
             )
             shutil.copyfile(hwpx_src, named)
             result["submit_copy"] = str(named)
@@ -391,6 +389,11 @@ def run_pipeline(
             shutil.copyfile(hwpx_src, ws_named)
             result["workspace_named"] = str(ws_named)
             result["submit_filename"] = named.name
+            gen = try_generate_sibling_pdf(named)
+            if missing_pdf_pair(named):
+                result.setdefault("needs_input", []).append(
+                    f"L050: 제출 HWPX 동일명 PDF 없음 ({gen.reason})"
+                )
 
     (work / "00_engines.json").write_text(
         json.dumps(
@@ -417,19 +420,18 @@ def main(argv: list[str] | None = None) -> int:
         dest="outputs",
         action="append",
         choices=[o.value for o in OutputFormat],
-        required=True,
-        help="산출 형식. 본선은 hwpx. docx는 명시적 docx-crossform 만.",
+        help="산출 형식. 기본 hwpx. docx는 명시적 docx-crossform + --confirm-output-plan.",
     )
     parser.add_argument(
         "--engine",
-        required=True,
+        default="rhwp-hwpx-fill",
         choices=[e.value for e in FillEngine],
-        help="rhwp-hwpx-fill(권장) | com-hwpx-fill | docx-crossform(명시)",
+        help="기본 rhwp-hwpx-fill. docx-crossform 은 명시+승인.",
     )
     parser.add_argument(
         "--confirm-output-plan",
         action="store_true",
-        help="출력 형식·엔진 사용자 승인 (필수)",
+        help="DOCX·엔진 변경 승인 (한글 기본 hwpx 는 불필요)",
     )
     parser.add_argument("--hwpx-base", type=Path, help="입력 HWPX (기본: _workspace/10_form_base.hwpx)")
     parser.add_argument("--source-profile", type=Path)
@@ -464,28 +466,38 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--name",
         default=None,
-        help="제출 파일명용 성명. 없으면 identity 성명 → 전문상담위원_참여신청서_{성명}.hwpx",
+        help="레거시 호환 인자(새 기본 파일명에는 성명을 사용하지 않음)",
     )
     parser.add_argument(
         "--form-prefix",
         default="전문상담위원_참여신청서",
-        help="제출 파일명 접두",
+        help="레거시 호환/문서종류 폴백",
+    )
+    parser.add_argument(
+        "--program-name",
+        default=None,
+        help="최종 파일명 지원사업명(미지정 시 공고 폴더명)",
+    )
+    parser.add_argument(
+        "--document-type",
+        default=None,
+        help="최종 파일명 문서종류(미지정 시 원본 파일명에서 추정)",
     )
     parser.add_argument(
         "--version",
         default=None,
-        help="파일명 버전 접미사 (예: v1 → …_박다솜_v1.hwpx)",
+        help="레거시 호환 인자. 새 기본명은 동일 시간대 충돌 시 vN 자동 증가",
     )
     parser.add_argument(
         "--no-submit-copy",
         action="store_true",
-        help="제출/ 폴더 자동 파일명 복사 생략",
+        help="원본 양식 폴더의 최종 사용자 HWPX 복사 생략",
     )
     args = parser.parse_args(argv)
 
     try:
         plan = OutputPlan.parse(
-            output_names=args.outputs,
+            output_names=args.outputs or ["hwpx"],
             engine_name=args.engine,
             user_confirmed=args.confirm_output_plan,
         )
@@ -504,6 +516,8 @@ def main(argv: list[str] | None = None) -> int:
             submit_name=args.name,
             form_prefix=args.form_prefix,
             submit_version=args.version,
+            program_name=args.program_name,
+            document_type=args.document_type,
             write_submit_copy=not args.no_submit_copy,
         )
     except (OutputPolicyError, FileNotFoundError, RuntimeError) as exc:

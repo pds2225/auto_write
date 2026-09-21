@@ -14,7 +14,7 @@ from lxml import etree
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from auto_write.services.hwp_com_fill import _SAVE_FORMATS, _convert_via_com
-from auto_write.services.hwpx_fill import fill_hwpx
+from auto_write.services.hwpx_fill import _set_cell_text, fill_hwpx
 
 _HP = "http://www.hancom.co.kr/hwpml/2011/paragraph"
 
@@ -29,24 +29,8 @@ def _cell_text(tc) -> str:
 
 
 def _set_cell(tc, value: str) -> None:
-    ts = list(tc.iter(_q("t")))
-    if ts:
-        ts[0].text = value
-        for extra in ts[1:]:
-            extra.text = ""
-        return
-    paras = list(tc.iter(_q("p")))
-    if not paras:
-        return
-    p = paras[0]
-    runs = list(p.iter(_q("run")))
-    if runs:
-        run = runs[0]
-    else:
-        run = etree.SubElement(p, _q("run"))
-        run.set("charPrIDRef", "0")
-    t = etree.SubElement(run, _q("t"))
-    t.text = value
+    """엔진 원시함수로 기입한다 — L002 줄캐시 제거·L086 폼컨트롤 칸 보호가 따라온다."""
+    _set_cell_text(tc, value)
 
 
 def _set_row(cells, values: list[str]) -> None:

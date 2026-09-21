@@ -9,7 +9,7 @@ description: >-
 
 # session-closeout-all — 위치×AI 공통 마무리 신호
 
-체크포인트 SSOT 는 `RESUME.md`. 방송 채널은 git 추적 파일 `.session/closeout_due.json`.
+개발 작업 SSOT는 `TASK.md`. 세션 체크포인트는 `RESUME.md`. 방송 채널은 git 추적 파일 `.session/closeout_due.json`.
 
 ## 이 창에서 예약 (클라우드 포함)
 
@@ -21,7 +21,7 @@ description: >-
 
 ## 세션 시작 (모든 위치·AI)
 
-1. `git pull` (가능하면).
+1. `git fetch origin --prune` 후 `origin/main:TASK.md`의 현재 작업을 먼저 확인한다. 자동 `git pull`은 하지 않는다.
 2. `python scripts/session_closeout.py status`
 3. 로컬 Claude Code 면 `python scripts/session_closeout.py sync-disk --agent claude --location local`
 4. `due: true` 이고 이 `(agent, location)` 이 acks 에 없으면 **이 창** 상태를 `RESUME.md` 에 쓰고

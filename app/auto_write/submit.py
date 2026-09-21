@@ -8,7 +8,8 @@
 
 전제: 먼저 양식 분석 + 프로젝트 생성 + 폼 저장이 끝난 project_id 가 있어야 한다
 (웹 UI 또는 기존 흐름). 본 CLI 는 그 project_id 로 generate->평가루프->마감->품질->이미지를
-한 번에 수행해 '제출초안' DOCX 를 만든다.
+한 번에 수행해 '제출초안' 한글(HWPX) 을 만든다. DOCX 는 작업본·명시적 --required-format docx 만.
+이진 .hwp 는 Windows+한글 COM 전용.
 """
 from __future__ import annotations
 
@@ -57,8 +58,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="실사용 수용검사 게이트(DRAFT 마킹) 생략")
     parser.add_argument("--blind-review", action="store_true",
                         help="블라인드 공고 모드 — ○○○ 마스킹 허용 + 실명 잔존 검출(fail)")
-    parser.add_argument("--required-format", default=None,
-                        help="공고 요구 산출 형식(예: hwp) — 다르면 제출명 차단(_DRAFT)+변환 안내")
+    parser.add_argument("--required-format", default="hwpx",
+                        help="산출 형식(기본 hwpx). docx 를 원하면 --required-format docx")
     parser.add_argument("--strict", action="store_true",
                         help="종료코드 계약 활성: 0=제출가능/1=입력오류/2=제출불가/3=검사불능 (기본은 항상 0)")
     parser.add_argument("--submit-clean", action="store_true",
@@ -69,6 +70,9 @@ def main(argv: list[str] | None = None) -> int:
                         help="AI활용계획 등 섹션 분량 제한(p, 예: 2). 미지정=검사 안 함")
     parser.add_argument("--strict-acceptance", action="store_true",
                         help="US-3c 선도입 warn 3종(괄호선택란·라벨변형·빈그림칸)을 fail 로 승격(공고 필수 항목용 opt-in)")
+    parser.add_argument("--required-doc", dest="required_docs", action="append", default=None,
+                        metavar="서식명",
+                        help="공고 필수 서식명(반복). 누락 시 수용검사 fail→_DRAFT (L040)")
     args = parser.parse_args(argv)
 
     settings, storage, project_service, evaluation_service = _make()
@@ -98,9 +102,10 @@ def main(argv: list[str] | None = None) -> int:
         max_pages=args.max_pages,
         ai_section_max=args.ai_section_max,
         strict_acceptance=args.strict_acceptance,
+        required_documents=tuple(args.required_docs or ()),
     )
     print(json.dumps(report, ensure_ascii=False, indent=2))
-    print("\n최종 제출초안:", report.get("final_docx", ""))
+    print("\n최종 제출초안:", report.get("final") or report.get("final_hangul") or report.get("final_docx", ""))
     acc = report.get("acceptance") or {}
     if acc:
         print(f"수용검사: {acc.get('verdict', '')} (fail {acc.get('fail_defects', 0)}건)")

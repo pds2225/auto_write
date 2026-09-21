@@ -24,6 +24,7 @@ from auto_write.services.hwpx_acceptance import (
     count_colored_charpr,
     count_form_guides,
     count_linesegarray,
+    count_template_dummy_names,
     run_hwpx_acceptance,
 )
 
@@ -101,6 +102,14 @@ def test_linesegarray_counted():
     root = _root("<sec><p><linesegarray/></p><p><linesegarray/></p><p/></sec>")
     assert count_linesegarray(root) == 2
     assert count_linesegarray(_root("<sec><p/></sec>")) == 0
+
+
+def test_dummy_names_counted_unless_allowed():
+    root = _root("<sec><p><t>성명 홍길동</t></p></sec>")
+    n, samples = count_template_dummy_names(root)
+    assert n == 1 and samples == ["홍길동"]
+    n2, _ = count_template_dummy_names(root, allowed=("박다솜 홍길동",))
+    assert n2 == 0
 
 
 # --- HwpxAcceptanceReport 판정 ----------------------------------------------------------

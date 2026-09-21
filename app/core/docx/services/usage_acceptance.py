@@ -961,6 +961,27 @@ _ALL_CHECKS = (
 _PROMOTABLE_WARN_IDS = ("paren_choices", "empty_label_fields_ext", "empty_image_slots")
 
 
+def _check_work_suffix_filename(path: Path) -> CheckResult:
+    """L059: 최종본 파일명에 작업접미사(_converted 등)가 있으면 warn.
+
+    fail 이 아니다 — 중간산출물을 제출 폴더에 둔 실수 경고. _DRAFT 는 상태 접미사라
+    허용한다. 본문 결함과 달리 경로만 본다.
+    """
+    from .submission_gates import work_suffix_hits
+
+    hits = work_suffix_hits(path.name)
+    label = "작업접미사 파일명"
+    if not hits:
+        return CheckResult(
+            "work_suffix_filename", label, SEV_WARN, 0, [],
+            "제출 파일명에 작업접미사 없음",
+        )
+    return CheckResult(
+        "work_suffix_filename", label, SEV_WARN, len(hits), hits,
+        f"작업접미사 잔존 {hits} — 상태(_DRAFT)만 허용 (L059)",
+    )
+
+
 def run_acceptance(path: str | Path, config: AcceptanceConfig | None = None) -> AcceptanceReport:
     """DOCX 1개에 대해 전체 수용 검사를 실행한다 (읽기 전용).
 
@@ -974,6 +995,8 @@ def run_acceptance(path: str | Path, config: AcceptanceConfig | None = None) -> 
     report = AcceptanceReport(source=str(path))
     for check in _ALL_CHECKS:
         report.results.append(check(doc, cfg))
+    # L059: 제출 파일명 작업접미사 — 문서 본문 검사가 아니라 경로만 본다.
+    report.results.append(_check_work_suffix_filename(path))
     if cfg.strict_acceptance:
         for r in report.results:
             if r.check_id in _PROMOTABLE_WARN_IDS:

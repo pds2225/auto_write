@@ -41,7 +41,7 @@ argument-hint: <초안DOCX경로> [--brief-file 브리프.txt] [--announcement-f
 
 1. 입력 DOCX 존재 확인. 없으면 "실행 막힘" 보고.
 2. `cd D:\auto_write\app` 후 `python bizplan_autopilot.py "<초안>" [옵션]` 실행.
-3. 산출물 확인: 최종 DOCX, 백업, 통합 리포트(md, 점수추이·근거출처·확인필요 To-Do).
+3. 산출물 확인: 최종 HWPX(기본은 원본 파일 폴더), 백업, 통합 리포트(md, 점수추이·근거출처·확인필요 To-Do).
 4. 사용자에게 정리: 채점 추이/목표도달, 서식점수, 차트/자리표시, **[확인필요] 항목(수치 검증 필수)**.
 
 ## 호출 에이전트
@@ -84,7 +84,7 @@ python document_quality_orchestrator.py --rollback "D:\auto_write\results\backup
 ## 보고 형식
 
 첫 줄 상태(`정상 실행 확인됨` / `수정만 완료` / `미검증` / `실행 막힘`). 이어서:
-1. 최종 DOCX 경로 / 백업 / 통합 리포트(md)
+1. 최종 HWPX/DOCX 경로 / 백업 / 통합 리포트(md)
 2. AI 사용 여부 · 반복 횟수 · 공고 채점 추이(목표 도달 여부)
 3. 서식 품질점수·게이트 / 차트·자리표시 / AI 보강 영역
 4. **제출 전 [확인필요] 항목(핵심 수치·이력 검증)** — 반드시 사람이 확인

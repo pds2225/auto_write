@@ -21,7 +21,7 @@
 | 의도 | 에이전트(스킬/커맨드) | CLI (사람이 직접) |
 |------|----------------------|-------------------|
 | 뭘 해야 할지 모름 / "문서 도와줘" | **bizdoc-hub** `/bizdoc` | — (먼저 의도 확정) |
-| 뭐 신청했지 / 아이템별 지원 목록 | **user-applications-memory** + `docs/clients/user_applications.md` (채팅만. Docs 정리본 금지) | — |
+| 뭐 신청했지 / 아이템별 지원 목록 | **user-applications-memory** + `docs/clients/user_applications.md` (채팅만. Docs 정리본 금지. 신청서 작성을 TASK에 등록 금지 — 파일에서 사업명 삭제 아님) | — |
 | 업무 절차 / 그대로 실행 / 도보네비 카드 | **user-bizdoc-playbook** + `docs/clients/dobonevi_card.md` | — |
 | 공고·양식 분석 | `announcement-form-analysis` · `/auto-write-analyze` | `py -3.11 app/analyze_docs.py …` |
 | 처음부터 본문 작성 | **bizplan-orchestrator** · `/auto-write-bizplan` | `py -3.11 app/bizplan_autopilot.py …` |
@@ -75,6 +75,7 @@
 
 - fail 결함 1개라도 있으면 출력명 `_DRAFT` (제출 금지).
 - 이미지: NotebookLM 프롬프트 삽입(직접 생성 기본 금지).
+- **자동생성·채움·제출 기본 산출 = 한글(HWPX).** DOCX는 사용자가 워드를 명시한 경우만. 품질 하네스는 DOCX 입력 전용.
 - 테스트: `py -3.11`.
 
 ---

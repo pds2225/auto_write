@@ -104,6 +104,50 @@ def _int_attr(el, name: str, default: int) -> int:
         return default
 
 
+# L097: 한 줄 칸 폭 추정. 1pt ≈ 100 HWPUNIT (7200/72). 한글 1em, ASCII 0.5em.
+_HWPUNIT_PER_PT = 100
+_DEFAULT_CELL_FONT_PT = 10
+_ONE_LINE_HEIGHT_HWPUNIT = int(_DEFAULT_CELL_FONT_PT * _HWPUNIT_PER_PT * 1.6)
+
+
+def estimate_text_width_hwpunit(text: str, font_pt: int = _DEFAULT_CELL_FONT_PT) -> int:
+    """셀에 넣을 문자열의 대략 폭(HWPUNIT). 한글·전각=1em, ASCII=0.5em."""
+    em = max(1, int(font_pt) * _HWPUNIT_PER_PT)
+    width = 0
+    for ch in str(text or "").replace("\n", ""):
+        width += em if ord(ch) > 0x7F else em // 2
+    return width
+
+
+def cell_text_may_overflow(tc, value: str) -> bool:
+    """한 줄로 잠긴 칸에 값이 폭을 넘치면 True. cellSz 없으면 측정 불가 → False.
+
+    채움을 막지 않는다(데이터 손실 금지). 호출자가 overflow_cells 에 기록만 한다.
+    """
+    if not str(value or "").strip():
+        return False
+    sz = next(iter(_direct(tc, "cellSz")), None)
+    if sz is None:
+        return False
+    width = _int_attr(sz, "width", 0)
+    height = _int_attr(sz, "height", 0)
+    if width <= 0:
+        return False
+    text_w = estimate_text_width_hwpunit(value)
+    if text_w <= width:
+        return False
+    if 0 < height < _ONE_LINE_HEIGHT_HWPUNIT:
+        return True
+    return text_w > width * 3
+
+
+def _note_overflow(bucket: Optional[list], label: str, tc, value: str) -> None:
+    if bucket is None or not cell_text_may_overflow(tc, value):
+        return
+    shown = str(value).replace("\n", " ")[:24]
+    bucket.append(f"{label}={shown}")
+
+
 def _cell_addr(tc) -> Optional[int]:
     """셀의 논리 열 위치(colAddr). cellAddr 미지정이면 None."""
     ca = next(iter(_direct(tc, "cellAddr")), None)
@@ -314,6 +358,10 @@ def _set_cell_text(tc, value: str, black: Optional[_BlackCharPr] = None) -> bool
 
     L086: 폼 컨트롤(checkBtn 등)이 든 칸에는 텍스트를 절대 기입하지 않는다 —
     ``_cell_is_fillable`` 우회·resume 경로에서도 이중 표시를 막기 위한 최종 방어핀.
+
+    L002/L145: 기입에 성공하면 그 칸의 ``hp:linesegarray`` 를 즉시 제거한다.
+    호출자가 ``fill_hwpx`` 파이프라인·별도 strip 을 잊어도 옛 줄좌표에 새 글씨가
+    겹치지 않는다. 형제 칸은 건드리지 않는다(L074).
     """
     if _has_form_control(tc):
         return False
@@ -330,6 +378,7 @@ def _set_cell_text(tc, value: str, black: Optional[_BlackCharPr] = None) -> bool
             run = ts[0].getparent()
             if run is not None and _local(getattr(run, "tag", "")) == "run":
                 black.fix_run(run)
+        _invalidate_lineseg(tc)
         return True
     runs = list(p.iter(_q("run")))
     if runs:
@@ -341,6 +390,7 @@ def _set_cell_text(tc, value: str, black: Optional[_BlackCharPr] = None) -> bool
         run.set("charPrIDRef", _inherit_charpr(tc, black))
     t = etree.SubElement(run, _q("t"))
     t.text = value
+    _invalidate_lineseg(tc)
     return True
 
 
@@ -385,6 +435,7 @@ def _splice_run_text(p, fill_start: int, fill_end: int, value: str) -> bool:
         return False  # cross-run span: 보수적 skip(오채움<빈칸)
     cur = start_t.text or ""
     start_t.text = cur[:start_off] + value + cur[end_off:]
+    _invalidate_lineseg(p)
     return True
 
 
@@ -559,6 +610,7 @@ def _apply_line_edits(
                         run = ts[0].getparent()
                         if run is not None and _local(getattr(run, "tag", "")) == "run":
                             black.fix_run(run)
+                    _invalidate_lineseg(p)
                     applied += 1
                     edited.append(p)
                 else:
@@ -848,6 +900,9 @@ class HwpxFillReport:
     grid_needs_confirm: list[str] = field(default_factory=list)
     line_edits_applied: int = 0   # 앵커 문단 편집(체크·치환) 성공 건수
     sections_changed: int = 0
+    overflow_cells: list[str] = field(default_factory=list)  # L097 한 줄 칸 넘침 가능
+    pages_before: int = 0  # L095 XML 페이지 기준선 (한글 렌더 아님)
+    pages_after: int = 0
     notes: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
@@ -864,8 +919,41 @@ class HwpxFillReport:
             "grid_needs_confirm": list(self.grid_needs_confirm),
             "line_edits_applied": self.line_edits_applied,
             "sections_changed": self.sections_changed,
+            "overflow_cells": list(self.overflow_cells),
+            "pages_before": self.pages_before,
+            "pages_after": self.pages_after,
             "notes": list(self.notes),
         }
+
+
+def _layout_scope(el):
+    """``hp:linesegarray`` 가 붙는 단위(문단 p, 없으면 셀 tc)로 올라간다.
+
+    캐시는 run/t 가 아니라 그 조상 ``hp:p`` 의 자식(run 과 형제)이다. t 만
+    넘기면 하위 iter 로는 안 잡히므로 조상으로 올린다.
+    """
+    cur = el
+    while cur is not None:
+        loc = _local(getattr(cur, "tag", ""))
+        if loc in ("p", "tc"):
+            return cur
+        cur = cur.getparent()
+    return el
+
+
+def _invalidate_lineseg(el) -> int:
+    """텍스트를 바꾼 요소의 줄위치 캐시(hp:linesegarray)를 즉시 제거한다.
+
+    L002 뿌리: 편집 직후 그 칸/문단만 무효화한다. ``fill_hwpx`` 파이프라인을
+    거치지 않는 직접 호출(``_set_cell_text``, L145)에서도 글씨 겹침이 나지 않는다.
+    L074: 형제 문단(안내박스) 캐시는 건드리지 않는다.
+    """
+    if el is None:
+        return 0
+    scope = _layout_scope(el)
+    if scope is None:
+        return 0
+    return _strip_linesegarray(scope, only_under=[scope])
 
 
 def _strip_linesegarray(root, *, only_under=None) -> int:
@@ -874,7 +962,8 @@ def _strip_linesegarray(root, *, only_under=None) -> int:
     텍스트를 바꿔도 예시문구 기준의 linesegarray 가 남으면 한글이 새 글씨를 옛
     좌표에 겹쳐 그린다(사용자 실측: STAR·서울 AI 허브 신청서 글씨 겹침 재발). 제거하면
     문서를 열 때 줄위치를 새로 계산한다 — 레이아웃 캐시라 내용 무손실·멱등.
-    HWPX 직접 납품(.hwpx→.hwpx) 경로의 글씨 겹침을 엔진 단에서 원천 차단한다.
+    원천 차단은 ``_set_cell_text`` / ``_splice_run_text`` 가 편집 직후
+    ``_invalidate_lineseg`` 를 부르는 쪽이다. 이 함수는 그 구현 + 후처리 진입점.
 
     L074: ``only_under`` 가 주어지면 그 요소(들) 하위의 lineseg 만 제거한다.
     rhwp→PDF 경로에서 전역 strip 이 안내박스 다중문단을 깨뜨리는 것을 막기 위한
@@ -906,6 +995,7 @@ def _fill_section_xml(
     grid_confirm: Optional[list] = None,
     line_edits: Optional[list[dict]] = None,
     line_report: Optional[dict] = None,
+    overflow_cells: Optional[list] = None,
 ) -> tuple[bytes, dict[str, str], int, set[str]]:
     """한 섹션 XML 에서 표 라벨-값 칸(1) + 셀 인라인 빈칸(1.5) + 체크박스(1.7) +
     그리드 선택칸(1.75, □ 없음) + 표 밖 본문 단락 인라인 빈칸(1.8) 채움 +
@@ -959,6 +1049,7 @@ def _fill_section_xml(
                         used_keys.add(want_key)
                         changed = True
                         edited.append(target)
+                        _note_overflow(overflow_cells, lbl, target, str(val))
                     break
 
     # 1.5) 셀 '안' 인라인 빈칸(`라벨 : ______`) 채움 — 표 경로 '뒤'에 실행하며
@@ -1055,6 +1146,7 @@ def _fill_section_xml(
                         used_keys.add(want_key)
                         changed = True
                         edited.append(hits[0])
+                        _note_overflow(overflow_cells, lbl, hits[0], mark)
                     break
 
     # 1.8) 표 '밖' 본문 단락 인라인 필드(`라벨 : ______`) — hs:sec 직계 hp:p 만 대상.
@@ -1088,6 +1180,7 @@ def _fill_section_xml(
                 t.text = new
                 replaced += 1
                 changed = True
+                _invalidate_lineseg(t)
                 # L074: 치환된 run 의 조상 p/tc 를 strip 범위에 포함.
                 anc = t.getparent()
                 while anc is not None:
@@ -1198,6 +1291,12 @@ def fill_hwpx(
     # 1) 안전장치
     if not src.exists():
         raise FileNotFoundError(f"입력 파일이 없습니다: {src}")
+    from .submission_gates import (
+        assert_not_announcement_form,
+        estimate_page_count,
+        page_count_increased,
+    )
+    assert_not_announcement_form(src)
     if _same_file(src, dst):
         raise ValueError("출력이 입력과 같습니다. 원본 덮어쓰기는 금지입니다.")
     if src.suffix.lower() != ".hwpx":
@@ -1206,6 +1305,7 @@ def fill_hwpx(
         raise ValueError(f"출력은 .hwpx 만 지원합니다: {dst.name}")
     if not zipfile.is_zipfile(src):
         raise ValueError(f"올바른 HWPX(ZIP)가 아닙니다: {src.name}")
+    report.pages_before = estimate_page_count(src)
 
     # 2) ZIP 전체를 읽어 들인다(엔트리 순서·압축방식·내용 보존용).
     with zipfile.ZipFile(src) as zin:
@@ -1229,6 +1329,7 @@ def fill_hwpx(
     all_used: set[str] = set()
     changed_names: set[str] = set()
     grid_confirm: list[str] = []
+    overflow_cells: list[str] = []
     line_report: dict[str, Any] = {"applied": 0, "notes": []}
     for name in section_names:
         try:
@@ -1236,6 +1337,7 @@ def fill_hwpx(
                 data[name], identity, replacements, black=black,
                 grid_confirm=grid_confirm,
                 line_edits=line_edits, line_report=line_report,
+                overflow_cells=overflow_cells,
             )
         except etree.XMLSyntaxError as exc:
             report.notes.append(f"{name} 파싱 실패(건너뜀): {exc}")
@@ -1310,6 +1412,28 @@ def fill_hwpx(
             standalone=standalone,
         )
 
+    # 3.6) fill 만 타고 submit 을 안 타도 과압축 자간을 완화한다(L 자간 하한).
+    #      변경이 없으면 원본 헤더 바이트를 그대로 둔다(양식 보존 테스트).
+    if header_name in data:
+        try:
+            from .hwpx_layout_fix import clamp_letter_spacing
+            hroot = etree.fromstring(data[header_name])
+            n_sp = clamp_letter_spacing(hroot)
+            if n_sp:
+                standalone = _detect_standalone(data[header_name])
+                data[header_name] = etree.tostring(
+                    hroot, xml_declaration=True, encoding="UTF-8",
+                    standalone=standalone,
+                )
+                report.notes.append(f"자간 하한 clamp {n_sp}건")
+        except etree.XMLSyntaxError:
+            pass
+
+    report.overflow_cells = list(dict.fromkeys(overflow_cells))
+    if report.overflow_cells:
+        report.notes.append(
+            "한 줄 칸 넘침 가능(L097): " + "; ".join(report.overflow_cells))
+
     report.filled_count = len(report.filled)
     report.residual = [
         lbl
@@ -1358,6 +1482,13 @@ def fill_hwpx(
         except OSError:
             pass
         raise
+
+    report.pages_after = estimate_page_count(dst)
+    if page_count_increased(report.pages_before, report.pages_after):
+        report.notes.append(
+            f"L095 페이지 증가 {report.pages_before}→{report.pages_after} "
+            "(XML 추정, 한글 렌더 쪽수는 L005)"
+        )
 
     report.ok = True
     if not report.filled and not report.replaced and not report.checked:

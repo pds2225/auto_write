@@ -1,75 +1,52 @@
 # RESUME.md — auto_write 세션 체크포인트
 
-## 현재 세션 체크포인트 — 2026-09-17
-
-### 압축 후 갱신 — 2026-09-18
-
-- AUTONOMOUS NIGHT RUN 재개: `origin/main`과 현재 branch/worktree/TASK/REQUEST_LEDGER를 재검증한 뒤 안전한 작업만 계속한다.
-- P0 작업 worktree: `D:\auto_write\_work\codex-p0-addendum-20260918`, branch `codex/p0-addendum-20260918`.
-- 완료된 P0: 공통 `hwpx_integrity_gate`, validator 실행 상태·severity 집계, 제출 경로 fail-closed, fixed-cell `REVIEW_REQUIRED`, cross-form gate-bypass 회귀. 기존 COM 2회 무응답으로 rendering은 `ENVIRONMENT_BLOCKED` 유지.
-- 마지막 검증: P0 targeted `56 passed, 2 skipped`, gate/bypass `10 passed`, HWPX acceptance/cleanup `36 passed`. 기존 DOCX submission hang과 resume/private re-export 실패는 TASK followup으로 분리.
-- 이번 재개 다음 액션: remote/main/TASK 상태 재확인 → T-20260918-01 잔여 독립 검증 → 사람이 가능한 AW-001/AW-008/AW-003 중 현재 TASK에 명시된 안전 작업만 별도 worktree/commit으로 처리.
-- 금지: root master dirty 변경·기존 worktree 보존, main/master push·merge, PR 재시도(gh 401), COM 추가 재시도, AW-009 승인 전 코드, OAuth/secret/외부 전송.
-
-### 야간 실행 실측 갱신 — 2026-09-18
-
-- 재검증: `git fetch origin --prune` 완료. `origin/main=f220d2d`, root `master=2130493`는 `origin/master` 제거 상태이며 기존 dirty 변경을 보존했다. root `TASK.md`의 #0 LIST와 열린 AW-001/AW-003/AW-005/AW-008/AW-009 8-1, `docs/REQUEST_LEDGER.md` C1을 확인했다.
-- P0 worktree `codex/p0-addendum-20260918`는 clean, 원격 push SHA `2ebf550`; gate/bypass 재검증 `10 passed`. Hancom COM 2회 무응답은 계속 `ENVIRONMENT_BLOCKED`; 추가 시도 금지.
-- AW-001 별도 worktree에서 실제 caller를 확인했다. `run_to_final`은 autopilot/resume/domain facade에 연결되어 있고 E2E `26 passed`; 기존 `ProjectService.generate → _publish_results_bundle`는 gate 미연결이지만 AW-009 승인 전 웹앱 코드 금지와 겹쳐 수정하지 않고 PARTIAL/FOLLOWUP로 남겼다. 넓은 보조 회귀는 origin/main 기존 실패 10건(acceptance 전달/옵션 전달/private re-export 등)으로 확인했다.
-- AW-008 별도 worktree 실측: registry 151건, `mechanized=66`, `judgment=84`, `gap=1(L050)`; L050은 rhwp/renderer 의존으로 partial이며 관련 회귀 `28 passed`. DETERMINISTIC 신규 전환 없음.
-- AW-003 별도 worktree 실측: registry → `LRuleEnforcer` → `LRuleReport.to_json()` → 기존 CLI/operator console 구조가 이미 존재. evaluator/CLI 기반 회귀 `19 passed`, console 핵심 `3 passed`; 새 UI/중복 registry는 만들지 않음.
-- 생성 worktree: `D:\auto_write\_work\overnight-aw-001-20260918`, `overnight-aw-008-20260918`, `overnight-aw-003-20260918` 모두 origin/main 기준 clean 조사 브랜치이며 아직 코드 commit/push 없음.
-- 다음 재개: P0 TASK 상태·RESUME 최종 동기화 → root dirty/master 변경 없이 결과 보고. 추가 자동 수정 후보는 AW-001 ProjectService gate 연결이지만 AW-009 승인 없이는 착수하지 않는다.
-
-### AUTONOMOUS CONTINUE — 2026-09-18
-
-- 사용자 보정: AW-001의 기존 ProjectService 출력 경로 gate 연결은 신규 웹 UI가 아니라 기존 엔진의 fail-closed 수렴 작업인지 재판정하고, 안전하면 구현한다. AW-009 승인 제한은 신규 웹앱 기능 개발에만 적용한다.
-- 현재 구현 worktree: `D:\auto_write\_work\overnight-aw-001-20260918`, branch `codex/overnight-aw-001-20260918`, base `origin/main`. root master와 기존 dirty 변경은 건드리지 않는다.
-- 구현 목표: `ProjectService.generate → _publish_results_bundle`의 DOCX/HWPX 출력이 기존 LRule/Hash/Finalizer 공통 경로를 우회해 FINAL처럼 노출되지 않도록 최소 fail-closed gate와 bypass fixture/test를 추가한다. 실제 렌더 COM은 재시도하지 않는다.
-- 이전 조사 결과: domain/autopilot/resume 경로는 이미 `run_to_final` 연결. ProjectService 결과 bundle은 gate 미연결. 이 분기를 이번 턴에 구현 가능성 기준으로 검증한다.
-- 다음: caller 계약·ArtifactBundle·기존 테스트를 읽고 최소 패치 → targeted regression → 관련 E2E → commit/push. 실패 시 같은 원인 2회 이내로 분류하고 TASK/RESUME에 남긴다.
-
-- 사용자 요청: 현재 작업지시 파일 `TASK.md` 내용 확인.
-- 원격 기준: GitHub default branch `main`, `origin/main`=`f220d2d`; 원격 `TASK.md` blob=`ad37279`.
-- 로컬 상태: `master`=`2130493`, `origin/master`는 제거됨. 작업트리에 기존 미커밋 변경과 열린 worktree가 있어 보존 중이며, 이번 조회로 코드 파일은 수정하지 않음.
-- 원격 TASK 요지: AW-001~009와 T-20260814-02, T-20260816-03이 미완료; 원장 C 최우선, named 신청서 작성은 TASK 등록 금지, 웹앱 코드는 승인 전 대기.
-- 다음: 사용자가 원하면 원격 TASK의 특정 열린 항목 8-1만 추가 확인. 구현·머지·정리는 별도 요청 전 하지 않음.
-- 추가 요청(2026-09-18): P0 안정화 Addendum을 적용해 실제 개발 실행을 재개. 원격 `main` 기준으로 확인한 결과 rowAddr 격자 검출·교정은 이미 존재하므로 재작성하지 않음. 루트 `master`는 `origin/main`보다 16커밋 뒤처지고 dirty 상태라 보존했으며, 격리 worktree `D:\auto_write\_work\codex-p0-addendum-20260918`와 브랜치 `codex/p0-addendum-20260918`을 생성함.
-- 현재 다음 단계: 격리 worktree에서 기존 P0 테스트·공통 gate·fixed-cell/rendering/gate-bypass 상태를 조사하고, 중복이 아닌 최소 독립 작업만 `origin/main` 기준 TASK에 등록·추적.
-
-### 병행 세션 — 2026-09-18 (L규칙 재발방지 설계 검증, 코드 미수정)
-
-- 사용자 요청: "같은 잘못을 반복하지 않게" → "설계만, 코드수정 금지" → 범위를 "전"(산출물게이트+화면노출+서브에이전트검증)으로 확정 → "설계 검증만, 코드/TASK.md/lessons registry 수정 금지"로 재검증.
-- 코드/TASK.md/`app/tests/lessons_coverage.json` 전혀 수정하지 않음(요청대로 설계·검증만). 이 항목은 위 P0 addendum 격리 worktree 작업과 **무관한 별개 트랙**이다(파일 겹치지 않음).
-- 핵심 발견(실측): ①`lessons_coverage.json` 151건(mechanized 44/gap 21/judgment 86) — `category`는 구현상태 단일축이고 "부분자동"은 `mechanizable` 필드에 별도로 있음. ②`top_gaps` 프리앰블 6건 중 4건(L040·L013·L046·L010)이 이미 mechanized로 승격됐는데 프리앰블만 stale. ③AW-003("L규칙 한 화면")은 TASK.md `[ ]`(미착수)로 보이지만 실제로는 `LRuleConsoleService`+`operator_main.py`(`/console/lrules`)로 registry↔UI 편집 절반이 이미 구현돼 있었고, `LRuleEnforcer.evaluate_all()`(런타임 PASS/FAIL 판정)만 그 콘솔에 안 붙어 있음. ④L167(서브에이전트 완료보고 미검증)형은 이 레지스트리에 없지만, 이 repo `.claude/settings.json` 에 이미 `PostToolUse: Agent|Task` 훅(전역 스킬 `omc_post_tool_remind.py`)이 걸려 있어 최소 방어선 확장은 전역 정책 수정 없이도 가능성 있음(단, tool_response에 실제 tool_uses 값이 들어오는지는 미검증).
-- 산출물: 위키 `.omc/wiki/aw-003-aw-008-l167-2026-09-18.md`(신규) · 스킬 `~/.claude/skills/omc-learned/lessons-coverage-ssot-sync.md`(재검토용 사전점검 절 추가).
-- 제안했으나 미승인(다음 세션 착수 가능): P0=`lessons_coverage.json`에 `enforcement_mode`/`implementation_status` 필드 **추가만**(기존 필드 보존)+top_gaps stale 4건 정리 / P1=gap 15건 중 impact=high(L032·L049·L151·L096·L097) 가드 구현.
-
-
-## 현재 작업 — 2026-09-07 H 스타트업 신청서
-
-- 대상: 박다솜 예비창업자, 아이템 `MarketGate`.
-- 원본 HWPX는 보존하고 `제출\H스타트업_신청서_박다솜_마켓게이트_서명전.hwpx`와 PDF를 별도 생성함.
-- 신청서·사업계획서(4쪽)·서약서·개인정보 동의서를 작성했고 한글 2022 열기, PDF 변환, 구조·필수칸 검사를 통과함.
-- 서명 3곳은 고의로 비워 두었고, `2026.12.31.(예정)` 창업예정일과 동일·유사 아이템 수상 이력은 사용자 최종 확인 필요.
-- 현재 재개 지점: 작성본을 한글로 열어 사용자 육안 확인 후 불필요한 빈 페이지를 최소화하고 최종 검증.
-
 > 세션을 새로 시작하면 **이 파일을 먼저** 읽는다. 상세 트랙은 아래 링크.
-> 최종 갱신: **2026-09-02** (일일 브리핑 갱신, 제품 코드 변경 없음)
+> 최종 갱신: **2026-08-31** (원장 C 최우선. 사업명은 원장·파일 저장. named 신청서 작성 TASK 등록 금지. 자동생성 기본=HWPX. T-20260831-01은 `main` `2a8e14e`)
 
 ## 한 줄 상태
 
-`pds2225/auto_write` 단일 정본. 원격 `origin/main` @ `f220d2d` (default branch `main`, #177 반영). 로컬 `master` @ `2130493`, `origin/master` 추적명은 사라짐.
+`pds2225/auto_write` 단일 정본. `origin/main` @ `2a8e14e` (#176 원장 정책). 개발 원장 **C가 최우선**. 사업명은 원장 A·`user_applications.md`에 저장. named 지원사업 신청서 작성은 TASK에 등록하지 않음. 자동생성·채움 기본 산출=**한글(HWPX)**. DOCX는 명시할 때만. 이진 .hwp 는 Windows+한글 COM.
+
+## 지금 세션 — 2026-08-31 (자동생성 기본 한글)
+
+| 항목 | 내용 |
+|------|------|
+| 요청 | 「지 지금 자동으로 문서 만들면 워드로 만들어지냐 한글로 만들어지냐 한글로 만들어 줘야 돼」 |
+| 한 일 | 기본 산출=.hwpx. hub fill 한글 기본은 승인 불필요. generate/submit/bizplan 사용자 산출 HWPX. COM 없으면 XML 래핑. `.hwp` 저장은 Windows-only |
+| 안 한 일 | 이진 .hwp COM 저장(이 리눅스 클라우드 BLOCKED). L050 PDF 쌍 생성. draft 머지 안 함 |
+| 재개 | 한글 PC에서 .hwp 저장·L050 PDF. 워드가 필요하면 `-o *.docx` / `--required-format docx` |
+
+## 지금 세션 — 2026-08-31 (Wave D·E 규약, 승인 없이 마무리)
+
+| 항목 | 내용 |
+|------|------|
+| 요청 | 닫힘=머지? → 아님. D·E도 승인 질문 없이 마무리 |
+| 한 일 | D: L003 spy 유지, L005 픽셀 BLOCKED 규약+`l005_pixel_review_status`, L050 `try_generate_sibling_pdf`(rhwp 없으면 BLOCKED, soffice 미인정). E: L067 스크립트 `git add -A` 스캔, L008 `normalize_fonts=False`, 스킬훅·승인금지 테스트. `test_lockdown_wave_de.py`. coverage 66/1/84 유지 |
+| 안 한 일 | draft 브랜치를 `main`에 머지하지 않음. L050 실제 PDF 생성. L005 한글 화면 검증. 151 재발 0 아님 |
+| 재개 | Windows 한글 PC에서만 L050 쌍 생성·L005 픽셀. 닫힌 가드 재구현 금지. 머지는 사용자가 "머지"라고 한 뒤 |
+
+## 지금 세션 — 2026-08-31 (JSON gap L004·L014·L048·L049·L072·L105)
+
+| 항목 | 내용 |
+|------|------|
+| 요청 | 열린 JSON gap를 한 세션에서 닫는다. 승인 질문 금지 |
+| 한 일 | 세금계산서 2번째 (법인명), 생성표 헤더, PDF합본·공고튜플, `YYYYMMDD 공고명/제출`, 품질 열등원복, 스킬 YAML. coverage 60→66. 테스트 `test_lockdown_wave_gaps.py` 42 passed 1 skipped (wave_bc 포함) |
+| 안 한 일 | L050 동일명 PDF **생성**(한글/LibreOffice 없음). L005 픽셀. 151 재발 0 아님 |
+| 재개 | L050 생성은 Windows 한글/COM 환경. 닫힌 ID 재구현 금지 |
+
+`pds2225/auto_write` 단일 정본. `origin/main` @ `5edd4f5` (#171 hwpx linesegarray 겹침버그 정식 수정 — 로컬 master는 아직 `2130493`, 1커밋 뒤처짐, `git pull` 필요). 이전 주: #170 M4 `gpt-image-1` 누락 생성 경로. 이번 주 #160·#164·#168·#169·#170·#171 병합.
 에이전트 입구 = **bizdoc-hub** / CLI 입구 = **auto_write_hub.py**. 맵: `docs/BIZDOC_HUB_MAP.md`.
 로컬 `master`도 `2130493`이며 `origin/master` 추적명은 사라짐. 미커밋: 이 체크포인트와 A9 미제출 종료 원장 2개 문서(보존, 커밋 여부 결정 필요).
+
+**⚠ 2026-08-31 발견 — PR #171 (`fix(hwpx): 글씨 겹침 — linesegarray를 텍스트 변경 함수에서 즉시 제거`):** 오늘 다른 세션이 `_set_cell_text`/`_splice_run_text` 등 텍스트-변형 primitive에서 `hp:linesegarray`를 즉시 무효화하도록 엔진 자체를 고쳤다(로컬 master에는 아직 없음, `git pull` 필요). 이번 세션에서 이지비건 문서를 손스크립트로 고칠 때 발견한 것과 **같은 근본원인**(L002)이며, 앞으로 HWPX 채움 스크립트를 새로 짤 때는 이 엔진 함수를 재사용하고 별도로 손패치하지 말 것.
 
 **밤샘 2026-08-19 → main #161:** AW-001 `[~]`. `run_to_final` + mechanized 가드(`build_lrule_guards`, unverifiable=0).
 judgment/gap은 REVIEW_REQUIRED → FINAL 차단 유지. 웹앱·BPQ-00 제품 코드는 승인 전 대기. 공고+양식 오기 전 초안 대기.
 
-**문서 작업:** 원장 A1~A7. A1 온랩 **접수**. A5 1인창조 **취소**. A6 STAR **선정**(6팀 멘토링, 상위2 지원금은 별도). 내비 KICXUP **선정**. 신청 원장=`docs/clients/user_applications.md`(채팅만, Google Docs 정리본 금지). 도보네비 카드=`docs/clients/dobonevi_card.md`.
+**문서 작업:** 원장 A1~A8. A1 온랩 **접수**. A5 1인창조 **취소**. A6 STAR **선정**(6팀 멘토링, 상위2 지원금은 별도). 내비 KICXUP **선정**. 신청 원장=`docs/clients/user_applications.md`(채팅만, Google Docs 정리본 금지). 도보네비 카드=`docs/clients/dobonevi_card.md`. 개발 원장 C 최우선.
 **세션 마무리 신호:** `python scripts/session_closeout.py plant|status|sync-disk|ack|cancel`. 기본 커밋본 `due: false`.
-**엔진:** T-20260814-02 명세+실행지시+BPQ-00 감사+#150 측정기+#155 git-sync(기준 브랜치=GitHub default/`main`)+#156(웹앱 사양·계획 보강·STEP 3A)+#161(DomainRouter→LRule→Hash→Finalizer 게이트)+#164(STAR 프레이밍 스킬)+#160(소셜벤처 본문)이 main에 있음. DOCX 정본=`core.docx.services`.
-**열린 작업:** GitHub 열린 PR #174 1건 확인. AW-001·웹앱은 승인 전 대기, A9 미제출 종료 기록은 로컬 원장 2개에 미커밋 보존. Cursor 클라우드 PR은 기본 draft.
+**엔진:** T-20260814-02 명세+실행지시+BPQ-00 감사+#150 측정기+#155 git-sync(기준 브랜치=GitHub default/`main`)+#156(웹앱 사양·계획 보강·STEP 3A)+#161(DomainRouter→LRule→Hash→Finalizer 게이트)+#164(STAR 프레이밍 스킬)+#160(소셜벤처 본문)+#171(hwpx linesegarray 정식수정, origin에만)이 있음. DOCX 정본=`core.docx.services`.
+**열린 작업:** 열린 PR 0건(파악 시점 기준, #171은 이미 merge됨). AW-001·웹앱은 승인 전 대기, A9 미제출 종료 기록은 로컬 원장 2개에 미커밋 보존. Cursor 클라우드 PR은 기본 draft.
 **머지 주의:** Cursor 클라우드 PR은 기본 draft. GitHub 자동머지는 draft에서 불가. 머지 요청 시 Ready for review 후 `gh pr merge --auto --squash`.
 작업 시작 전: `git fetch` → `TASK.md` → 현재 구현 조사 → 그다음 작업.
 목표 흐름: `LLM → StageResult(JSON) → 검증 → 다음 Stage → 렌더 → Finalizer`. 한 번에 최종 DOCX 금지.
@@ -77,14 +54,27 @@ judgment/gap은 REVIEW_REQUIRED → FINAL 차단 유지. 웹앱·BPQ-00 제품 �
 P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금지. 파일 오면 초안 1건). **P 완료 후는 최우선 사용 케이스.** 사업자등록증은 첫 화면 필수 아님.
 웹앱 실행 정본=`웹앱 최종 요구사항_20260816`. 승인 전 웹앱 제품 코드 대기.
 
-## 자동화 브리핑 — 2026-09-02
+## 지금 세션 — 2026-08-31 (이지비건 인천TP 기술지원단 종합완료보고서, repo 밖 개인문서 작업)
 
-- 오늘 일정: 10:00 뉴키즈인베스트먼트 밋업, 14:00 SK텔레콤 밋업. `업무마감일`은 오늘 0건. SIW·대전창경 상담은 9/3까지.
-- 보안: Google 계정 복구 뒤 2단계 인증 제거 안내가 unread. 본인 요청 확인 후 즉시 2단계 인증 재설정 또는 보안 진단.
-- 운영·비용: `export-monitor`가 8/31 이후 4회 실패(최신 9/2 09:26). `walk` Vercel 실패 unread 50건. Google Cloud ₩8,965 결제 확인 필요.
-- 구독·마감: Xiaomi MiMo 취소 예정일은 오늘이나 취소 확인 메일 없음. 한투AC는 9/3 이벤트 13:00/설명 17:00 충돌 → 13:00 안전 마감. 9/3 Kimi, 9/4 Claude Max, 9/6 Skywork 결제 일정.
-- 다음 액션: 11:00 Google 보안 확인 → MiMo 해지 확인 → export-monitor 최신 오류 확인 → 14:00 SKT 밋업 준비.
-- 산출물: `D:\v_up\worklog\briefings\2026-09-02.md`. Gmail/Calendar 읽기 전용, 제품 코드 수정 없음.
+> 폴더: `OneDrive\...\20260630 이지비건 인천TP기술지원단배정\기술지원단 컨설팅보고서_이지비건\` — auto_write repo와 무관한 개인 문서 작업. 코드 변경 없음.
+
+| 항목 | 내용 |
+|------|------|
+| 완료 ① | `제출자료\기술지원단 종합완료보고_이지비건 v2.hwpx` — 8페이지, 8개 항목 채움 + 글씨겹침 수정 + 돋움12pt(내가 채운 부분만) 적용 완료. **회차 날짜가 구버전(아래 ⚠ 참조), 정정 필요** |
+| 완료 ② | `종합보고서\인천TP 기술지원단 종합완료보고서_경영컨설팅_이지비건_박다솜_v2.hwpx` — 32페이지 정식 완료본. `종합보고서` 폴더 전체 자료 반영, 오늘자 일정정합성수정본 기준으로 회차 날짜·내용 정정 완료. `hwpx_doctor.py diagnose` PASS. 원본 `.hwp`·다른 소스 문서 전부 미수정 확인됨 |
+| ⚠ 다음 즉시 할 일 | ①의 8p본 회차 날짜(구: 1회차7/3·2회차7/20·3회차8/3·4회차8/21·5회차8/26)를 ②와 같은 정정 날짜(1회차7/3·2회차7/20·3회차7/25·4회차8/3·5회차8/8, 3회차=구조설계만·4회차=19p초안작성·5회차=그 초안검수)로 맞춰야 두 파일이 일치함 |
+| [확인 필요] (날조 안 함) | 매출액, 연락처, 연간기대비용효과 6개 수치(신규고용/특허실용신안/기술력향상/매출액증가/생산성향상비용절감/수출수입대체효과) — 소스 문서 어디에도 확정값 없어 비워둠. 사용자 확답 대기 |
+| 자동화 아님 | 증빙사진 삽입은 사람이 직접(32p본에 `[이미지/캡처 붙임 위치]` 마커 28곳 표시해둠) |
+| 위키 저장 | `.omc/wiki` — "파일명 '최종'만 믿지 말고 내부 안내문구 먼저 확인"(예: `최종보고서.hwpx`는 사실 붙여넣기용 원고였음) |
+
+## 자동화 브리핑 — 2026-08-28
+
+- 캘린더: 기본 캘린더는 오늘 0건. `업무마감일`에 `한경련 더하기 창업 마감` 1건이 있으며 이벤트 시각 15:00과 설명의 18:00이 충돌하므로 15:00 전 원문 확인이 최우선. 캘린더 목록 권한은 부족하지만 config에 확인된 보조 캘린더는 직접 조회함.
+- 중요 미확인 메일: `mail` workflow 4시간 후 실패와 P0 7개 수집원 누락, `walk` Vercel preview 실패 22건, Cursor GitHub App 추가 권한 요청, Kimi·Zoom Google 접근 및 Claude 신뢰 기기 확인, OpenAI Plus·Cursor 결제 실패 확인 필요.
+- 오늘 할 일: ① 한경련 마감 여부 결정 ② 키핀 비즈니스지원단(D-1) 30분 착수 ③ mail-monitor·walk 반복 실패 원인 확인 ④ 계정 접근·구독 상태 확인. SIW(9/1~3)는 관심 프로그램만 사전등록 검토.
+- 경계: Gmail/Calendar 읽기 전용 유지. 읽음 처리·회신·발송·캘린더 수정·권한 승인·결제 변경 없음. 제품 코드 수정 없음.
+- 주간 검토: 8/24~8/28 PR 5건 병합·`docs-gate` 전부 통과. 소셜벤처 본문, STAR 출처 가드, draft 6건 합본, M4 복구 TASK와 이미지 누락 생성 경로 반영. 서울 AI 허브 2기 신청서는 작성했으나 미제출 종료.
+- 다음 액션: A9 원장 기록 커밋 여부 결정 → AW-001·웹앱 승인 상태 확인. 자동화 보고 외 제품 코드 작업 없음.
 
 ## 지금 세션 — 2026-08-23 마무리
 
@@ -115,6 +105,7 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 
 | 날짜 | 내용 | 근거 |
 |------|------|------|
+| 2026-08-31 | 자동생성·채움 기본 산출=한글(HWPX). DOCX는 명시할 때만. 이진 .hwp 는 Windows+한글 COM | `hangul_default.py` · `test_hangul_default_output.py` |
 | 2026-08-25 | 열린 draft #159+#162+#163+#165+#166+#167 합본. 충돌 없는 #164+#160은 먼저 squash | 이 체크포인트 |
 | 2026-08-23 | 신청 원장: KICXUP 선정 · 온랩 접수 · 1인창조 취소. 플레이북·도보네비 카드. 채팅만(Docs 정리본 금지) | `docs/clients/user_applications.md` · `user-bizdoc-playbook` |
 | 2026-08-23 | 세션 마무리. 스킬 `tech-framing-provenance` 의미 확인(공고 맞춤 문장≠보유기술). 추가 구현 없음 | 이 체크포인트 · 위키 `session-2026-08-23.md` |
@@ -150,6 +141,8 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
 
 ## 남은 일 (우선순위)
 
+00. **원장 C (제일 중요):** 있는 기능을 실사용 가능하게. B4 그림 품질 · B5 DOCX 실삽입 · B7 안내문구 오탐 · AW-001 FINAL 막힘. named 지원사업 신청서 작성을 TASK에 등록하지 말 것
+00p. **이지비건 8p본 날짜정정:** `제출자료\기술지원단 종합완료보고_이지비건 v2.hwpx`의 회차 날짜를 32p본과 동일하게(3회차7/25·4회차8/3·5회차8/8) 정정 — 다음 세션 최우선. 이후 매출액·연락처 등 [확인 필요] 값은 사용자 확답 오면 두 파일 모두 반영
 0. **STAR-Exploration:** 원장 A6 종료(선정·재작성 금지). 상위2 지원금·발표자료는 **새 요청이 있을 때만**. 그때 IR 위성항법=공고 맞춤 프레이밍(미보유 기술) — 과대포장 금지
 0a. **K-Navi 배너:** 16:9 한글/영문은 Cursor artifact. 재생성은 요청 시에만(스킬로 고정하지 않음). 저장소/슬라이드 삽입은 사용자가 원할 때만
 0a2. **K-네비 9장 PPT (A8):** Skywork 결과 검수 대기. Cursor가 카드덱을 다시 그리지 말 것. 프롬프트=`docs/KNEVI_KICKXUP_SKYWORK_PROMPT.md`
@@ -168,26 +161,25 @@ P 개발 중에는 요청 한 장(지금은 Problem만. 끝나기 전 S/Sc/T 금
    - HWPX: `py -3.11 app/hwpx_submit.py 양식.hwpx -o 결과.hwpx --identity identity.json`
    - DOCX 품질: `py -3.11 app/auto_write_autopilot.py 문서.docx --submit-clean --strict`
    - 인젝터: `cd tools/injector && python3 -m pytest tests/test_v2.py -q`
-3. **REQUEST_LEDGER A:** A1~A6 재작성 금지(A5는 취소). A7 소셜벤처 리그 사용자 확인. A8 Skywork PPT 검수 대기. 웹앱은 최종계획 승인 전 코드 대기
+3. **REQUEST_LEDGER:** C 최우선. A1~A6 재작성 금지(A5는 취소). A7 소셜벤처 리그 사용자 확인. A8 Skywork PPT 검수 대기. named 신청서 작성 TASK 등록 금지. 웹앱은 최종계획 승인 전 코드 대기
 4. **보류**: HWPX 세로 라벨(c) — 코퍼스 수요 극소(AC6)
 5. **보류**: SFT P3 후속·DOCX↔HWP 100% — 실사용에서 막힐 때
 6. **원격 정리:** `main` + `backup/*` 2개. 이 합본이 머지되면 흡수 draft #159+#162+#163+#165+#166+#167 닫음. 닫힌 #139 충돌 표시는 무시.
+7. **로컬 master ↔ origin/main 동기화:** 로컬이 origin보다 1커밋(#171) 뒤처짐. 다음 세션 시작 시 `git pull origin main` 먼저 (RESUME.md 자체는 로컬 미커밋 버전이 더 최신 내용을 담고 있으니 pull 전 diff 확인).
 
 ## 재개 명령
 
 ```text
-이어서: 스킬 `session-resume` + `RESUME.md`. 원장 A는 종료. 발표 IR은 새 요청이 있을 때만. 그때 위성항법을 항우연 보유기술처럼 쓰지 말 것(스킬 `tech-framing-provenance`, 2026-08-20 출처).
-K-Navi: 16:9 한글/영문 배너는 Cursor artifact. 저장소에 넣을지는 사용자 확인. 재생성 요청이 오기 전에 스킬화하지 말 것.
-스킬 훅: 만들게 한 요청 원문을 description 맨 앞. 스킬명만 부르면 효용 감소 (`AGENTS.md` §7).
-엔진: T-20260814-02 + #150 측정기 + #155 git-sync(base=GitHub default/main) + #161 생산 게이트. main `9851ab3`. 합본 #156 squash `1001b76`. 세션핀 #158 `d6b96b8`.
+이어서: 스킬 `session-resume` + `RESUME.md`. 원장 **C**가 제일 중요(있는 기능 실사용). 사업명은 원장·`user_applications.md`에 저장. named 신청서 작성 TASK 등록 금지. 승인 요청 금지.
+스킬 훅: 만들게 한 요청 원문을 description 맨 앞 (`AGENTS.md` §7).
+엔진: #175 교훈 잠금 `6ff5ec0`. #161 생산 게이트. 웹앱은 승인 전 대기.
 P 개발 중=Problem만. P 완료 후=최우선 사용 케이스.
-GitSync 기준 브랜치: AUTO_WRITE_GIT_BASE_BRANCH 없으면 origin/HEAD → ls-remote HEAD → main.
 머지: draft면 자동머지 안 됨. Ready 후 gh pr merge --auto --squash.
 ```
 
 ```powershell
 cd D:\auto_write
-git checkout main && git pull origin main
+git pull origin main   # #171 hwpx linesegarray 정식수정 반영
 # 테스트 (반드시 3.11 — PATH 기본 3.14 는 matplotlib 부재)
 cd app
 py -3.11 -m pytest tests/test_archived_commands_not_resurrected.py tests/test_hub_entrypoints.py tests/test_skill_request_hooks.py -q
@@ -202,7 +194,7 @@ py -3.11 auto_write_hub.py env
 - 이 세션 위키: `session-2026-08-23.md` (Drive)
 - autowrite 통합: `docs/REPO_DUPLICATION_CHECK.md`
 - HWPX 파리티(B 완결): `docs/RESUME_hwpx_parity.md`
-- 실사용 원장: `docs/REQUEST_LEDGER.md`
+- 개발 원장(C 최우선): `docs/REQUEST_LEDGER.md`
 - 신청 원장(채팅만): `docs/clients/user_applications.md` · 스킬 `user-applications-memory`
 - 도보네비 카드·절차: `docs/clients/dobonevi_card.md` · 스킬 `user-bizdoc-playbook`
 - K-네비 IR PPT: `.claude/skills/ir-storyboard-pptx/SKILL.md` · `docs/KNEVI_KICKXUP_SKYWORK_PROMPT.md`
@@ -215,305 +207,4 @@ py -3.11 auto_write_hub.py env
 ## 안전 불변
 
 원본 미수정 · 날조 0 · fail 시 `_DRAFT` · 경로 광역 스캔 금지 · 테스트 `py -3.11`.
-
-## 2026-09-18 LONG DEVELOPMENT RUN v2 — checkpoint
-
-- START_TIME: 2026-09-18 02:04:28 +09:00. AW-001 구현 branch `codex/overnight-aw-001-20260918`에 실제 코드·테스트·TASK 변경을 적용하고 push했다.
-- AW-001 commits: `da81c5a` (ProjectService 공통 final gate 연결), `2c316fe` (malformed gate fault-injection). 주요 검증: targeted 3 passed, domain/LRule 26 passed, finalizer/LRule/hash 23 passed, compileall exit 0. 넓은 보조 회귀는 origin/main에서도 재현되는 기존 실패 10건.
-- AW-008 실측: registry total 151, mechanized 66, judgment 84, gap 1(L050). L005/L008은 사람 판단·정책 예외, L050은 rhwp/한글 renderer 의존으로 신규 CLOSED 0건. 관련 28 passed. 별도 TASK 기록 branch `codex/overnight-aw-008-20260918`, commit `6098240` push.
-- AW-003은 registry/evaluator/JSON/report/CLI 구조가 이미 존재하여 UI·중복 abstraction을 만들지 않았다. 기존 핵심 console 3건 및 LRule 기반 19건 PASS 증거를 유지한다.
-- P0 `T-20260918-01`: gate/bypass 10 passed, HWPX acceptance/cleanup 22 passed 2 skipped. Hancom COM은 기존 2회 무응답으로 `ENVIRONMENT_BLOCKED`; 재시도 금지. `gh` PR 401은 HUMAN_GATE.
-- 현재 남은 자동 가능 작업: AW-001의 HWPX R9 수용검사와 P0 HWPX gate는 별도 계약/branch로 분리되어 있어 혼합하지 않고, 관련 baseline triage·최종 diff audit을 계속한다.
-## 2026-09-18 LONG DEVELOPMENT RUN v2 — final checkpoint
-
-- 구현 완료: AW-001 기존 `ProjectService.generate → _publish_results_bundle`에 `run_to_final` 공통 gate와 `final_gate_report.json`을 연결했다. 게이트 실행 오류·malformed report는 `DRAFT`/비제출로 남는다. 브랜치 `codex/overnight-aw-001-20260918`, commits `da81c5a`, `2c316fe`, remote 동기화 완료.
-- 구현 완료: AW-003 기존 registry/evaluator/CLI 구조의 registry test subprocess timeout/start failure를 `RuleTestResult(ok=false)`로 보존한다. 브랜치 `codex/overnight-aw-003-20260918`, commits `449c5d1`, `48be026`, `d77767c`, remote 동기화 완료.
-- AW-008 실측: total 151, mechanized 66, judgment 84, gap 1(L050). L005/L008은 judgment/정책·렌더 의존, 신규 deterministic CLOSED 0건. 브랜치 `codex/overnight-aw-008-20260918`, commit `6098240`.
-- P0 재검증: HWPX gate/bypass/acceptance/cleanup `32 passed, 2 skipped`; 실제 Hancom COM/render는 기존 2회 무응답으로 `ENVIRONMENT_BLOCKED`, 추가 재시도 금지. P0 브랜치 `codex/p0-addendum-20260918` clean, `2ebf550`.
-- AW-001 관련 회귀: 신규 targeted `3 passed`, domain/finalizer/LRule `49 passed`. 넓은 10건은 origin/main에서도 재현된 `BASELINE_FAILURE`이며 이번 변경 회귀가 아니다. registry integrity는 lessons.md의 L152-L167과 coverage 151 불일치 등 기존 실패가 남아 있어 해당 registry를 임의 확장하지 않았다.
-- AW-003 추가: operator console 전체는 30초 내 완료 증거를 얻지 못해 무한 재시도하지 않았고, 핵심 console `3 passed`, 신규 failure handling 포함 `5 passed`, LRule 회귀 `19 passed` 및 compileall exit 0을 기록했다.
-- Git 안전: main/master 직접 push·merge·force 작업 없음. PR 생성은 기존 GitHub CLI HTTP 401 `HUMAN_GATE`로 재시도하지 않았다. root dirty 변경과 기존 worktree는 보존했다.
-- 다음 자동 실행: 사용자가 승인한 경우에만 PR/merge를 진행하고, 그 전에는 P0 Hancom COM 환경 차단을 해소한 뒤 실제 렌더 smoke를 1회 검증한다.
-
-## 2026-09-18 LONG DEVELOPMENT RUN v2 — post-final checkpoint
-
-- 이후 AW-003 구현을 추가 검증했다: `69cbbe2`에서 부분 출력이 있는 registry timeout을 다루는 회귀 테스트를 추가했고, timeout/start-failure/partial-output targeted `3 passed`; 브랜치 원격 동기화 완료.
-- AW-001 최신 targeted `3 passed`, 관련 domain/LRule/finalizer `49 passed`, fail-draft invariant `9 passed`; AW-003 관련 LRule 회귀 `19 passed`, compileall exit 0. 중단된 넓은 pytest 프로세스는 이 세션이 시작한 정확한 PID만 종료했고 다른 세션 프로세스는 건드리지 않았다.
-- 현재 feature worktree 4개는 모두 clean이며 각 원격 feature branch와 동기화되어 있다. root `master`는 기존 사용자 변경과 `_work/`를 계속 보존한다.
-- 종료 전 상태: P0 Hancom COM/render `ENVIRONMENT_BLOCKED`, AW-001/AW-003 구현 branch는 push 완료, AW-008 deterministic CLOSED 0건, PR 생성 `gh` 401은 `HUMAN_GATE`, main 직접 push/merge 없음.
-
-## 2026-09-18 LONG DEVELOPMENT RUN v2 — final execution checkpoint
-
-- AW-001 추가 구현: baseline 테스트의 잘못된 compatibility-wrapper patch를 core 모듈 patch로 바로잡고, legacy wrapper의 `_find_anchor`, `_RESIDUAL_RE`, `_build_todo`, `_write_report`, `_scan_guide`, `_is_guide_text` 노출을 복구했다. `test_auto_write_apply.py` `45 passed`, 문서품질+finalizer `42 passed`, 제출 파이프라인 `18 passed`, 통합 `96 passed`.
-- AW-001 최신 커밋: `da81c5a`, `2c316fe`, `2a5117b`, `a60327a`, `e0723af`; branch `codex/overnight-aw-001-20260918` remote push 완료. 관련 broad 회귀 `71 passed`, ProjectService 관련 `76 passed` 및 compileall exit 0.
-- 최종 root TASK 동기화: AW-001/AW-003 결과와 `REQUEST_SOLVED=NO`/PARTIAL을 반영했다. AW-008은 151건(`66/84/1`) 유지, 신규 CLOSED 0건이다. P0는 `32 passed, 2 skipped`, Hancom COM/render는 기존 2회 timeout으로 `ENVIRONMENT_BLOCKED` 유지.
-- 종료 전 feature worktree 상태를 재확인하고 main/master에는 push·merge하지 않는다. root 사용자 변경과 테스트가 만든 무시 임시폴더는 보존/정리 경계에 따라 건드리지 않는다.
-
-## 2026-09-18 LONG DEVELOPMENT RUN v2 — closeout evidence
-
-- 최종 추가 검증: AW-003 operator console `28 passed`; AW-001 한글 기본 출력 `19 passed`, service resilience `12 passed`, architecture boundary `3 passed`, document ingest `7 passed`.
-- 남은 baseline: generation store `5 passed, 2 failed` — `core.docx.services`에 기존 `generation_store` shim이 없어 trace 기록 테스트가 실패한다. AW-001 final-gate 범위 밖이라 이번 branch에 섞지 않았다.
-- 최종 원격 확인: `origin/main=f220d2d3004e058c7a167d2f38174bb6f2b385d0`; 네 feature branch 모두 clean/원격 동기화. `nightcopy` remote는 `D:\_night_pilot\auto_write-copy`가 repo가 아니어서 fetch 실패했으며, origin 동기화에는 영향이 없다.
-
-## 2026-09-18 FOLLOWUP LONG RUN 2 — start checkpoint
-
-- 목표 순서: generation_store compatibility shim → 실제 caller 회귀 → AW-001 fault injection → AW-008 deterministic 후보 → lessons coverage 불일치 → cp949 portability → 단계적 full pytest.
-- 기준 상태: AW-001 ProjectService gate와 AW-003 registry failure handling은 원격 feature branch에 반영됨. AW-008은 151건(`66/84/1`), 신규 CLOSED 0건. P0 Hancom COM은 기존 2회 timeout으로 재시도 금지.
-- 이번 실행 1순위 baseline: `app/tests/test_generation_store.py`의 2개 실패. 기존 canonical implementation은 `app/auto_write/services/generation_store.py`, core caller의 `.generation_store` import shim 누락이 의심되며 로직 복제 금지.
-- 현재 branch/worktree는 작업 시작 전 `origin/main`, dirty 사용자 변경, TASK/REQUEST_LEDGER를 확인하고 별도 feature branch를 사용한다. main push/merge·COM 재시도·AW-009 웹앱 코드는 금지.
-- 다음 재개 명령: `py -3.11 -m pytest app/tests/test_generation_store.py -q --tb=short` 후 canonical/shim caller를 확인하고, 수정마다 targeted → related regression → commit → push.
-
-## 2026-09-18 FOLLOWUP LONG RUN 2 — restored checkpoint
-
-- 컨텍스트 복원 후 확인: 이번 후속의 1순위는 `app/tests/test_generation_store.py`의 남은 2개 실패이며, 원인은 `app/core/docx/services/openai_client.py`가 참조하는 `core.docx.services.generation_store` 호환 경로 누락으로 기록되어 있다.
-- 기존 canonical 구현(`app/auto_write/services/generation_store.py`)을 재사용하는 최소 shim만 검토한다. 로직 복제·새 저장소 엔진·테스트 우회는 금지한다.
-- 다음 실행: 현재 시각/branch/status를 기록하고, canonical API와 기존 compatibility shim 패턴을 확인한 뒤 failing test를 재현한다.
-
-## 2026-09-18 FOLLOWUP LONG RUN 2 — continued after accidental pause
-
-- 사용자가 승인 대기 중단을 정정했다. `generation_store` 호환 shim과 관련 회귀 수정은 Secret/OAuth/결제/배포가 아닌 기존 엔진의 안전한 코드 작업이므로 별도 승인을 요구하지 않는다.
-- 직전 명령은 `git fetch`와 pytest 시작뿐이며 GUI/COM 호출은 없었다. 실행 중인 pytest가 남았는지는 다음 상태 점검에서 확인한다.
-- 즉시 다음 액션: 현재 branch/worktree와 pytest 상태 확인 → generation_store 실패 재현 → canonical implementation을 재사용하는 최소 shim 구현.
-
-## 2026-09-18 FOLLOWUP LONG RUN 2 — CP2 generation_store complete
-
-- 실제 재현: `app/tests/test_generation_store.py`에서 `core.docx.services.generation_store` ImportError로 2건 실패.
-- 수정: `app/core/docx/services/generation_store.py`를 추가해 canonical `auto_write.services.generation_store`와 동일 모듈 객체를 alias한다. 로직 복제·새 저장소 구현 없음. import identity 회귀 테스트를 추가했다.
-- 검증: generation store/SFT/ProjectService/fail-draft 관련 `56 passed, 23 subtests passed`; `py_compile` 성공; `git diff --check` 경고 없음(라인엔딩 안내만 있음).
-- 커밋/원격: `24104fd fix(compat): alias core generation store to canonical`, `codex/overnight-aw-001-20260918` push 완료, worktree clean.
-- 다음: generation_store 실제 caller audit 및 ProjectService final-gate fault injection으로 진행한다.
-
-## 2026-09-18 FOLLOWUP LONG RUN 2 — CP3 AW-001 HWPX fail-closed complete
-
-- ProjectService의 기존 DOCX는 내부 중간본으로 유지하고, 기본 사용자 산출물 HWPX 생성 결과를 별도로 확인하도록 `_publish_results_bundle` 순서를 보강했다. 두 gate report 기록 전 결과 DOCX를 공개 폴더에 복사하지 않으며, HWPX emit 실패 시 gate report를 `DRAFT`, `final_output_allowed=false`, `submittable=false`로 강등한다.
-- 테스트는 core converter 경로의 `hancom_com_available`을 false로 고정해 실제 COM 창을 띄우지 않는 XML HWPX fallback을 검증한다. COM/Hancom 실제 smoke는 기존 `ENVIRONMENT_BLOCKED` 정책으로 재시도하지 않는다.
-- 검증: generation store + ProjectService `36 passed, 23 subtests passed`; HWPX default output `19 passed`; GUI 프로세스 잔존 없음. 커밋 `bc64e96 fix(project): fail closed when Hangul output is unavailable`, AW-001 branch push 완료.
-- 다음: AW-008 registry의 judgment deterministic 후보를 실제 코드 근거로 판별하고, 조건을 모두 만족하는 경우에만 최대 2개 mechanization을 구현한다.
-
-## 2026-09-18 FOLLOWUP LONG RUN 2 — CP4 AW-008 census / source mismatch
-
-- `app/tests/lessons_coverage.json` 실측: total 151, mechanized 66, judgment 84, gap 1(L050). judgment 중 `mechanizable != no` 후보는 L005/L008뿐이며 각각 픽셀 검증·서식 정책 의존 `partial`이라 guard + fixture + runtime/final gate + metadata + 차단 증거 5조건을 충족할 수 없어 신규 CLOSED 0건을 유지한다.
-- 외부 정본 `D:\.omc\agent-learning\lessons.md`에는 L152~L167이 있으나 repo registry에는 없다. registry integrity 테스트는 `10 passed, 3 failed`로 재현되었고, L163/L164는 외부 정본 내부 중복도 확인됐다. L154~L156은 기존 lockdown 규약상 JSON 미수록 skill-only다. 이 PHASE는 `BASELINE_DATA_MISMATCH`로 기록하며 숫자 맞추기용 registry 확장은 하지 않는다.
-- 조사 파일·GUI·임시 프로세스는 생성하지 않았고, 파일 삭제도 하지 않았다.
-- 다음: cp949/UTF-8 portability의 실제 실패 테스트와 production 파일 I/O 경계를 확인한다.
-
-## 2026-09-18 FOLLOWUP LONG RUN 2 — compression restore checkpoint
-
-- 압축 후 최신 기준을 복원했다. root `master`의 기존 dirty 변경과 AW-001/AW-008 전용 worktree를 보존하며, `origin/main=f220d2d`와 실제 branch/commit 상태를 기준으로 계속한다.
-- AW-001 실제 구현 커밋 `24104fd`(generation_store compatibility alias), `bc64e96`(HWPX emit fail-closed)는 별도 feature branch에 존재하고 관련 테스트 근거가 있다. Hancom COM은 재시도하지 않고 `ENVIRONMENT_BLOCKED`를 유지한다.
-- 현재 실행 목표: TASK.md와 코드/RESUME 동기화 감사 → cp949/UTF-8 portability 실패의 production/test 경계 판정 → 안전한 경우 별도 branch에서 최소 수정 및 회귀 검증. AW-008은 deterministic 조건을 충족하는 후보가 없으면 0 CLOSED로 유지한다.
-- 다음 실행: `TASK.md` 관련 항목을 실제 코드/커밋 상태에 맞게 갱신한 뒤, session-resume 관련 실패를 기본 인코딩 환경에서 재현한다.
-
-## 2026-09-18 FOLLOWUP LONG RUN 2 — CP5 TASK sync / CP6 portability
-
-- TASK 동기화 감사: AW-001은 최신 코드/커밋(`24104fd`, `bc64e96`)이 기존 상세 기록보다 앞서 있어 처음에는 `CODE_AHEAD_OF_TASK`였고, 기존 항목에 검증 근거를 추가했다. 이후 AW-001의 구조/fail-closed 범위는 MATCH이며, HWPX R9/LRule 및 실제 Hancom 렌더는 `PARTIAL`/`ENVIRONMENT_BLOCKED`로 유지한다.
-- AW-008은 registry `151 = mechanized 66 + judgment 84 + gap 1`과 일치한다. 외부 lessons 정본 `D:\.omc\agent-learning\lessons.md`의 L152~L167 미편입 및 L163/L164 내부 중복은 `BASELINE_DATA_MISMATCH`로 기록했고 registry 숫자 맞추기용 변경은 하지 않았다. 관련 검사는 `15 passed, 3 failed`이며 실패 3건은 이 baseline 불일치다.
-- cp949 재현: 기본 Windows 인코딩에서 `test_session_resume.py::test_close_prompt_injects_skill`가 Node UTF-8 출력 해석 오류로 실패했다. `subprocess.run(..., encoding="utf-8")`를 테스트 하네스에 최소 적용한 `04a4750 test(session): decode hook output as UTF-8`을 별도 branch `codex/overnight-encoding-20260918`에 커밋·push했다. 기본 인코딩에서 session-resume/closeout `11 passed`, py_compile 통과.
-- AW-001 별도 branch 재검증: ProjectService safety `28 passed, 23 subtests passed`; generation_store `8 passed`; domain/LRule/finalizer `41 passed`. HWPX acceptance 재실행은 점 출력에서 종료 증거가 남지 않아 `UNVERIFIED/HANG`으로 분류하고 같은 명령을 반복하지 않는다. COM은 재시도하지 않았다.
-- 다음: root dirty 변경을 보존한 채 최종 diff/status, branch push, 임시 테스트 프로세스 잔존 여부를 확인하고 최종 TASK/RESUME 상태를 보고한다.
-
-## 2026-09-18 FOLLOWUP LONG RUN 2 — CP7 final audit
-
-- 최종 root 상태: `master`는 `origin/main` 대비 `16 behind / 0 ahead`, 기존 dirty 파일과 `_work/`를 보존했다. main/master push·merge는 하지 않았다.
-- feature branch 원격 증명: AW-001 `bc64e96`, AW-008 `6098240`, encoding portability `04a4750`, P0 `2ebf550`; 네 worktree 모두 clean이며 원격 SHA와 일치한다.
-- AW-008 신규 CLOSED는 0건이다. LRule 관련 검사는 `15 passed, 3 failed`; 3건은 외부 lessons source와 repo registry의 baseline mismatch로 분류했다. deterministic 조건을 충족하지 않는 L005/L008은 HUMAN_GATE/정책 예외로 유지한다.
-- 임시 `pytest`/HWP/Hancom/Word/LibreOffice 프로세스는 최종 점검에서 0건이었다. 파일 삭제 없이 정리했고, 실제 COM은 재시도하지 않았다.
-- 최종 판정: AW-001 구조/fail-closed는 MATCH, 실제 Hancom 렌더는 `ENVIRONMENT_BLOCKED`, AW-008은 `PARTIAL`, 전체 상태는 `PARTIAL`이다.
-
-## 2026-09-18 파일/창 정리 checkpoint
-
-- 상태: 코드 작업은 완료 보고 상태이며 root `master`의 기존 dirty 변경, feature worktree, 생성 파일을 보존한다.
-- 결정: 조사·검증용 임시 파일은 삭제하지 않고, 임시 프로세스/뷰어만 확인 후 불필요한 경우 종료한다. 사용자 원래 창과 저장되지 않은 변경은 닫지 않는다.
-- 확인: `D:\auto_write` 관련 pytest/Hancom/Word/LibreOffice/미리보기 프로세스는 남아 있지 않았다. 기존 Chrome/Notepad 창은 사용자 원래 창인지 구분할 수 없어 닫지 않았다.
-
-## 2026-09-18 HWPX R9 Acceptance / Common Final Gate — 시작 checkpoint
-
-- 사용자 요청으로 R9 수용검사와 공통 HWPX final gate 연결을 non-COM fixture로 검증·보강한다. 기존 AW-001 fail-closed, P0 gate, COM `ENVIRONMENT_BLOCKED`, AW-008 baseline mismatch는 유지하고 재작업하지 않는다.
-- 문서 작업 등록은 별도 branch `docs/task-hwpx-r9-20260918`의 커밋 `9ea814e`로 완료·push했다. 코드 작업은 P0 공통 gate가 포함된 별도 R9 feature worktree에서 진행한다.
-- 현재 계획: R9 FAIL/PASS/bypass 회귀를 먼저 failing test로 고정하고, 필요한 경우 `SubmitReport`의 final/submittable 상태 전달만 최소 보강한 뒤 관련 gate 회귀를 실행한다.
-- Hancom COM과 실제 HWP 시각 렌더는 이번 작업에서도 재시도하지 않는다. 임시 창/프로세스는 검증 후 점검하고 사용자 원래 창과 파일은 보존한다.
-
-## 2026-09-18 HWPX R9 Acceptance / Common Final Gate — 검증 완료 checkpoint
-
-- R9 non-COM fixture 3종을 추가했다: R9 FAIL, R9 PASS, `acceptance_gate=False` bypass.
-- 최소 production 보강: `SubmitReport`에 `final_output_allowed`와 `submittable`을 추가하고, 공통 gate PASS에서만 true가 되도록 fail-closed 상태를 명시했다. JSON `as_dict()`에도 두 필드를 보존한다.
-- 검증: 신규 R9 `3 passed`; R9/submit/integrity/acceptance/cleanup/bypass `45 passed, 2 skipped`; HWPX/LRule 보조 회귀 `19 passed`; py_compile/diff check 통과.
-- 결과 commit/push: `codex/hwpx-r9-gate-p0-20260918` / 최신 `ce8cd62` (`8699f20`의 JSON assertion 보강 포함) / `origin` push 완료. P0 base `2ebf550` 위의 feature branch이며 main 직접 push/merge는 하지 않았다.
-- 별도 ProjectService broad regression은 R9와 무관한 Windows `output.docx` 파일 잠금 cleanup 1건으로 실패해 baseline/environment failure로 분류했다. Hancom COM/실제 시각 렌더는 재시도하지 않고 `ENVIRONMENT_BLOCKED` 유지.
-- TASK.md에는 기존 AW-001을 확장해 R9 결과와 branch/SHA/다음 통합·실제 렌더 검증을 기록했다. 다음은 최신 `ce8cd62` feature branch의 P0/main 통합 검토와 Hancom 가능한 환경의 시각 smoke다.
-
-## 2026-09-18 HWPX R9 — final audit
-
-- 최종 코드 branch `codex/hwpx-r9-gate-p0-20260918`는 clean이며 `origin`의 `ce8cd62`와 일치한다. TASK 문서 branch는 `f6b7be7`과 원격이 일치한다.
-- 종료 점검에서 pytest/Hancom/HWP/Word/LibreOffice/미리보기 임시 프로세스는 0건이었다. 기존 사용자 창은 닫지 않았다.
-- `git fetch --all --prune` 중 저장소에 이미 등록된 보조 remote `nightcopy`의 `D:\_night_pilot\auto_write-copy` 경로가 git repository가 아니어서 fetch만 실패했다. `origin/main`은 `7951360`으로 갱신됐고, R9 branch는 P0 base `2ebf550` 위에 보존했다. 이 보조 remote 문제는 R9 코드 실패가 아니며 수정/삭제하지 않는다.
-- root `master`는 기존 dirty 변경을 보존한 채 `origin/main`보다 17개 뒤이고 직접 push/merge하지 않았다. R9는 non-COM 범위에서 PASS, 실제 Hancom 시각 렌더와 main 통합은 별도 `ENVIRONMENT_BLOCKED`/통합 검토 상태다.
-
-## 2026-09-18 R9 Integration Readiness / P0 Release Gate
-
-- 기준: `origin/main=7951360`, P0 base `2ebf550`, R9 `ce8cd62`(사용자가 제시한 production 기준 `8699f20` 포함). R9는 P0 base를 포함하지만 AW-001 `24104fd`/`bc64e96`를 포함하지 않는다.
-- 변경 범위: P0 기준 R9 branch diff는 production `hwpx_submit.py` 12줄과 신규 `test_hwpx_r9_common_gate.py`뿐이며 unrelated 변경은 없다.
-- Release Gate: HWPX 구조/제출/R9/cleanup/default-output `176 passed, 2 skipped`; D1-D6/L154-L156 `28 passed, 1 skipped`; lessons registry `29 passed, 3 failed`는 기존 `BASELINE_DATA_MISMATCH`다.
-- 전체 pytest는 26개 collection ImportError로 중단됐다. 실패 모듈은 R9 변경 파일과 무관한 legacy/private-helper re-export 불일치이며 `BASELINE_FAILURE/TEST_INFRA_FAILURE`로 분류한다. DOCX autopilot rename-lock 2건과 Windows output.docx cleanup lock 1건도 R9 regression이 아니다.
-- `submit_hwpx`→common gate→R9 acceptance 호출은 정적 기준 1회씩이며 중복 validator 실행은 확인되지 않았다. 별도 성능 최적화는 하지 않았다.
-- 최종 merge readiness: `REVIEW_REQUIRED`. 이유는 R9 branch가 `origin/main`과 4 ahead/1 behind로 drift했고 AW-001 별도 통합 및 Hancom COM 실제 렌더가 남았기 때문이다. main merge/push는 하지 않았다.
-- 다음 TASK 1개: AW-001/P0 통합 후보를 최신 `origin/main` 기준으로 안전하게 조합하고 관련 release subset을 재실행하는 통합 review. 실제 COM이 불가능한 동안 COM 재시도는 하지 않는다.
-
-## 2026-09-18 모바일 원격 연결 문의
-
-- 현재 auto_write 개발 상태는 R9/P0 통합 검토(`REVIEW_REQUIRED`)이며 코드 변경·main 병합은 하지 않았다.
-- 모바일에서 집 PC를 조작하는 방법을 안내한다. 추천 기본 경로는 Chrome Remote Desktop 또는 Tailscale+원격 데스크톱이며, 비밀번호·OAuth·권한 승인은 사용자가 직접 처리해야 한다.
-- 다음 개발 액션은 모바일 연결과 별개로 AW-001/P0/R9 통합 worktree 검토다.
-- Codex 모바일 원격 연결은 ChatGPT 모바일 앱의 `Remote`에서 지원되며, 데스크톱 ChatGPT 앱 `Settings > Connections > Control this PC`의 QR pairing이 필요하다.
-- 새 개발 작업은 root `TASK.md` 전체 확인·기존 TASK 귀속 또는 신규 ID 등록·TODO/IN_PROGRESS 기록 후에만 코드/테스트/fixture를 수정한다. 이번 턴은 규칙 적용만 했고 코드 수정은 없다.
-- TASK.md 읽기 전용 상태감사 요청: TASK/코드/RESUME 불일치를 보고만 하고 TASK·코드·branch는 수정하지 않는다.
-- AW-001 후속 실행 시작: 다음 작업은 최신 origin/main 기준 AW-001·R9·P0 통합 검토와 관련 Release Gate 재실행이며, main merge/push·Hancom COM 재시도는 하지 않는다.
-
-## 2026-09-18 AW-001/P0 통합 검토 재개
-
-- 압축 복원 후 재개: 기존 root master의 dirty 변경과 기존 feature worktree는 보존한다.
-- 다음 작업: 최신 `origin/main` 기준 별도 통합 worktree에서 AW-001/R9/P0 diff를 감사하고 non-COM Release Gate를 재실행한다.
-- 제한: main push/merge, force/reset/clean, Hancom COM 재시도는 하지 않는다.
-
-## 2026-09-18 AW-001/R9/P0 통합 검토 완료 checkpoint
-
-- 최신 `origin/main=7951360`에서 `codex/integration-aw001-r9-p0-20260918`를 만들고 AW-001·P0/R9 변경을 격리 조합했다. HEAD=`0a5d785`, 원격 feature branch push 완료, main 변경 없음.
-- 핵심 회귀: AW-001/R9/gate/bypass/submit/generation store `59 passed, 23 subtests`; cross-form/ProjectService 추가 `77 passed, 23 subtests`; 확장 HWPX `395 passed, 2 skipped, 2 baseline failures`.
-- LRule/lessons `37 passed, 3 baseline data mismatch`; 전체 pytest `25 collection ImportError`는 legacy/private-helper re-export 인프라 실패로 분류했다. `compileall`·`git diff --check` 통과.
-- 통합 판정: `READY_WITH_KNOWN_ENV_BLOCK`(non-COM P0/R9 통과, Hancom COM/실제 시각 렌더만 `ENVIRONMENT_BLOCKED`). main merge/push 및 COM 재시도는 하지 않는다.
-- 다음 작업: 사람 승인 없이 가능한 별도 baseline private-helper re-export 정리 또는 P0 통합 branch PR 검토 중 하나를 TASK 기준으로 선택한다. 실제 main 통합은 사용자 승인 대상이다.
-
-## 2026-09-18 AW-001 stabilization — collection recovery checkpoint
-
-- 실제 개발 worktree: `D:\auto_write\_work\stabilize-0918`, branch `codex/stabilize-0918-20260918`, `origin/main=7951360` 기준. root `master`와 기존 feature worktree는 보존한다.
-- 전체 pytest baseline은 26개 collection `ImportError`였다. legacy `auto_write.services.*` wrapper의 private helper re-export 누락이 원인으로 확인되어 canonical `core.docx.services.*`를 재사용하는 동적 private export를 최소 추가했고 `82e450a`로 커밋했다.
-- 현재 검증: `python -m pytest --collect-only -q`는 `2248 tests collected`, exit 0으로 collection 오류가 해소됐다. 실제 전체 실행은 별도 기존/호환성 테스트 실패에서 중단되어 전체 PASS로 표현하지 않는다.
-- 다음 즉시 작업: rename-lock 2건과 Windows `output.docx` cleanup lock 1건을 targeted test로 재현하고, 원인 확인 후 최소 파일 핸들/rename 안정화만 추가한다. Hancom COM은 재시도하지 않는다.
-
-## 2026-09-18 AW-001 stabilization — rename compatibility checkpoint
-
-- rename-lock 원인은 실제 rename retry 부족이 아니라 legacy `auto_write.services.autopilot_pipeline`의 함수 전역 분리였다. 테스트가 legacy 모듈의 `force_draft_name`을 patch해도 canonical `run_autopilot`에는 전달되지 않아 잠금 실패가 성공처럼 보였다.
-- `app/auto_write/services/autopilot_pipeline.py`를 canonical 모듈 alias로 바꾸고 `755abf0`에 커밋·push했다. `test_gate_faildraft_invariant.py -k rename_lock`: `2 passed`; 전체 fail-draft invariant: `14 passed`.
-- 같은 호환성 패턴으로 `hwp_com_fill.py`와 `infographic_suggest.py`도 alias 보강했고 관련 테스트 `36 passed`; 커밋 `57c649d`에 포함·push했다.
-- `test_submission_pipeline.py` 관련 gate/format/submit-clean 회귀는 `10 passed`; ProjectService 안전 테스트는 개별 핵심 및 AW-001 feature branch 기준 `28 passed, 23 subtests passed`다. `output.docx` cleanup lock은 현재 stabilization에서 직접 재현되지 않아 전체 회귀에서 재분류한다.
-- 다음: collection 재확인 → 단계적 전체 pytest 실행 및 hang/기존 실패 분류 → 필요 시 `output.docx` 파일 핸들 원인만 최소 수정한다.
-
-## 2026-09-18 AW-001 stabilization — compression recovery checkpoint
-
-- 현재 작업 worktree: `D:\auto_write\_work\stabilize-0918`, branch `codex/stabilize-0918-20260918`, latest known commit `57c649d`; root `master`와 기존 feature worktree는 보존한다.
-- collection 복구와 legacy wrapper alias 보강은 완료·push 상태다. collect-only는 `2248 tests collected`, exit 0이며 rename-lock/관련 호환성 회귀는 PASS 증거가 있다.
-- 직전 전체 pytest 프로세스는 종료되었으나 최종 stdout/exit 요약이 세션 압축에 보존되지 않았다. 전체 결과를 로그로 재확인하기 전에는 전체 회귀 PASS로 표시하지 않는다.
-- `output.docx` cleanup lock은 아직 현재 stabilization에서 직접 재현되지 않았다. 다음 실행은 중복 pytest 프로세스 확인 → 전체 pytest 결과 로그화 → 실패 분류 → lock 재현 여부 판정 순서다.
-
-## 2026-09-18 AW-001 stabilization — full regression and merge decision
-
-- 전체 pytest 실측: `1771 passed, 22 failed, 5 skipped, 23 subtests passed` in `537.60s`; 전체 PASS가 아니므로 성공으로 표현하지 않는다.
-- origin/main 대조: rename-lock은 `2 failed`, private-helper 대상 수집은 `2 collection errors`; stabilization branch는 rename-lock `2 passed`, 관련 ProjectService/gate/서비스 회귀 `73 passed, 23 subtests passed`다.
-- `output.docx` cleanup lock은 현재 branch의 관련 ProjectService/submission 회귀에서 재현되지 않았다. 별도 코드 수정 없이 `BASELINE_UNREPRODUCED`로 남긴다.
-- `python -m compileall -q app` 및 `git diff --check`는 PASS. branch `codex/stabilize-0918-20260918`, HEAD `57c649d`, origin branch push 완료, main merge/push는 전체 회귀 실패로 보류.
-- 전체 실패 분류: lessons L152~L167/L163/L164 baseline mismatch, Hancom/변환 환경 차단, cp949 portability 및 기존 runtime compatibility. 다음 작업은 이 baseline 목록을 TASK별로 분리하거나, 사용자 승인 없이 가능한 compatibility 후속만 선택한다.
-
-## 2026-09-18 AW-001 stabilization — 22-failure triage requested
-
-- 사용자 지시: 전체 pytest 22건을 `BASELINE` / `ENVIRONMENT` / `NEW_REGRESSION`으로 정확히 분류하고, 안전한 안정화 수정만 적용한 뒤 main 통합 가능 여부를 재판정한다.
-- 확정 baseline evidence: origin/main rename-lock `2 failed`; private-helper 대상 수집 `2 collection errors`; stabilization branch rename-lock `2 passed`, 관련 ProjectService/gate 회귀 `73 passed, 23 subtests passed`.
-- 전체 결과는 여전히 `1771 passed, 22 failed, 5 skipped, 23 subtests passed`; `output.docx` lock은 재현되지 않았다. main merge/push는 보류 상태다.
-- 다음 실행: 현재 branch/작업트리 재확인 → 22건을 테스트 파일별로 origin/main 또는 환경 조건과 대조 → 안전한 compatibility/encoding 수정만 TASK 귀속으로 적용 → targeted/regression 재실행 → merge readiness 재판정.
-
-## 2026-09-18 AW-001 stabilization — post-compression continuation
-
-- 현재 구현 worktree: `D:\auto_write\_work\stabilize-0918`, branch `codex/stabilize-0918-20260918`; latest pushed commit `d52201e`.
-- 안전 수정 반영: legacy service module aliases 및 canonical/legacy ingest compatibility, session resume hook의 cp949-safe JSON 직렬화. 최신 전체 회귀는 `1780 passed, 13 failed, 5 skipped, 23 subtests passed`.
-- 현재 미커밋 후보: `app/auto_write/services/hancom_com_guard.py` module alias와 `app/core/docx/services/hwp_docx_convert.py` legacy ingest seam. Hancom guard·hwp_docx_convert targeted는 통과했으나 hwp_fill 3건은 아직 원인 확인 중이다.
-- 다음: hwp_fill caller/module identity와 fixture 변환 결과를 직접 확인 → 안전한 compatibility 수정 여부 결정 → targeted/regression/full pytest → TASK 동기화 및 main integration readiness 재판정.
-
-## 2026-09-18 AW-001 stabilization — final triage checkpoint
-
-- `hwp_fill` 레거시 star-reexport가 canonical 함수 전역을 공유하지 않던 문제를 module alias로 수정했고, `hancom_com_guard` alias 및 `hwp_docx_convert`의 legacy `auto_write.document_ingest` patch seam과 함께 `6d2f820`으로 커밋·feature branch push했다.
-- HWP/HWPX 및 resume hook targeted 회귀: `26 passed`; 전체 pytest 최신 결과: `1788 passed, 5 failed, 5 skipped, 23 subtests passed` in `350.50s`.
-- 남은 5건: lessons registry 3건은 origin/main에서도 동일한 L152~L167/L163/L164 mismatch; resume CLI 2건은 baseline에서 import 오류 후 현재 fail-closed `_DRAFT.hwpx` 출력과 구 테스트의 `out.hwpx` 기대가 불일치한다. 테스트 완화·DRAFT 복사는 하지 않는다.
-- 통합 판정: `NOT_READY` (새 회귀 증거 없음, 그러나 전체 pytest가 red). Hancom COM/실제 HWP 렌더는 기존 `ENVIRONMENT_BLOCKED` 유지. 다음 작업은 resume CLI 테스트/계약 정합성의 별도 안전 검토다.
-- Windows 기본 cp949 재검증: `test_step3a_golden.py::test_cli_prints_same_human_report`는 기본 환경에서 `UnicodeEncodeError(cp949, U+2014)`가 재현되고 `PYTHONUTF8=1`에서는 통과했다. 출력 의미를 바꾸지 않는 공통 콘솔 계약이 필요해 `ENVIRONMENT_BLOCKED/FOLLOWUP`으로 남겼다.
-
-## 2026-09-18 K-tour/K-Navi PSST HWPX 요청
-
-- 사용자 요청: 최신 케이투어(케이네비) 자료 기준 PSST 버전을 HWPX로 작성한다.
-- 현재 단계: 로컬 저장소의 최신 케이투어/케이네비 원자료와 PSST 빈 양식을 확인 중. 확인되지 않은 사업정보·수치·선택항목은 생성하지 않는다.
-- 산출 원칙: 확인된 원자료를 기준으로 별도 HWPX를 만들고, 원본 양식은 보존한다. 생성 후 HWPX 구조·필수값·렌더링 가능 범위를 별도로 검증한다.
-
-## 2026-09-18 K-tour/K-Navi PSST source correction
-
-- 사용자 정정: 최신 기준은 KICXUP가 아니라 `모두의창업 2차`다.
-- 방금 생성된 `results/KICXUP_2026_도보네비_한국케이블텔레콤/케이네비_PSST_v1.hwpx`는 잘못된 공고 기준의 임시 산출물로 최종 전달하지 않는다. 원본 삭제 없이 보존한다.
-- 다음: `모두의창업 2차` 공고·빈 양식·케이네비 최신 사실자료를 확인하고, 해당 양식 기준 PSST HWPX를 별도 파일로 생성·검증한다.
-
-## 2026-09-18 K-tour/K-Navi PSST source correction — continuation checkpoint
-
-- 현재 사용자 기준: 최신 공고/양식은 `모두의창업 2차`이며 KICXUP 기준 산출물은 최종본으로 사용하지 않는다.
-- 현재 상태: 코드 수정 없음. KICXUP 임시 HWPX는 삭제하지 않고 보존하며 전달 대상에서 제외한다.
-- 다음 실행: 사용자 확인 후 `모두의창업 2차` 관련 공고·빈 양식·케이네비 사실자료를 지정된 사용자 폴더에서 검색하고, 확인된 자료가 있을 때만 별도 HWPX를 생성한다.
-- 검증 제한: Hancom COM/실제 시각 렌더가 필요하면 기존 정책대로 `ENVIRONMENT_BLOCKED`로 기록하며, 구조 검증 결과와 혼동하지 않는다.
-
-## 2026-09-19 K-tour/K-Navi PSST execution checkpoint
-
-- 사용자 확정: 최신 기준은 `모두의창업 2차`이며, 해당 기준으로 실제 자료 검색과 HWPX 작성·검증을 실행한다.
-- KICXUP 기반 임시 HWPX는 최종 산출물로 사용하지 않고 원본 파일도 삭제하지 않는다.
-- 진행 순서: 자료 검색 → 공고/양식 및 케이네비 사실자료 대조 → 확인값만 PSST HWPX 작성 → 구조/텍스트 검증 → 실제 렌더 제한 기록.
-- 실행 중 확인되지 않은 정보는 임의 작성하지 않고 `[확인필요]`로 남긴다.
-
-## 2026-09-19 K-tour/K-Navi PSST HWPX output
-
-- 최신 기준 자료: `C:\Users\ekth3\Downloads\(붙임) 제2026-511호「모두의_창업_프로젝트」 통합 모집공고 2차.hwpx` 및 최신 케이네비 발표/사업계획 자료를 대조했다.
-- 최종 산출물: `results/모두의창업2차_케이투어_케이네비/케이투어_케이네비_PSST_v3.hwpx`.
-- 내용 범위: PSST Problem/Solution/Scale-up/Team, 8주 PoC 목표, 모두의 창업 2차 2R 연계, 제출 전 `[확인필요]` 항목. 매출·투자·계약·사업자 정보는 임의 작성하지 않았다.
-- 구조 검증: `rhwp info` 11쪽·14표, `app/hwpx_doctor.py diagnose` 정상, `hwpx` 패키지 validate 이슈 없음, PSST 핵심 섹션·모두의 창업 표기 확인. 기존 `hwpx_self_diagnose.py`는 legacy `_same_file` re-export ImportError로 별도 미해결.
-- 실제 Hancom/HWP 시각 렌더는 기존 환경 정책에 따라 시도하지 않았으며 `ENVIRONMENT_BLOCKED`로 유지한다. 이전 KICXUP 임시 산출물은 최종본이 아니다.
-
-## 2026-09-19 overnight runner retry checkpoint
-
-- 직전 야간 실행 요청은 `D:\_night_pilot`의 auto_write runner와 격리 복사본이 없어 시작되지 않았다.
-- 사용자 재요청에 따라 원본 저장소와 기존 산출물을 보존한 상태에서 실행기 위치를 다시 확인하고, 존재하는 안전한 격리 실행 경로를 즉시 사용한다.
-- 현재 확인된 제한: 원래 지정된 `run_night_autowrite.ps1`·`auto_write-copy`·예약 작업은 부재. 없는 실행기를 추측해 만들거나 원본 repo에 무인 자동개발을 직접 걸지 않는다.
-- 다음: 대체 가능한 기존 night runner/isolated worktree를 확인한 뒤, 있으면 포그라운드 실행하고 없으면 정확한 차단 원인을 기록한다.
-
-## 2026-09-19 overnight runner result
-
-- 보관된 `D:\보관함\밤자동실행\run_night_autowrite_loop.ps1`를 격리 복사본 대상으로 2시간 설정으로 실행했다.
-- 실제 실행은 01:25:41~01:27:59, 4개 cycle 모두 `OAuth session expired and could not be refreshed`로 실패했고, 동일 실패 4회 제한에 따라 자동 중단됐다.
-- 코드 수정·테스트·원본 저장소 변경은 없었다. 복사본의 기존 dirty 파일 3개는 보존했고, push/merge는 하지 않았다.
-- 로컬 백업 bundle은 `D:\보관함\밤자동실행\backups\autowrite-20260919_012541.bundle`에 생성됐다.
-- 다음 실행 조건: OAuth 구독 인증을 사용자가 복구한 뒤 동일 runner를 재시작한다. Secret/API key를 자동 입력하거나 노출하지 않는다.
-
-## 2026-09-19 overnight retry requested
-
-- 사용자 재개 응답(`ㅇㅇ`)을 받아 OAuth 상태를 먼저 확인한다.
-- 인증이 복구된 경우에만 격리 auto_write runner를 다시 실행한다. 인증 실패가 반복되면 동일 시도를 무한 반복하지 않고 중단한다.
-- 대상은 계속 `D:\보관함\밤자동실행\auto_write-copy`이며 원본 저장소·main·기존 dirty 파일은 보존한다.
-
-## 2026-09-19 direct isolated overnight development requested
-
-- 사용자는 OAuth runner가 막혀도 중단하지 말고 `D:\_night_pilot\auto_write-overnight-20260919` 격리 worktree에서 실제 TASK 기반 개발을 시작하도록 지시했다.
-- 원본 `D:\auto_write`의 사용자 변경은 보존하고, 새 worktree에서만 코드·테스트를 수정한다. main/master push·merge와 destructive 작업은 금지한다.
-- 시작 절차: root `TASK.md`·`RESUME.md`·Git 상태 확인 → 기존 TASK 귀속 → 작은 수정·targeted test·회귀·commit → `NIGHT_REPORT.md` 작성.
-- Hancom/HWP 실제 렌더는 기존 `ENVIRONMENT_BLOCKED`를 유지하며, 시각 문제는 원인 특정 없는 추측 패치를 하지 않는다.
-
-## 2026-09-19 overnight implementation checkpoint
-
-- 격리 worktree `D:\_night_pilot\auto_write-overnight-20260919-stabilize`에서 AW-001 안전 안정화를 실제 구현했다. 코드/테스트 커밋 `2b8807e`, checkpoint 문서 커밋 `904c844`.
-- 관련 회귀 `197 passed`; 전체 pytest `3 failed, 2240 passed, 5 skipped, 23 subtests passed` (14분 43초). 남은 3건은 lessons source/coverage baseline mismatch로 분류했고 registry를 임의 수정하지 않았다.
-- `NIGHT_REPORT.md`가 active worktree root에 생성됐다. main/root 사용자 변경은 보존했고 push/merge하지 않았다.
-
-## 2026-09-19 overnight autonomous development checkpoint
-
-- 사용자 요청: 승인 대기 없이 안전한 기존 TASK를 기준으로 정상 개발 분량의 장시간 야간 작업을 수행한다.
-- 시작 기준: 현재 저장소 상태·root `TASK.md`·기존 worktree를 먼저 확인하고, 사용자 변경과 기존 HWPX 산출물을 보존한다.
-- 현재 알려진 blocker: Hancom/HWP 실제 시각 렌더 `ENVIRONMENT_BLOCKED`; 기존 전체 pytest 5건은 baseline/환경성 실패로 분류된 상태다.
-- 실행 원칙: TASK에 귀속된 최소 안정화 수정만 수행하고, 작은 변경→targeted test→회귀→commit 순서로 진행한다. main 직접 push/merge와 destructive 작업은 하지 않는다.
-- 다음: `night-autodev` 규칙과 TASK SSOT를 확인한 뒤, 안전하게 구현 가능한 기존 TASK를 선택하여 즉시 실행한다.
-
-## 2026-09-19 overnight development resumed after context compaction
-
-- 활성 worktree: `D:\_night_pilot\auto_write-overnight-20260919-stabilize`, branch `codex/overnight-20260919-stabilize`, 기준 HEAD `6d2f820`.
-- baseline 전체 테스트: `13 failed, 2230 passed, 5 skipped, 23 subtests passed`. 실패는 cross-form CLI 경로 테스트 5건, fail-closed DRAFT 출력명을 반영하지 않은 resume 테스트 4건(중복 수집 포함), cp949 CLI 출력 1건, 기존 lessons registry 불일치 3건으로 분류했다.
-- 다음 구현 순서: cross-form 테스트의 실제 CLI 경로 복구 → DRAFT 산출물 계약 테스트 정정 → step3a UTF-8 콘솔 출력 보강 → 관련 회귀 및 전체 테스트 재실행.
-- 원본 worktree의 사용자 변경·main 브랜치는 보존하며, Hancom COM 실제 렌더는 기존 `ENVIRONMENT_BLOCKED`를 유지한다.
+자동생성·채움·제출 기본 산출 = 한글(HWPX). 이진 .hwp 는 Windows+한글 COM.

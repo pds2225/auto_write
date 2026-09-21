@@ -175,8 +175,12 @@ def submit_hwpx(
         return report
 
     # 3) 수용검사 — 예외는 '검사불능'이며 fail-closed 로 _DRAFT 강제(R9).
+    allowed_names = [
+        str(v) for src in (identity, replacements) if src
+        for v in src.values() if str(v or "").strip()
+    ]
     try:
-        acc = run_hwpx_acceptance(out)
+        acc = run_hwpx_acceptance(out, allowed_names=allowed_names)
     except Exception as exc:  # noqa: BLE001 — 판정 불가는 전부 제출불가로
         report.acceptance = {"ok": False,
                              "exception": f"{type(exc).__name__}: {exc}"}
@@ -195,6 +199,7 @@ def submit_hwpx(
     report.draft_reason = (
         f"수용검사 fail {acc.fail_defects}건 — 유색 {acc.colored}"
         f"·안내문구 {acc.guides}·linesegarray {acc.linesegarray}"
+        f"·예시이름 {acc.dummy_names}"
         " (제출 전 후처리 필요)"
     )
     report.final = str(_mark_draft(report, out, src))

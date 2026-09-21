@@ -12,6 +12,7 @@ import os
 import re
 import zipfile
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 from typing import Any, Optional
 
@@ -22,9 +23,11 @@ from .hwpx_fill import (
     _cell_text,
     _direct,
     _direct_form_checkbtns,
+    _has_form_control,
+    _invalidate_lineseg,
     _q,
     _same_file,
-    _strip_linesegarray,
+    _set_cell_text,
 )
 
 _STANDALONE_RE = re.compile(rb"standalone\s*=\s*['\"](yes|no)['\"]")
@@ -41,6 +44,16 @@ _PLACEHOLDER_RE = re.compile(
     r"^(년\s*월|졸업/수료|대학교|전공|\(yyyy|/mm/dd\)|\(\s*\)|~)+$",
     re.IGNORECASE,
 )
+
+
+def canonical_sign_date(*, today: date | None = None) -> str:
+    """서명일·작성일은 실행 시점 날짜만 쓴다(L032).
+
+    대화·RESUME·facts JSON 의 낡은 날짜는 호출자가 넘기더라도 이 값을 써야 한다.
+    형식은 한글 양식 ``YYYY년  M월  D일`` (앞에 0 없음, 년/월 뒤 공백 2).
+    """
+    d = today or date.today()
+    return f"{d.year}년  {d.month}월  {d.day}일"
 
 
 @dataclass
@@ -88,39 +101,17 @@ def _is_fillable_cell_text(cur: str) -> bool:
 
 
 def _set_tc_text(tc, text: str, *, force_placeholder: bool = False) -> bool:
-    """값 칸 hp:t 설정. 빈칸·플레이스홀더만(실값 보호)."""
+    """값 칸 텍스트 설정. 빈칸·플레이스홀더만(실값 보호).
+
+    기입은 ``_set_cell_text`` 로 위임한다 — 폼컨트롤 칸 거부(L086)와
+    줄위치 캐시 제거(L002/L145)가 빠지지 않는다.
+    """
     cur = _cell_text(tc).strip()
     if cur and not _is_fillable_cell_text(cur) and not force_placeholder:
         return False
-    for t in tc.iter(_q("t")):
-        raw = str(t.text or "")
-        if t.text is None or not raw.strip() or _is_fillable_cell_text(raw):
-            t.text = text
-            parent = t.getparent()
-            while parent is not None:
-                if str(parent.tag).endswith("tc"):
-                    _strip_linesegarray(parent)
-                    break
-                parent = parent.getparent()
-            return True
-    # 셀에 hp:t 가 없으면 run 추가
-    run = etree.Element(_q("run"))
-    run.set("charPrIDRef", "0")
-    t_el = etree.SubElement(run, _q("t"))
-    t_el.text = text
-    sub = tc.find(".//{%s}subList" % _HP)
-    if sub is None:
+    if _has_form_control(tc):
         return False
-    p = sub.find("{%s}p" % _HP)
-    if p is None:
-        p = etree.SubElement(sub, _q("p"))
-    # 기존 placeholder run 비우기
-    for old_t in list(p.iter(_q("t"))):
-        if _is_fillable_cell_text(str(old_t.text or "")):
-            old_t.text = ""
-    p.append(run)
-    _strip_linesegarray(tc)
-    return True
+    return _set_cell_text(tc, text)
 
 
 def _find_tbl_by_snippet(root, snippet: str):
@@ -205,8 +196,14 @@ def supplement_hwpx_from_resume(
     sign_date: str = "",
     sign_name: str = "",
     facts_json: Optional[str | Path] = None,
+    today: date | None = None,
+    sample_ok: bool = True,
+    full_document: bool = False,
 ) -> ResumeSupplementReport:
     """이력서 표 사실을 HWPX 신청서 표에 좌표 기입."""
+    from .submission_gates import require_sample_ok
+
+    require_sample_ok(sample_ok=sample_ok, full_document=full_document)
     if facts_json is not None:
         f = facts_from_dict(load_resume_facts(facts_json))
         education = education if education is not None else f["education"]
@@ -221,6 +218,8 @@ def supplement_hwpx_from_resume(
     licenses = list(licenses or [])
     careers = list(careers or [])
     check_columns = list(check_columns or [])
+    if sign_date:
+        sign_date = canonical_sign_date(today=today)
 
     src, dst = Path(in_hwpx), Path(out_hwpx)
     rep = ResumeSupplementReport(input=str(src), output=str(dst))
@@ -324,6 +323,7 @@ def supplement_hwpx_from_resume(
             txt = t.text or ""
             if re.search(r"\d{4}\s*년", txt) and "월" in txt and "일" in txt:
                 t.text = sign_date
+                _invalidate_lineseg(t)
                 changed = True
                 rep.tables_filled.append("서명일")
                 break
@@ -341,6 +341,7 @@ def supplement_hwpx_from_resume(
                         nxt = runs[idx + 1]
                         if not (nxt.text or "").strip():
                             nxt.text = sign_name
+                            _invalidate_lineseg(nxt)
                             changed = True
                             rep.tables_filled.append("신청인")
                             break

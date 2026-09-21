@@ -371,6 +371,43 @@ def test_standalone_declaration_preserved(tmp_path):
     assert b"standalone='no'" in head or b'standalone="no"' in head
 
 
+def test_cli_default_output_is_source_adjacent(src_hwpx, tmp_path):
+    """-o 미지정 시 직접 채움 결과는 원본 폴더의 통일 파일명으로 생성된다."""
+    from hwp_fill_direct import main
+
+    src = tmp_path / "GovTech_아이디어기획서_원본.hwpx"
+    src.write_bytes(src_hwpx.read_bytes())
+
+    rc = main([
+        str(src),
+        "--program-name", "2026 GovTech",
+        "--document-type", "아이디어기획서",
+        "--set", "기업명=x(주)",
+    ])
+
+    assert rc == 0
+    outputs = list(tmp_path.glob("2026GovTech_아이디어기획서_* v1.hwpx"))
+    assert len(outputs) == 1
+    assert outputs[0].parent == src.parent
+    assert src.exists()
+
+
+def test_cli_explicit_output_still_wins(src_hwpx, tmp_path):
+    """직접 지정한 -o 경로는 새 기본 규칙보다 우선한다."""
+    from hwp_fill_direct import main
+
+    explicit = tmp_path / "내가지정.hwpx"
+    rc = main([
+        str(src_hwpx),
+        "-o", str(explicit),
+        "--set", "기업명=x(주)",
+    ])
+
+    assert rc == 0
+    assert explicit.exists()
+
+
+
 def test_cli_returns_2_on_bad_input(tmp_path):
     """MEDIUM: CLI 가 잘못된 입력에 크래시 대신 종료코드 2 를 낸다."""
     from hwp_fill_direct import main
@@ -461,6 +498,104 @@ def test_strip_linesegarray_helper_idempotent():
     assert hwpx_fill._strip_linesegarray(root) == 0  # 멱등
     texts = [t.text for t in root.iter(f"{{{_HP}}}t")]
     assert "상호" in texts  # 라벨 텍스트 보존
+
+
+def _lineseg_tbl_xml() -> str:
+    """값칸+안내칸 각각 lineseg 를 가진 2열 표. L145 직접호출 픽스처."""
+    value = (
+        '<hp:tc><hp:cellAddr colAddr="0" rowAddr="0"/>'
+        '<hp:cellSpan colSpan="1" rowSpan="1"/><hp:subList><hp:p>'
+        '<hp:linesegarray><hp:lineseg textpos="0" vertpos="120"/></hp:linesegarray>'
+        '<hp:run charPrIDRef="0"><hp:t></hp:t></hp:run></hp:p></hp:subList></hp:tc>'
+    )
+    guide = (
+        '<hp:tc><hp:cellAddr colAddr="1" rowAddr="0"/>'
+        '<hp:cellSpan colSpan="1" rowSpan="1"/><hp:subList><hp:p>'
+        '<hp:linesegarray><hp:lineseg textpos="0" vertpos="20"/></hp:linesegarray>'
+        '<hp:run charPrIDRef="0"><hp:t>안내</hp:t></hp:run></hp:p></hp:subList></hp:tc>'
+    )
+    return (
+        f'<hp:tbl xmlns:hp="{_HP}">'
+        f'<hp:tr>{value}{guide}</hp:tr></hp:tbl>'
+    )
+
+
+def test_set_cell_text_strips_own_lineseg_keeps_sibling():
+    """L145 뿌리: _set_cell_text 직접 호출만으로 그 칸 lineseg 가 사라진다.
+
+    fill_hwpx 파이프라인·별도 strip 없이 호출해도 겹침 캐시가 남으면 안 된다.
+    형제 칸(안내) 캐시는 보존(L074).
+    """
+    from lxml import etree
+
+    tbl = etree.fromstring(_lineseg_tbl_xml())
+    tcs = list(tbl.iter(hwpx_fill._q("tc")))
+    assert hwpx_fill._set_cell_text(tcs[0], "도보네비게이션") is True
+    edited = [e for e in tcs[0].iter() if etree.QName(e).localname == "linesegarray"]
+    sibling = [e for e in tcs[1].iter() if etree.QName(e).localname == "linesegarray"]
+    assert edited == []
+    assert len(sibling) == 1
+    assert "".join(tcs[0].itertext()).strip() == "도보네비게이션"
+    assert "".join(tcs[1].itertext()).strip() == "안내"
+
+
+def test_set_cell_text_skips_form_control_without_stripping_sibling():
+    """L086 실패 시 칸을 안 바꾸고, 형제 lineseg 도 안 건드린다."""
+    from lxml import etree
+
+    xml = (
+        f'<hp:tbl xmlns:hp="{_HP}"><hp:tr>'
+        f'<hp:tc><hp:subList><hp:p>'
+        f'<hp:linesegarray><hp:lineseg/></hp:linesegarray>'
+        f'<hp:run charPrIDRef="0">'
+        f'<hp:checkBtn name="CB" value="UNCHECKED"/><hp:t/></hp:run>'
+        f'</hp:p></hp:subList></hp:tc>'
+        f'<hp:tc><hp:subList><hp:p>'
+        f'<hp:linesegarray><hp:lineseg/></hp:linesegarray>'
+        f'<hp:run charPrIDRef="0"><hp:t>안내</hp:t></hp:run>'
+        f'</hp:p></hp:subList></hp:tc>'
+        f'</hp:tr></hp:tbl>'
+    )
+    tbl = etree.fromstring(xml)
+    tcs = list(tbl.iter(hwpx_fill._q("tc")))
+    assert hwpx_fill._set_cell_text(tcs[0], "010-9999-8888") is False
+    assert len([e for e in tcs[0].iter() if etree.QName(e).localname == "linesegarray"]) == 1
+    assert len([e for e in tcs[1].iter() if etree.QName(e).localname == "linesegarray"]) == 1
+
+
+def test_splice_run_text_strips_paragraph_lineseg():
+    """인라인 스플라이스도 그 문단 lineseg 를 즉시 제거한다(L002 뿌리)."""
+    from lxml import etree
+
+    xml = (
+        f'<hp:p xmlns:hp="{_HP}">'
+        f'<hp:linesegarray><hp:lineseg textpos="0" vertpos="0"/></hp:linesegarray>'
+        f'<hp:run charPrIDRef="0"><hp:t>상호 : ______</hp:t></hp:run>'
+        f'</hp:p>'
+    )
+    p = etree.fromstring(xml)
+    flat = "상호 : ______"
+    start = flat.index("_")
+    assert hwpx_fill._splice_run_text(p, start, start + 6, "도보네비") is True
+    assert not [e for e in p.iter() if etree.QName(e).localname == "linesegarray"]
+    assert "도보네비" in "".join(p.itertext())
+
+
+def test_invalidate_lineseg_on_t_walks_to_paragraph():
+    """hp:t 만 넘겨도 조상 p 의 lineseg 를 찾는다(캐시는 t 하위에 없음)."""
+    from lxml import etree
+
+    xml = (
+        f'<hp:p xmlns:hp="{_HP}">'
+        f'<hp:run charPrIDRef="0"><hp:t>값</hp:t></hp:run>'
+        f'<hp:linesegarray><hp:lineseg/></hp:linesegarray>'
+        f'</hp:p>'
+    )
+    p = etree.fromstring(xml)
+    t = next(p.iter(hwpx_fill._q("t")))
+    assert hwpx_fill._invalidate_lineseg(t) == 1
+    assert not [e for e in p.iter() if etree.QName(e).localname == "linesegarray"]
+    assert "".join(p.itertext()).strip() == "값"
 
 
 # --------------------------------------------------------------------------- #
@@ -1650,3 +1785,76 @@ def test_line_edits_set_replaces_whole_paragraph(tmp_path: Path):
     assert rep.line_edits_applied == 1
     assert texts[1] == "희망 근무지역 : 서울 마포"
     assert "[ ] 동의" in texts[0]          # 다른 문단은 손대지 않는다
+
+
+# --- Wave A: fill-path 자간 clamp / L097 한 줄 칸 넘침 ---------------------------
+
+_HH = "http://www.hancom.co.kr/hwpml/2011/head"
+
+
+def test_fill_clamps_letter_spacing_without_submit(tmp_path):
+    """submit 을 안 타도 fill_hwpx 가 자간 -50 을 -30 으로 올린다."""
+    from lxml import etree
+
+    header = (
+        f'<?xml version="1.0" encoding="UTF-8"?>'
+        f'<hh:head xmlns:hh="{_HH}"><hh:refList><hh:charProperties>'
+        f'<hh:charPr id="0" textColor="#000000">'
+        f'<hh:spacing hangul="-50" latin="-10" hanja="-30"/>'
+        f'</hh:charPr></hh:charProperties></hh:refList></hh:head>'
+    ).encode("utf-8")
+    src = tmp_path / "form.hwpx"
+    _make_hwpx_color(src, _row(0, "상호", ""), header=header)
+    out = tmp_path / "out.hwpx"
+    fill_hwpx(src, out, identity={"기업명": "도보네비(주)"})
+    with zipfile.ZipFile(out) as z:
+        hroot = etree.fromstring(z.read("Contents/header.xml"))
+    sp = next(e for e in hroot.iter() if str(e.tag).rsplit("}", 1)[-1] == "spacing")
+    assert sp.get("hangul") == "-30"
+    assert sp.get("latin") == "-10"
+    assert sp.get("hanja") == "-30"
+
+
+def test_one_line_cell_overflow_noted_but_value_kept(tmp_path):
+    """L097: 한 줄 칸에 긴 값은 들어가고 overflow_cells 에 남는다(데이터 손실 금지)."""
+    from lxml import etree
+
+    def sz_cell(col, row, text, *, width, height):
+        inner = f"<hp:t>{text}</hp:t>" if text else "<hp:t></hp:t>"
+        return (
+            f'<hp:tc><hp:cellAddr colAddr="{col}" rowAddr="{row}"/>'
+            f'<hp:cellSpan colSpan="1" rowSpan="1"/>'
+            f'<hp:cellSz width="{width}" height="{height}"/>'
+            f'<hp:subList><hp:p><hp:run charPrIDRef="0">{inner}</hp:run>'
+            f'</hp:p></hp:subList></hp:tc>'
+        )
+
+    rows = (
+        f"<hp:tr>{sz_cell(0, 0, '상호', width=8000, height=400)}"
+        f"{sz_cell(1, 0, '', width=2000, height=400)}</hp:tr>"
+    )
+    src = tmp_path / "form.hwpx"
+    _make_hwpx_color(src, rows)
+    out = tmp_path / "out.hwpx"
+    long_name = "밸류업파트너스주식회사"
+    rep = fill_hwpx(src, out, identity={"기업명": long_name})
+    assert long_name in "".join(rep.overflow_cells)
+    with zipfile.ZipFile(out) as z:
+        root = etree.fromstring(z.read("Contents/section0.xml"))
+    blob = "".join(root.itertext())
+    assert long_name in blob
+
+
+def test_cell_text_may_overflow_unit():
+    from lxml import etree
+
+    xml = (
+        f'<hp:tc xmlns:hp="{_HP}">'
+        f'<hp:cellSz width="2000" height="400"/>'
+        f'<hp:subList><hp:p><hp:run><hp:t/></hp:run></hp:p></hp:subList></hp:tc>'
+    )
+    tc = etree.fromstring(xml.encode("utf-8"))
+    assert hwpx_fill.cell_text_may_overflow(tc, "가나다라마바사아자차") is True
+    assert hwpx_fill.cell_text_may_overflow(tc, "가") is False
+    assert hwpx_fill.estimate_text_width_hwpunit("가나") == 2000
+

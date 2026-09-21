@@ -1,7 +1,84 @@
 # auto_write
 
-> 이 파일은 이 GitHub 레포의 유일한 AI 작업지시 기준이다.
+> 이 파일은 이 GitHub 레포의 유일한 AI 작업지시 기준(개발 TASK SSOT)이다.
+> 공식 기준은 `origin/main:TASK.md`이며, 작업 브랜치의 TASK 변경은 main에 머지된 뒤 공식 상태가 된다.
+> `RESUME.md`는 세션 체크포인트일 뿐 TASK 우선순위·상태의 정본이 아니다.
+> Google Drive는 필요 시 백업/열람용 미러만 허용하며, Drive 복사본을 병행 편집 원본으로 사용하지 않는다.
 > Google Tasks와는 완전히 별개이며 Google Tasks의 항목을 조회·복사·동기화하지 않는다.
+
+
+# GLOBAL DEFAULT GUARDRAILS — 모든 TASK 기본 안전장치
+
+> 아래 규칙은 이 저장소의 **모든 현재/미래 TASK와 실행 프롬프트에 자동 적용**한다.
+> 새 TASK마다 같은 문구를 반복 복사할 필요는 없다.
+> TASK별로 더 강한 안전조건을 추가할 수는 있지만, 사용자의 명시적 승인 없이 아래 기본값을 약화하지 않는다.
+
+## 1) 자율수행 / 사용자 개입 최소화
+- 조사 → 분석 → 구현 → 테스트 → 회귀검증 → 문서화 → commit → push → PR → Checks 확인 → 허용된 자동병합까지 안전하게 가능한 범위는 AI가 연속 수행한다.
+- 중간 진행상황 확인만을 이유로 사용자를 호출하지 않는다.
+- 코드·테스트·데이터·기존 아키텍처 근거로 안전하게 결정 가능한 선택은 AI가 스스로 결정한다.
+- 사용자 판단/입력이 정말 필요한 항목만 `HUMAN_BATCH`에 누적해 가능한 한 한 번에 요청한다.
+- 개발자가 스스로 해결할 수 있는 Git 상태, 테스트 실패, 일반 오류는 HUMAN_BATCH에 넣지 않는다.
+
+## 2) 즉시 사용자 승인이 필요한 예외
+- 데이터 손실 위험
+- Secret/보안/개인정보 문제
+- 실제 비용 발생
+- 외부 시스템의 되돌리기 어려운 운영 변경
+- 제품/사업정책을 바꾸는 결정
+- 법적·계약상 명시적 승인 필요 작업
+
+## 3) 중단/재개 안전성
+- 장시간·다단계 TASK는 단계별 CHECKPOINT를 남긴다.
+- CHECKPOINT에는 최소 TASK_ID, 기준 base/code SHA, 완료 단계, 다음 단계, 핵심 산출물 위치를 재구성할 수 있는 정보가 있어야 한다.
+- 세션 만료, 컨텍스트 손실, PC 종료 후에도 최신 remote 상태와 TASK.md만 읽고 안전하게 재개 가능해야 한다.
+- 가능한 경우 의미 있는 단계 완료마다 이번 TASK 관련 파일만 commit/push한다.
+
+## 4) 재실행 / 중복 방지
+- 반복 실행 가능성이 있는 작업은 가능한 한 idempotent하게 구현한다.
+- 동일 입력을 다시 실행해 데이터 중복 추가, 지표 이중계산, 규칙 중복적용, 동일 파일 중복생성이 발생하지 않게 한다.
+- 필요한 경우 input snapshot/fingerprint, code/config SHA, run_id를 기록한다.
+- 이미 완료·검증된 단계를 발견하면 재사용하고 불필요하게 처음부터 다시 하지 않는다.
+
+## 5) 무한루프 / 과도한 자동개발 방지
+- retry/agent loop/자동개선은 반드시 종료조건을 둔다.
+- TASK에 수치가 없으면 합리적인 bounded retry/cycle을 정해 기록한다.
+- 동일 실패를 근거 없이 무한 반복하지 않는다.
+- 한 후보/한 실험의 실패 때문에 이미 검증된 전체 checkpoint를 되돌리지 않는다. 가능한 경우 실패 단위만 폐기한다.
+
+## 6) Git / 사용자 데이터 보존
+- 사용자 변경 삭제 금지.
+- `git reset --hard`, force push, `git clean -fd`, 무단 stash/drop 금지.
+- `git add -A` 금지. 이번 TASK에 필요한 파일만 stage한다.
+- 위험한 main 직접수정보다 작업 브랜치 + PR을 기본으로 한다.
+- 원격 main이 작업 중 바뀌면 최신 상태를 확인하고 안전하게 통합한 뒤 필요한 검증을 다시 한다.
+- 충돌을 무조건 ours/theirs로 해결하지 않는다.
+- 기존 사용자 데이터·정답 데이터·운영 설정은 명시적 근거 없이 덮어쓰거나 삭제하지 않는다.
+
+## 7) Secret / 외부효과 / 비용
+- Secret, 토큰, 비밀번호, 개인정보를 출력·커밋하지 않는다.
+- 실제 이메일 발송, 삭제, 결제, 유료 API, production 데이터 변경 등 외부효과가 있는 작업은 명시적으로 허용되지 않은 한 dry-run/preview/staging을 우선한다.
+- 비용이 발생하거나 되돌리기 어려운 외부 작업은 사용자 승인 전에 실행하지 않는다.
+
+## 8) 검증 / DONE 기준
+- 코드 작성, 테스트 PASS, build PASS, PR 생성만으로 DONE 처리하지 않는다.
+- 사용자 요청이 실제로 해결됐는지 USER_E2E 또는 그에 준하는 실제 경로로 확인한다.
+- 정상경로, 주요 경계값, 오류상태, 관련 회귀를 검증한다.
+- 데이터/평가/모델 성능 TASK는 가능한 범위에서 tuning 데이터와 최종 평가 데이터를 분리해 leakage를 방지한다.
+- 수치 개선은 동일 기준 데이터/동일 조건에서 변경 전후를 비교한다.
+- 실패·목표 미달 수치를 숨기거나 유리한 표본만 골라 보고하지 않는다.
+
+## 9) 부분 장애
+- CI 실패, 외부 사이트 일시 오류, 일부 데이터 미접근 등 부분 장애가 발생해도 안전하게 가능한 독립 작업은 계속한다.
+- 이미 검증된 산출물과 checkpoint를 보존한다.
+- 정말 사용자 입력이 필요한 항목만 `HUMAN_BATCH` 또는 `BLOCKED_INPUT`으로 분리한다.
+- 한 의존성의 실패 때문에 관련 없는 독립 작업까지 전부 중단하지 않는다.
+
+## 10) 새 TASK 생성 규칙
+- 모든 새 TASK/실행 프롬프트는 이 전역 안전장치를 자동 상속한다.
+- TASK 특성상 필요한 추가 안전장치(checkpoint/resume, idempotency, bounded retry, rollback, HUMAN_BATCH, dry-run, reproducibility)를 DETAILS/VERIFY/DONE에 필요한 만큼만 보강한다.
+- 단순 문서 수정처럼 특정 안전장치가 의미 없으면 억지 구현하지 않고 N/A로 판단한다.
+- 전역 안전장치를 약화하거나 예외 처리하려면 사용자의 명시적 요청과 이유를 TASK에 남긴다.
 
 ---
 
@@ -15,15 +92,17 @@ TASK 1개 = 반드시 1줄. LIST의 TASK_ID와 DETAILS의 TASK_ID는 반드시 1
 REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 -->
 
-[~] AW-001 | 문서 작성이 정해진 검사 경로를 거쳐 끝나게 한다
+[ ] AW-001 | 문서 작성이 정해진 검사 경로를 거쳐 끝나게 한다
 [ ] AW-002 | GitHub와 작업 상태를 안전하게 주고받게 한다
 [ ] AW-003 | L 규칙을 한 화면에서 보고 고칠 수 있게 한다
 [ ] AW-004 | 문서 작성 진행 상태를 한 화면에서 보게 한다
 [ ] AW-005 | 새 작성과 기존 자료 작성을 한 흐름으로 단순화한다
 [ ] AW-006 | 루트 파일을 역할별로 정리한다
 [ ] AW-007 | 중복·미사용 코드를 찾아 정리한다
-[~] AW-008 | 남은 L 규칙 빈칸을 실제 검사로 채운다
+[ ] AW-008 | 남은 L 규칙 빈칸을 실제 검사로 채운다
 [ ] AW-009 | 요구사항 문서로 운영 웹앱 P0를 만든다
+[ ] AW-010 | 원본 문서 형식을 유지하고 이미지 생성·삽입까지 자동화한다
+[x] T-20260920-01 | 최종 HWPX를 원본 파일 폴더에 통일된 파일명으로 저장한다
 [x] T-20260814-01 | 기본 브랜치(main) 보호가 켜져 있고, 문서 머지는 docs-gate를 거친다
 [ ] T-20260814-02 | AIMY급 사업계획서를 공고·양식·기업사실에 맞춰 자동 작성하는 통합 과업을 명세한다
 [x] T-20260814-03 | 야간 A~H 미머지 브랜치를 최신 main에 체리픽 이식 준비한다
@@ -37,8 +116,11 @@ REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 [x] T-20260816-07 | main에 이미 들어간 원격 브랜치를 지우고 backup은 남긴다
 [x] T-20260816-08 | 열린 draft #149·#152·#153·#154를 한 브랜치로 합쳐 한 번에 머지할 수 있게 한다
 [x] T-20260825-01 | 다른 폴더에만 남아 있던 빠진 그림 생성 코드를 지금 저장소로 옮긴다
+[x] T-20260831-01 | 문서가 다시 깨지는 오류부터 우선순위 A→B→C로 기계 검사에 넣는다
+[x] T-20260831-02 | 신청서 작성을 TASK에 등록 금지 — 파일에서 사업명 삭제 아님. 원장 C가 제일 중요
+[x] T-20260918-01 | TASK.md를 유일한 개발 작업 SSOT로 고정하고 모든 에이전트가 시작·종료 시 같은 파일을 갱신한다
 
-에이전트 본문 금지: `# 0` LIST + 열린(`[ ]`/`[~]`) `8-1`만. T-20260814-02 8-1 전문은 생략. 제품 목표=`AW-005` 8-1 + `최우선 사용 케이스`. 웹앱 실행 정본=`웹앱 최종 요구사항_20260816`(승인 전 웹앱 코드 대기). 원장 A/B 표만. TASK 통째·CHANGELOG·닫힌 `[x]` DETAILS 금지.
+에이전트 본문 금지: `# 0` LIST + 열린(`[ ]`/`[~]`) `8-1`만. T-20260814-02 8-1 전문은 생략. 제품 목표=`AW-005` 8-1 + `최우선 사용 케이스`. 웹앱 실행 정본=`웹앱 최종 요구사항_20260816`(승인 전 웹앱 코드 대기). 원장 **C가 최우선**. 신청서 작성을 TASK에 등록 금지 — 파일에서 사업명 삭제 아님. TASK 통째·CHANGELOG·닫힌 `[x]` DETAILS 금지.
 
 ---
 
@@ -52,11 +134,17 @@ REMOTE: https://github.com/pds2225/auto_write
 
 실행 기준은 이 파일 하나뿐이다.
 
-- `TASK.md`만 작업지시 파일로 사용한다.
+- `TASK.md`만 개발 작업지시·상태·우선순위의 SSOT로 사용한다.
+- 공식 정본은 `origin/main:TASK.md`다. 작업 브랜치에서 수정한 TASK는 main 머지 전까지 제안 상태다.
+- 모든 에이전트는 세션 시작 시 `git fetch origin --prune` 후 TASK.md의 `# 0` LIST와 열린(`[ ]`/`[~]`/`[!]`) TASK의 `8-1`을 먼저 확인한다.
+- `RESUME.md`는 중단 지점·실행 로그·재개 힌트용 세션 체크포인트다. TASK.md와 충돌하면 TASK.md가 우선한다.
+- 작업 종료 시 실제 결과에 맞춰 같은 작업 브랜치의 TASK.md 상태·검증·차단·다음 작업을 갱신하고, main에 머지된 상태를 공식 기록으로 본다.
+- Google Drive 복사본은 백업/열람용 미러만 허용한다. Drive와 GitHub를 동시에 편집 가능한 이중 정본으로 운영하지 않는다.
 - `NEXT_TASK.md`는 없다. 실행 기준은 TASK.md만.
 - 별도의 CURRENT_TASK.md / NEW_TASK.md / NEXT_TASK.md를 만들지 않는다.
 - 다른 레포 TASK, Google Tasks, 과거 채팅 내용을 임의 실행하지 않는다.
 - 사용자의 새 요청은 이 TASK.md에 새로운 TASK 항목으로 등록한다.
+- 예외: 특정 지원사업 신청서 작성(명명 공고 신청서)은 TASK.md LIST에 등록하지 않는다. 원장 A에만 기록. 사용자가 명시적으로 TASK 등록을 시킬 때만 예외.
 
 ## 우선순위 — 사용자 요청이 최우선 (2026-08-16)
 
@@ -82,7 +170,7 @@ AW DETAILS에는 「원칙」 칸이 없다. 칸은 MUST / KEEP / FORBIDDEN이�
 기록된 요청(요약):
 
 - 엔진 AW-001~009 — 검사 경로, git 동기화, L규칙 화면, 진행 화면, 새작성=기존자료 한 흐름, 루트 정리, 중복 정리, L빈칸, 웹앱 P0
-- 실제출 원장 A1~A6 — 한난, 울산, 비앤코, 이지비건, 입주신청, 항우연
+- 원장 **C가 최우선** — 있는 기능을 실사용 가능하게. 신청서 작성을 TASK에 등록 금지(원장 A 사업명 기록은 유지)
 - 기능 원장 B1~B7 — 허브, HWPX 값만 채움, 이미지, 규칙 검사 등
 - 이번 세션에 추가로 적은 것 — 기존 계획서 1순위 흐름, 생성은 허용·인지, 사용자 원문 최우선
 
@@ -90,7 +178,7 @@ AW DETAILS에는 「원칙」 칸이 없다. 칸은 MUST / KEEP / FORBIDDEN이�
 
 1. 이 파일 `# 0` LIST만 (20줄).
 2. 열린(`[ ]`/`[~]`) 항목의 `8-1` 인용문만.
-3. `docs/REQUEST_LEDGER.md` A/B 표만.
+3. `docs/REQUEST_LEDGER.md` **C가 최우선**, 그다음 B, A는 기록 유지. A 항목을 TASK.md 작업으로 바꾸지 않음.
 4. T-20260814-02 긴 `8-1` 전문은 기본 생략. **제품 목표 = AW-005 `8-1` + `최우선 사용 케이스`.**
 
 에이전트에게는 LIST+8-1만. DETAILS 본문(MUST/KEEP/BPQ/실행지시) 금지. 한 줄이면 된다.
@@ -104,7 +192,7 @@ AW DETAILS에는 「원칙」 칸이 없다. 칸은 MUST / KEEP / FORBIDDEN이�
 | ID | 사용자 원문 (한 줄) |
 |---|---|
 | AW-001 | 문서 생성이 DomainRouter → Pipeline → LRule → Hash → Finalizer로 끝나게. business_plan / consultant_application 실제 검증 |
-| AW-002 | GitHub와 작업상태를 안전하게 쌍방향 sync. 비개발자도 상태 파악. master를 원격에 강제 맞추기 버튼 금지 |
+| AW-002 | GitHub와 작업상태를 안전하게 쌍방향 sync. 비개발자도 상태 파악. 기준 브랜치를 원격에 강제 맞추기 버튼 금지 |
 | AW-003 | 전체 L 규칙을 한 화면에서 조회·관리·수정. UI가 runtime 검사를 우회하면 안 됨 |
 | AW-004 | 비개발자가 이해할 아키텍처·업무흐름 모니터 한 화면 |
 | AW-005 | 새 작성과 기존자료→새양식을 별도 제품으로 쪼개지 말 것. 출처=`파일명+페이지` |
@@ -115,6 +203,8 @@ AW DETAILS에는 「원칙」 칸이 없다. 칸은 MUST / KEEP / FORBIDDEN이�
 | T-20260814-02 | 8-1은 2026-08-14 **명세만 작성** 지시. **제품 목표 아님.** 제품 목표=`AW-005` 8-1 + `최우선 사용 케이스`. 이 8-1 전문은 기본 생략 |
 | T-20260816-03 | clone 끝나면 로컬 PC 리모트 컨트롤 |
 | T-20260816-08 | 지금PR정리 |
+| T-20260831-01 | ㅇㅜ선순우;ㅣ대로 해결하려고함 계획? → 문서가 다시 깨지는 것부터 A→B→C로 잠근다. 계획 task에 추가 |
+| T-20260831-02 | 신청서 작성을 TASK에 등록 금지 — 파일에서 사업명 삭제 아님. 원장 씨가 제일 중요 |
 
 같은 파일에 나중에 기록된 사용자 요청 (8-1 아님. 충돌 시 나중 요청이 해당 부분만 덮음):
 
@@ -128,8 +218,12 @@ AW DETAILS에는 「원칙」 칸이 없다. 칸은 MUST / KEEP / FORBIDDEN이�
 | `웹앱 최종 요구사항_20260816` | 새 Google Doc이 AW-009 실행 정본. 첫 화면=공고+양식(1파일 가능·2+가능), 기존 계획서 선택. 파트만 작성. 칸=양식 대목차. 전사→유사→생성. 제출자동판정 UI 없음. P0 미완이면 업무흐름 고도화 금지. 이 계획 승인 전 웹앱 코드 대기 |
 | `계획 보강 — 2026-08-16` | P 개발 중=Problem만·파일 오면 초안 1건. P 완료 후=최우선. 사업자등록증은 첫 화면 필수 아님. 우선순위 1–5. #150은 측정기, 다음=3 HWP×Golden 41 Baseline |
 | `STEP 3A 병렬 — 2026-08-16` | 이 트랙=양식↔Fact/Evidence↔공고 매칭 계약·Golden·비개발자 리포트. STEP 2 추출기 파일 금지. 만남점=`Fact[]`/`NarrativeEvidence[]`/`Conflict[]`. Writer/UI/HWP 금지 |
+| T-20260831-01 | 지금까지 난 오류를 우선순위대로 기계 가드로 닫는다. A 문서깨짐 → B 제출·품질 → C 이력서. 151개 한 번에 재발 0 불가. 계획 SSOT=`docs/LESSONS_LOCKDOWN_WAVES.md` |
+| T-20260831-01 | 승인요청하지않고 웨이브C? 인지뭔지 너가말한것다 끝까지 개발하게하는방법. +프롬프트. 이어가기 프롬프트=`docs/LESSONS_LOCKDOWN_WAVES.md` |
+| T-20260831-01 | 닫힘이 머지했다는거임? → 아님(브랜치 가드). D·E도 승인요청없이 마무리 |
+| T-20260831-02 | 특정지원사업은 저장하지마 / 원장 씨가 제일 중요 / 원장·파일에 사업명 저장 금지 / 아예 제외하라는게아니라 특정지원사업신청서 작성하는일을 task에등록하지마라고 |
 
-실제 제출물·옛 엔진 요청 (표만): `docs/REQUEST_LEDGER.md` A1~A6(한난·울산·비앤코·이지비건·입주신청·항우연) / B1~B7(허브·HWPX 값만 채움·이미지·규칙 검사 등) / C1.
+개발 원장: `docs/REQUEST_LEDGER.md` **C → B → A**. 사업명은 원장·`user_applications.md`에 저장. named 신청서 작성 TASK 등록 금지.
 
 ---
 
@@ -155,7 +249,7 @@ Google Tasks는 이 개발 TASK 시스템과 무관하다.
 
 작업 시작 전 반드시:
 
-1. `git fetch --all --prune`
+1. `git fetch origin --prune` — 작업 기준 원격은 origin이다. 폐기·로컬 전용 remote 장애가 세션 시작을 막지 않게 한다.
 2. `git remote get-url origin` — 이 파일 `# 1. REPOSITORY`의 REPO와 일치하는지 확인
 3. `git branch --show-current`
 4. `git status --short`
@@ -176,7 +270,7 @@ Google Tasks는 이 개발 TASK 시스템과 무관하다.
 
 ## 판정 (fetch 후, AI가 그대로 실행)
 
-`<BASE>`는 `# 1. REPOSITORY`의 BASE다. 이 레포는 `master`.
+`<BASE>`는 `# 1. REPOSITORY`의 BASE다. 이 레포의 BASE는 `main`.
 
 동기화됨(ahead=0, behind=0, clean)이면 그대로 작업을 시작한다.
 
@@ -354,6 +448,39 @@ TASK-A
 
 # 8. TASK DETAILS
 
+## T-20260918-01
+
+### 8-1. 사용자 원문
+task.md를 드라이브나 레포에 저장하고 계속 거기서 수정하면 안됨?? / 그렇게 셋팅해
+
+### 최종 결과
+개발 작업의 유일한 공식 SSOT를 `origin/main:TASK.md`로 고정한다. 모든 에이전트는 TASK를 먼저 읽고, 작업 브랜치에서 TASK를 갱신한 뒤 main 머지로 공식화한다. `RESUME.md`는 세션 체크포인트, Google Drive는 백업/열람용 미러만 사용한다.
+
+### MUST
+- TASK 상태·우선순위·다음 작업의 공식 정본은 `origin/main:TASK.md`
+- 세션 시작 시 `git fetch origin --prune` 후 TASK LIST + 열린 8-1 먼저 확인
+- 작업 종료 시 실제 결과를 TASK.md에 반영
+- `RESUME.md`는 세션 중단/재개 보조 정보로만 사용
+- Drive 복사본은 백업/열람 전용
+
+### FORBIDDEN
+- TASK.md와 Drive를 동시에 편집 가능한 이중 정본으로 운영
+- RESUME.md가 TASK 우선순위나 상태를 덮어씀
+- 고장 난 보조 remote 때문에 `git fetch --all`이 전체 세션을 막게 함
+- 별도 CURRENT_TASK.md / NEW_TASK.md / NEXT_TASK.md 생성
+
+### VERIFY
+- TASK.md 헤더·작업지시·Git 동기화 규칙이 main/TASK SSOT와 일치
+- AGENTS.md / CLAUDE.md / session-resume / session-closeout-all이 TASK-first로 일치
+- BASE=main, 기본 fetch=origin only
+
+### DONE
+REQUEST_SOLVED=YES
+- TASK SSOT 정책 문서화 완료
+- 에이전트 진입 문서와 세션 스킬의 RESUME 우선 규칙 제거
+- Drive 이중정본 금지 및 origin-only fetch 규칙 반영
+
+
 <!--
 TASK LIST 한 줄 요약과 아래 상세 TASK는 TASK_ID로 연결한다.
 새 사용자 요청을 TASK로 만들 때 반드시 MUST / KEEP / REMOVE / FORBIDDEN / VERIFY / DONE 관점으로 변환한다.
@@ -361,6 +488,106 @@ TASK LIST 한 줄 요약과 아래 상세 TASK는 TASK_ID로 연결한다.
 NEXT_TASK.md 이관(2026-08-13): A/B/C/D/E→AW-001, H→§12 테스트. F→AW-006, G→AW-007, I→AW-008. ACTIVE(AW-001)에 내용 합치지 않음. 파일 삭제.
 AW-009(2026-08-14): 웹앱 최종 사양서 실행 TASK. AW-001에 합치지 않음. AW-002~005는 사양서 부분 요구.
 -->
+
+## AW-010
+
+### 8-1. 사용자 원문 요청
+
+> 원본이 HWPX면 HWPX, DOCX면 DOCX 유지 + 실제 이미지 생성/삽입, 생성 불가 시 이미지 프롬프트를 추가한다.
+
+나중 요청 (2026-09-20):
+
+> DOCX 엔진은 그대로 유지하되, HWPX에서도 재사용할 수 있는 것 중 구현 리소스가 작은 것만 우선 개발해서 main에 병합한다.
+
+이번 턴 범위:
+- 기존 DOCX 엔진 삭제/대체 금지.
+- 공통 판단 로직은 재사용하고 HWPX 입력 어댑터만 최소 추가.
+- 저비용 후보 중 직접 재사용성이 높은 `psst_check`와 `infographic_suggest`를 우선.
+- DOCX 구조를 직접 수정하는 대규모 품질/렌더 엔진의 HWPX 포팅은 이번 턴 제외.
+- HWPX→DOCX→HWPX 왕복 변환으로 기능을 흉내내지 않는다.
+
+
+### 8-2. 비개발자용 1줄 요약
+
+원본 문서 형식을 그대로 유지하면서 필요한 이미지를 실제 생성·삽입하고, 생성할 수 없으면 바로 쓸 수 있는 이미지 프롬프트를 남긴다.
+
+### 8-3. 사용자가 원하는 최종 결과
+
+- 입력이 HWPX면 최종 산출물도 HWPX다.
+- 입력이 DOCX면 최종 산출물도 DOCX다.
+- 기존 원본 양식·표·셀·문단·페이지 구조를 가능한 범위에서 보존한다.
+- 문서 계획상 이미지가 필요한 위치를 판단하고, 실제 이미지 생성 capability가 사용 가능하면 이미지를 생성해 원본 형식 안에 삽입한다.
+- 이미지 생성/삽입이 환경·권한·provider 문제로 불가능하면 문서 전체를 실패시키지 않고 해당 슬롯을 REVIEW_REQUIRED로 남기며 고품질 생성 프롬프트를 산출한다.
+- 프롬프트에는 최소 삽입 위치, 목적, 구성, 스타일, 필수 객체/텍스트, 권장 비율·크기를 포함한다.
+- Evidence / Data visualization / Generated illustration을 구분하고, 생성형 이미지를 증빙처럼 사용하지 않는다.
+- 정상 양식 작성과 서식 깨짐 복구 경로를 구분해 기존 integrity/acceptance gate와 연결한다.
+
+### 8-4. 현재상태
+
+- STATUS: READY
+- 2026-09-20 incremental slice: `psst_check`와 `infographic_suggest`에 HWPX direct-read 어댑터를 연결하고 회귀 테스트를 추가함. DOCX 엔진/기존 API는 유지. 전체 AW-010(DOCX/HWPX 이미지 생성·삽입 E2E)은 계속 미완료.
+- 기존 HWP/HWPX/DOCX renderer/fill 및 HWPX integrity gate를 우선 재사용한다.
+- 기존 그림 생성 코드 복구 작업(T-20260825-01)은 완료되어 있으므로 중복 엔진을 만들지 않는다.
+- BPQ 이미지 3종 원칙(Evidence / Data viz / Generated illustration)을 유지한다.
+
+### 8-5. MUST
+
+- [ ] 입력 파일 형식을 감지하고 동일 형식 출력 계약을 강제한다: HWPX→HWPX, DOCX→DOCX.
+- [ ] 형식 변환이 필요한 내부 처리 과정이 있더라도 사용자 최종 산출물은 원본 형식으로 복원되고 구조 보존 검사를 통과해야 한다.
+- [ ] 기존 HWPX/HWP/DOCX renderer/fill 엔진을 전수 조사해 재사용하고 새 병렬 renderer를 만들지 않는다.
+- [ ] DocumentPlan/이미지 슬롯에서 실제 이미지 필요 위치와 유형을 결정한다.
+- [ ] 이미지 생성 provider/capability가 있으면 실제 이미지를 생성하고 원본 문서의 지정 슬롯에 삽입한다.
+- [ ] 실제 삽입 후 표/셀 크기, 비율, overflow, 페이지 깨짐을 artifact QA로 확인한다.
+- [ ] 이미지 생성이 불가하면 구조화된 이미지 프롬프트를 산출하고 해당 위치를 REVIEW_REQUIRED로 표시한다.
+- [ ] 생성 프롬프트 필수 필드: section/anchor, 목적, 이미지 유형, 핵심 메시지, 구성, 스타일, 필수 객체, 금지 요소, 포함 텍스트, 권장 aspect ratio, 권장 px/mm.
+- [ ] Evidence는 원본 증빙 파일만 사용하고 생성형 대체 금지.
+- [ ] Data visualization은 실제 근거 데이터와 source/provenance가 있을 때만 생성한다.
+- [ ] Generated illustration은 설명용으로만 사용하며 증빙 라벨을 붙이지 않는다.
+- [ ] 정상 작성 경로와 서식 깨짐 복구 경로를 구분한다. format/integrity gate 실패 시 자동 PASS 금지.
+- [ ] 최종 문서가 원본과 다른 형식으로만 남으면 DONE 금지.
+
+### 8-6. KEEP
+
+- DomainRouter / LRuleEnforcer / Finalizer
+- HWPX integrity gate 및 acceptance gate
+- RenderService, hwpx_fill, hwp_fill, hwp_com_fill, DOCX renderer 기존 경로
+- 원본 덮어쓰기 금지
+- 생성형 이미지를 증빙으로 사용 금지
+- 실제 사실/수치 provenance 정책
+- AW-001 검사 경로와 BPQ renderer/QA 계획
+
+### 8-7. REMOVE
+
+- 원본 HWPX를 DOCX만으로 출력하거나 DOCX를 HWPX만으로 바꾸는 임의 형식변환
+- 이미지 슬롯이 필요한데 아무 표시 없이 비워두는 silent fallback
+- 생성 실패를 숨기고 placeholder를 실제 이미지처럼 처리하는 동작
+- 기존 renderer와 같은 역할의 새 병렬 엔진
+
+### 8-8. FORBIDDEN
+
+- 원본 파일 overwrite
+- 생성형 이미지를 특허증·계약서·실화면·증빙으로 위장
+- 출처 없는 데이터 차트 생성
+- 형식 보존 검증 없이 FINAL 처리
+- 테스트 실패 skip/delete로 DONE 처리
+- Secret/유료 provider 무단 사용
+
+### 8-9. VERIFY
+
+- [ ] 실제 HWPX 샘플 1건: 작성 → 이미지 생성/삽입 → HWPX 유지 → integrity/acceptance PASS
+- [ ] 실제 DOCX 샘플 1건: 작성 → 이미지 생성/삽입 → DOCX 유지 → 구조/레이아웃 QA PASS
+- [ ] 이미지 provider unavailable 시 프롬프트 fallback + REVIEW_REQUIRED 확인
+- [ ] generated illustration이 evidence 슬롯에 들어가면 FAIL
+- [ ] 이미지 삽입 전후 표/필수 라벨/section 구조 보존
+- [ ] format mismatch 출력은 fail-closed
+- [ ] 기존 HWPX/DOCX 관련 회귀테스트 PASS
+- [ ] 실제 사용자 E2E에서 입력 형식=출력 형식 확인
+
+### 8-10. DONE
+
+REQUEST_SOLVED=NO — HWPX와 DOCX 각각 실제 산출물 E2E에서 원본 형식 유지, 이미지 실제 삽입 또는 구조화 프롬프트 fallback, artifact QA를 모두 확인한 뒤 YES.
+
+---
 
 ## T-20260814-01
 
@@ -426,14 +653,7 @@ TASK_ID: AW-001
 TASK_START_SHA: d6b96b86a0015f53141054c27517607923a596a8
 TASK_BLOB_SHA: f6f8023b0dd47d301acedc75a5d4957edd147d4e
 WORK_BRANCH: cursor/overnight-aw-001-2cb9
-STATUS_THIS_TURN: 기존 `ProjectService.generate → _publish_results_bundle`에 공통 `run_to_final` 수렴과 `final_gate_report.json` 기록을 연결했다. 게이트 실행·예외·malformed 결과 모두 `DRAFT`/비제출 상태로 남긴다. 추가로 rename-lock fail-closed 테스트 주입 오류와 legacy private-helper re-export 누락을 보정했다. feature branch `codex/overnight-aw-001-20260918`에 `da81c5a`, `2c316fe`, `2a5117b`, `a60327a`, `e0723af`를 push했다. 관련 회귀 `71 passed`, 적용·품질·제출 통합 `96 passed`. 2026-09-18 HWPX R9 후속은 P0 공통 `run_hwpx_integrity_gate`에 R9 수용검사를 연결한 feature branch `codex/hwpx-r9-gate-p0-20260918`의 최신 `ce8cd62`로 non-COM FAIL/PASS/bypass와 JSON 상태 직렬화를 검증했다. LIST `[~]`. REQUEST_SOLVED=NO(실제 Hancom 렌더 `ENVIRONMENT_BLOCKED`, R9 feature branch의 main 통합 전).
-
-### 2026-09-18 FOLLOWUP LONG RUN 2 상태 동기화
-
-- 실제 AW-001 feature branch `codex/overnight-aw-001-20260918`의 추가 커밋은 `24104fd`(canonical `generation_store`에 대한 `core.docx.services` compatibility alias)와 `bc64e96`(HWPX emit 실패 시 fail-closed)이다. 기존 canonical 구현을 복제하지 않았고 branch push 및 worktree clean을 확인했다.
-- `bc64e96` 검증: generation store + ProjectService 관련 `36 passed, 23 subtests passed`, HWPX default output `19 passed`; ProjectService 결과는 HWPX 오류 시 `status=DRAFT`, `final_output_allowed=false`, `submittable=false`, `hangul_output_allowed=false`로 남는다. DOCX는 내부 중간본이며 기본 사용자 산출물 계약은 HWPX이다.
-- 실제 Hancom COM smoke는 기존 동일 환경 무응답 2회로 `ENVIRONMENT_BLOCKED` 유지한다. 따라서 실제 시각 렌더링 `FULL/PASS`로 표시하지 않는다. `REQUEST_SOLVED=NO`를 유지한다.
-- 상태 판정: 코드/커밋은 기존 TASK 기록보다 앞서 있었으므로 이 블록 추가 전에는 `CODE_AHEAD_OF_TASK`; 본 동기화 후 AW-001 완료 근거는 MATCH이나 HWPX R9/LRule 계약 및 실제 렌더는 PARTIAL/ENVIRONMENT_BLOCKED이다.
+STATUS_THIS_TURN: mechanized 가드(`build_lrule_guards`)를 `run_to_final`/autopilot에 연결. mechanized unverifiable=0, L009 실 FAIL. LIST `[~]`. REQUEST_SOLVED=NO(judgment/gap REVIEW_REQUIRED로 FINAL 차단 유지·HWPX `submit_hwpx`는 R9 수용검사 KEEP).
 
 ### 8-1. 사용자 원문 요청
 
@@ -477,7 +697,7 @@ INPUT
 - 현재 구현: DomainRouter, 도메인 Pipeline, LRule, Finalizer, workspace/results 구조가 존재
 - 2026-08-19: `app/auto_write/domains/pipeline_gate.py` `run_to_final` 이 생산 수렴점. autopilot 4.6·BP/CA pipeline·resume_fill CLI가 호출. ambiguous/누락 report/중복 ID/artifact·registry 해시 불일치 → FINAL 금지
 - 2026-08-19 가드: `app/auto_write/services/lrule_guards.py` `build_lrule_guards` 가 44 mechanized 규칙 callable을 `run_to_final`에 자동 주입. 산출물 검사(L009 마커 등)는 실 PASS/FAIL. 채움/git 규칙은 process PASS(가짜 산출물 검사 아님). judgment/gap은 넣지 않음 → REVIEW_REQUIRED 유지로 FINAL 계속 차단(의도된 fail-closed)
-- 현재 문제: judgment/gap 미가드이므로 실문서 FINAL 불가(의도). HWPX `submit_hwpx` 는 R9 수용검사 게이트 KEEP(LRule 미연결). `ProjectService`의 기존 DOCX bundle 우회는 `run_to_final` 실행결과와 예외 상태 sidecar를 남기도록 보강했다.
+- 현재 문제: judgment/gap 미가드이므로 실문서 FINAL 불가(의도). HWPX `submit_hwpx` 는 R9 수용검사 게이트 KEEP(LRule 미연결)
 - 이미 구현된 부분: 기존 CORE/shared services, LRule, Finalizer, mechanized 가드
 - 확인 필요한 부분: HWPX 경로를 LRule에 붙일지(수용검사 계약과 충돌). 실사용자 문서 E2E
 
@@ -490,72 +710,8 @@ INPUT
 - [x] ambiguous domain 자동 FINAL 금지
 - [x] LRule report 누락/duplicate/FAIL/REVIEW_REQUIRED/UNVERIFIABLE이면 FINAL 금지
 - [x] artifact/registry hash가 검사 이후 변경되면 FINAL 금지
-- [~] legacy direct FINAL 우회경로 차단 (ProjectService DOCX bundle은 공통 gate 연결 완료; HWPX `submit_hwpx`는 R9 수용검사 KEEP — LRule 미연결)
+- [ ] legacy direct FINAL 우회경로 차단 (HWPX `submit_hwpx` 는 R9 수용검사 KEEP — LRule 미연결)
 - [x] business_plan / consultant_application 실제 E2E (synthetic fixture)
-
-### HWPX R9 Acceptance / Common Final Gate — 2026-09-18
-
-상태: `PARTIAL` / `REQUEST_SOLVED=NO`
-
-- [x] R9 정의 및 현재 구현 위치 조사: `app/auto_write/services/hwpx_acceptance.py`의 XML 수용검사(`run_hwpx_acceptance`)
-- [x] `submit_hwpx` acceptance 경로 및 공통 gate 연결 조사
-- [x] non-COM R9 FAIL fixture: 유색 `charPr` HWPX
-- [x] R9 FAIL → `HARD_FAIL` → `_DRAFT`/최종 출력 차단 테스트
-- [x] R9 PASS → 정상 final/submittable 테스트
-- [x] `acceptance_gate=False` 우회 요청도 공통 gate를 거치고 최종 제출을 허용하지 않는 테스트
-- [x] `SubmitReport`에 `final_output_allowed`/`submittable`을 명시적으로 기록하는 최소 보강
-- [x] 관련 회귀: R9/submit/gate/acceptance/cleanup `45 passed, 2 skipped`; HWPX/LRule 보조 회귀 `19 passed`
-- [x] feature branch push: `codex/hwpx-r9-gate-p0-20260918` / `ce8cd62`
-- [~] main 통합 전 상태와 실제 Hancom COM/시각 렌더: 기존 정책대로 `ENVIRONMENT_BLOCKED`
-- 최종 audit: `origin/main=7951360`으로 갱신되었으나 현재 R9 branch는 P0 base `2ebf550` 위에 보존했고 rebase/merge하지 않았다. root `master`는 기존 dirty 변경을 보존한 채 `origin/main`보다 17개 뒤다.
-
-R9 판정:
-
-- 기존 자동검출 수준: `PARTIAL` → feature branch non-COM 범위는 `FULL` 조건 충족
-- R9 invariant: 유색 예시 `charPr` 등 제출 전 허용되지 않는 HWPX 구조가 없어야 하며, 위반 시 `run_hwpx_acceptance`가 실패한다.
-- 공통 흐름: `submit_hwpx → run_hwpx_integrity_gate → run_hwpx_acceptance → severity aggregation → _DRAFT/final_output_allowed=false/submittable=false`
-- 다음 1개: 최신 feature branch `ce8cd62`를 P0/AW-001 통합 기준과 대조한 뒤 별도 통합 절차에서 검토하고, Hancom COM이 가능한 환경에서 실제 시각 smoke를 별도 검증한다.
-
-### R9 Integration Readiness / P0 Release Gate — 2026-09-18
-
-- `origin/main=7951360`, root `master=2130493`(17 behind, dirty 보존), P0 base=`2ebf550`, R9 최신=`ce8cd62`(`8699f20` production + 상태 JSON assertion).
-- ancestry: P0 base는 R9에 포함됨. AW-001 `24104fd`/`bc64e96`는 R9 branch의 조상이 아니므로, AW-001/P0를 함께 배포할 때 별도 통합 검토가 필요하다. main 직접 merge/push는 하지 않았다.
-- R9 diff audit: P0 기준 변경은 `app/auto_write/services/hwpx_submit.py`와 `app/tests/test_hwpx_r9_common_gate.py` 2개뿐이다. production 12줄 + R9 fixture/test이며 unrelated 변경은 없다.
-- P0 Release Gate: HWPX 구조/제출/R9/cleanup/default-output 묶음 `176 passed, 2 skipped`; D1-D6/L154-L156 corpus `28 passed, 1 skipped`; lessons registry `29 passed, 3 failed`(외부 L152~L167 및 L163/L164 중복 `BASELINE_DATA_MISMATCH`).
-- 기존 실패 분리: DOCX autopilot rename-lock 2건은 R9와 무관한 기존 baseline failure, ProjectService broad 회귀의 Windows `output.docx` cleanup 잠금 1건은 environment/baseline failure, 전체 pytest 26개 collection ImportError는 기존 legacy/private-helper 테스트 인프라 불일치다. R9 변경으로 새로 발생한 실패는 확인되지 않았다.
-- gate 중복/성능 정적 점검: `submit_hwpx`는 공통 gate를 1회 호출하고 gate 내부에서 R9 acceptance를 1회 집계한다. 불필요한 중복 acceptance 호출은 확인되지 않았으며 이번에는 대규모 최적화를 하지 않는다.
-- Release 판정: `REVIEW_REQUIRED` — R9 non-COM/P0 범위는 통과했지만 branch가 최신 `origin/main`과 4 ahead/1 behind로 갈라져 있고 AW-001 별도 커밋 통합 및 실제 Hancom 렌더가 남아 있다. `READY_WITH_KNOWN_ENV_BLOCK`로 과장하지 않는다.
-
-### AW-001/R9 통합 검토 — 2026-09-18
-
-- 최신 `origin/main=7951360`에서 격리 통합 브랜치 `codex/integration-aw001-r9-p0-20260918`를 생성하고 AW-001 7개 커밋과 P0/R9 3개 코드·테스트 커밋을 선별 적용했다. 최신 HEAD=`0a5d785`, feature branch push 완료, main 직접 merge/push 없음.
-- 통합 worktree는 clean이며 `compileall=PASS`, `git diff --check=PASS`이다. 변경 범위는 AW-001 fail-closed/compatibility와 HWPX common gate/R9 fixture·tests 22개 파일이며 별도 unrelated production 변경은 확인되지 않았다.
-- 핵심 통합 회귀: AW-001/R9/gate/bypass/submit/generation store `59 passed, 23 subtests passed`; cross-form/ProjectService/generation store 관련 추가 회귀 `77 passed, 23 subtests passed`.
-- 확장 HWPX 회귀 `395 passed, 2 skipped, 2 failed`; 실패 2건은 변경하지 않은 기존 `docx_ops`·`usage_acceptance` private helper re-export 수집 불일치로 `BASELINE_FAILURE` 처리한다.
-- LRule/lessons 회귀 `37 passed, 3 failed`; 실패 3건은 외부 lessons L152~L167 및 L163/L164 중복과 coverage registry 불일치인 기존 `BASELINE_DATA_MISMATCH`이며 이번 통합에서 임의 편입하지 않는다.
-- 전체 pytest는 `25 collection ImportError`로 중단됐다. legacy/private-helper re-export 불일치이며 R9/AW-001 변경으로 새로 발생한 회귀로 보지 않는다(`TEST_INFRA_FAILURE/BASELINE_FAILURE`).
-- 통합 판정: `READY_WITH_KNOWN_ENV_BLOCK`(non-COM 구조·제출·R9 범위 통과, 실제 Hancom COM/시각 렌더만 `ENVIRONMENT_BLOCKED`). 기존 baseline/infra 실패는 별도 follow-up이며 main 통합은 별도 승인 절차다.
-
-### AW-001 안정화 후속 — 2026-09-18
-
-STATUS_THIS_TURN: `IN_PROGRESS`. 통합 검토에서 확인된 기존 안정화 범위의 테스트 인프라/Windows 파일 핸들 실패를 최소 수정으로 복구한다. 새 기능·PRD·데이터 구조는 만들지 않는다.
-
-- [x] 전체 pytest collection ImportError: legacy/private-helper re-export 계약을 canonical 구현 기준으로 복구하고 테스트 삭제/skip/xfail 없이 전체 수집 실패를 줄인다. Baseline `26 collection ImportError` → `pytest --collect-only -q` `2248 collected`, exit 0. 실제 전체 실행은 별도 기존 호환성 테스트 실패가 있어 전체 PASS로 표시하지 않는다. Commit `82e450a`.
-- [x] DOCX autopilot rename-lock 2건: legacy `auto_write.services.autopilot_pipeline`가 canonical 함수의 전역을 공유하지 않아 잠금 fixture monkeypatch가 무시되던 호환성 결함을 모듈 alias로 최소 보강했다. `test_gate_faildraft_invariant.py -k rename_lock` `2 passed`, 전체 `14 passed`. Commit `755abf0`.
-- [~] Windows `output.docx` cleanup lock 1건: 현재 stabilization 기준에서 동일 failure fixture의 정확한 재현 경로를 분리 중이다. AW-001 feature branch의 ProjectService publish/cleanup 회귀는 `28 passed, 23 subtests passed`로 재현되지 않아 full 회귀 결과를 추가 확인한다.
-- [~] 전체 회귀 재분류: stabilization branch 최신 `pytest -q`는 `1788 passed, 5 failed, 5 skipped, 23 subtests passed`로 종료했다. 호환성/portability 안전 수정으로 17건을 줄였고, 남은 5건은 lessons L152~L167 baseline mismatch 3건과 fail-closed `_DRAFT` 출력 계약을 기대하지 않는 기존 resume CLI 테스트 2건이다. `output.docx` cleanup lock은 재현되지 않았다. 전체 PASS가 아니므로 main 통합은 보류한다.
-- [x] 변경 영향 대조: origin/main에서 rename-lock은 `2 failed`, private-helper 관련 대상 수집은 `2 collection errors`로 재현되었고 stabilization branch에서는 rename-lock `2 passed`, 관련 서비스/ProjectService 회귀 `73 passed, 23 subtests passed`다. `compileall=PASS`, `git diff --check=PASS`.
-- [x] 22건 triage 안전 수정: legacy/canonical 모듈 호환성(`bizplan_autopilot`, `hwp_docx_convert`, `resume_fill_service`, `generation_store`)을 최소 alias/shim으로 보강했다. 관련 targeted `45 + 9 + 7`건은 통과했고 resume CLI의 초기 import 오류는 제거했으나 기존 `_DRAFT` 출력 계약 테스트 2건은 잔여 baseline으로 남겼다. Commits `45cead0`, `6d2f820`.
-- [x] 22건 triage portability: `session_resume_hook.js`의 JSON stdout을 Windows cp949 부모 프로세스에서도 손실 없이 읽도록 ASCII-safe 직렬화로 보강했다. `test_session_resume.py` `4 passed`, commit `d52201e`.
-- [x] 22건 triage HWP compatibility: `hancom_com_guard`/`hwp_fill` module alias와 `hwp_docx_convert`의 legacy `document_ingest` patch 경로를 정렬했다. HWP/HWPX 관련 targeted `26 passed`, commit `6d2f820`.
-- [~] 22건 잔여 baseline: lessons registry 3건은 origin/main baseline에서도 동일 실패했고, resume CLI 2건은 baseline의 import 오류 뒤 현재 fail-closed `_DRAFT` 출력 계약 불일치가 노출된다. 테스트 완화·DRAFT 복사는 하지 않고 후속 계약 정합성 작업으로 남긴다.
-- [~] Windows 기본 cp949 portability: `test_step3a_golden.py::test_cli_prints_same_human_report`는 `PYTHONUTF8=1`에서 통과하지만 기본 cp949 자식 CLI 출력의 UnicodeEncodeError가 재현된다. 보고서 Unicode 의미를 바꾸지 않는 안전한 공통 출력계약이 필요하므로 `ENVIRONMENT_BLOCKED/FOLLOWUP`으로 남긴다.
-- [ ] 22건 triage HWP fill compatibility: legacy `hwp_fill` 호출자가 canonical 변환 함수 전역을 공유하도록 module alias를 정렬하고 HWPX fixture 회귀를 확인한다.
-- MAIN_INTEGRATION: `NOT_READY` — 최신 전체 회귀가 `1788 passed, 5 failed, 5 skipped`이며 baseline/기존 계약 실패가 남아 있어 main 직접 merge/push는 수행하지 않았다. 최신 branch HEAD `6d2f820`.
-- [ ] lessons L152~L167 및 L163/L164 중복은 외부 baseline mismatch로 이번 안정화에서 수정하지 않는다.
-- WORK_BRANCH: `codex/stabilize-0918-20260918` (origin/main 기준 별도 worktree), HEAD `6d2f820`, feature branch push 완료
-- VERIFY: 수정 전/후 전체 pytest 결과, 해당 targeted 회귀, compileall, diff audit
-- FORBIDDEN: 테스트 삭제·skip/xfail·assert 완화·main push/merge·force/reset/clean·기능/데이터구조 변경
 
 ### 8-6. KEEP — 유지
 
@@ -793,7 +949,6 @@ L 규칙을 한 화면에서 보고 고칠 수 있게 한다
 - 현재 문제: 전수관리·수정 화면이 미완일 수 있음
 - 이미 구현된 부분: canonical LRule
 - 확인 필요한 부분: 누락/중복, runtime report 연결
-- 2026-09-18 실측: 기존 registry → evaluator → JSON/report → CLI/operator console 경로는 존재한다. registry subprocess timeout/start failure/partial output을 machine-readable 실패 결과로 보존하는 보강을 `codex/overnight-aw-003-20260918`에 push했다(`449c5d1`, `48be026`, `d77767c`, `69cbbe2`). 관련 LRule 회귀 `19 passed`, 핵심 console `6 passed`; 새 UI는 만들지 않았고 AW-003은 LIST `[ ]`, REQUEST_SOLVED=NO다.
 
 문서의 DONE 표시만 믿지 말고 실제 코드/runtime을 확인한다.
 
@@ -1416,12 +1571,6 @@ DEPENDS_ON:
 - 현재 문제: gap 중 일부는 guard/test/coverage/runtime이 빠졌을 수 있음
 - 이미 구현된 부분: AW-001/AW-003 범위의 규칙 골격
 - 확인 필요한 부분: HIGH impact gap 목록
-- 2026-09-18 실측: `app/tests/lessons_coverage.json` 151건, `mechanized=66`, `judgment=84`, `gap=1`로 합계가 일치한다. 과거 `44/86/21` 수치는 stale이며 현재 판정에 사용하지 않는다.
-- 현재 gap은 L050(HWP+PDF 쌍 생성) 하나이며 rhwp/한글 렌더러 환경 의존으로 `partial` 유지한다. L005(픽셀 눈검증)·L008(폰트 위계)는 사람 판단/정책 예외가 있어 deterministic mechanization 후보로 닫지 않는다.
-- 이번 실측에서는 재발 이력·낮은 오탐 위험·실패 fixture·runtime 차단 증거를 동시에 만족하는 신규 규칙이 없어 mechanized 전환 0건, AW-008은 `PARTIAL`이다.
-- 외부 정본 `D:\.omc\agent-learning\lessons.md`에는 L152~L167이 있으나 repo coverage registry에는 없다. registry integrity 관련 검사는 `10 passed, 3 failed`이며 외부 문서 내부에서 L163/L164 중복도 확인됐다. L154~L156은 기존 skill-only 규약으로 JSON registry에 무조건 편입하지 않는다.
-- 위 차이는 코드 결함이 아닌 `BASELINE_DATA_MISMATCH`로 기록한다. 숫자 맞추기용 registry 확장이나 judgment 규칙의 억지 mechanization은 하지 않는다. AW-008은 신규 CLOSED 0건, `PARTIAL`, `REQUEST_SOLVED=NO`로 유지한다.
-- 관련 LRule 회귀는 `15 passed, 3 failed`(coverage/registry 불일치 3건)으로 확인했다. 실패를 신규 mechanization의 성공으로 세지 않으며, 현재 registry 후보 L005/L008은 HUMAN_GATE·정책 예외가 있어 자동화하지 않는다.
 
 문서의 DONE 표시만 믿지 말고 실제 코드/runtime을 확인한다.
 
@@ -4301,6 +4450,126 @@ REQUEST_SOLVED=YES: 합본이 origin/main `1001b76`에 있다. #155는 `ddac657`
 - HTML 2개 미반영 유지
 - `py -3.11 -m pytest tests/test_generate_missing.py tests/test_run_business_plan_images_m4.py tests/test_image_pipeline.py tests/test_image_provider_gpt.py -q` → 20 passed
 
+## T-20260831-01
+
+TASK_ID: T-20260831-01
+TASK_START_SHA: 5edd4f5c725417be2855471002b0d7846caacec6
+WORK_BRANCH: cursor/lessons-wave-bc-e71f
+STATUS_THIS_TURN: Wave D·E 규약 잠금. L003/L017/L067 mechanized 유지. L005/L008 judgment. L050 gap/BLOCKED(try_generate). 닫힘≠머지. REQUEST_SOLVED=YES.
+
+### 8-1. 사용자 원문
+
+1번은 **그 네 줄이 가리키는 범위에서는 코드에 걸려 있습니다.** 한글 화면에서 겹침이 0이라는 뜻은 아닙니다.
+2번은 재발 방지용으로, 지금까지 기록된 오류를 **전부** 나열합니다. 기준은 `app/tests/lessons_coverage.json` 151개 + 결함 코퍼스 D1–D6 + 스킬에만 있는 L154–L156입니다.
+다음 단계는 이 목록에서 **문서가 다시 깨지는 것**부터 잠그는 것입니다. 우선순위는 A → B → C입니다.
+D·E는 테스트로 못 막는 것이 많습니다.
+원하면 A부터 갭을 하나씩 기계 가드로 닫으면 됩니다. 151개 전부를 한 번에 “재발 0”으로 만들 수는 없습니다. 사람 판단(L005 눈검증, L009 날조)은 테스트가 대체하지 않습니다.
+
+ㅇㅜ선순우;ㅣ대로 해결하려고함 계획?
+
+계획 task에 추가
+
+전체 오류 표(A~E)는 그 대화에 있다. 실행 계획 정본=`docs/LESSONS_LOCKDOWN_WAVES.md`.
+
+승인요청하지않고 웨이브C? 인지뭔지 너가말한것다 끝까지 개발하게하는방법
+
++프롬프트
+
+닫힘이 머지했다는거임?
+
+그럼이제 d,e어떻게해 이것도 승인요청없이 마무리
+
+### 최종 결과
+문서가 다시 깨지는 오류(A)부터, 제출·품질 게이트(B), 이력서(C) 순으로 기계 가드가 닫힌다. D·E는 규약(L005/L050 이 환경 BLOCKED, L067/스킬훅/승인금지). 4점이 있는 것만 `mechanized`다. 닫힘≠머지.
+
+### MUST
+- 우선순위 A → B → C. D·E는 규약(테스트로 못 막는 항목은 BLOCKED로 남김)
+- 기계화 4점(AW-008): guard + test + coverage JSON + runtime wiring. 하나라도 없으면 `mechanized` 금지
+- 이미 잠긴 A 항목(D1 칸단위 lineseg, D2 격자, D3/D4 색, D5 병합, L007/L010/L011 등)은 다시 구현하지 않음
+- Wave A: D1 잔여(가짜 lineseg 우회+fill 자간) · D6 홍길동 · L097 overflow 기록(값 유지) · L032 실행일 서명 · L001 세로 0 거부 · L096/L151 4점이면 재분류
+- Wave B: L040 필수서식 `_DRAFT` · L059 작업접미사 오케스트레이터 배선 · L048 원본·중간본 혼입 · L049 공고 PDF를 양식으로 채움 · L050 한글 전용인데 DOCX만 · L080 라벨 칸 굵게 · L095 페이지 수 베이스라인
+- Wave C: L038/L060 정량 컬럼 · L039 포트폴리오 마커 · L043/L044 골격 · L154–L156 · L061 출력 형식 확인
+- L154–L156은 `lessons.md`에 없으면 `lessons_coverage.json`에 넣지 않음(무결성 테스트)
+
+### KEEP
+- AW-008 4점 규칙. AW-008 LIST는 이 TASK에 합치지 않음(`[ ]` 유지)
+- 기존 mechanized 가드·테스트
+- `app/tests/lessons_coverage.json` 총 151
+- 원본 덮어쓰기 금지, `_DRAFT` fail-closed
+
+### REMOVE
+- 없음. 미닫힘 갭을 mechanized로 위장하지 않음
+
+### FORBIDDEN
+- 151개 전부 재발 0 보고
+- 4점 미충족을 mechanized로 표시
+- L005 한글 픽셀을 이 클라우드에서 PASS로 보고(한글 없음=BLOCKED)
+- L009 날조 본문을 테스트가 대체했다고 보고
+- 원본 덮어쓰기 · `git add -A` · force push · 유료 API 무단 호출
+- AW-001~009 · T-20260814-02 본문에 이 계획을 섞기
+
+### VERIFY
+- Wave A: `python3 -m pytest app/tests/test_hwpx_no_fake_lineseg.py app/tests/test_hwpx_fill.py app/tests/test_hwpx_acceptance.py app/tests/test_pure_hwpx_acceptance.py app/tests/test_resume_defect_corpus.py app/tests/test_hwpx_resume_supplement.py app/tests/test_hwpx_submit.py app/tests/test_l001_hwpx_image_width_clamp.py app/tests/test_l151_no_posix_backup_path.py app/tests/test_lrule_guards.py app/tests/test_lessons_coverage.py app/tests/test_night_high_gaps_l074_l091.py app/tests/test_hwpx_layout_fix.py app/tests/test_hwpx_image_clamp.py -q` (Windows는 `py -3.11`)
+- `lessons_coverage.json` counts = 실제 분류
+- Wave JSON gap: `python3 -m pytest app/tests/test_lockdown_wave_gaps.py app/tests/test_lessons_coverage.py app/tests/test_lrule_guards.py app/tests/test_lockdown_wave_bc.py -q` (Windows는 `py -3.11`)
+- Wave D·E: `python3 -m pytest app/tests/test_lockdown_wave_de.py app/tests/test_lessons_coverage.py app/tests/test_lrule_guards.py -q`
+
+### 웨이브 상태 (2026-08-31)
+- [x] Wave A1 D1 잔여 — 가짜 `linesegarray` Element/문자열 XML 금지 + `fill_hwpx` 자간 -50→-30
+- [x] Wave A2 D6 — 홍길동·아무개 잔존 fail, identity 허용, skip 해제, leftover `_DRAFT`
+- [x] Wave A3 L097 — `overflow_cells` 기록, 값은 유지
+- [x] Wave A4 L032 — `canonical_sign_date(today=)` 실행일
+- [x] Wave A5 L001 세로 — `picture_display_wh` 높이 0 거부
+- [x] Wave A6 L096/L151 — 4점 충족 시 mechanized (45→49, gap 21→17)
+- [x] Wave B — L040 오케스트레이터 · L059 · 계획 L048 혼입코드 · 계획 L049=JSON L037 · 계획 L050 형식게이트 · L080 · L095
+- [x] Wave C — L038/L060 · L039 · L043/L044 · L154–L156(코드만) · JSON L061 사진칸 + 계획 L061 confirm-output-plan(기존)
+- [x] Wave D spy — L003 `kill_hangul_processes` before Dispatch. L005 눈검증은 judgment/BLOCKED
+- [x] JSON gap — L004 세금계산서 · L014 생성표 헤더 · L048 PDF합본 · L049 `제출/` · L072 열등원복 · L105 YAML. L050 HWP+PDF 생성은 한글/LibreOffice 없음 **BLOCKED**(검사는 `missing_pdf_pair`)
+- [x] Wave D·E 규약 — 닫힘≠머지. L005/L050 BLOCKED 정직. L067 스크립트 `git add -A` 스캔. L008 `normalize_fonts` 기본 False. 승인 질문 금지. `test_lockdown_wave_de.py`
+
+### DONE
+- REQUEST_SOLVED=YES: A→B→C 기계 가드 + JSON gap 6건 mechanized(66/151) + D·E 규약 문서·테스트. L050 병행 생성·L005 픽셀은 이 환경 BLOCKED(judgment/gap 유지). 닫힘≠머지. 151 재발 0 아님. 이어가기 프롬프트=`docs/LESSONS_LOCKDOWN_WAVES.md`.
+
+## T-20260831-02
+
+TASK_ID: T-20260831-02
+TASK_START_SHA: 6ff5ec01d02895e9aebe1c3609c6882b27c3deca
+WORK_BRANCH: cursor/ledger-c-priority-e71f
+STATUS_THIS_TURN: 원장 C 최우선 고정. 사업명 원장·파일 저장 복원. named 신청서 작성 TASK 등록 금지. REQUEST_SOLVED=YES.
+
+### 8-1. 사용자 원문
+
+특정지원사업은 저장하지마
+원장 씨가 제일 중요
+원장·파일에 사업명 저장 금지
+아예 제외하라는게아니라 특정지원사업신청서 작성하는일을 task에등록하지마라고
+
+### 최종 결과
+요청사항체크·개발은 C(있는 기능 실사용)를 먼저 본다. A 표·`user_applications.md`에 사업명을 유지한다. `TASK.md` LIST에 named 지원사업 **신청서 작성**을 새로 등록하지 않는다.
+
+### MUST
+- `docs/REQUEST_LEDGER.md` 절 순서 C → B → A
+- A 표에 named 지원사업(예: STAR-Exploration) 유지
+- `docs/clients/user_applications.md` 정본 유지
+- 스킬 훅에 요청 원문 그대로 (`AGENTS.md` §7)
+- 물으면 채팅만. Google Docs 정리본 금지. 원장 A·user_applications.md 사업명 표는 유지
+
+### KEEP
+- 엔진 원장 B1~B7
+- 채움용 사실 카드 `docs/clients/dobonevi_card.md` (사업 목록 아님)
+- 열린 LIST AW-001~009
+
+### FORBIDDEN
+- `TASK.md` LIST에 named 지원사업 신청서 작성을 새로 등록
+- Google Docs 지원사업 목록 정리본
+- `git add -A` · 원본 덮어쓰기
+
+### VERIFY
+- `python3 -m pytest app/tests/test_request_ledger_c_priority.py app/tests/test_hub_entrypoints.py app/tests/test_skill_request_hooks.py -q`
+
+### DONE
+- REQUEST_SOLVED=YES: 원장 A·user_applications.md 사업명 복원. C가 맨 위. 신청서 작성을 TASK에 등록하지 않음(파일에서 사업명 삭제 아님). 원문 두 줄+정정이 8-1·스킬 description에 있다.
+
 # 9. 실제사용 시나리오
 
 TASK 완료 전에 반드시 실제 사용자 관점으로 검증한다.
@@ -4683,3 +4952,53 @@ PENDING_TASKS:
 - 해결방법 선택이 제품정책을 바꾸며 사용자의 결정이 반드시 필요함
 
 상태를 `BLOCKED` 또는 `NO_ACTIVE_TASK`로 보고한다.
+
+
+---
+
+# T-20260920-01 — 최종 HWPX 원본 폴더 저장 + 파일명 통일
+
+## 8-1. 사용자 원문
+
+> 지원사업명_문서종류_MMDDHH v1.hwpx
+>
+> 원본파일경로에 생성되면안댐?
+>
+> 그럼그렇게 개발원함
+
+## MUST
+- 사용자가 출력 경로를 따로 지정하지 않으면 최종 사용자용 HWPX/HWP 결과는 입력 원본 파일과 같은 폴더에 생성한다.
+- 기본 파일명은 `지원사업명_문서종류_MMDDHH vN.hwpx` 형식을 사용한다.
+- 같은 시간대 파일명이 이미 있으면 `v1 → v2 → v3...` 로 자동 증가해 기존 결과를 덮어쓰지 않는다.
+- 지원사업명·문서종류를 호출측이 알면 명시값을 사용하고, 없으면 원본 파일명/기본 문서종류로 안전하게 폴백한다.
+- 사용자가 `-o/--output` 으로 경로를 직접 지정하면 그 명시 경로를 우선한다.
+- 중간 산출물·검수 리포트·백업은 기존 `results/` / workspace 구조를 유지할 수 있다. 이번 변경은 최종 사용자 파일 위치 계약이다.
+
+## KEEP
+- 원본 절대 덮어쓰기 금지.
+- `_DRAFT` fail-closed 정책 유지.
+- DOCX 명시 출력 경로와 기존 레거시 파일명 함수는 하위호환을 위해 유지.
+- 기존 HWPX 양식 보존 엔진은 건드리지 않는다.
+
+## FORBIDDEN
+- 최종 파일을 기본값으로 `D:\\auto_write\\results` 에만 숨겨두기.
+- 동일 파일명 충돌 시 기존 파일 덮어쓰기.
+- HWPX 결과를 만들기 위해 DOCX 왕복 변환을 새로 추가.
+
+## VERIFY
+- 파일명 순수함수: 시간 포맷, Windows 금지문자, 공백 규칙, vN 자동 증가.
+- `bizplan_autopilot`, `hwp_fill_direct.py`, `hwpx_submit.py` 기본 출력이 입력 파일의 parent로 향하는지 테스트.
+- 명시 `--output` 은 그대로 존중하는지 회귀 테스트.
+- `_DRAFT` 마킹이 새 파일명 뒤에도 유지되는지 기존 테스트와 충돌 없는지 확인.
+
+## DONE
+- [x] naming/path helper 구현
+- [x] 핵심 HWPX 최종 출력 경로 배선
+- [x] 테스트 추가 — source-adjacent / 명시 output 우선 / vN 충돌 / _DRAFT 버전 충돌 회귀
+- [x] PR checks 통과 — PR #184 docs-gate SUCCESS
+- [x] main 병합 — PR #184 squash merge 예정(이 체크포인트 직후 수행)
+
+## 검증 메모
+- GitHub Actions 현재 repo에는 docs-gate만 있어 pytest 자동 실행 job은 없음.
+- PR #184 자동 리뷰 P1(기존 v1_DRAFT가 있을 때 v1 재사용 가능)을 수정하고 회귀 테스트를 추가함.
+- 코드 경로 검토 기준: 원본 덮어쓰기 금지, 명시 -o 우선, HWPX 왕복 변환 추가 없음.

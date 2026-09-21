@@ -3,9 +3,11 @@
 > `D:\auto_write` 전용. 정부지원사업 문서 자동생성 + 문서 품질 개선 하네스 프로젝트.
 > 공통 지침(글로벌 CLAUDE.md)과 충돌 시 이 repo-local 규칙을 우선한다.
 >
-> **🔄 세션을 새로 시작했다면 `RESUME.md` 를 먼저 읽어라** — 진행 상태·남은 일·재개 명령이 있다.
+> **🔄 세션을 새로 시작했다면 `git fetch origin --prune` 후 `TASK.md`를 먼저 읽어라.**
+> 개발 작업 상태·우선순위·다음 작업의 공식 정본은 `origin/main:TASK.md` 하나다.
+> `RESUME.md`는 중단 지점·실행 로그·재개 힌트용 세션 체크포인트이며 TASK를 덮어쓰지 않는다.
 > 작업을 잠시 멈추거나 컨텍스트가 무거워지면 "체크포인트 저장"으로 RESUME.md 를 갱신하고,
-> 새 세션에서 "이어서"로 복원한다(session-resume 스킬).
+> 새 세션에서 TASK를 먼저 확인한 뒤 "이어서"로 복원한다(session-resume 스킬).
 > **마무리 예약(로컬·클라우드·GitHub · Cursor/Claude/Codex 공통):**
 > `python scripts/session_closeout.py plant|status|sync-disk|ack|cancel`.
 > `due: true` 이고 이 (agent, location) 이 아직 ack 가 아니면 `RESUME.md` 갱신 후
@@ -75,7 +77,7 @@ table-whitespace-cleanup · content-emphasis · document-type-classification ·
 psst-structure-check · infographic-suggestion · document-quality-scoring ·
 backup-and-rollback · document-quality-inspection ·
 **docx-hwp-conversion**(DOCX↔HWP/HWPX 양방향 변환, 입출력단)
-**session-resume**(이어서/세션마무리/체크포인트. RESUME.md SSOT. 일회성 배너는 스킬 아님)
+**session-resume**(이어서/세션마무리/체크포인트. TASK.md=작업 SSOT, RESUME.md=세션 체크포인트. 일회성 배너는 스킬 아님)
 **session-closeout-all**(위치×AI 공통 마무리 깃발. `.session/closeout_due.json`. 기본 커밋본은 due=false)
 **병행(문서 하네스 아님):** `k-navi-mvp-highlight` — KICXUP MVP 화면녹화 컷시트·하이라이트. `bizdoc-hub`로 라우팅하지 말 것.
 

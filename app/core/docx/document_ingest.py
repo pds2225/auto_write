@@ -42,6 +42,8 @@ def reference_accept_value() -> str:
 
 def ensure_template_docx(source_path: Path) -> tuple[Path, list[str]]:
     suffix = source_path.suffix.lower()
+    from .services.submission_gates import assert_not_announcement_form
+    assert_not_announcement_form(source_path)
     if suffix == ".docx":
         return source_path, []
 
@@ -557,6 +559,10 @@ def _render_unhwp_table(document: Document, rows: list[dict[str, Any]]) -> bool:
             start.merge(end)
         except Exception:
             continue
+    from core.docx.services.docx_ops import style_generated_table
+
+    header_rows = {int(c["row"]) for c in placements if c.get("header")}
+    style_generated_table(doc_table, header_rows=header_rows or {0})
     return True
 
 

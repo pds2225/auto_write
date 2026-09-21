@@ -1,7 +1,7 @@
 ---
 name: session-resume
 description: >-
-  auto_write 세션을 시작·일시정지·마무리할 때 사용. RESUME.md 가 SSOT.
+  auto_write 세션을 시작·일시정지·마무리할 때 사용. TASK.md가 개발 작업 SSOT이고 RESUME.md는 세션 체크포인트.
   CLAUDE.md 가 이 스킬을 가리키는데 파일이 없으면 안 된다.
   트리거: "이어서", "세션 재개", "세션마무리", "세션 마무리", "체크포인트 저장",
   "어디까지 했지", "RESUME", "session-resume".
@@ -11,7 +11,7 @@ description: >-
 # session-resume — 세션 재개·체크포인트·마무리
 
 > 2026-08-20 수확. 같은 날 만든 `promo-banner-localize` 는 배너 1건짜리라 철회.
-> 매 세션 반복되는 것은 **RESUME 읽고 핀하고 닫는 절차**다.
+> 매 세션 반복되는 것은 **TASK를 먼저 읽고, 필요 시 RESUME으로 중단 지점을 복원한 뒤 핀하고 닫는 절차**다.
 
 ## 언제 쓰나
 
@@ -23,9 +23,9 @@ description: >-
 
 ## 재개
 
-1. `RESUME.md` 를 먼저 읽는다. 다음 할 일은 「재개 명령」과 「남은 일」만.
-2. `git fetch origin main` 후 핀 SHA 가 원격과 같은지 본다. 로컬 main 이 스냅샷이면 한두 시간 늦을 수 있다.
-3. `TASK.md` 열린 `[ ]` 만 본다. 옛 채팅을 새 일로 꺼내지 않는다.
+1. `git fetch origin --prune` 후 `origin/main:TASK.md`의 `# 0` LIST와 열린(`[ ]`/`[~]`/`[!]`) TASK의 `8-1`을 먼저 확인한다.
+2. `RESUME.md`는 현재 TASK의 중단 지점·실행 로그·재개 힌트만 확인한다. TASK와 충돌하면 TASK가 우선한다.
+3. 핀 SHA가 원격과 같은지 본다. 로컬 main이 스냅샷이면 늦을 수 있다. 옛 채팅을 새 일로 꺼내지 않는다.
 4. 메일·양식·파일이 온 뒤에야 하는 일(STAR-Exploration IR 등)은 **파일이 없으면 시작하지 않는다.**
 5. 테스트·실행은 `py -3.11`. PATH 기본 3.14 는 matplotlib 부재로 수집 에러.
 
@@ -36,7 +36,7 @@ description: >-
 
 ## 종료 (세션마무리)
 
-`git fetch origin main` 한 뒤에 핀한다. 핀 SHA = 작업 시작 시점의 `origin/main` (이 마무리 커밋의 SHA 가 아님). 패턴: #158 이 `d6b96b8` 인데 본문은 그 전 핀 `fe4aa17` 을 가리켰다 → 이번 마무리는 현재 `origin/main` 을 핀하면 된다.
+`git fetch origin --prune` 한 뒤에 핀한다. 핀 SHA = 작업 시작 시점의 `origin/main` (이 마무리 커밋의 SHA 가 아님). 패턴: #158 이 `d6b96b8` 인데 본문은 그 전 핀 `fe4aa17` 을 가리켰다 → 이번 마무리는 현재 `origin/main` 을 핀하면 된다.
 
 `RESUME.md` 필수 칸:
 
@@ -69,7 +69,7 @@ description: >-
 
 ## 성공 기준
 
-- [ ] 다음 세션이 `RESUME.md` 만 읽고 재개 명령을 실행할 수 있다
+- [ ] 다음 세션이 `TASK.md`에서 공식 작업을 확인하고 `RESUME.md`로 중단 지점만 복원할 수 있다
 - [ ] 핀 SHA 가 `git fetch` 이후 `origin/main` 과 맞다
 - [ ] 일회성 PNG 가 커밋되지 않았다
 - [ ] `CLAUDE.md` 이력이 5건 이하이고 CHANGELOG 와 중복되지 않는다
