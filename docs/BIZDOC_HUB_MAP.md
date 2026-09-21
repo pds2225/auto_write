@@ -69,6 +69,8 @@
 
 ## 5. 연계 흐름
 
+> 실사용 제품 흐름 정본: `docs/PRODUCT_FLOW_ACTUAL_USE_20260921.md` (AW-005 작업 브랜치)
+
 ```
 공고·양식 분석 → bizplan(본문) → 값 채움(기업정보/cross-form/hwpx) → 품질·검수 → 제출본
 ```
