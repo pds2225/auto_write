@@ -196,8 +196,9 @@ def test_cli_fill_smoke(tmp_path):
     out = tmp_path / "out.hwpx"
 
     rc = main(["fill", str(src), "--profile", str(prof_path), "-o", str(out)])
-    assert rc == 0
-    assert out.exists()
+    assert rc == 2
+    assert not out.exists()
+    assert (tmp_path / "out_DRAFT.hwpx").exists()
 
 
 def test_fill_rejects_overwrite_original(tmp_path):
@@ -250,7 +251,7 @@ def test_trainings_reported_as_residual(tmp_path):
 
 
 def test_cli_fill_identity_only_exit0(tmp_path):
-    """반복행 표 없이 신상정보만 채우는 양식도 채움 성공이면 exit 0."""
+    """신상정보만 채워도 매핑은 성공이다. LRule이 막으면 제출명은 _DRAFT이고 exit 2다."""
     from resume_fill import main
 
     src = tmp_path / "form.hwpx"
@@ -260,5 +261,6 @@ def test_cli_fill_identity_only_exit0(tmp_path):
                          encoding="utf-8")
     out = tmp_path / "out.hwpx"
     rc = main(["fill", str(src), "--profile", str(prof_path), "-o", str(out)])
-    assert rc == 0
-    assert out.exists()
+    assert rc == 2
+    assert not out.exists()
+    assert (tmp_path / "out_DRAFT.hwpx").exists()

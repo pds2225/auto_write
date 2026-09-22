@@ -23,12 +23,13 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 from auto_write.services.resume_extract import (
     build_profile,
-    format_build_korean,
     profile_to_json,
 )
+from core.docx.services.resume_extract import format_build_korean
 
 
 def _cmd_extract(args: argparse.Namespace) -> int:
@@ -90,11 +91,30 @@ def _cmd_fill(args: argparse.Namespace) -> int:
         print(f"채움 실패: {exc}", file=sys.stderr)
         return 1
 
+    gate = _apply_resume_finalizer_gate(report, out, prof, form)
     print(format_fill_korean(report))
     filled_rows = sum(s["filled"] for s in report.sections)
     if filled_rows == 0 and not report.identity_filled:
         return 2  # 반복행·신상정보 모두 못 채움 = 매핑 실패
+    if not gate.submittable:
+        return 2  # 채움은 됐어도 Finalizer가 제출을 막으면 _DRAFT
     return 0
+
+
+def _apply_resume_finalizer_gate(report: Any, out: Path, prof: dict, form: Path):
+    """Filled resume is not a submit file until the shared gate says so."""
+    from resume.pipeline import finalize_consultant_resume
+
+    gate = finalize_consultant_resume(
+        out,
+        text=json.dumps(prof, ensure_ascii=False),
+        filename=form.name,
+        document_type="resume",
+    )
+    report.out = gate.final_path
+    if not gate.submittable:
+        print(f"제출 판정: DRAFT — {gate.blocked_reason}")
+    return gate
 
 
 def build_parser() -> argparse.ArgumentParser:
