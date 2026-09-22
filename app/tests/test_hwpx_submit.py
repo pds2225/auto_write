@@ -202,10 +202,13 @@ def test_submit_original_untouched(colored_hwpx, tmp_path):
 def test_cli_exit_codes(clean_hwpx, colored_hwpx, tmp_path, monkeypatch):
     from hwpx_submit import main
 
-    # 0: 깨끗한 양식 + 값 지정 → 제출가능
+    # 수용검사가 통과해도 CLI는 LRule/Finalizer를 거친다.
+    # 최소 양식은 canonical LRule을 모두 통과하지 못하므로 제출명은 _DRAFT다.
     rc = main([str(clean_hwpx), "-o", str(tmp_path / "ok.hwpx"),
                "--set", "기업명=x(주)"])
-    assert rc == 0
+    assert rc == 2
+    assert not (tmp_path / "ok.hwpx").exists()
+    assert (tmp_path / "ok_DRAFT.hwpx").exists()
 
     # 1: identity 도 --set 도 없음 → 빈 제출 방지
     rc = main([str(clean_hwpx), "-o", str(tmp_path / "empty.hwpx")])

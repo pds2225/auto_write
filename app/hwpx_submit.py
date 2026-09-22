@@ -78,7 +78,8 @@ def main(argv: list[str] | None = None) -> int:
         rep = submit_hwpx(src, out, identity=identity, replacements=replacements,
                           acceptance_gate=not args.no_acceptance,
                           normalize_colors=not args.no_normalize_colors,
-                          submission_cleanup=not args.no_submission_cleanup)
+                          submission_cleanup=not args.no_submission_cleanup,
+                          lrule_gate=True)
     except (ValueError, FileNotFoundError, OSError) as exc:
         print(f"[입력오류] {exc}", file=sys.stderr)
         return 1
