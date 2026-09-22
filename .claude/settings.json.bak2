@@ -1,7 +1,6 @@
 {
   "hooks": {
     "SessionStart": [],
-<<<<<<< Updated upstream
     "UserPromptSubmit": [
       {
         "matcher": "",
@@ -73,11 +72,5 @@
         ]
       }
     ]
-=======
-    "UserPromptSubmit": [],
-    "PostToolUse": [],
-    "SessionEnd": [],
-    "PreToolUse": []
->>>>>>> Stashed changes
   }
 }
