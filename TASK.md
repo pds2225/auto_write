@@ -698,6 +698,7 @@ INPUT
 - 2026-08-19: `app/auto_write/domains/pipeline_gate.py` `run_to_final` 이 생산 수렴점. autopilot 4.6·BP/CA pipeline·resume_fill CLI가 호출. ambiguous/누락 report/중복 ID/artifact·registry 해시 불일치 → FINAL 금지
 - 2026-08-19 가드: `app/auto_write/services/lrule_guards.py` `build_lrule_guards` 가 44 mechanized 규칙 callable을 `run_to_final`에 자동 주입. 산출물 검사(L009 마커 등)는 실 PASS/FAIL. 채움/git 규칙은 process PASS(가짜 산출물 검사 아님). judgment/gap은 넣지 않음 → REVIEW_REQUIRED 유지로 FINAL 계속 차단(의도된 fail-closed)
 - 현재 문제: judgment/gap 미가드이므로 실문서 FINAL 불가(의도). HWPX `submit_hwpx` 는 R9 수용검사 게이트 KEEP(LRule 미연결). `ProjectService`의 기존 DOCX bundle 우회는 `run_to_final` 실행결과와 예외 상태 sidecar를 남기도록 보강했다.
+- 2026-09-23: integration `0a5d785`를 main `cf16eb4` 위 `cursor/group3-gate-merge-7092`에 병합. 겹친 alias 5파일은 integration 유지, stabilize `6d2f820`의 추가 alias와 cp949 훅만 수용. #184 원본 옆 저장과 #190 창 숨김은 유지. integrity/submit/project safety/operator/session/hwp convert targeted 108 passed. `# 0` LIST는 `[ ]`(REQUEST_SOLVED=NO).
 - 이미 구현된 부분: 기존 CORE/shared services, LRule, Finalizer, mechanized 가드
 - 확인 필요한 부분: HWPX 경로를 LRule에 붙일지(수용검사 계약과 충돌). 실사용자 문서 E2E
 
@@ -951,6 +952,7 @@ L 규칙을 한 화면에서 보고 고칠 수 있게 한다
 - 현재 문제: 전수관리·수정 화면이 미완일 수 있음
 - 이미 구현된 부분: canonical LRule
 - 확인 필요한 부분: 누락/중복, runtime report 연결
+- 2026-09-23: overnight-aw-003 `69cbbe2`의 registry timeout·시작 실패 보고를 같은 브랜치에 병합. operator console 포함 targeted 108 passed. UI 신규 없음. `# 0` LIST `[ ]`, REQUEST_SOLVED=NO.
 
 문서의 DONE 표시만 믿지 말고 실제 코드/runtime을 확인한다.
 
