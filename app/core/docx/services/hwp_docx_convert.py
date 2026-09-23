@@ -111,6 +111,11 @@ def _convert_via_com(src: Path, dst: Path, save_formats: tuple[str, ...]) -> Non
     Dispatch/Open 단계에서 실패할 수 있다(호출측이 폴백을 처리한다).
     """
     hwp = _dispatch_hwp()
+    # 자동화 중 화면에 창이 뜨는 것을 방지(버전에 따라 미지원일 수 있어 무시하고 진행)
+    try:
+        hwp.XHwpWindows.Item(0).Visible = False
+    except Exception:
+        pass
     try:
         # 보안 대화상자 억제(모듈이 등록돼 있으면 성공, 없으면 무시)
         try:
