@@ -199,13 +199,17 @@ def hwp_to_docx(in_path: str | Path, out_path: Optional[str | Path] = None,
 
     # 2) 구조 변환(unhwp / HWPX XML) — document_ingest 재사용
     try:
-        from ..document_ingest import _convert_hwp_to_docx, _convert_hwpx_to_docx
+        # The legacy ingest module remains the shared compatibility seam while
+        # the core/domain split is in progress. Existing callers and fixtures
+        # patch that module, so resolving it here keeps both import paths in
+        # the same runtime contract.
+        from auto_write import document_ingest as _document_ingest
 
         if ext == ".hwp":
-            _convert_hwp_to_docx(src, dst)
+            _document_ingest._convert_hwp_to_docx(src, dst)
             report.method = "unhwp"
         else:
-            _convert_hwpx_to_docx(src, dst)
+            _document_ingest._convert_hwpx_to_docx(src, dst)
             report.method = "hwpx_xml"
         if _nonempty_file(dst):
             report.ok = True
@@ -217,11 +221,11 @@ def hwp_to_docx(in_path: str | Path, out_path: Optional[str | Path] = None,
     # 3) PrvText 폴백(HWP 전용) — 텍스트만
     if ext == ".hwp":
         try:
-            from ..document_ingest import _write_text_docx, extract_hwp_preview_text
+            from auto_write import document_ingest as _document_ingest
 
-            preview = extract_hwp_preview_text(src)
+            preview = _document_ingest.extract_hwp_preview_text(src)
             if preview.strip():
-                _write_text_docx(preview, dst, title=src.stem)
+                _document_ingest._write_text_docx(preview, dst, title=src.stem)
                 report.method, report.ok = "prvtext", True
                 report.notes.append("미리보기 텍스트(PrvText)만 추출 — 본문 일부가 누락될 수 있습니다.")
                 return report

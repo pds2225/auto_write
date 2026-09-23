@@ -185,15 +185,39 @@ class LRuleConsoleService:
         else:
             python_exe = shutil.which("python") or "python"
             cmd = [python_exe, "-m", "pytest", *tests, "-q"]
-        proc = subprocess.run(
-            cmd,
-            cwd=self.repo_root,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=180,
-        )
+        try:
+            proc = subprocess.run(
+                cmd,
+                cwd=self.repo_root,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=180,
+            )
+        except subprocess.TimeoutExpired as exc:
+            def _text(value: object) -> str:
+                if isinstance(value, bytes):
+                    return value.decode("utf-8", errors="replace")
+                return str(value) if value else ""
+
+            output = "\n".join(
+                part for part in [_text(exc.stdout), _text(exc.stderr)] if part
+            ).strip()
+            timeout_note = "registry tests timed out after 180 seconds"
+            return RuleTestResult(
+                ok=False,
+                command=" ".join(cmd),
+                output=f"{timeout_note}\n{output}".strip(),
+                returncode=124,
+            )
+        except OSError as exc:
+            return RuleTestResult(
+                ok=False,
+                command=" ".join(cmd),
+                output=f"registry tests could not start: {type(exc).__name__}: {exc}",
+                returncode=127,
+            )
         output = "\n".join(part for part in [proc.stdout, proc.stderr] if part).strip()
         return RuleTestResult(
             ok=proc.returncode == 0,

@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
-"""hwpx_submit — HWPX 채움→수용검사 게이트→_DRAFT 강제까지 한 번에(제출 파이프라인).
+"""hwpx_submit — HWPX 채움→공통 무결성 게이트→_DRAFT 강제까지 한 번에(제출 파이프라인).
 
 B②(게이트 배선) + B③(제출 파이프라인). 기존 자산만 조립한다(재구현 금지):
 
   1. ``hwpx_fill.fill_hwpx``            — 값 채움(원본미수정·원자적쓰기·날조0 내장)
-  2. ``hwpx_acceptance.run_hwpx_acceptance`` — 산출물 결함 검출(유색·안내문구·linesegarray)
+  2. ``hwpx_integrity_gate.run_hwpx_integrity_gate`` — 구조·수용검사 집계 및 실행상태 기록
+     (내부에서 ``check_hwpx_semantics``와 ``run_hwpx_acceptance``를 실행)
   3. ``usage_acceptance.force_draft_name``   — _DRAFT 강제 명명 정책 **단일 출처** 재사용
 
 게이트 정책(fail-closed, R9)
@@ -27,9 +28,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
-from .hwpx_acceptance import run_hwpx_acceptance
 from .hwpx_fill import fill_hwpx
-from .hwpx_layout_fix import normalize_colors_in_hwpx
+from .hwpx_acceptance import run_hwpx_acceptance
+from .hwpx_integrity_gate import run_hwpx_integrity_gate
+from .hwpx_layout_fix import check_hwpx_semantics, normalize_colors_in_hwpx
 from .hwpx_submission_cleanup import finalize_submission_hwpx
 from .usage_acceptance import force_draft_name
 
@@ -40,7 +42,7 @@ class SubmitReport:
 
     - ``output``: 요청한 출력 경로(rename 전 이름).
     - ``final``: 실제 최종 파일 경로(_DRAFT 강제 시 바뀐 이름). 항상 실존 경로.
-    - ``ok``: True = 제출가능(게이트 통과 또는 게이트 생략+채움 성공).
+    - ``ok``: True = 공통 무결성 게이트 통과.
     - ``acceptance``: run_hwpx_acceptance 결과 dict. 검사불능이면
       ``{"ok": False, "exception": "..."}`` (CLI exit 3 판별 근거).
     """
@@ -48,12 +50,18 @@ class SubmitReport:
     output: str = ""
     final: str = ""
     ok: bool = False
+    # 최종 산출물 공개/제출 여부를 호출자가 ``ok`` 해석에 의존하지 않도록
+    # 공통 final gate의 정책 결과를 명시적으로 보존한다. 기본값은 fail-closed다.
+    final_output_allowed: bool = False
+    submittable: bool = False
     acceptance: dict[str, Any] = field(default_factory=dict)
     filled: dict[str, str] = field(default_factory=dict)
     residual: list[str] = field(default_factory=list)
+    overflow_cells: list[str] = field(default_factory=list)
     draft_marked: bool = False
     draft_reason: str = ""
     error: str = ""
+    integrity: dict[str, Any] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
@@ -62,12 +70,16 @@ class SubmitReport:
             "output": self.output,
             "final": self.final,
             "ok": self.ok,
+            "final_output_allowed": self.final_output_allowed,
+            "submittable": self.submittable,
             "acceptance": dict(self.acceptance),
             "filled": dict(self.filled),
             "residual": list(self.residual),
+            "overflow_cells": list(self.overflow_cells),
             "draft_marked": self.draft_marked,
             "draft_reason": self.draft_reason,
             "error": self.error,
+            "integrity": dict(self.integrity),
             "notes": list(self.notes),
         }
 
@@ -105,7 +117,8 @@ def submit_hwpx(
         out_hwpx: 출력 경로(.hwpx). 게이트 fail/검사불능이면 ``_DRAFT`` 로 rename 된다.
         identity: 라벨→값(fill_hwpx 로 전달, 날조0).
         replacements: 직접 치환(선택, 라벨/실값 칸 보호).
-        acceptance_gate: False 면 게이트를 생략한다(이름 유지, notes 에 명시).
+        acceptance_gate: False 면 진단용 우회 요청으로 기록하되 공통 게이트는 실행하고
+            최종 제출본은 허용하지 않는다(``_DRAFT`` + ``APPROVAL_REQUIRED``).
         normalize_colors: True(기본)면 채움 직후 잔존 예시 유색체를 검정으로 정규화해
             수용검사 colored 결함을 자동 해소한다(채운 값 검정은 fill_hwpx 가 이미 처리).
             ``submission_cleanup=True`` 이면 cleanup 의 force_black 이 동일 역할을 하므로
@@ -129,6 +142,7 @@ def submit_hwpx(
     fill_rep = fill_hwpx(src, out, identity=identity, replacements=replacements)
     report.filled = dict(fill_rep.filled)
     report.residual = list(fill_rep.residual)
+    report.overflow_cells = list(fill_rep.overflow_cells)
     report.notes.extend(fill_rep.notes)
     report.final = str(out)
 
@@ -167,41 +181,59 @@ def submit_hwpx(
         except Exception as exc:  # noqa: BLE001
             report.notes.append(f"검정 정규화 스킵(오류): {type(exc).__name__}")
 
-    # 2) 게이트 생략(opt-out) — 스킵 사실을 정직하게 남긴다.
-    if not acceptance_gate:
-        report.ok = bool(fill_rep.ok)
-        report.notes.append(
-            "수용검사 게이트 생략(acceptance_gate=False) — 제출 전 별도 점검 필요.")
-        return report
-
-    # 3) 수용검사 — 예외는 '검사불능'이며 fail-closed 로 _DRAFT 강제(R9).
+    # 2) 공통 HWPX 무결성 gate — 구조/수용 validator를 같은 entry point로 실행.
     allowed_names = [
         str(v) for src in (identity, replacements) if src
         for v in src.values() if str(v or "").strip()
     ]
-    try:
-        acc = run_hwpx_acceptance(out, allowed_names=allowed_names)
-    except Exception as exc:  # noqa: BLE001 — 판정 불가는 전부 제출불가로
-        report.acceptance = {"ok": False,
-                             "exception": f"{type(exc).__name__}: {exc}"}
-        report.error = f"수용검사 불능(fail-closed): {type(exc).__name__}: {exc}"
-        report.draft_reason = "검사불능 — 판정 불가는 제출불가로 처리(_DRAFT 강제)"
+    gate = run_hwpx_integrity_gate(
+        str(out),
+        allowed_names=allowed_names,
+        semantic_validator=check_hwpx_semantics,
+        acceptance_validator=run_hwpx_acceptance,
+        fixed_cell_overflow=report.overflow_cells,
+    )
+    report.integrity = gate.as_dict()
+    report.acceptance = gate.acceptance_report
+
+    # 명시적 bypass 요청도 최종 제출본으로 통과시키지 않는다.
+    # 진단 목적의 호출은 결과를 남기되 _DRAFT/ok=False로 fail-closed 처리한다.
+    if not acceptance_gate:
+        report.notes.append(
+            "수용검사 게이트 우회 요청은 최종 제출본에 허용하지 않음 — "
+            "공통 gate 결과를 기록하고 _DRAFT로 보존합니다(APPROVAL_REQUIRED).")
+        report.draft_reason = (
+            "수용검사 gate 우회 요청 — 최종 제출 불가(APPROVAL_REQUIRED, _DRAFT 강제)"
+        )
         report.final = str(_mark_draft(report, out, src))
         report.ok = False
+        report.final_output_allowed = False
+        report.submittable = False
         return report
 
-    report.acceptance = acc.as_dict()
-    if acc.ok:
+    if gate.final_status == "PASS":
         report.ok = True
+        report.final_output_allowed = True
+        report.submittable = True
         return report
 
-    # 4) 게이트 fail — 결함 요약을 사유로 남기고 _DRAFT 강제.
-    report.draft_reason = (
-        f"수용검사 fail {acc.fail_defects}건 — 유색 {acc.colored}"
-        f"·안내문구 {acc.guides}·linesegarray {acc.linesegarray}"
-        f"·예시이름 {acc.dummy_names}"
-        " (제출 전 후처리 필요)"
-    )
+    failed = [v for v in gate.validators if v.severity != "PASS"]
+    messages = "; ".join(v.message for v in failed[:3])
+    if report.acceptance.get("fail_defects"):
+        acc = report.acceptance
+        report.draft_reason = (
+            f"수용검사 fail {acc.get('fail_defects', 0)}건 — 유색 {acc.get('colored', 0)}"
+            f"·안내문구 {acc.get('guides', 0)}·linesegarray {acc.get('linesegarray', 0)}"
+            f"·예시이름 {acc.get('dummy_names', 0)} (제출 전 후처리 필요)"
+        )
+    else:
+        report.draft_reason = f"공통 무결성 gate {gate.final_status}: {messages}"
+    for result in failed:
+        if result.validator_status != "EXECUTED":
+            report.error = result.message
+            break
     report.final = str(_mark_draft(report, out, src))
     report.ok = False
+    report.final_output_allowed = False
+    report.submittable = False
     return report
