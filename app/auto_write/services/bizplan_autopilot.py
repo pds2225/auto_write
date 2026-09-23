@@ -1,3 +1,7 @@
-# bizplan_autopilot.py -- backward-compatible re-export from core.docx.services
-# Canonical source: core.docx.services.bizplan_autopilot
-from core.docx.services.bizplan_autopilot import *  # noqa: F401,F403
+"""Backward-compatible module alias for the canonical bizplan service."""
+
+import sys as _sys
+
+from core.docx.services import bizplan_autopilot as _canonical
+
+_sys.modules[__name__] = _canonical

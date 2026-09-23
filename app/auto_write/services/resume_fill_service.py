@@ -1,3 +1,7 @@
-# resume_fill_service.py -- backward-compatible re-export from core.docx.services
-# Canonical source: core.docx.services.resume_fill_service
-from core.docx.services.resume_fill_service import *  # noqa: F401,F403
+"""Backward-compatible module alias for the canonical resume fill service."""
+
+import sys as _sys
+
+from core.docx.services import resume_fill_service as _canonical
+
+_sys.modules[__name__] = _canonical
