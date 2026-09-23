@@ -653,7 +653,7 @@ TASK_ID: AW-001
 TASK_START_SHA: d6b96b86a0015f53141054c27517607923a596a8
 TASK_BLOB_SHA: f6f8023b0dd47d301acedc75a5d4957edd147d4e
 WORK_BRANCH: cursor/overnight-aw-001-2cb9
-STATUS_THIS_TURN: PR #191 리뷰에서 stabilize가 복원하던 legacy private export가 충돌 해소 때 빠져 `_dominant`와 채점 스캐너 import가 깨진 것을 고쳤다. HWPX 실패는 DRAFT로 남고, `submit_hwpx`의 R9 수용검사는 공통 integrity gate 한 번으로 제출을 막는다. LIST `[~]`. REQUEST_SOLVED=NO(HWPX `submit_hwpx`는 R9 수용검사 KEEP — LRule 미연결).
+STATUS_THIS_TURN: 그룹3 통합 PR #191 재검증 완료. HEAD `8b5281b11c25a93c1902f97ee825d801606c7788`. pytest collect 1831 collected, collection errors 0, exit 0. 수정 영향 테스트 96 passed. docs-gate success. 그룹3 통합 판정 READY_FOR_REVIEW. PR은 draft 유지, main 미병합. LIST `[~]`. REQUEST_SOLVED=NO(HWPX `submit_hwpx`는 이미 구현된 R9 수용검사 KEEP — LRule 미연결. R9 재구현 아님).
 
 ### 8-1. 사용자 원문 요청
 
@@ -700,6 +700,7 @@ INPUT
 - 현재 문제: judgment/gap 미가드이므로 실문서 FINAL 불가(의도). HWPX `submit_hwpx` 는 R9 수용검사 게이트 KEEP(LRule 미연결). `ProjectService`의 기존 DOCX bundle 우회는 `run_to_final` 실행결과와 예외 상태 sidecar를 남기도록 보강했다.
 - 2026-09-23: integration `0a5d785`를 main `cf16eb4` 위 `cursor/group3-gate-merge-7092`에 병합. #184 원본 옆 저장과 #190 창 숨김은 유지. HWPX 실패는 `final_output_allowed`/`submittable`/`hangul_output_allowed`를 false로 두고 DRAFT에 남긴다.
 - 2026-09-23 리뷰: 충돌 5파일 중 `doc_quality_ops.py`·`doc_quality_score.py`는 integration의 명시 import를 유지한 채 stabilize의 private 재수출을 복원했다. `autopilot_pipeline.py`·`image_apply.py`·`generation_store.py`는 기존 호출이 이미 해석된다. REQUEST_SOLVED=NO.
+- 2026-09-23 재검증: HEAD `8b5281b11c25a93c1902f97ee825d801606c7788`. `python3 -m pytest --collect-only -q` → 1831 collected, collection errors 0, exit 0. 수정 영향 테스트 96 passed. docs-gate success. 그룹3 통합 판정 READY_FOR_REVIEW. draft 유지, main 미병합. 코드 추가 수정 없음.
 - 이미 구현된 부분: 기존 CORE/shared services, LRule, Finalizer, mechanized 가드
 - 확인 필요한 부분: HWPX 경로를 LRule에 붙일지(수용검사 계약과 충돌). 실사용자 문서 E2E
 
