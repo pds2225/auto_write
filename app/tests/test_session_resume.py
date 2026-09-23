@@ -21,6 +21,7 @@ def _run(prompt: str) -> subprocess.CompletedProcess[str]:
         ),
         capture_output=True,
         text=True,
+        encoding="utf-8",
         cwd=str(_REPO),
         check=False,
     )
