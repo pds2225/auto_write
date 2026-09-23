@@ -49,6 +49,11 @@ class ProjectServiceSafetyTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp_dir = tempfile.TemporaryDirectory()
         root = Path(self.tmp_dir.name)
+        self._com_patch = patch(
+            "core.docx.services.hwp_docx_convert.hancom_com_available",
+            return_value=False,
+        )
+        self._com_patch.start()
         self.settings = build_settings(root)
         ensure_directories(self.settings)
         self.storage = Storage(self.settings)
@@ -63,6 +68,7 @@ class ProjectServiceSafetyTests(unittest.TestCase):
         )
 
     def tearDown(self) -> None:
+        self._com_patch.stop()
         self.tmp_dir.cleanup()
 
     def _save_template_profile(self, template_id: str) -> TemplateProfile:
@@ -95,6 +101,166 @@ class ProjectServiceSafetyTests(unittest.TestCase):
                 reference_files=[("../evil.txt", b"bad")],
             )
         self.assertIn("경로 구분자", str(ctx.exception))
+
+    def test_project_publish_carries_fail_closed_gate_report(self):
+        output_path = Path(self.tmp_dir.name) / "output.docx"
+        Document().save(output_path)
+        profile = TemplateProfile(
+            template_id="tpl_gate",
+            template_name="gate.docx",
+            source_docx=str(output_path),
+        )
+        project_input = ProjectInput(template_id="tpl_gate")
+        gate_report = {
+            "status": "DRAFT",
+            "validator_status": "EXECUTED",
+            "final_output_allowed": False,
+            "submittable": False,
+            "blocked_reason": "fixture review required",
+        }
+
+        with patch(
+            "auto_write.services.hangul_default.emit_hangul_file",
+            side_effect=RuntimeError("renderer fixture unavailable"),
+        ):
+            published = self.service._publish_results_bundle(
+                "prj_gate",
+                profile,
+                project_input,
+                output_path,
+                {"error_count": 0, "warning_count": 0, "errors": [], "warnings": [], "passed": True},
+                {"errors": [], "warnings": []},
+                psst_field_ids=set(),
+                core_table_ids=set(),
+                final_gate_report=gate_report,
+            )
+
+        report_path = Path(published["final_gate_report"])
+        self.assertTrue(report_path.exists())
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(report.get("validator_status"), "EXECUTED")
+        self.assertEqual(report.get("status"), "DRAFT")
+        self.assertFalse(report.get("final_output_allowed"))
+        self.assertNotEqual(report.get("status"), "FINAL")
+
+    def test_project_gate_exception_never_becomes_silent_pass(self):
+        output_path = Path(self.tmp_dir.name) / "bypass_fixture.docx"
+        Document().save(output_path)
+
+        with patch(
+            "auto_write.domains.pipeline_gate.run_to_final",
+            side_effect=RuntimeError("validator fixture failure"),
+        ):
+            report = self.service._run_project_final_gate(output_path)
+
+        self.assertEqual(report.get("validator_status"), "ERROR")
+        self.assertEqual(report.get("status"), "DRAFT")
+        self.assertFalse(report.get("final_output_allowed"))
+        self.assertFalse(report.get("submittable"))
+        self.assertIn("validator fixture failure", report.get("blocked_reason", ""))
+
+    def test_project_gate_malformed_result_never_becomes_final(self):
+        output_path = Path(self.tmp_dir.name) / "malformed_gate_fixture.docx"
+        Document().save(output_path)
+
+        class _MalformedGate:
+            def as_dict(self):
+                return {"submittable": True}
+
+        with patch(
+            "auto_write.domains.pipeline_gate.run_to_final",
+            return_value=_MalformedGate(),
+        ):
+            report = self.service._run_project_final_gate(output_path)
+
+        self.assertEqual(report.get("validator_status"), "EXECUTED")
+        self.assertEqual(report.get("status"), "DRAFT")
+        self.assertFalse(report.get("final_output_allowed"))
+        self.assertIn("finalizer missing", report.get("blocked_reason", ""))
+
+    def test_project_publish_does_not_copy_result_before_gate_report(self):
+        """gate report 기록 실패가 공개 결과 DOCX로 우회되지 않아야 한다."""
+        output_path = Path(self.tmp_dir.name) / "report_write_failure.docx"
+        Document().save(output_path)
+        profile = TemplateProfile(
+            template_id="tpl_report_failure",
+            template_name="report_failure.docx",
+            source_docx=str(output_path),
+        )
+        project_input = ProjectInput(template_id="tpl_report_failure")
+
+        write_calls = 0
+
+        def _write_json_side_effect(path, value):
+            nonlocal write_calls
+            write_calls += 1
+            if write_calls == 2:
+                raise OSError("final gate report write failure")
+
+        results_dir = self.storage.results_dir("prj_report_failure")
+        with patch(
+            "auto_write.services.project_service.write_json",
+            side_effect=_write_json_side_effect,
+        ), self.assertRaises(OSError):
+            self.service._publish_results_bundle(
+                "prj_report_failure",
+                profile,
+                project_input,
+                output_path,
+                {"error_count": 0, "warning_count": 0, "errors": [], "warnings": [], "passed": True},
+                {"errors": [], "warnings": []},
+                psst_field_ids=set(),
+                core_table_ids=set(),
+                final_gate_report={
+                    "status": "FINAL",
+                    "validator_status": "EXECUTED",
+                    "final_output_allowed": True,
+                    "submittable": True,
+                },
+            )
+
+        assert write_calls == 2
+        assert not (results_dir / "output.docx").exists()
+        assert not list(results_dir.glob("*.docx"))
+
+    def test_project_publish_hangul_failure_downgrades_final_to_draft(self):
+        """기본 HWPX 산출 실패가 DOCX FINAL 우회로 이어지지 않아야 한다."""
+        output_path = Path(self.tmp_dir.name) / "hangul_failure.docx"
+        Document().save(output_path)
+        profile = TemplateProfile(
+            template_id="tpl_hangul_failure",
+            template_name="hangul_failure.docx",
+            source_docx=str(output_path),
+        )
+        project_input = ProjectInput(template_id="tpl_hangul_failure")
+
+        with patch(
+            "auto_write.services.hangul_default.emit_hangul_file",
+            side_effect=RuntimeError("HWPX renderer fixture failure"),
+        ):
+            published = self.service._publish_results_bundle(
+                "prj_hangul_failure",
+                profile,
+                project_input,
+                output_path,
+                {"error_count": 0, "warning_count": 0, "errors": [], "warnings": [], "passed": True},
+                {"errors": [], "warnings": []},
+                psst_field_ids=set(),
+                core_table_ids=set(),
+                final_gate_report={
+                    "status": "FINAL",
+                    "validator_status": "EXECUTED",
+                    "final_output_allowed": True,
+                    "submittable": True,
+                },
+            )
+
+        report = json.loads(Path(published["final_gate_report"]).read_text(encoding="utf-8"))
+        assert report["status"] == "DRAFT"
+        assert report["final_output_allowed"] is False
+        assert report["submittable"] is False
+        assert report["hangul_output_allowed"] is False
+        assert "HWPX renderer fixture failure" in report["blocked_reason"]
 
     def test_template_upload_rejects_path_like_or_reserved_filename(self):
         for file_name in ("../evil.docx", r"..\evil.docx", r"C:\evil.docx", r"\\server\evil.docx", "CON.docx"):

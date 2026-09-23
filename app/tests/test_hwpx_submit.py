@@ -165,7 +165,7 @@ def test_submit_acceptance_exception_fail_closed(clean_hwpx, tmp_path, monkeypat
 
 
 # --------------------------------------------------------------------------- #
-# 4) acceptance_gate=False → 게이트 스킵·이름 유지
+# 4) acceptance_gate=False → 최종 제출본 우회 금지·_DRAFT 강제
 # --------------------------------------------------------------------------- #
 
 
@@ -174,12 +174,13 @@ def test_submit_no_gate_flag(colored_hwpx, tmp_path):
     rep = submit_hwpx(
         colored_hwpx, out, identity={"기업명": "x(주)"}, acceptance_gate=False
     )
-    assert rep.ok is True                              # 채움 성공 기준
-    assert rep.final == str(out)
-    assert out.exists()
-    assert rep.draft_marked is False
-    assert rep.acceptance == {}                        # 게이트 미실행
-    assert any("생략" in n for n in rep.notes)          # 스킵 사실을 정직하게 노트
+    assert rep.ok is False                             # gate 우회는 제출가능이 아님
+    assert Path(rep.final).name == "out_DRAFT.hwpx"
+    assert Path(rep.final).exists()
+    assert not out.exists()
+    assert rep.draft_marked is True
+    assert rep.acceptance.get("ok") is True            # gate 결과는 기록됨
+    assert any("우회 요청" in n for n in rep.notes)    # 우회 사실을 정직하게 노트
 
 
 # --------------------------------------------------------------------------- #

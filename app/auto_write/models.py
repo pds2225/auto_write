@@ -125,6 +125,7 @@ class ArtifactBundle(BaseModel):
     output_docx: str
     qa_report: str
     sources: str
+    final_gate_report: str = ""
     benchmark_compare: str = ""
     transfer_report: str = ""
     preview_manifest: str = ""
