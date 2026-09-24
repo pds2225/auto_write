@@ -151,14 +151,14 @@ class GitSyncService:
         """Resolve the GitHub (or git remote) default branch without a hardcoded master.
 
         Order:
-        1. ``origin/HEAD`` symbolic ref (clone-time default)
-        2. ``git ls-remote --symref`` HEAD (live remote/GitHub default)
+        1. ``git ls-remote --symref`` HEAD (live remote/GitHub default)
+        2. ``origin/HEAD`` symbolic ref (clone-time default fallback)
         3. ``origin/main`` if it exists
         4. ``origin/master`` if it exists
         """
         for candidate in (
-            self._detect_from_symbolic_ref(),
             self._detect_from_ls_remote(),
+            self._detect_from_symbolic_ref(),
         ):
             if candidate:
                 return candidate
