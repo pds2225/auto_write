@@ -717,6 +717,30 @@ def test_git_sync_prefers_detected_main_over_leftover_master(tmp_path, monkeypat
 
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
+def test_git_sync_prefers_live_remote_head_over_stale_origin_head(tmp_path, monkeypatch):
+    monkeypatch.delenv("AUTO_WRITE_GIT_BASE_BRANCH", raising=False)
+    _, web, peer = _setup_git_remote(tmp_path, base_branch="main")
+    _git(peer, "branch", "master")
+    _git(peer, "push", "origin", "master")
+    _git(web, "fetch", "origin")
+    subprocess.run(
+        [
+            "git",
+            "symbolic-ref",
+            "refs/remotes/origin/HEAD",
+            "refs/remotes/origin/master",
+        ],
+        cwd=web,
+        check=True,
+        capture_output=True,
+    )
+    service = GitSyncService(web)
+    assert service._detect_from_symbolic_ref() == "master"
+    assert service._detect_from_ls_remote() == "main"
+    assert service.base_branch == "main"
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
 def test_git_sync_fallback_is_main_when_no_remote(tmp_path, monkeypatch):
     monkeypatch.delenv("AUTO_WRITE_GIT_BASE_BRANCH", raising=False)
     repo = tmp_path / "solo"
