@@ -32,6 +32,24 @@ def test_operator_console_smoke():
     assert "GitHub" in response.text
 
 
+def test_operator_console_mobile_shell():
+    client = TestClient(app)
+    response = client.get("/console")
+    assert response.status_code == 200
+    assert 'name="viewport"' in response.text
+    assert 'viewport-fit=cover' in response.text
+    assert 'class="mobile-tabbar"' in response.text
+    assert 'aria-label="모바일 메뉴"' in response.text
+    assert 'href="/static/manifest.webmanifest"' in response.text
+    css = (REPO_ROOT / "app/auto_write/static/operator.css").read_text(encoding="utf-8")
+    assert ".mobile-tabbar" in css
+    assert "safe-area-inset-bottom" in css
+    assert "font-size: 16px" in css
+    manifest = client.get("/static/manifest.webmanifest")
+    assert manifest.status_code == 200
+    assert '"start_url": "/console"' in manifest.text
+
+
 def test_registry_test_timeout_is_machine_readable(monkeypatch):
     service = LRuleConsoleService(REPO_ROOT)
 
