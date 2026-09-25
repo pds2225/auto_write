@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from core.docx.services.cross_form_autofill import autofill_from_source
 from core.docx.services.hwp_docx_convert import docx_to_hwp, hwp_to_docx
 
+from .access_gate import git_writes_allowed
 from .document_ingest import is_supported_template_file, template_upload_detail
 from .domains.domain_router import DomainRouter
 from .main import app, openai_service, project_service, settings, storage, templates
@@ -35,6 +36,13 @@ domain_router = DomainRouter(settings)
 for _route in list(app.router.routes):
     if getattr(_route, "path", None) == "/" and "GET" in (getattr(_route, "methods", set()) or set()):
         app.router.routes.remove(_route)
+
+
+def _git_write_blocked(target: str):
+    if git_writes_allowed():
+        return None
+    message = quote("Render에서는 L규칙과 Git 변경이 꺼져 있습니다.", safe="")
+    return RedirectResponse(url=f"{target}?error={message}", status_code=303)
 
 
 def _ctx(request: Request, **extra) -> dict:
@@ -600,6 +608,9 @@ async def operator_lrule_preview(
     impact: str = Form(default=""),
     domain: str = Form(default=""),
 ):
+    blocked = _git_write_blocked(f"/console/lrules/{code}")
+    if blocked:
+        return blocked
     before_text = ""
     updates = {
         "summary": summary,
@@ -668,6 +679,9 @@ async def operator_lrule_update(
     impact: str = Form(default=""),
     domain: str = Form(default=""),
 ):
+    blocked = _git_write_blocked(f"/console/lrules/{code}")
+    if blocked:
+        return blocked
     before_text = ""
     try:
         git_sync.assert_write_base(base_remote_sha)
@@ -720,6 +734,9 @@ async def operator_lrule_rollback(
     commit_sha: str = Form(...),
     base_remote_sha: str = Form(...),
 ):
+    blocked = _git_write_blocked(f"/console/lrules/{code}")
+    if blocked:
+        return blocked
     before_text = ""
     try:
         git_sync.assert_write_base(base_remote_sha)
@@ -803,6 +820,9 @@ async def operator_settings(request: Request):
 
 @app.post("/console/git/sync")
 async def operator_git_sync():
+    blocked = _git_write_blocked("/console/settings")
+    if blocked:
+        return blocked
     try:
         snapshot = git_sync.sync_from_remote()
         message = f"GitHub 동기화 완료: {snapshot.status} / {snapshot.local_sha[:8]}"
