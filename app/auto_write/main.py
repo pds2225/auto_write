@@ -26,6 +26,7 @@ from .services.project_service import ProjectService
 from .services.qa_service import QAService
 from .services.render_service import RenderService
 from .storage import Storage
+from .access_gate import install_access_gate
 from .utils import read_json, sanitize_user_filename
 
 settings = get_settings()
@@ -429,3 +430,6 @@ async def health():
     # Backward compatibility for existing clients that read old key name.
     payload["openai_available"] = payload["ai_available"]
     return payload
+
+
+install_access_gate(app)
