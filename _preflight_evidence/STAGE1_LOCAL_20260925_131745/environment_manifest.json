@@ -1,0 +1,78 @@
+﻿{
+    "collected_at":  "2026-09-25T13:17:45.9903342+09:00",
+    "computer_name":  "WIN-K20QOC29TOB",
+    "user_name":  "ekth3",
+    "autowrite_path":  "D:\\auto_write",
+    "evidence_root":  "D:\\auto_write\\_preflight_evidence",
+    "run_dir":  "D:\\auto_write\\_preflight_evidence\\STAGE1_LOCAL_20260925_131745",
+    "source_code_modified":  false,
+    "originals_modified":  false,
+    "com_probe":  "NOT_RUN",
+    "m01":  {
+                "status":  "DOWNLOADED",
+                "path":  "D:\\auto_write\\_preflight_evidence\\STAGE1_LOCAL_20260925_131745\\official_downloads\\M01_2026_data_voucher_notice.pdf",
+                "sha256":  "1D3E58901CDA196D0319201FD3CAD5366BE2C2683451035337376875AD5D1122",
+                "length":  182261
+            },
+    "m08":  {
+                "status":  "DOWNLOADED",
+                "path":  "D:\\auto_write\\_preflight_evidence\\STAGE1_LOCAL_20260925_131745\\official_downloads\\M08_Seoul_AI_Hub_blank_notice_appendix1-4.hwp",
+                "sha256":  "FB968CC776A7E3B1BDC45094A15C60010A33EFAB30A1846285575B34A5655E50",
+                "length":  239616
+            },
+    "windows":  {
+                    "WindowsProductName":  "Windows 10 Home",
+                    "WindowsVersion":  "2009",
+                    "OsBuildNumber":  "26200",
+                    "OsArchitecture":  "64비트"
+                },
+    "culture":  "ko-KR",
+    "time_zone":  "Korea Standard Time",
+    "disk":  [
+                 {
+                     "Name":  "C",
+                     "Root":  "C:\\",
+                     "Used":  950388015104,
+                     "Free":  27868377088
+                 },
+                 {
+                     "Name":  "D",
+                     "Root":  "D:\\",
+                     "Used":  14261002240,
+                     "Free":  7212781568
+                 },
+                 {
+                     "Name":  "G",
+                     "Root":  "G:\\",
+                     "Used":  951781437440,
+                     "Free":  26474954752
+                 }
+             ],
+    "repo":  {
+                 "path":  "D:\\auto_write",
+                 "sha":  "f0631415745f75c48ee5441e11e23081fb2b6c96",
+                 "branch":  "port/pr187-mobile-console",
+                 "status":  "## port/pr187-mobile-console\r\n?? _preflight_evidence/"
+             },
+    "python":  {
+                   "py_launcher":  "-V:3.14 *        C:\\Python314\\python.exe\r\n -V:3.13          C:\\Users\\ekth3\\AppData\\Local\\Microsoft\\WindowsApps\\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\\python.exe\r\n -V:3.11          C:\\Users\\ekth3\\AppData\\Local\\Programs\\Python\\Python311\\python.exe\r\n -V:Astral/CPython3.11.15 C:\\Users\\ekth3\\AppData\\Roaming\\uv\\python\\cpython-3.11.15-windows-x86_64-none\\python.exe",
+                   "version":  "Python 3.14.7",
+                   "where":  "C:\\Python314\\python.exe\r\nC:\\Users\\ekth3\\AppData\\Local\\Programs\\Python\\Python311\\python.exe\r\nC:\\Users\\ekth3\\AppData\\Local\\Microsoft\\WindowsApps\\python.exe"
+               },
+    "hancom_startapps_error":  "\"?쒓?|Hancom|HWP\" 구문 분석 - 수량자 {x,y} 앞에 아무 것도 없습니다.",
+    "hwp_executables":  [
+                            {
+                                "FullName":  "C:\\Program Files (x86)\\Hnc\\Office 2022\\HOffice120\\Bin\\Hwp.exe",
+                                "ProductVersion":  "12.0.0.893",
+                                "FileVersion":  "12.0.0.893"
+                            },
+                            {
+                                "FullName":  "C:\\Program Files (x86)\\Hnc\\Office 2024\\HOffice130\\Bin\\Hwp.exe",
+                                "ProductVersion":  "13.0.0.3380",
+                                "FileVersion":  "13.0.0.3380"
+                            }
+                        ],
+    "hwp_process_before":  null,
+    "font_count":  402,
+    "f01_error":  "F-01 not found. Rerun with -F01Path."
+}

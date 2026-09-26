@@ -222,6 +222,7 @@ def run_pipeline(
             result["outputs"]["hwpx"] = str(out_hwpx)
             result["filled"] = fr.filled
             result["filled_count"] = fr.filled_count
+            result["overflow_cells"] = list(fr.overflow_cells)
 
             if supplement_resume:
                 from auto_write.services.hwpx_resume_supplement import (
@@ -368,9 +369,35 @@ def run_pipeline(
 
     # 최종 사용자 HWPX: 원본 양식과 같은 폴더 + 통일 파일명.
     # submit_name/submit_version은 구 CLI 하위호환 인자로 남기되 새 기본명에는 사용하지 않는다.
+    # HWPX 출력은 제출용 복사본을 만들기 전에 공통 무결성 gate를 통과시킨다.
+    # 이 파이프라인은 RHWP/COM 두 엔진을 지원하므로 최종 HWPX 경로를 여기서
+    # 한 번만 검사한다. 렌더러가 없는 환경에서는 gate가 구조 PASS를 내더라도
+    # 시각 FULL/PASS를 주장하지 않고, 렌더링 smoke 상태를 별도 evidence로 남긴다.
+    hwpx_src = result.get("outputs", {}).get("hwpx")
+    if hwpx_src and Path(hwpx_src).is_file():
+        from auto_write.services.hwpx_integrity_gate import HARD_FAIL, run_hwpx_integrity_gate
+
+        gate = run_hwpx_integrity_gate(
+            str(hwpx_src),
+            allowed_names=tuple(str(value) for value in identity.values() if value),
+            fixed_cell_overflow=tuple(result.get("overflow_cells") or ()),
+        )
+        result["integrity_gate"] = gate.as_dict()
+        if gate.final_status == "PASS":
+            result["output_status"] = "PASS"
+        elif gate.final_status == HARD_FAIL:
+            result["output_status"] = "BLOCKED"
+            result.setdefault("needs_input", []).append(
+                f"공통 HWPX integrity gate HARD_FAIL: {gate.final_status}"
+            )
+        else:
+            result["output_status"] = "REVIEW_REQUIRED"
+            result.setdefault("needs_input", []).append(
+                f"공통 HWPX integrity gate 검토 필요: {gate.final_status}"
+            )
     if write_submit_copy:
         hwpx_src = result.get("outputs", {}).get("hwpx")
-        if hwpx_src and Path(hwpx_src).is_file():
+        if hwpx_src and Path(hwpx_src).is_file() and result.get("output_status") == "PASS":
             from auto_write.services.submission_gates import (
                 missing_pdf_pair,
                 try_generate_sibling_pdf,
@@ -394,6 +421,12 @@ def run_pipeline(
                 result.setdefault("needs_input", []).append(
                     f"L050: 제출 HWPX 동일명 PDF 없음 ({gen.reason})"
                 )
+        elif hwpx_src and Path(hwpx_src).is_file():
+            result["submit_blocked"] = {
+                "reason": "공통 HWPX integrity gate 결과가 PASS가 아니어서 제출용 복사본을 만들지 않음",
+                "status": result.get("output_status", "UNKNOWN"),
+                "source": str(hwpx_src),
+            }
 
     (work / "00_engines.json").write_text(
         json.dumps(

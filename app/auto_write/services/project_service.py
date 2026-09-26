@@ -573,6 +573,44 @@ class ProjectService:
         lines.append("📋 섹션별 복사: 화면의 「복사」 버튼 또는 copy_blocks.json")
         return "\n".join(lines) + "\n"
 
+    @staticmethod
+    def _run_project_final_gate(output_path: Path) -> dict[str, Any]:
+        """ProjectService 산출물을 공통 LRule/Hash/Finalizer 경로에 통과시킨다.
+
+        이 서비스의 결과는 작업 초안으로 발행되지만, 검증 없이 FINAL처럼
+        취급되는 우회 경로는 허용하지 않는다. 게이트 오류도 정상 통과로
+        바꾸지 않고 DRAFT + ERROR 상태로 남긴다.
+        """
+        try:
+            from ..domains.pipeline_gate import run_to_final
+
+            gate = run_to_final(
+                output_path,
+                explicit_domain="business_plan",
+                document_type="business_plan",
+                filename=output_path.name,
+                apply_draft_name=False,
+            )
+            report = gate.as_dict()
+            report["validator_status"] = "EXECUTED"
+            report["artifact_path"] = str(output_path)
+            finalizer = report.get("finalizer") or {}
+            allowed = bool(report.get("submittable") and finalizer.get("submittable"))
+            report["final_output_allowed"] = allowed
+            report["status"] = "FINAL" if allowed else "DRAFT"
+            if not finalizer:
+                report["blocked_reason"] = report.get("blocked_reason") or "finalizer missing"
+            return report
+        except Exception as exc:  # noqa: BLE001 — 검사불능은 silent PASS 금지
+            return {
+                "status": "DRAFT",
+                "validator_status": "ERROR",
+                "final_output_allowed": False,
+                "submittable": False,
+                "artifact_path": str(output_path),
+                "blocked_reason": f"final_gate_error:{type(exc).__name__}: {exc}",
+            }
+
     def _publish_results_bundle(
         self,
         project_id: str,
@@ -584,16 +622,18 @@ class ProjectService:
         *,
         psst_field_ids: set[str],
         core_table_ids: set[str],
+        final_gate_report: dict[str, Any],
     ) -> dict[str, str]:
         results_dir = self.storage.results_dir(project_id)
         results_dir.mkdir(parents=True, exist_ok=True)
         dated_name = self._results_docx_name(project_input)
         results_docx = results_dir / dated_name
-        shutil.copy2(output_path, results_docx)
-        shutil.copy2(output_path, results_dir / "output.docx")
 
+        # 사용자 기본 산출물은 HWPX다. DOCX는 내부 중간본으로 유지하되,
+        # HWPX 변환에 실패한 결과를 FINAL처럼 발행하지 않는다.
         results_hwpx = ""
         output_hwpx = ""
+        hangul_output_error = ""
         try:
             from .hangul_default import emit_hangul_file
 
@@ -603,10 +643,44 @@ class ProjectService:
             emit_res = emit_hangul_file(output_path, res_hwpx)
             if emit_out.ok:
                 output_hwpx = emit_out.output
+            else:
+                hangul_output_error = "output.hwpx emission failed"
             if emit_res.ok:
                 results_hwpx = emit_res.output
-        except Exception as exc:  # noqa: BLE001 — 한글 산출 실패가 생성 전체를 막지 않음
-            log_line(f"[WARN] 한글 산출 실패(DOCX 작업본은 유지): {exc}")
+            else:
+                hangul_output_error = hangul_output_error or "results HWPX emission failed"
+        except Exception as exc:  # noqa: BLE001 — HWPX 실패는 FINAL로 승격하지 않음
+            hangul_output_error = f"{type(exc).__name__}: {exc}"
+
+        if hangul_output_error:
+            final_gate_report = dict(final_gate_report)
+            final_gate_report.update(
+                {
+                    "status": "DRAFT",
+                    "final_output_allowed": False,
+                    "submittable": False,
+                    "hangul_output_allowed": False,
+                    "blocked_reason": (
+                        final_gate_report.get("blocked_reason")
+                        or f"hangul_output_error:{hangul_output_error}"
+                    ),
+                }
+            )
+        else:
+            final_gate_report = dict(final_gate_report)
+            final_gate_report["hangul_output_allowed"] = True
+
+        output_gate_path = output_path.parent / "final_gate_report.json"
+        write_json(output_gate_path, final_gate_report)
+        results_gate_report = dict(final_gate_report)
+        results_gate_report["published_artifact"] = str(results_docx)
+        results_gate_path = results_dir / "final_gate_report.json"
+        write_json(results_gate_path, results_gate_report)
+
+        # 두 gate report가 모두 기록된 뒤에만 결과 DOCX를 공개 폴더로 복사한다.
+        # report 기록 실패 시 부분 FINAL 산출물이 남아 gate를 우회하지 않게 한다.
+        shutil.copy2(output_path, results_docx)
+        shutil.copy2(output_path, results_dir / "output.docx")
 
         hwp_text = self._build_hwp_paste_text(
             profile,
@@ -651,6 +725,7 @@ class ProjectService:
             "copy_blocks": str(copy_blocks_path),
             "fill_map": str(fill_map_path),
             "generation_summary": str(summary_path),
+            "final_gate_report": str(results_gate_path),
         }
 
     # --- SFT 데이터 레이어 P0: 생성 계측(스냅샷·provenance) -------------------
@@ -1005,6 +1080,7 @@ class ProjectService:
                 transfer_mode=transfer_mode,
             ),
         )
+        final_gate_report = self._run_project_final_gate(output_path)
         published = self._publish_results_bundle(
             project_id,
             profile,
@@ -1014,15 +1090,18 @@ class ProjectService:
             render_result,
             psst_field_ids=psst_field_ids,
             core_table_ids=core_table_ids,
+            final_gate_report=final_gate_report,
         )
         log_line(
             f"[DONE] project={project_id} docx={output_path.name} "
-            f"errors={qa_report['error_count']} results={published.get('results_dir', '')}"
+            f"errors={qa_report['error_count']} gate={final_gate_report.get('status', 'DRAFT')} "
+            f"results={published.get('results_dir', '')}"
         )
         return ArtifactBundle(
             output_docx=str(output_path),
             qa_report=str(qa_path),
             sources=str(sources_path),
+            final_gate_report=published.get("final_gate_report", ""),
             benchmark_compare=str(benchmark_path),
             transfer_report=str(transfer_path),
             preview_manifest=str(preview_manifest_path),
