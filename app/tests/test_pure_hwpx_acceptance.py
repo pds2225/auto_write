@@ -77,6 +77,17 @@ def test_guide_needs_core_and_aux_together():
     assert "삭제 후 제출" in samples[0]
 
 
+def test_core_heading_split_across_runs_is_guide():
+    """FINDING-QA-001 유지: 이어 붙인 핵심 표제는 안내문. 본문 분할은 0."""
+    guided, samples = count_form_guides(_root(
+        "<sec><p><t>작성방법:</t><t> 예시를 참고하십시오</t></p></sec>"))
+    assert guided == 1
+    assert "작성방법" in samples[0]
+    prose, prose_samples = count_form_guides(_root(
+        "<sec><p><t>작성방법을</t><t> 참고하여 자유롭게 기술</t></p></sec>"))
+    assert prose == 0 and prose_samples == []
+
+
 def test_core_heading_without_aux_is_guide():
     """FINDING-QA-001: 보조 토큰 없는 핵심 표제는 안내문. 핵심+보조도 유지."""
     core_only, samples = count_form_guides(_root(

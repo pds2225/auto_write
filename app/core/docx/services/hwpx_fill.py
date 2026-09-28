@@ -97,6 +97,43 @@ def _cell_text(tc) -> str:
     return re.sub(r"\s+", " ", "".join(parts)).strip()
 
 
+def _split_value_spans(tc) -> bool:
+    """값 글자가 둘 이상의 hp:t 에 나뉘어 있으면 True.
+
+    ``_set_cell_text`` 는 첫 hp:t 에 값을 넣고 나머지 hp:t 를 비운다.
+    공백이 아닌 글자가 뒤 span 에 있거나, 그 글자가 첫 span 이 아니면
+    형제 run 을 지우거나 빈 span 으로 합친다. 그 칸은 기입하지 않는다.
+    전부 비어 있는 추가 hp:t 는 기존 빈 칸 기입을 막지 않는다.
+    """
+    nodes = _cell_texts(tc)
+    if len(nodes) <= 1:
+        return False
+    meaningful = [
+        index for index, node in enumerate(nodes) if (node.text or "").strip()
+    ]
+    if len(meaningful) >= 2:
+        return True
+    return bool(meaningful) and meaningful[0] != 0
+
+
+def _note_unfilled_span(bucket: list, label: str, tc=None) -> None:
+    """run/span 경계 때문에 안 채운 칸을 residual 과 별도로 남긴다."""
+    row = col = None
+    if tc is not None:
+        addr = next(iter(_direct(tc, "cellAddr")), None)
+        if addr is not None:
+            if addr.get("rowAddr") is not None:
+                row = _int_attr(addr, "rowAddr", -1)
+            if addr.get("colAddr") is not None:
+                col = _int_attr(addr, "colAddr", -1)
+    if row is not None and col is not None:
+        note = f"[span] {label} row={row} col={col} UNFILLED"
+    else:
+        note = f"[span] {label} UNFILLED"
+    if note not in bucket:
+        bucket.append(note)
+
+
 def _int_attr(el, name: str, default: int) -> int:
     if el is None:
         return default
@@ -355,6 +392,8 @@ def _set_cell_text(tc, value: str, black: Optional[_BlackCharPr] = None) -> bool
     """셀의 텍스트를 value 로 설정한다(첫 hp:t 에 기입, 나머지 hp:t 는 비움).
 
     빈/플레이스홀더 칸에만 호출되므로 잔여 hp:t 를 비워도 실데이터 손실은 없다.
+    다만 공백이 아닌 글자가 첫 hp:t 가 아닌 span 에 있거나 여러 span 에 나뉘면
+    False 를 반환하고 아무 글자도 바꾸지 않는다(형제 run 보존).
     hp:t/hp:run 이 없으면 단락 서식(charPrIDRef 승계)을 유지하며 최소 생성한다.
     black 이 주어지면 값이 들어간 run 의 유색 charPr 를 검정 클론으로 바꾼다.
 
@@ -366,6 +405,8 @@ def _set_cell_text(tc, value: str, black: Optional[_BlackCharPr] = None) -> bool
     겹치지 않는다. 형제 칸은 건드리지 않는다(L074).
     """
     if _has_form_control(tc):
+        return False
+    if _split_value_spans(tc):
         return False
     paras = list(tc.iter(_q("p")))
     if not paras:
@@ -412,14 +453,8 @@ def _inline_texts(p) -> list:
     return texts
 
 
-def _splice_run_text(p, fill_start: int, fill_end: int, value: str) -> bool:
-    """p 직계 텍스트 흐름의 flat 문자 구간 [fill_start, fill_end) 만 value 로 교체.
-
-    형제 run/hp:t 의 텍스트·charPrIDRef 는 전부 보존한다(대상 hp:t 의 text 만 수정).
-    flat 문자열은 _inline_texts(p) 의 text 를 공백 정규화 없이 그대로 이어붙인 것과
-    동일해야 한다. 구간이 두 hp:t 에 걸치면(cross-run span) 채우지 않고 False
-    (오채움<빈칸 — 보수적 skip).
-    """
+def _locate_inline_span(p, fill_start: int, fill_end: int):
+    """flat 구간이 걸친 (start hp:t, offset, end hp:t, offset). 못 찾으면 None."""
     ts = _inline_texts(p)
     pos = 0
     start_t = start_off = end_t = end_off = None
@@ -431,6 +466,24 @@ def _splice_run_text(p, fill_start: int, fill_end: int, value: str) -> bool:
             end_t, end_off = t, fill_end - pos
             break
         pos += len(s)
+    return start_t, start_off, end_t, end_off
+
+
+def _span_crosses_text_nodes(p, fill_start: int, fill_end: int) -> bool:
+    """채울 구간이 둘 이상의 hp:t(run 또는 같은 run 의 문자 span)에 걸치면 True."""
+    start_t, _, end_t, _ = _locate_inline_span(p, fill_start, fill_end)
+    return start_t is not None and end_t is not None and start_t is not end_t
+
+
+def _splice_run_text(p, fill_start: int, fill_end: int, value: str) -> bool:
+    """p 직계 텍스트 흐름의 flat 문자 구간 [fill_start, fill_end) 만 value 로 교체.
+
+    형제 run/hp:t 의 텍스트·charPrIDRef 는 전부 보존한다(대상 hp:t 의 text 만 수정).
+    flat 문자열은 _inline_texts(p) 의 text 를 공백 정규화 없이 그대로 이어붙인 것과
+    동일해야 한다. 구간이 두 hp:t 에 걸치면(cross-run/span) 채우지 않고 False
+    (오채움<빈칸 — 보수적 skip).
+    """
+    start_t, start_off, end_t, end_off = _locate_inline_span(p, fill_start, fill_end)
     if start_t is None or end_t is None:
         return False
     if start_t is not end_t:
@@ -441,16 +494,22 @@ def _splice_run_text(p, fill_start: int, fill_end: int, value: str) -> bool:
     return True
 
 
-def _fill_inline_fields_in_p(p, wants, used_keys: set, filled: dict) -> bool:
+def _fill_inline_fields_in_p(
+    p, wants, used_keys: set, filled: dict, span_notes: Optional[list] = None,
+) -> bool:
     """hp:p 하나의 인라인 필드(`라벨 : ______`)를 채운다 — 1.5(셀)·1.8(본문) 공용 커널.
 
     '가시 빈칸'(밑줄/점/대시 채움선)만 채운다(_is_visible_blank) — '라벨 :'(콜론+공백만)
     은 옆 값칸·산문과 구별이 안 되므로 제외(_is_fill_blank 금지). flat 은 _inline_texts
     의 직계 hp:t 를 문서순 그대로 결합(공백 정규화 금지, AC9)하고, 역순 스플라이스로
     앞 필드 offset 을 보존한다. 형제 run 의 텍스트·charPrIDRef 보존은 _splice_run_text
-    가 보장(대상 hp:t 부분 교체만). used_keys 는 표(1)/인라인(1.5)/체크박스(1.7)/
-    본문(1.8)이 공유한다(이중 기입 금지). 반환: 이 단락에서 하나라도 채웠으면 True.
+    가 보장(대상 hp:t 부분 교체만). 구간이 둘 이상의 hp:t 에 걸치면 채우지 않고
+    span_notes 에 ``[span] … UNFILLED`` 를 남긴다. used_keys 는 표(1)/인라인(1.5)/
+    체크박스(1.7)/본문(1.8)이 공유한다(이중 기입 금지). 반환: 이 단락에서 하나라도
+    채웠으면 True.
     """
+    if span_notes is None:
+        span_notes = []
     ts = _inline_texts(p)
     if not ts:
         return False
@@ -471,6 +530,9 @@ def _fill_inline_fields_in_p(p, wants, used_keys: set, filled: dict) -> bool:
                 continue
             if not _label_matches(field_key, want_key):
                 continue
+            if _span_crosses_text_nodes(p, f_start, f_end):
+                _note_unfilled_span(span_notes, lbl, _tc_of(p))
+                break
             if _splice_run_text(p, f_start, f_end, " " + str(val)):
                 filled[lbl] = str(val)
                 used_keys.add(want_key)
@@ -678,6 +740,11 @@ def _apply_line_edits(
                     continue
                 if not _cell_is_fillable(hit[0]):
                     notes.append(f"칸에 이미 값 있음(덮어쓰기 금지, colAddr={col}): {anchor[:24]}")
+                    continue
+                if _split_value_spans(hit[0]):
+                    notes.append(
+                        f"칸 기입 보류(run 경계 분할, colAddr={col}): {anchor[:24]}"
+                    )
                     continue
                 if _set_cell_text(hit[0], str(val), black):
                     applied += 1
@@ -1043,6 +1110,7 @@ def _fill_section_xml(
     overflow_cells: Optional[list] = None,
     field_writes: Optional[dict[str, str]] = None,
     f01_bucket: Optional[dict[str, dict]] = None,
+    span_notes: Optional[list] = None,
 ) -> tuple[bytes, dict[str, str], int, set[str]]:
     """한 섹션 XML 에서 표 라벨-값 칸(1) + 셀 인라인 빈칸(1.5) + 체크박스(1.7) +
     그리드 선택칸(1.75, □ 없음) + 표 밖 본문 단락 인라인 빈칸(1.8) 채움 +
@@ -1059,6 +1127,8 @@ def _fill_section_xml(
     변경이 없으면 입력 바이트를 그대로 반환한다(불필요한 재직렬화·선언 변형 회피).
     """
     root = etree.fromstring(xml_bytes)
+    if span_notes is None:
+        span_notes = []
     filled: dict[str, str] = {}
     used_keys: set[str] = set()
     replaced = 0
@@ -1091,6 +1161,9 @@ def _fill_section_xml(
                         continue  # 값칸 후보가 또 라벨 → 기입 금지
                     if not _cell_is_fillable(target):
                         continue  # 실제 값 있는 칸/폼컨트롤 칸 — 기입 금지
+                    if _split_value_spans(target):
+                        _note_unfilled_span(span_notes, lbl, target)
+                        break
                     if _set_cell_text(target, str(val), black):
                         filled[lbl] = str(val)
                         used_keys.add(want_key)
@@ -1108,7 +1181,7 @@ def _fill_section_xml(
         for tc in root.iter(_q("tc")):
             for sub in _direct(tc, "subList"):
                 for p in _direct(sub, "p"):
-                    if _fill_inline_fields_in_p(p, wants, used_keys, filled):
+                    if _fill_inline_fields_in_p(p, wants, used_keys, filled, span_notes):
                         changed = True
                         edited.append(p)
 
@@ -1147,6 +1220,9 @@ def _fill_section_xml(
                         ]
                         if len(hits) != 1:
                             break   # 0개/다수 매칭 → 모호, 아무 박스도 안 건드림
+                        if _span_crosses_text_nodes(p, hits[0], hits[0] + 1):
+                            _note_unfilled_span(span_notes, lbl, tc)
+                            break
                         if _splice_run_text(p, hits[0], hits[0] + 1, _CHECK_MARK):
                             filled[lbl] = str(val)
                             used_keys.add(want_key)
@@ -1203,7 +1279,7 @@ def _fill_section_xml(
     #      used_keys 공유(표/인라인/체크박스와 이중 기입 금지)·형제 run 보존.
     if wants:
         for p in _direct(root, "p"):
-            if _fill_inline_fields_in_p(p, wants, used_keys, filled):
+            if _fill_inline_fields_in_p(p, wants, used_keys, filled, span_notes):
                 changed = True
                 edited.append(p)
 
@@ -1405,6 +1481,7 @@ def fill_hwpx(
     overflow_cells: list[str] = []
     line_report: dict[str, Any] = {"applied": 0, "notes": []}
     f01_bucket: dict[str, dict] = {"written": {}, "skipped": {}, "style": {}}
+    span_notes: list[str] = []
     for name in section_names:
         try:
             new_bytes, filled, replaced, used = _fill_section_xml(
@@ -1414,6 +1491,7 @@ def fill_hwpx(
                 overflow_cells=overflow_cells,
                 field_writes=requested_writes if name == "Contents/section0.xml" else None,
                 f01_bucket=f01_bucket if name == "Contents/section0.xml" else None,
+                span_notes=span_notes,
             )
         except etree.XMLSyntaxError as exc:
             report.notes.append(f"{name} 파싱 실패(건너뜀): {exc}")
@@ -1427,6 +1505,9 @@ def fill_hwpx(
     report.field_writes_written.update(f01_bucket["written"])
     report.field_write_skipped.update(f01_bucket["skipped"])
     report.field_write_style.update(f01_bucket["style"])
+    for note in span_notes:
+        if note not in report.notes:
+            report.notes.append(note)
 
     # 3.3) 폼 컨트롤 체크박스(hp:checkBtn) 2-패스 — '문서 전체' 유일성 판정.
     #      (섹션 단위 판정은 다섹션 양식에서 전역 모호 라벨을 오체크 — 적대검증.)

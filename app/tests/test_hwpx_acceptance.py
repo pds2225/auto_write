@@ -200,6 +200,42 @@ def test_core_without_aux_not_guide(tmp_path):
     assert rep.guides == 0
 
 
+def test_core_heading_split_across_runs_is_guide(tmp_path):
+    """FINDING-QA-001 유지: 핵심 표제가 run 둘로 나뉘어도 안내문. 본문 분할은 제외."""
+    split = (
+        '<hp:p>'
+        '<hp:run charPrIDRef="2"><hp:t>작성방법:</hp:t></hp:run>'
+        '<hp:run charPrIDRef="0"><hp:t> 예시를 참고하십시오</hp:t></hp:run>'
+        "</hp:p>"
+    )
+    prose = (
+        '<hp:p>'
+        '<hp:run charPrIDRef="2"><hp:t>작성방법을</hp:t></hp:run>'
+        '<hp:run charPrIDRef="0"><hp:t> 참고하여 자유롭게 기술</hp:t></hp:run>'
+        "</hp:p>"
+    )
+    guided = tmp_path / "split_guide.hwpx"
+    _make_hwpx(
+        guided,
+        header=_header_xml(_charpr(0, "#000000")),
+        section=_section_xml(split),
+    )
+    before = hashlib.sha256(guided.read_bytes()).hexdigest()
+    rep = run_hwpx_acceptance(guided)
+    assert rep.guides == 1
+    assert "작성방법" in rep.guides_samples[0]
+    assert hashlib.sha256(guided.read_bytes()).hexdigest() == before
+
+    plain = tmp_path / "split_prose.hwpx"
+    _make_hwpx(
+        plain,
+        header=_header_xml(_charpr(0, "#000000")),
+        section=_section_xml(prose),
+    )
+    plain_rep = run_hwpx_acceptance(plain)
+    assert plain_rep.guides == 0
+
+
 def test_core_heading_without_aux_is_guide(tmp_path):
     """FINDING-QA-001: 핵심 표제만 있는 안내문도 센다. 본문은 바꾸지 않는다."""
     core_only = tmp_path / "core_heading.hwpx"
