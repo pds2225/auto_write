@@ -1113,11 +1113,18 @@ class ProjectService:
         organization_name = str((project_input.organization_profile or {}).get("name", "")).strip()
         if organization_name:
             identity.setdefault("기업명", organization_name)
+        from .hwpx_fill import F01_CANONICAL_SHA256, F01_FIELD_KEYS
+
+        field_writes: dict[str, str] = {}
         for key, value in (project_input.answers or {}).items():
             if key in {"user_brief", "user_notes"} or not isinstance(value, (str, int, float)):
                 continue
-            if str(value).strip():
-                identity.setdefault(str(key), str(value))
+            if not str(value).strip():
+                continue
+            if key in F01_FIELD_KEYS:
+                field_writes[str(key)] = str(value)
+                continue
+            identity.setdefault(str(key), str(value))
 
         report = submit_hwpx(
             source,
@@ -1128,6 +1135,8 @@ class ProjectService:
             normalize_colors=False,
             submission_cleanup=False,
             preserve_template=True,
+            field_writes=field_writes or None,
+            expected_sha256=F01_CANONICAL_SHA256 if field_writes else None,
         )
         results_dir = self.storage.results_dir(project_id)
         results_dir.mkdir(parents=True, exist_ok=True)

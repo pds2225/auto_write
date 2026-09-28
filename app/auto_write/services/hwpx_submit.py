@@ -77,6 +77,7 @@ class SubmitReport:
     draft_reason: str = ""
     error: str = ""
     integrity: dict[str, Any] = field(default_factory=dict)
+    native_render: dict[str, Any] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
@@ -99,6 +100,7 @@ class SubmitReport:
             "draft_reason": self.draft_reason,
             "error": self.error,
             "integrity": dict(self.integrity),
+            "native_render": dict(self.native_render),
             "notes": list(self.notes),
         }
 
@@ -128,7 +130,7 @@ def _semantic_status(semantic: dict[str, Any]) -> str:
     return NORMAL
 
 
-def _check_and_repair_semantics(report: SubmitReport, out: Path) -> bool:
+def _check_and_repair_semantics(report: SubmitReport, out: Path, *, preserve_template: bool = False) -> bool:
     """Run semantic check and repair only the existing safe table-grid defect."""
     try:
         before = check_hwpx_semantics(out)
@@ -152,6 +154,12 @@ def _check_and_repair_semantics(report: SubmitReport, out: Path) -> bool:
         if report.routing_status == NORMAL:
             report.notes.append("semantic PASS — table repair 생략")
         return True
+
+    if preserve_template:
+        report.semantic_after = before
+        report.draft_reason = "보호 양식의 표 구조 결함 — 외곽 구조 자동 변경 금지"
+        report.notes.append("원본 보존 모드: 표 격자 자동 repair 생략")
+        return False
 
     repaired = out.with_name(f"{out.stem}.__grid_repair__.{os.getpid()}{out.suffix}")
     try:
@@ -203,6 +211,9 @@ def submit_hwpx(
     normalize_colors: bool = True,
     submission_cleanup: bool = True,
     preserve_template: bool = False,
+    region_edits: Optional[list[dict[str, Any]]] = None,
+    field_writes: Optional[dict[str, str]] = None,
+    expected_sha256: str | None = None,
 ) -> SubmitReport:
     """HWPX 양식을 채우고 수용검사 게이트로 판정해 제출 가능 여부를 확정한다.
 
@@ -235,14 +246,39 @@ def submit_hwpx(
     report = SubmitReport(input=str(src), output=str(out))
 
     # 1) 채움 — 원본미수정·원자적쓰기·덮어쓰기금지는 fill_hwpx 에 내장.
-    fill_rep = fill_hwpx(src, out, identity=identity, replacements=replacements)
+    fill_options: dict[str, Any] = {"identity": identity, "replacements": replacements}
+    if field_writes:
+        fill_options["field_writes"] = field_writes
+    if expected_sha256:
+        fill_options["expected_sha256"] = expected_sha256
+    if region_edits is not None:
+        fill_options["region_edits"] = region_edits
+    if preserve_template:
+        fill_options["force_black"] = False
+    fill_rep = fill_hwpx(src, out, **fill_options)
     report.filled = dict(fill_rep.filled)
     report.residual = list(fill_rep.residual)
     report.overflow_cells = list(fill_rep.overflow_cells)
     report.notes.extend(fill_rep.notes)
+    for key, mode in fill_rep.field_writes_written.items():
+        report.notes.append(f"[field_writes] {key}={mode}")
+    for key, reason in fill_rep.field_write_skipped.items():
+        report.notes.append(f"[field_writes] {key} {reason}")
+    for key, status in fill_rep.field_write_style.items():
+        report.notes.append(f"[field_writes] {key} {status}")
     report.final = str(out)
+    if fill_rep.template_status == "TEMPLATE_MISMATCH":
+        report.routing_status = "TEMPLATE_MISMATCH"
+        report.ok = False
+        report.final_output_allowed = False
+        report.submittable = False
+        report.draft_reason = (
+            "TEMPLATE_MISMATCH — F01 canonical SHA256과 다른 양식에는 field_writes를 적용하지 않음"
+        )
+        report.final = str(_mark_draft(report, out, src))
+        return report
 
-    semantic_ok = _check_and_repair_semantics(report, out)
+    semantic_ok = _check_and_repair_semantics(report, out, preserve_template=preserve_template)
     if semantic_ok and report.routing_status == NORMAL and fill_rep.overflow_cells:
         report.routing_status = LOCAL_LAYOUT_RISK
         report.notes.append(
@@ -289,12 +325,21 @@ def submit_hwpx(
         str(v) for src in (identity, replacements) if src
         for v in src.values() if str(v or "").strip()
     ]
+    render_validator = None
+    if preserve_template:
+        from core.docx.services.native_hwp import verify_hwpx_native
+
+        def render_validator(candidate: str) -> dict[str, Any]:
+            report.native_render = verify_hwpx_native(candidate)
+            return report.native_render
+
     gate = run_hwpx_integrity_gate(
         str(out),
         allowed_names=allowed_names,
         semantic_validator=check_hwpx_semantics,
         acceptance_validator=run_hwpx_acceptance,
         fixed_cell_overflow=report.overflow_cells,
+        render_validator=render_validator,
     )
     report.integrity = gate.as_dict()
     report.acceptance = gate.acceptance_report
@@ -333,7 +378,7 @@ def submit_hwpx(
         report.draft_reason = f"공통 무결성 gate {gate.final_status}: {messages}"
     for result in failed:
         if result.validator_status != "EXECUTED":
-            report.error = result.message
+            report.error = f"{report.error}; {result.message}" if report.error else result.message
             break
     report.final = str(_mark_draft(report, out, src))
     report.ok = False
