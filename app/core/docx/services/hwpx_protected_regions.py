@@ -1129,6 +1129,128 @@ def find_nested_leaf_targets(index: HwpxStructureIndex) -> tuple[T02Target, ...]
     return tuple(target for target in pending if label_counts[target.field_label] == 1)
 
 
+def _column_header_label(text: str) -> str | None:
+    raw = (text or "").strip()
+    if not raw or "/" in raw or "※" in raw:
+        return None
+    if guidance_status(raw) == "guidance" or _SIGNATURE_RE.search(raw) or _is_date_scaffold_paragraph(raw):
+        return None
+    if _CHOICE_MARK_RE.search(raw) or _is_multi_choice(raw) or _sign_consent_label(_compact(raw)):
+        return None
+    compact = _compact(raw).rstrip(":：")
+    if not compact or len(compact) > 40 or not re.search(r"[가-힣]", compact):
+        return None
+    if re.fullmatch(r"\d{2,4}년|\d{1,2}월|\d{1,2}일", compact):
+        return None
+    return compact
+
+
+def _row_key_label(text: str) -> str | None:
+    raw = (text or "").strip()
+    if not raw or "/" in raw or "※" in raw:
+        return None
+    if guidance_status(raw) == "guidance" or _SIGNATURE_RE.search(raw) or _is_date_scaffold_paragraph(raw):
+        return None
+    if _CHOICE_MARK_RE.search(raw) or _sign_consent_label(_compact(raw)):
+        return None
+    compact = _compact(raw)
+    if not compact or len(compact) > 40:
+        return None
+    return compact
+
+
+def _plain_grid(table) -> dict[tuple[int, int], object]:
+    grid = {}
+    for cell in table.cells:
+        if (
+            _cell_placed(cell)
+            and cell.row_span == 1
+            and cell.col_span == 1
+            and not cell.has_nested_table
+            and not cell.has_non_text_object
+        ):
+            grid[(cell.row, cell.col)] = cell
+    return grid
+
+
+def find_repeated_row_targets(index: HwpxStructureIndex) -> tuple[T02Target, ...]:
+    """One empty cell in a repeated column, named by its row key and header.
+
+    The header and the row key stay untouched. A single value for the header
+    is not a target, because it does not say which row to fill.
+    """
+    if index.analysis_status != "COMPLETE":
+        return ()
+    occupied_labels = {item.field_label for item in find_t02_auto_targets(index)}
+    occupied_labels.update(item.field_label for item in find_merged_value_targets(index))
+    occupied_labels.update(item.field_label for item in find_nested_leaf_targets(index))
+    occupied_cells = {
+        (item.section_index, item.table_index, item.row, item.col)
+        for item in (*find_t02_auto_targets(index), *find_merged_value_targets(index), *find_nested_leaf_targets(index))
+    }
+    pending: list[T02Target] = []
+    for section in index.sections:
+        for table_index in section.table_indexes:
+            table = index.tables[table_index]
+            if table.story_scope != "body":
+                continue
+            grid = _plain_grid(table)
+            columns = sorted({col for _, col in grid})
+            for col in columns:
+                rows = sorted(row for (row, cell_col) in grid if cell_col == col)
+                header = None
+                empties = []
+
+                def emit() -> None:
+                    if header is None or len(empties) < 2:
+                        return
+                    header_label = _column_header_label(_cell_joined(section, header))
+                    if header_label is None:
+                        return
+                    for value in empties:
+                        key = None
+                        for other_col in sorted(cell_col for (row, cell_col) in grid if row == value.row and cell_col != col):
+                            key = _row_key_label(_cell_joined(section, grid[(value.row, other_col)]))
+                            if key:
+                                break
+                        if key is None:
+                            continue
+                        if len(value.paragraph_indexes) != 1:
+                            continue
+                        paragraph = section.paragraphs[value.paragraph_indexes[0]]
+                        if paragraph.story_scope != "body" or len(paragraph.runs) != 1:
+                            continue
+                        run = paragraph.runs[0]
+                        if run.has_nested_table or not _plain_empty_run(run):
+                            continue
+                        label = f"{key}/{header_label}"
+                        if label in occupied_labels:
+                            continue
+                        cell_key = (section.section_index, table.table_index, value.row, value.col)
+                        if cell_key in occupied_cells:
+                            continue
+                        pending.append(_target_from_value(section, table, value, label, run))
+
+                for row in rows:
+                    cell = grid[(row, col)]
+                    if _cell_joined(section, cell).strip():
+                        emit()
+                        header = cell
+                        empties = []
+                        continue
+                    if header is None or (empties and row != empties[-1].row + 1):
+                        emit()
+                        header = None
+                        empties = []
+                        continue
+                    empties.append(cell)
+                emit()
+    label_counts: dict[str, int] = {}
+    for target in pending:
+        label_counts[target.field_label] = label_counts.get(target.field_label, 0) + 1
+    return tuple(target for target in pending if label_counts[target.field_label] == 1)
+
+
 @dataclass(frozen=True)
 class FieldAssessment:
     field_label: str | None
@@ -1627,6 +1749,67 @@ def authorize_nested_leaf_writes(index: HwpxStructureIndex) -> tuple[T02WriteAut
 def nested_authorization_is_current(index: HwpxStructureIndex, grant: T02WriteAuthorization) -> bool:
     """A nested grant is current only when this index would issue the same one."""
     return any(item == grant for item in authorize_nested_leaf_writes(index))
+
+
+def _repeated_writer_supports(index: HwpxStructureIndex, target: T02Target) -> bool:
+    """The exact writer can change one empty hp:t in a repeated-row cell."""
+    if target.row_span != 1 or target.col_span != 1 or target.expected_raw_text != "" or "/" not in target.field_label:
+        return False
+    if target.table_index >= len(index.tables):
+        return False
+    table = index.tables[target.table_index]
+    if table.story_scope != "body":
+        return False
+    section = next((item for item in index.sections if item.section_index == target.section_index), None)
+    if section is None or target.paragraph_index >= len(section.paragraphs):
+        return False
+    paragraph = section.paragraphs[target.paragraph_index]
+    if paragraph.story_scope != "body" or paragraph.table_index != target.table_index or len(paragraph.runs) != 1:
+        return False
+    run = paragraph.runs[0]
+    if run.run_index != target.run_index or run.has_nested_table or run.has_non_text_object:
+        return False
+    if len(run.text_nodes) > 1 or (run.raw_text or "").strip():
+        return False
+    if run.text_nodes and (run.text_nodes[0].raw_text != "" or run.text_nodes[0].text_node_index != target.text_node_index):
+        return False
+    if not run.text_nodes and target.text_node_index is not None:
+        return False
+    return True
+
+
+def authorize_repeated_row_writes(index: HwpxStructureIndex) -> tuple[T02WriteAuthorization, ...]:
+    """Grant one repeated-row cell. The header and the row key are not grants."""
+    if index.analysis_status != "COMPLETE" or not index.source_sha256:
+        return ()
+    grants: list[T02WriteAuthorization] = []
+    for target in find_repeated_row_targets(index):
+        if not _repeated_writer_supports(index, target):
+            continue
+        section = next(item for item in index.sections if item.section_index == target.section_index)
+        paragraph = section.paragraphs[target.paragraph_index]
+        grants.append(T02WriteAuthorization(
+            source_sha256=index.source_sha256,
+            field_label=target.field_label,
+            section_member=target.section_member,
+            section_index=target.section_index,
+            table_index=target.table_index,
+            row=target.row,
+            col=target.col,
+            row_span=target.row_span,
+            col_span=target.col_span,
+            paragraph_index=target.paragraph_index,
+            run_index=target.run_index,
+            text_node_index=target.text_node_index,
+            expected_raw_text=target.expected_raw_text,
+            story_scope=paragraph.story_scope,
+        ))
+    return tuple(grants)
+
+
+def repeated_authorization_is_current(index: HwpxStructureIndex, grant: T02WriteAuthorization) -> bool:
+    """A repeated-row grant is current only when this index would issue the same one."""
+    return any(item == grant for item in authorize_repeated_row_writes(index))
 
 
 def t02_write_authorized(index: HwpxStructureIndex, field: FieldAssessment) -> bool:

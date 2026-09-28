@@ -243,8 +243,10 @@ def apply_t02_analyzer_writes(
         assess_fields,
         authorize_merged_value_writes,
         authorize_nested_leaf_writes,
+        authorize_repeated_row_writes,
         merged_authorization_is_current,
         nested_authorization_is_current,
+        repeated_authorization_is_current,
     )
 
     raw = {
@@ -266,6 +268,11 @@ def apply_t02_analyzer_writes(
         grant.field_label
         for grant in authorize_nested_leaf_writes(index)
         if nested_authorization_is_current(index, grant) and grant.field_label
+    )
+    granted_labels.update(
+        grant.field_label
+        for grant in authorize_repeated_row_writes(index)
+        if repeated_authorization_is_current(index, grant) and grant.field_label
     )
     pending_labels = {
         field.field_label
