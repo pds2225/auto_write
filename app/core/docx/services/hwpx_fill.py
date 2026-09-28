@@ -2217,8 +2217,9 @@ def commit_t02_label_writes(
     """Refuse analyzer writes until an internal authorization recheck passes.
 
     A T02 candidate is not a write. ``auto_write_allowed`` on a caller-built
-    record is ignored. Legacy ``commit_exact_text_writes`` stays a separate
-    coordinate contract.
+    record is ignored. A horizontal merged value grant uses the same exact
+    writer and the same all-or-nothing refusal. Legacy ``commit_exact_text_writes``
+    stays a separate coordinate contract.
     """
     from core.docx.services.hwpx_analysis_adapter import index_hwpx_structure
 
@@ -2235,12 +2236,22 @@ def commit_t02_label_writes(
         report.reason = "EMPTY_PLAN"
         report.reasons.append("EMPTY_PLAN")
         return report
-    from core.docx.services.hwpx_protected_regions import authorization_is_current, authorize_t02_writes
+    from core.docx.services.hwpx_protected_regions import (
+        authorization_is_current,
+        authorize_merged_value_writes,
+        authorize_t02_writes,
+        merged_authorization_is_current,
+    )
     grants = {
         grant.field_label: grant
         for grant in authorize_t02_writes(index)
         if authorization_is_current(index, grant)
     }
+    for grant in authorize_merged_value_writes(index):
+        if grant.field_label in grants:
+            continue
+        if merged_authorization_is_current(index, grant):
+            grants[grant.field_label] = grant
     exact: list[ExactTextTarget] = []
     for key, value in wanted.items():
         grant = grants.get(key)

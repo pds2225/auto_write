@@ -929,6 +929,130 @@ def find_t02_auto_targets(index: HwpxStructureIndex) -> tuple[T02Target, ...]:
     return tuple(results)
 
 
+def _spans_overlap(left, right) -> bool:
+    if not _cell_placed(left) or not _cell_placed(right):
+        return False
+    row_overlap = left.row < right.row + right.row_span and right.row < left.row + left.row_span
+    col_overlap = left.col < right.col + right.col_span and right.col < left.col + left.col_span
+    return row_overlap and col_overlap
+
+
+def _merged_span_clear(table, value) -> bool:
+    """The merged value occupies its rectangle alone."""
+    return not any(other is not value and _spans_overlap(value, other) for other in table.cells)
+
+
+def _blank_continuation(section, table, value) -> bool:
+    """An unlabeled empty cell stacked on this value is a repeated row."""
+    for other in table.cells:
+        if other is value or not _cell_placed(other) or other.col != value.col:
+            continue
+        adjacent = other.row == value.row + value.row_span or value.row == other.row + other.row_span
+        if not adjacent or _cell_joined(section, other).strip():
+            continue
+        left = [
+            cell for cell in table.cells
+            if cell is not other and _cell_placed(cell) and cell.col + cell.col_span == other.col
+            and cell.row < other.row + other.row_span and other.row < cell.row + cell.row_span
+            and _cell_joined(section, cell).strip()
+        ]
+        if not left:
+            return True
+    return False
+
+
+def _target_from_value(section, table, value, label: str, run) -> T02Target:
+    return T02Target(
+        field_label=label,
+        section_member=section.section_member,
+        section_index=section.section_index,
+        paragraph_index=section.paragraphs[value.paragraph_indexes[0]].paragraph_index,
+        run_index=run.run_index,
+        text_node_index=None if not run.text_nodes else run.text_nodes[0].text_node_index,
+        expected_raw_text="",
+        table_index=table.table_index,
+        row=value.row,
+        col=value.col,
+        row_span=value.row_span,
+        col_span=value.col_span,
+    )
+
+
+def find_merged_value_targets(index: HwpxStructureIndex) -> tuple[T02Target, ...]:
+    """Unique label beside one empty run stretched across columns.
+
+    A vertical merge can sit beside two labels, so rowSpan other than 1 stays out.
+    Extra runs stay out: the exact writer changes one hp:t and nothing else.
+    This is not a T02 target and it is not an AUTO decision.
+    """
+    if index.analysis_status != "COMPLETE":
+        return ()
+    blocked = _protected_label_paragraphs(index)
+    counted: dict[tuple[int, int, str], int] = {}
+    located = []
+    for section in index.sections:
+        for table_index in section.table_indexes:
+            table = index.tables[table_index]
+            if table.story_scope != "body" or table.parent_table_index is not None:
+                continue
+            for cell in table.cells:
+                if cell.has_nested_table or cell.has_non_text_object or not _cell_placed(cell):
+                    continue
+                if cell.row_span != 1 or cell.col_span != 1:
+                    continue
+                if any((section.section_index, item) in blocked for item in cell.paragraph_indexes):
+                    continue
+                label_paragraphs = [section.paragraphs[item] for item in cell.paragraph_indexes]
+                if any(item.story_scope != "body" for item in label_paragraphs):
+                    continue
+                label = _t02_label(_cell_joined(section, cell))
+                if label is None:
+                    continue
+                key = (section.section_index, table.table_index, label)
+                counted[key] = counted.get(key, 0) + 1
+                located.append((section, table, cell, label))
+    claims = _value_claim_counts(index)
+    pending: list[T02Target] = []
+    for section, table, cell, label in located:
+        if counted.get((section.section_index, table.table_index, label), 0) != 1:
+            continue
+        value = _right_value_cell(table, cell)
+        if value is None or value.has_nested_table or value.has_non_text_object or not _cell_placed(value):
+            continue
+        if value.row_span != 1 or value.col_span is None or value.col_span < 2:
+            continue
+        if not _merged_span_clear(table, value):
+            continue
+        if value.col in _repeated_value_columns(section, table):
+            continue
+        if (
+            _repeated_entry_row(section, table, value)
+            or _blank_continuation(section, table, value)
+            or _above_label_conflict(section, table, value)
+        ):
+            continue
+        claim_key = (section.section_index, table.table_index, value.row, value.col)
+        if claims.get(claim_key, 0) != 1:
+            continue
+        if _neighbor_is_guidance(section, table, value):
+            continue
+        if _cell_joined(section, value).strip():
+            continue
+        if len(value.paragraph_indexes) != 1:
+            continue
+        paragraph = section.paragraphs[value.paragraph_indexes[0]]
+        if paragraph.story_scope != "body" or len(paragraph.runs) != 1:
+            continue
+        run = paragraph.runs[0]
+        if not _plain_empty_run(run):
+            continue
+        pending.append(_target_from_value(section, table, value, label, run))
+    label_counts: dict[str, int] = {}
+    for target in pending:
+        label_counts[target.field_label] = label_counts.get(target.field_label, 0) + 1
+    return tuple(target for target in pending if label_counts[target.field_label] == 1)
+
+
 @dataclass(frozen=True)
 class FieldAssessment:
     field_label: str | None
@@ -1303,6 +1427,69 @@ def authorize_t02_writes(index: HwpxStructureIndex) -> tuple[T02WriteAuthorizati
 def authorization_is_current(index: HwpxStructureIndex, grant: T02WriteAuthorization) -> bool:
     """A serialized or edited grant is current only when the index issues the same one."""
     return any(item == grant for item in authorize_t02_writes(index))
+
+
+def _merged_writer_supports(index: HwpxStructureIndex, target: T02Target) -> bool:
+    """The exact writer can change one empty hp:t inside a horizontal merge."""
+    if target.row_span != 1 or target.col_span is None or target.col_span < 2:
+        return False
+    if target.expected_raw_text != "":
+        return False
+    if target.table_index >= len(index.tables):
+        return False
+    table = index.tables[target.table_index]
+    if table.story_scope != "body" or table.parent_table_index is not None:
+        return False
+    section = next((item for item in index.sections if item.section_index == target.section_index), None)
+    if section is None or target.paragraph_index >= len(section.paragraphs):
+        return False
+    paragraph = section.paragraphs[target.paragraph_index]
+    if paragraph.story_scope != "body" or len(paragraph.runs) != 1:
+        return False
+    run = paragraph.runs[0]
+    if run.run_index != target.run_index or run.has_nested_table or run.has_non_text_object:
+        return False
+    if len(run.text_nodes) > 1 or (run.raw_text or "").strip():
+        return False
+    if run.text_nodes and (run.text_nodes[0].raw_text != "" or run.text_nodes[0].text_node_index != target.text_node_index):
+        return False
+    if not run.text_nodes and target.text_node_index is not None:
+        return False
+    return True
+
+
+def authorize_merged_value_writes(index: HwpxStructureIndex) -> tuple[T02WriteAuthorization, ...]:
+    """Grant a horizontal merged value cell. Assessment stays unauthorized."""
+    if index.analysis_status != "COMPLETE" or not index.source_sha256:
+        return ()
+    grants: list[T02WriteAuthorization] = []
+    for target in find_merged_value_targets(index):
+        if not _merged_writer_supports(index, target):
+            continue
+        section = next(item for item in index.sections if item.section_index == target.section_index)
+        paragraph = section.paragraphs[target.paragraph_index]
+        grants.append(T02WriteAuthorization(
+            source_sha256=index.source_sha256,
+            field_label=target.field_label,
+            section_member=target.section_member,
+            section_index=target.section_index,
+            table_index=target.table_index,
+            row=target.row,
+            col=target.col,
+            row_span=target.row_span,
+            col_span=target.col_span,
+            paragraph_index=target.paragraph_index,
+            run_index=target.run_index,
+            text_node_index=target.text_node_index,
+            expected_raw_text=target.expected_raw_text,
+            story_scope=paragraph.story_scope,
+        ))
+    return tuple(grants)
+
+
+def merged_authorization_is_current(index: HwpxStructureIndex, grant: T02WriteAuthorization) -> bool:
+    """A merged grant is current only when this index would issue the same one."""
+    return any(item == grant for item in authorize_merged_value_writes(index))
 
 
 def t02_write_authorized(index: HwpxStructureIndex, field: FieldAssessment) -> bool:

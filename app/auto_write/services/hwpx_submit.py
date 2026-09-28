@@ -239,7 +239,11 @@ def apply_t02_analyzer_writes(
     passed to legacy ``fill_hwpx``. Assessment decisions stay unchanged.
     """
     from core.docx.services.hwpx_analysis_adapter import index_hwpx_structure
-    from core.docx.services.hwpx_protected_regions import assess_fields
+    from core.docx.services.hwpx_protected_regions import (
+        assess_fields,
+        authorize_merged_value_writes,
+        merged_authorization_is_current,
+    )
 
     raw = {
         str(key): "" if value is None else str(value)
@@ -251,6 +255,11 @@ def apply_t02_analyzer_writes(
         if authorization_is_current(index, grant)
     )
     granted_labels = {grant.field_label for grant in current if grant.field_label}
+    granted_labels.update(
+        grant.field_label
+        for grant in authorize_merged_value_writes(index)
+        if merged_authorization_is_current(index, grant) and grant.field_label
+    )
     pending_labels = {
         field.field_label
         for field in assess_fields(index)

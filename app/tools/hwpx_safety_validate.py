@@ -43,6 +43,7 @@ UNIT_FILES = [
     "app/tests/test_hwpx_protected_regions.py",
     "app/tests/test_hwpx_exact_write.py",
     "app/tests/test_hwpx_t02_auto.py",
+    "app/tests/test_hwpx_merged_value.py",
     "app/tests/test_hwpx_safety_runner.py",
 ]
 GOLDEN_FILES = ["app/tests/test_hwpx_safety_golden10.py"]
