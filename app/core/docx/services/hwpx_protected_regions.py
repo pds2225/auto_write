@@ -1251,6 +1251,112 @@ def find_repeated_row_targets(index: HwpxStructureIndex) -> tuple[T02Target, ...
     return tuple(target for target in pending if label_counts[target.field_label] == 1)
 
 
+def _trailing_guidance_run(paragraph):
+    """The last run may be filled only when every earlier run is guidance text."""
+    if paragraph.story_scope != "body" or len(paragraph.runs) < 2:
+        return None
+    last = paragraph.runs[-1]
+    if not _plain_empty_run(last):
+        return None
+    earlier = paragraph.runs[:-1]
+    if any(not (run.raw_text or "").strip() or run.has_nested_table or run.has_non_text_object for run in earlier):
+        return None
+    if any(_SIGNATURE_RE.search(run.raw_text or "") or _is_date_scaffold_paragraph(run.raw_text or "") for run in earlier):
+        return None
+    if not any("※" in (run.raw_text or "") or guidance_status(run.raw_text) == "guidance" for run in earlier):
+        return None
+    return last
+
+
+def _left_value_label(section, table, value) -> str | None:
+    labels = []
+    for other in table.cells:
+        if other is value or other.has_nested_table or not _cell_placed(other):
+            continue
+        if _right_value_cell(table, other) is not value:
+            continue
+        label = _t02_label(_cell_joined(section, other))
+        if label:
+            labels.append(label)
+    if len(labels) == 1:
+        return labels[0]
+    return None
+
+
+def _narrative_label(index: HwpxStructureIndex, section, paragraph) -> str | None:
+    if paragraph.table_index is None or paragraph.table_index >= len(index.tables):
+        return None
+    table = index.tables[paragraph.table_index]
+    owner = next((cell for cell in table.cells if paragraph.paragraph_index in cell.paragraph_indexes), None)
+    if owner is None:
+        return None
+    direct = _left_value_label(section, table, owner)
+    if direct:
+        return direct
+    current = table
+    while current.parent_table_index is not None:
+        parent = index.tables[current.parent_table_index]
+        host = next((
+            cell for cell in parent.cells
+            if cell.physical_tr_index == current.parent_physical_tr_index
+            and cell.physical_tc_index == current.parent_physical_tc_index
+        ), None)
+        if host is None:
+            return None
+        label = _left_value_label(section, parent, host)
+        if label:
+            return label
+        current = parent
+    return None
+
+
+def find_guidance_narrative_targets(index: HwpxStructureIndex) -> tuple[T02Target, ...]:
+    """A labeled cell whose answer run is empty and whose other runs are guidance.
+
+    The guidance runs are not targets. An empty run between guidance lines is not
+    a target either.
+    """
+    if index.analysis_status != "COMPLETE":
+        return ()
+    occupied = {item.field_label for item in find_t02_auto_targets(index)}
+    occupied.update(item.field_label for item in find_merged_value_targets(index))
+    occupied.update(item.field_label for item in find_nested_leaf_targets(index))
+    occupied.update(item.field_label for item in find_repeated_row_targets(index))
+    pending: list[T02Target] = []
+    for section in index.sections:
+        for paragraph in section.paragraphs:
+            run = _trailing_guidance_run(paragraph)
+            if run is None or paragraph.table_index is None:
+                continue
+            table = index.tables[paragraph.table_index]
+            if table.story_scope != "body":
+                continue
+            owner = next((cell for cell in table.cells if paragraph.paragraph_index in cell.paragraph_indexes), None)
+            if owner is None or not _cell_placed(owner) or owner.has_non_text_object:
+                continue
+            label = _narrative_label(index, section, paragraph)
+            if label is None or label in occupied:
+                continue
+            pending.append(T02Target(
+                field_label=label,
+                section_member=section.section_member,
+                section_index=section.section_index,
+                paragraph_index=paragraph.paragraph_index,
+                run_index=run.run_index,
+                text_node_index=None if not run.text_nodes else run.text_nodes[0].text_node_index,
+                expected_raw_text="",
+                table_index=table.table_index,
+                row=owner.row,
+                col=owner.col,
+                row_span=owner.row_span,
+                col_span=owner.col_span,
+            ))
+    label_counts: dict[str, int] = {}
+    for target in pending:
+        label_counts[target.field_label] = label_counts.get(target.field_label, 0) + 1
+    return tuple(target for target in pending if label_counts[target.field_label] == 1)
+
+
 @dataclass(frozen=True)
 class FieldAssessment:
     field_label: str | None
@@ -1810,6 +1916,57 @@ def authorize_repeated_row_writes(index: HwpxStructureIndex) -> tuple[T02WriteAu
 def repeated_authorization_is_current(index: HwpxStructureIndex, grant: T02WriteAuthorization) -> bool:
     """A repeated-row grant is current only when this index would issue the same one."""
     return any(item == grant for item in authorize_repeated_row_writes(index))
+
+
+def _guidance_writer_supports(index: HwpxStructureIndex, target: T02Target) -> bool:
+    """The exact writer may change only the trailing empty run."""
+    if target.expected_raw_text != "" or target.table_index >= len(index.tables):
+        return False
+    section = next((item for item in index.sections if item.section_index == target.section_index), None)
+    if section is None or target.paragraph_index >= len(section.paragraphs):
+        return False
+    paragraph = section.paragraphs[target.paragraph_index]
+    run = _trailing_guidance_run(paragraph)
+    if run is None or run.run_index != target.run_index:
+        return False
+    if run.text_nodes and run.text_nodes[0].text_node_index != target.text_node_index:
+        return False
+    if not run.text_nodes and target.text_node_index is not None:
+        return False
+    return True
+
+
+def authorize_guidance_narrative_writes(index: HwpxStructureIndex) -> tuple[T02WriteAuthorization, ...]:
+    """Grant the empty answer run. Guidance text stays unauthorized."""
+    if index.analysis_status != "COMPLETE" or not index.source_sha256:
+        return ()
+    grants: list[T02WriteAuthorization] = []
+    for target in find_guidance_narrative_targets(index):
+        if not _guidance_writer_supports(index, target):
+            continue
+        section = next(item for item in index.sections if item.section_index == target.section_index)
+        grants.append(T02WriteAuthorization(
+            source_sha256=index.source_sha256,
+            field_label=target.field_label,
+            section_member=target.section_member,
+            section_index=target.section_index,
+            table_index=target.table_index,
+            row=target.row,
+            col=target.col,
+            row_span=target.row_span,
+            col_span=target.col_span,
+            paragraph_index=target.paragraph_index,
+            run_index=target.run_index,
+            text_node_index=target.text_node_index,
+            expected_raw_text="",
+            story_scope=section.paragraphs[target.paragraph_index].story_scope,
+        ))
+    return tuple(grants)
+
+
+def guidance_authorization_is_current(index: HwpxStructureIndex, grant: T02WriteAuthorization) -> bool:
+    """A guidance-narrative grant is current only when this index would issue it."""
+    return any(item == grant for item in authorize_guidance_narrative_writes(index))
 
 
 def t02_write_authorized(index: HwpxStructureIndex, field: FieldAssessment) -> bool:

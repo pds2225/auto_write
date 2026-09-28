@@ -46,6 +46,7 @@ UNIT_FILES = [
     "app/tests/test_hwpx_merged_value.py",
     "app/tests/test_hwpx_nested_leaf.py",
     "app/tests/test_hwpx_repeated_row.py",
+    "app/tests/test_hwpx_guidance_narrative.py",
     "app/tests/test_hwpx_safety_runner.py",
 ]
 GOLDEN_FILES = ["app/tests/test_hwpx_safety_golden10.py"]
