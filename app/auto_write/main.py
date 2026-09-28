@@ -109,7 +109,10 @@ async def upload_template(file: UploadFile = File(...)):
     if not is_supported_template_file(safe_name):
         raise HTTPException(status_code=400, detail=template_upload_detail())
     content = await file.read()
-    profile = project_service.analyze_uploaded_template(safe_name, content)
+    try:
+        profile = project_service.analyze_uploaded_template(safe_name, content)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return RedirectResponse(url=f"/templates/{profile.template_id}", status_code=303)
 
 
@@ -300,7 +303,8 @@ async def generate_project(request: Request, project_id: str):
 async def generate_project_api(project_id: str):
     try:
         artifacts = project_service.generate(project_id)
-    except ValueError as exc:
+    except (FileNotFoundError, ValueError) as exc:
+        # fill/submit 입력 오류는 상태와 본문으로 돌려준다. 500과 잘린 ZIP을 만들지 않는다.
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return artifacts.model_dump()
 
