@@ -847,6 +847,14 @@ def _t02_value_run(section, paragraph):
     return None
 
 
+def _t02_value_span_supported(section, value_cell) -> bool:
+    if value_cell.row_span != 1:
+        return False
+    if value_cell.col_span == 1:
+        return True
+    return section.section_index > 0 and value_cell.col_span is not None and value_cell.col_span > 1
+
+
 def find_t02_auto_targets(index: HwpxStructureIndex) -> tuple[T02Target, ...]:
     """Return only label-plus-completely-empty-cell targets. Nothing else is AUTO."""
     if index.analysis_status != "COMPLETE":
@@ -883,7 +891,7 @@ def find_t02_auto_targets(index: HwpxStructureIndex) -> tuple[T02Target, ...]:
         value = _right_value_cell(table, cell)
         if value is None or value.has_nested_table or value.has_non_text_object or not _cell_placed(value):
             continue
-        if value.row_span != 1 or value.col_span != 1:
+        if not _t02_value_span_supported(section, value):
             continue
         if value.col in _repeated_value_columns(section, table):
             continue
