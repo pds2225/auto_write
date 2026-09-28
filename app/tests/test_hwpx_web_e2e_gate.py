@@ -34,6 +34,7 @@ from docx import Document
 from fastapi.testclient import TestClient
 import auto_write.main as main
 import auto_write.operator_main  # noqa: F401  — 콘솔 라우트를 같은 app에 붙인다
+from auto_write.services.hwp_docx_convert import hancom_com_available
 from auto_write.services.hwpx_acceptance import run_hwpx_acceptance
 from auto_write.services.hwpx_submit import RHWP_ABSENT_RENDER_NOTE, RHWP_ABSENT_REPAIR_NOTE
 from core.docx.services.hwpx_analysis_adapter import index_hwpx_structure
@@ -225,7 +226,10 @@ def test_web_happy_path_returns_intact_filled_package(client, tmp_path):
     assert routing["native_render"]["l005_pixel"] == "ENV_BLOCKED"
     assert routing["native_render"]["l050_pdf"] == "ENV_BLOCKED"
     assert routing["native_render"]["pixel_reopen_claimed"] is False
-    assert route["visual_render"] == "ENVIRONMENT_BLOCKED"
+    # COM 설치 여부와 rhwp 부재는 별개다. L005 픽셀 PASS는 여기 기대값이 아니다.
+    assert route["visual_render"] == (
+        "REVIEW_REQUIRED" if hancom_com_available() else "ENVIRONMENT_BLOCKED"
+    )
     assert any("대표자" in note and "EXISTING_VALUE" in note for note in routing["notes"])
     assert not any("대표자" in note and note.endswith("GRANT_WRITTEN") for note in routing["notes"])
 
