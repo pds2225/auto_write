@@ -231,7 +231,7 @@ def test_web_happy_path_returns_intact_filled_package(client, tmp_path):
 
     final = _download_final(client, project_id, route, tmp_path / "out.hwpx")
     _assert_package(final, _FILL, _EXISTING)
-    assert "침범" not in final.read_bytes().decode("utf-8")
+    assert "침범" not in _section_text(final)
     with zipfile.ZipFile(final) as archive:
         assert archive.read("Contents/header.xml") == before_header
     _source_unchanged(template_id, project_id, "form.hwpx", original)
@@ -335,13 +335,13 @@ def test_web_duplicate_empty_label_writes_nothing(client, tmp_path):
     section = (
         '<?xml version="1.0" encoding="UTF-8"?>'
         f'<hs:sec xmlns:hp="{_HP}" xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section">'
-        "<hp:p><hp:run><hp:tbl><hp:tr>"
+        '<hp:p><hp:run><hp:tbl rowCnt="1" colCnt="2"><hp:tr>'
         '<hp:tc><hp:subList><hp:p><hp:run><hp:t>기업명</hp:t></hp:run></hp:p></hp:subList>'
         '<hp:cellAddr rowAddr="0" colAddr="0"/><hp:cellSpan rowSpan="1" colSpan="1"/></hp:tc>'
         '<hp:tc><hp:subList><hp:p><hp:run><hp:t></hp:t></hp:run></hp:p></hp:subList>'
         '<hp:cellAddr rowAddr="0" colAddr="1"/><hp:cellSpan rowSpan="1" colSpan="1"/></hp:tc>'
         "</hp:tr></hp:tbl></hp:run></hp:p>"
-        "<hp:p><hp:run><hp:tbl><hp:tr>"
+        '<hp:p><hp:run><hp:tbl rowCnt="1" colCnt="2"><hp:tr>'
         '<hp:tc><hp:subList><hp:p><hp:run><hp:t>기업명</hp:t></hp:run></hp:p></hp:subList>'
         '<hp:cellAddr rowAddr="0" colAddr="0"/><hp:cellSpan rowSpan="1" colSpan="1"/></hp:tc>'
         '<hp:tc><hp:subList><hp:p><hp:run><hp:t></hp:t></hp:run></hp:p></hp:subList>'
@@ -364,7 +364,12 @@ def test_web_duplicate_empty_label_writes_nothing(client, tmp_path):
     assert any(note == "[t02] 기업명 AUTHORIZATION_PENDING" for note in notes)
     assert any(note.startswith("[duplicate-label] 기업명 ") for note in notes)
     assert not any("기업명" in note and note.endswith("GRANT_WRITTEN") for note in notes)
-    assert route["routing"]["submittable"] is True
+    assert route["routing"]["submittable"] is True, {
+        "reason": route["routing"].get("draft_reason"),
+        "acceptance": route["routing"].get("acceptance"),
+        "status": route["routing"].get("routing_status"),
+        "notes": route["routing"].get("notes"),
+    }
     _source_unchanged(template_id, project_id, "dup.hwpx", payload)
     _no_auto(final)
 
@@ -412,7 +417,7 @@ def test_web_colored_template_is_not_normalized_into_a_submit_name(client, tmp_p
     final = _download_final(client, project_id, route, tmp_path / "colored-out.hwpx")
     _assert_package(final, _FILL, _EXISTING)
     assert b"FF0000" in zipfile.ZipFile(final).read("Contents/header.xml")
-    assert "침범" not in final.read_bytes().decode("utf-8")
+    assert "침범" not in _section_text(final)
     assert routing["native_render"]["l005_pixel"] != "PASS"
     _source_unchanged(template_id, project_id, "colored.hwpx", original)
 
@@ -460,7 +465,6 @@ def test_api_generate_maps_missing_file_to_400(client, monkeypatch):
     body = response.json()
     assert body["detail"]
     assert "없습니다" in body["detail"]
-    assert response.status_code != 500
 
 
 def test_operator_hwpx_keeps_existing_blocks_signature_and_synonym(client, tmp_path):
@@ -492,7 +496,7 @@ def test_operator_hwpx_keeps_existing_blocks_signature_and_synonym(client, tmp_p
     assert page.status_code == 200, page.text
     route = _route(client, project_id)
     final = _download_final(client, project_id, route, tmp_path / "op.hwpx")
-    text = final.read_bytes().decode("utf-8")
+    text = _section_text(final)
     assert "기존회사" in text
     assert "서울특별시" in text
     assert "새회사" not in text
@@ -505,9 +509,18 @@ def test_operator_hwpx_keeps_existing_blocks_signature_and_synonym(client, tmp_p
     _no_auto(final)
 
 
+def _section_text(path: Path) -> str:
+    with zipfile.ZipFile(path) as archive:
+        return "".join(
+            archive.read(name).decode("utf-8")
+            for name in archive.namelist()
+            if name.startswith("Contents/section")
+        )
+
+
 def _pair_table(label: str, value: str) -> str:
     return (
-        "<hp:p><hp:run><hp:tbl><hp:tr>"
+        '<hp:p><hp:run><hp:tbl rowCnt="1" colCnt="2"><hp:tr>'
         '<hp:tc><hp:subList><hp:p><hp:run><hp:t>' + label + "</hp:t></hp:run></hp:p></hp:subList>"
         '<hp:cellAddr rowAddr="0" colAddr="0"/><hp:cellSpan rowSpan="1" colSpan="1"/></hp:tc>'
         '<hp:tc><hp:subList><hp:p><hp:run><hp:t>' + value + "</hp:t></hp:run></hp:p></hp:subList>"
