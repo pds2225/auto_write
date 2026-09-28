@@ -244,8 +244,10 @@ def apply_t02_analyzer_writes(
         authorize_merged_value_writes,
         authorize_nested_leaf_writes,
         authorize_guidance_narrative_writes,
+        authorize_inline_field_writes,
         authorize_repeated_row_writes,
         guidance_authorization_is_current,
+        inline_authorization_is_current,
         merged_authorization_is_current,
         nested_authorization_is_current,
         repeated_authorization_is_current,
@@ -280,6 +282,11 @@ def apply_t02_analyzer_writes(
         grant.field_label
         for grant in authorize_guidance_narrative_writes(index)
         if guidance_authorization_is_current(index, grant) and grant.field_label
+    )
+    granted_labels.update(
+        grant.field_label
+        for grant in authorize_inline_field_writes(index)
+        if inline_authorization_is_current(index, grant) and grant.field_label
     )
     pending_labels = {
         field.field_label

@@ -1874,6 +1874,7 @@ class ExactTextTarget:
     table_index: int | None = None
     row: int | None = None
     col: int | None = None
+    preserve_prefix: bool = False
 
 
 @dataclass
@@ -2065,7 +2066,7 @@ def commit_exact_text_writes(
                 f"EXPECTED_TEXT_MISMATCH:{target.paragraph_index}:{target.run_index}:{target.text_node_index}"
             )
             continue
-        if current.strip():
+        if current.strip() and not target.preserve_prefix:
             report.reasons.append(
                 f"EXISTING_VALUE:{target.paragraph_index}:{target.run_index}:{target.text_node_index}"
             )
@@ -2075,6 +2076,18 @@ def commit_exact_text_writes(
                 f"PROTECTED_TEXT:{target.paragraph_index}:{target.run_index}:{target.text_node_index}"
             )
             continue
+        if current.strip():
+            prefix_ok = (
+                target.preserve_prefix
+                and current == target.expected_raw_text
+                and target.value.startswith(current)
+                and target.value[len(current):].strip() != ""
+            )
+            if not prefix_ok:
+                report.reasons.append(
+                    f"EXISTING_VALUE:{target.paragraph_index}:{target.run_index}:{target.text_node_index}"
+                )
+                continue
         located[(target.section_member, target.paragraph_index, target.run_index, target.text_node_index)] = node
     if report.reasons or len(located) != len(targets):
         report.reason = report.reasons[0] if report.reasons else "PLAN_REJECTED"
@@ -2241,9 +2254,11 @@ def commit_t02_label_writes(
         authorize_merged_value_writes,
         authorize_nested_leaf_writes,
         authorize_guidance_narrative_writes,
+        authorize_inline_field_writes,
         authorize_repeated_row_writes,
         authorize_t02_writes,
         guidance_authorization_is_current,
+        inline_authorization_is_current,
         merged_authorization_is_current,
         nested_authorization_is_current,
         repeated_authorization_is_current,
@@ -2273,16 +2288,30 @@ def commit_t02_label_writes(
             continue
         if guidance_authorization_is_current(index, grant):
             grants[grant.field_label] = grant
+    for grant in authorize_inline_field_writes(index):
+        if grant.field_label in grants:
+            continue
+        if inline_authorization_is_current(index, grant):
+            grants[grant.field_label] = grant
     exact: list[ExactTextTarget] = []
     for key, value in wanted.items():
         grant = grants.get(key)
         if grant is None or grant.source_sha256 != index.source_sha256:
             report.reasons.append(f"NOT_AUTHORIZED:{key}")
             continue
+        written = value
+        preserve = False
+        if grant.expected_raw_text:
+            prefix = grant.expected_raw_text
+            written = prefix + value if prefix[-1].isspace() else prefix + " " + value
+            preserve = True
         exact.append(ExactTextTarget(
             grant.section_member, grant.paragraph_index, grant.run_index, grant.text_node_index,
-            grant.expected_raw_text, value,
-            table_index=grant.table_index, row=grant.row, col=grant.col,
+            grant.expected_raw_text, written,
+            table_index=None if grant.table_index < 0 else grant.table_index,
+            row=None if grant.row < 0 else grant.row,
+            col=None if grant.col < 0 else grant.col,
+            preserve_prefix=preserve,
         ))
     if report.reasons or len(exact) != len(wanted):
         report.reason = report.reasons[0] if report.reasons else "NOT_AUTHORIZED"

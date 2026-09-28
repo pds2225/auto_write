@@ -1357,6 +1357,96 @@ def find_guidance_narrative_targets(index: HwpxStructureIndex) -> tuple[T02Targe
     return tuple(target for target in pending if label_counts[target.field_label] == 1)
 
 
+def _blank_colon_label(text: str) -> str | None:
+    """'기업명 :' with nothing after the colon. A seal or filled suffix stays out."""
+    raw = text or ""
+    if not re.search(r"[:：]\s*$", raw) or re.search(r"[:：]\s*\S", raw):
+        return None
+    if _protected_text_run(raw):
+        return None
+    return _t02_label(raw)
+
+
+def _protected_text_run(text: str) -> bool:
+    if guidance_status(text) == "guidance" or "※" in (text or ""):
+        return True
+    if _SIGNATURE_RE.search(text or "") or _is_date_scaffold_paragraph(text or ""):
+        return True
+    if _CHOICE_MARK_RE.search(text or "") or _is_multi_choice(text or ""):
+        return True
+    return False
+
+
+def find_inline_field_targets(index: HwpxStructureIndex) -> tuple[T02Target, ...]:
+    """Label and blank input in the same run, or in two runs of one cell.
+
+    A same-run target keeps the label text as expected_raw_text. The writer
+    may only append after that prefix.
+    """
+    if index.analysis_status != "COMPLETE":
+        return ()
+    occupied = {item.field_label for item in find_t02_auto_targets(index)}
+    occupied.update(item.field_label for item in find_merged_value_targets(index))
+    occupied.update(item.field_label for item in find_nested_leaf_targets(index))
+    occupied.update(item.field_label for item in find_repeated_row_targets(index))
+    occupied.update(item.field_label for item in find_guidance_narrative_targets(index))
+    pending: list[T02Target] = []
+    for section in index.sections:
+        for paragraph in section.paragraphs:
+            if paragraph.story_scope != "body" or not paragraph.runs:
+                continue
+            table = None if paragraph.table_index is None else index.tables[paragraph.table_index]
+            if table is not None and table.story_scope != "body":
+                continue
+            owner = None
+            if table is not None:
+                owner = next((cell for cell in table.cells if paragraph.paragraph_index in cell.paragraph_indexes), None)
+                if owner is None or owner.has_nested_table or owner.has_non_text_object or not _cell_placed(owner):
+                    continue
+            label = None
+            run = None
+            expected = ""
+            if len(paragraph.runs) == 1 and len(paragraph.runs[0].text_nodes) == 1 and not paragraph.runs[0].has_nested_table:
+                candidate = _blank_colon_label(paragraph.runs[0].text_nodes[0].raw_text)
+                if candidate and candidate not in occupied:
+                    label = candidate
+                    run = paragraph.runs[0]
+                    expected = paragraph.runs[0].text_nodes[0].raw_text
+            elif len(paragraph.runs) == 2:
+                label_run, empty_run = paragraph.runs
+                if (
+                    len(label_run.text_nodes) == 1
+                    and not label_run.has_nested_table
+                    and _plain_empty_run(empty_run)
+                    and not _protected_text_run(label_run.raw_text)
+                ):
+                    candidate = _t02_label(label_run.raw_text)
+                    if candidate and candidate not in occupied:
+                        label = candidate
+                        run = empty_run
+                        expected = ""
+            if label is None or run is None:
+                continue
+            pending.append(T02Target(
+                field_label=label,
+                section_member=section.section_member,
+                section_index=section.section_index,
+                paragraph_index=paragraph.paragraph_index,
+                run_index=run.run_index,
+                text_node_index=None if not run.text_nodes else run.text_nodes[0].text_node_index,
+                expected_raw_text=expected,
+                table_index=-1 if table is None else table.table_index,
+                row=-1 if owner is None else owner.row,
+                col=-1 if owner is None else owner.col,
+                row_span=1 if owner is None else owner.row_span,
+                col_span=1 if owner is None else owner.col_span,
+            ))
+    label_counts: dict[str, int] = {}
+    for target in pending:
+        label_counts[target.field_label] = label_counts.get(target.field_label, 0) + 1
+    return tuple(target for target in pending if label_counts[target.field_label] == 1)
+
+
 @dataclass(frozen=True)
 class FieldAssessment:
     field_label: str | None
@@ -1967,6 +2057,44 @@ def authorize_guidance_narrative_writes(index: HwpxStructureIndex) -> tuple[T02W
 def guidance_authorization_is_current(index: HwpxStructureIndex, grant: T02WriteAuthorization) -> bool:
     """A guidance-narrative grant is current only when this index would issue it."""
     return any(item == grant for item in authorize_guidance_narrative_writes(index))
+
+
+def _inline_writer_supports(index: HwpxStructureIndex, target: T02Target) -> bool:
+    fresh = next((item for item in find_inline_field_targets(index) if item == target), None)
+    return fresh is not None
+
+
+def authorize_inline_field_writes(index: HwpxStructureIndex) -> tuple[T02WriteAuthorization, ...]:
+    """Grant a same-run or same-cell blank. The label characters stay in place."""
+    if index.analysis_status != "COMPLETE" or not index.source_sha256:
+        return ()
+    grants: list[T02WriteAuthorization] = []
+    for target in find_inline_field_targets(index):
+        if not _inline_writer_supports(index, target):
+            continue
+        section = next(item for item in index.sections if item.section_index == target.section_index)
+        grants.append(T02WriteAuthorization(
+            source_sha256=index.source_sha256,
+            field_label=target.field_label,
+            section_member=target.section_member,
+            section_index=target.section_index,
+            table_index=target.table_index,
+            row=target.row,
+            col=target.col,
+            row_span=target.row_span,
+            col_span=target.col_span,
+            paragraph_index=target.paragraph_index,
+            run_index=target.run_index,
+            text_node_index=target.text_node_index,
+            expected_raw_text=target.expected_raw_text,
+            story_scope=section.paragraphs[target.paragraph_index].story_scope,
+        ))
+    return tuple(grants)
+
+
+def inline_authorization_is_current(index: HwpxStructureIndex, grant: T02WriteAuthorization) -> bool:
+    """An inline grant is current only when this index would issue the same one."""
+    return any(item == grant for item in authorize_inline_field_writes(index))
 
 
 def t02_write_authorized(index: HwpxStructureIndex, field: FieldAssessment) -> bool:
