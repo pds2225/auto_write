@@ -652,7 +652,11 @@ def _touches(left, right) -> bool:
 
 def _neighbor_is_guidance(section, table, value) -> bool:
     for other in table.cells:
-        if other is value or not _cell_placed(other) or not _touches(value, other):
+        if other is value or not _cell_placed(other):
+            continue
+        row_overlap = value.row < other.row + other.row_span and other.row < value.row + value.row_span
+        col_touch = value.col + value.col_span == other.col or other.col + other.col_span == value.col
+        if not (row_overlap and col_touch):
             continue
         text = _cell_joined(section, other).strip()
         if "※" in text or guidance_status(text) == "guidance":
@@ -678,23 +682,36 @@ def _value_claim_counts(index: HwpxStructureIndex) -> dict[tuple[int, int, int, 
 
 
 def _repeated_entry_row(section, table, value_cell) -> bool:
-    """Blank rows under the same value column, with no label of their own."""
-    extras = 0
-    for other in table.cells:
-        if other is value_cell or not _cell_placed(other):
-            continue
-        if other.col != value_cell.col or abs(other.row - value_cell.row) != 1:
-            continue
-        if other.row_span != 1 or other.col_span != 1 or _cell_joined(section, other).strip():
-            continue
+    """Continuation blank rows under the same value column, with no label of their own."""
+
+    def unlabeled_blank_at(row: int) -> bool:
+        matches = [
+            other for other in table.cells
+            if other is not value_cell and _cell_placed(other)
+            and other.col == value_cell.col and other.row == row
+            and other.row_span == 1 and other.col_span == 1
+        ]
+        if len(matches) != 1:
+            return False
+        other = matches[0]
+        if _cell_joined(section, other).strip():
+            return False
         left = [
             cell for cell in table.cells
             if cell is not other and _cell_placed(cell) and cell.col + cell.col_span == other.col
             and cell.row < other.row + other.row_span and other.row < cell.row + cell.row_span
         ]
-        if not left or all(not _cell_joined(section, cell).strip() for cell in left):
+        return not left or all(not _cell_joined(section, cell).strip() for cell in left)
+
+    extras = 0
+    for step in (-1, 1):
+        cursor = value_cell.row + step
+        while unlabeled_blank_at(cursor):
             extras += 1
-    return extras >= 1
+            cursor += step
+            if extras >= 2:
+                return True
+    return False
 
 
 def _above_label_conflict(section, table, value_cell) -> bool:
@@ -786,7 +803,7 @@ def find_t02_auto_targets(index: HwpxStructureIndex) -> tuple[T02Target, ...]:
     if index.analysis_status != "COMPLETE":
         return ()
     blocked = _protected_label_paragraphs(index)
-    counted: list[str] = []
+    counted: dict[tuple[int, int, str], int] = {}
     located = []
     for section in index.sections:
         for table_index in section.table_indexes:
@@ -806,12 +823,13 @@ def find_t02_auto_targets(index: HwpxStructureIndex) -> tuple[T02Target, ...]:
                 label = _t02_label(_cell_joined(section, cell))
                 if label is None:
                     continue
-                counted.append(label)
+                key = (section.section_index, table.table_index, label)
+                counted[key] = counted.get(key, 0) + 1
                 located.append((section, table, cell, label))
     claims = _value_claim_counts(index)
     results: list[T02Target] = []
     for section, table, cell, label in located:
-        if counted.count(label) != 1:
+        if counted.get((section.section_index, table.table_index, label), 0) != 1:
             continue
         value = _right_value_cell(table, cell)
         if value is None or value.has_nested_table or value.has_non_text_object or not _cell_placed(value):
