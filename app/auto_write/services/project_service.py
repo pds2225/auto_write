@@ -1162,9 +1162,21 @@ class ProjectService:
             )
             report.filled.update(wire.written)
             if wire.written:
+                from core.docx.services.hwpx_analysis_adapter import index_hwpx_structure
+                from core.docx.services.hwpx_protected_regions import (
+                    repeated_row_unfilled_labels,
+                )
+
+                scan_path = Path(report.final) if report.final else output_path
+                repeated_unfilled: set[str] = set()
+                if scan_path.is_file():
+                    repeated_unfilled = set(
+                        repeated_row_unfilled_labels(index_hwpx_structure(scan_path))
+                    )
                 report.residual = [
                     label for label in report.residual
-                    if re.sub(r"\s+", "", str(label)).rstrip(":：") not in wire.written
+                    if label in repeated_unfilled
+                    or re.sub(r"\s+", "", str(label)).rstrip(":：") not in wire.written
                 ]
             for label in wire.pending:
                 if label not in report.residual:

@@ -1574,6 +1574,15 @@ def fill_hwpx(
         report.notes.append(
             "채운 칸이 없습니다 — 라벨이 양식과 일치하지 않거나 칸에 이미 값이 "
             "있을 수 있습니다(덮어쓰기 금지). identity 라벨/값을 확인하세요.")
+    # Reporting only: a repeated label used on the first row still leaves later
+    # empty value cells. The write loop above is unchanged.
+    if dst.is_file():
+        from core.docx.services.hwpx_analysis_adapter import index_hwpx_structure
+        from core.docx.services.hwpx_protected_regions import repeated_row_unfilled_labels
+
+        for label in repeated_row_unfilled_labels(index_hwpx_structure(dst)):
+            if label not in report.residual:
+                report.residual.append(label)
     return report
 
 

@@ -330,9 +330,11 @@ def submit_hwpx(
     report = SubmitReport(input=str(src), output=str(out))
 
     # 1) 현재 T02 허가만 Analyzer commit. 허가 없는 적격 라벨은 fill 에도 넘기지 않는다.
+    from core.docx.services.hwpx_analysis_adapter import index_hwpx_structure
     from core.docx.services.hwpx_protected_regions import (
         authorization_is_current,
         authorize_t02_writes,
+        repeated_row_unfilled_cells,
     )
 
     staging_path = out.with_name(f"{out.stem}.__t02_auth__.{os.getpid()}{out.suffix}")
@@ -384,6 +386,16 @@ def submit_hwpx(
         note = f"[t02] {label} GRANT_WRITTEN"
         if note not in report.notes:
             report.notes.append(note)
+    # Same label on a later row can stay empty after the first value cell is
+    # filled. Identity residual drops the label once its key is used, so report
+    # the still-empty cell here. This does not write and does not grant AUTO.
+    if out.is_file():
+        for label, row, col in repeated_row_unfilled_cells(index_hwpx_structure(out)):
+            if label not in report.residual:
+                report.residual.append(label)
+            note = f"[repeated-row] {label} row={row} col={col} UNFILLED"
+            if note not in report.notes:
+                report.notes.append(note)
     report.overflow_cells = list(fill_rep.overflow_cells)
     report.notes.extend(fill_rep.notes)
     for key, mode in fill_rep.field_writes_written.items():

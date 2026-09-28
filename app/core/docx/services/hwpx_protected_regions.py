@@ -855,6 +855,73 @@ def _t02_value_span_supported(section, value_cell) -> bool:
     return section.section_index > 0 and value_cell.col_span is not None and value_cell.col_span > 1
 
 
+def _label_value_pairs(index: HwpxStructureIndex) -> list[tuple[int, str, object, bool]]:
+    """Body label cells paired with their logical-right value cell.
+
+    Each item is ``(table_index, label, value_cell, value_empty)``.
+    Nested tables and cells without exactly one right neighbor are omitted.
+    """
+    pairs: list[tuple[int, str, object, bool]] = []
+    for section in index.sections:
+        for table_index in section.table_indexes:
+            table = index.tables[table_index]
+            if table.story_scope != "body" or table.parent_table_index is not None:
+                continue
+            for cell in table.cells:
+                if cell.has_nested_table or cell.has_non_text_object or not _cell_placed(cell):
+                    continue
+                label = _t02_label(_cell_joined(section, cell))
+                if label is None:
+                    continue
+                value = _right_value_cell(table, cell)
+                if value is None or value.has_nested_table or value.has_non_text_object or not _cell_placed(value):
+                    continue
+                empty = not _cell_joined(section, value).strip()
+                pairs.append((table.table_index, label, value, empty))
+    return pairs
+
+
+def _repeated_label_keys(index: HwpxStructureIndex) -> set[tuple[int, str]]:
+    """Labels that sit on two or more value-bearing rows of the same table."""
+    counts: dict[tuple[int, str], int] = {}
+    for table_index, label, _value, _empty in _label_value_pairs(index):
+        key = (table_index, label)
+        counts[key] = counts.get(key, 0) + 1
+    return {key for key, count in counts.items() if count >= 2}
+
+
+def repeated_row_unfilled_cells(index: HwpxStructureIndex) -> tuple[tuple[str, int, int], ...]:
+    """Empty value cells whose same-table label also has a filled sibling row.
+
+    Read-only residual evidence. Does not authorize a write and does not
+    change T02 eligibility.
+    """
+    grouped: dict[tuple[int, str], list[tuple[object, bool]]] = {}
+    for table_index, label, value, empty in _label_value_pairs(index):
+        grouped.setdefault((table_index, label), []).append((value, empty))
+    found: list[tuple[str, int, int]] = []
+    for (_table_index, label), cells in grouped.items():
+        if len(cells) < 2:
+            continue
+        if not any(empty for _value, empty in cells):
+            continue
+        if all(empty for _value, empty in cells):
+            continue
+        for value, empty in cells:
+            if empty and value.row is not None and value.col is not None:
+                found.append((label, int(value.row), int(value.col)))
+    return tuple(found)
+
+
+def repeated_row_unfilled_labels(index: HwpxStructureIndex) -> tuple[str, ...]:
+    """Label texts for :func:`repeated_row_unfilled_cells`, first-seen order."""
+    labels: list[str] = []
+    for label, _row, _col in repeated_row_unfilled_cells(index):
+        if label not in labels:
+            labels.append(label)
+    return tuple(labels)
+
+
 def find_t02_auto_targets(index: HwpxStructureIndex) -> tuple[T02Target, ...]:
     """Return only label-plus-completely-empty-cell targets. Nothing else is AUTO."""
     if index.analysis_status != "COMPLETE":
@@ -1078,6 +1145,7 @@ def assess_fields(index: HwpxStructureIndex) -> tuple[FieldAssessment, ...]:
             protection_decision="" if value_decision is None else value_decision.decision,
         ))
     auto_paragraphs = {(item.section_index, item.paragraph_index) for item in records}
+    repeated_labels = _repeated_label_keys(index)
     for section in index.sections:
         paragraphs = section.paragraphs
         for paragraph in paragraphs:
@@ -1163,8 +1231,17 @@ def assess_fields(index: HwpxStructureIndex) -> tuple[FieldAssessment, ...]:
             elif not text.strip() and not types:
                 types.append("T16")
                 decision = "REVIEW_REQUIRED"
-                reasons.append("EMPTY_WITHOUT_LABEL")
-                evidence.append("NOT_FIRST_EMPTY_RUN_TARGET")
+                repeated_empty = (
+                    label is not None
+                    and paragraph.table_index is not None
+                    and (paragraph.table_index, label) in repeated_labels
+                )
+                if repeated_empty:
+                    reasons.append("REPEATED_ROW_UNFILLED")
+                    evidence.append("EMPTY_VALUE_CELL")
+                else:
+                    reasons.append("EMPTY_WITHOUT_LABEL")
+                    evidence.append("NOT_FIRST_EMPTY_RUN_TARGET")
             if not types:
                 continue
             if "T02" in types:
