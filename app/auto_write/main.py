@@ -159,7 +159,7 @@ async def project_detail(request: Request, project_id: str):
     results_folder = str(storage.results_dir(project_id))
     artifact_dir = storage.project_dir(project_id) / "output"
     if artifact_dir.exists():
-        for name in ("output.docx", "qa_report.json", "sources.json", "benchmark_compare.json", "transfer_report.json", "preview_manifest.json"):
+        for name in ("output.docx", "output.hwpx", "hwpx_route.json", "qa_report.json", "sources.json", "benchmark_compare.json", "transfer_report.json", "preview_manifest.json"):
             path = artifact_dir / name
             if path.exists():
                 artifacts[name] = str(path)
@@ -386,7 +386,7 @@ async def get_eval_report(project_id: str):
 async def get_artifacts(project_id: str):
     artifact_dir = storage.project_dir(project_id) / "output"
     result = {}
-    for name in ("output.docx", "qa_report.json", "sources.json", "benchmark_compare.json", "transfer_report.json", "preview_manifest.json"):
+    for name in ("output.docx", "output.hwpx", "hwpx_route.json", "qa_report.json", "sources.json", "benchmark_compare.json", "transfer_report.json", "preview_manifest.json"):
         path = artifact_dir / name
         if path.exists():
             result[name] = str(path)

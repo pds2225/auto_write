@@ -31,9 +31,20 @@ from typing import Any, Optional
 from .hwpx_fill import fill_hwpx
 from .hwpx_acceptance import run_hwpx_acceptance
 from .hwpx_integrity_gate import run_hwpx_integrity_gate
-from .hwpx_layout_fix import check_hwpx_semantics, normalize_colors_in_hwpx
+from .hwpx_layout_fix import (
+    check_hwpx_semantics,
+    finalize_layout_hwpx,
+    normalize_colors_in_hwpx,
+)
 from .hwpx_submission_cleanup import finalize_submission_hwpx
 from .usage_acceptance import force_draft_name
+
+
+NORMAL = "NORMAL"
+LOCAL_LAYOUT_RISK = "LOCAL_LAYOUT_RISK"
+STRUCTURAL_REPAIRABLE = "STRUCTURAL_REPAIRABLE"
+STRUCTURAL_UNSAFE = "STRUCTURAL_UNSAFE"
+UNKNOWN_REVIEW_REQUIRED = "UNKNOWN_REVIEW_REQUIRED"
 
 
 @dataclass
@@ -55,6 +66,10 @@ class SubmitReport:
     final_output_allowed: bool = False
     submittable: bool = False
     acceptance: dict[str, Any] = field(default_factory=dict)
+    routing_status: str = UNKNOWN_REVIEW_REQUIRED
+    semantic_before: dict[str, Any] = field(default_factory=dict)
+    semantic_after: dict[str, Any] = field(default_factory=dict)
+    repair: dict[str, Any] = field(default_factory=dict)
     filled: dict[str, str] = field(default_factory=dict)
     residual: list[str] = field(default_factory=list)
     overflow_cells: list[str] = field(default_factory=list)
@@ -73,6 +88,10 @@ class SubmitReport:
             "final_output_allowed": self.final_output_allowed,
             "submittable": self.submittable,
             "acceptance": dict(self.acceptance),
+            "routing_status": self.routing_status,
+            "semantic_before": dict(self.semantic_before),
+            "semantic_after": dict(self.semantic_after),
+            "repair": dict(self.repair),
             "filled": dict(self.filled),
             "residual": list(self.residual),
             "overflow_cells": list(self.overflow_cells),
@@ -100,6 +119,80 @@ def _mark_draft(report: SubmitReport, out: Path, src: Path) -> Path:
     return new_path
 
 
+def _semantic_status(semantic: dict[str, Any]) -> str:
+    """Classify using the existing semantic checker, without a new detector."""
+    if semantic.get("itemcnt_issues") or semantic.get("dangling_refs"):
+        return STRUCTURAL_UNSAFE
+    if semantic.get("broken_tables"):
+        return STRUCTURAL_REPAIRABLE
+    return NORMAL
+
+
+def _check_and_repair_semantics(report: SubmitReport, out: Path) -> bool:
+    """Run semantic check and repair only the existing safe table-grid defect."""
+    try:
+        before = check_hwpx_semantics(out)
+    except Exception as exc:  # semantic inspection itself is unavailable
+        report.routing_status = UNKNOWN_REVIEW_REQUIRED
+        report.error = f"semantic 검사 불능: {type(exc).__name__}: {exc}"
+        report.draft_reason = "semantic 검사 불능 — 정상 여부를 확정할 수 없어 REVIEW_REQUIRED 처리"
+        report.notes.append("semantic 검사 불능 — 자동수정하지 않고 REVIEW_REQUIRED 처리")
+        return False
+
+    report.semantic_before = before
+    status = _semantic_status(before)
+    report.routing_status = status
+    if status == STRUCTURAL_UNSAFE:
+        report.draft_reason = "구조 결함(itemCnt/dangling ref) — 자동 교정 근거 없음"
+        report.notes.append("STRUCTURAL_UNSAFE — 자동 repair 생략")
+        report.semantic_after = before
+        return False
+    if status != STRUCTURAL_REPAIRABLE:
+        report.semantic_after = before
+        if report.routing_status == NORMAL:
+            report.notes.append("semantic PASS — table repair 생략")
+        return True
+
+    repaired = out.with_name(f"{out.stem}.__grid_repair__.{os.getpid()}{out.suffix}")
+    try:
+        stats = finalize_layout_hwpx(
+            out,
+            repaired,
+            spacing_floor=None,
+            relax_lines=False,
+            merge_empty=False,
+            repair_grid=True,
+        )
+        repaired.replace(out)
+        report.repair = dict(stats)
+        after = check_hwpx_semantics(out)
+    except Exception as exc:  # repair failure is unsafe, never fail-open
+        report.repair = {"error": f"{type(exc).__name__}: {exc}"}
+        report.semantic_after = before
+        report.routing_status = STRUCTURAL_UNSAFE
+        report.error = f"table grid repair 불능: {type(exc).__name__}: {exc}"
+        report.draft_reason = "표 격자 repair 실패 — 자동 제출 금지"
+        return False
+    finally:
+        if repaired.exists():
+            try:
+                repaired.unlink()
+            except OSError:
+                pass
+
+    report.semantic_after = after
+    if after.get("itemcnt_issues") or after.get("dangling_refs") or after.get("broken_tables"):
+        report.routing_status = STRUCTURAL_UNSAFE
+        report.error = "table grid repair 후 semantic check가 계속 실패"
+        report.draft_reason = "repair 후 semantic 재검사 실패 — 자동 제출 금지"
+        return False
+    report.routing_status = STRUCTURAL_REPAIRABLE
+    report.notes.append(
+        f"STRUCTURAL_REPAIRABLE — 안전한 table grid만 repair ({report.repair.get('grid_cells_fixed', 0)} cells)"
+    )
+    return True
+
+
 def submit_hwpx(
     in_hwpx: str | Path,
     out_hwpx: str | Path,
@@ -109,6 +202,7 @@ def submit_hwpx(
     acceptance_gate: bool = True,
     normalize_colors: bool = True,
     submission_cleanup: bool = True,
+    preserve_template: bool = False,
 ) -> SubmitReport:
     """HWPX 양식을 채우고 수용검사 게이트로 판정해 제출 가능 여부를 확정한다.
 
@@ -126,6 +220,8 @@ def submit_hwpx(
         submission_cleanup: True(기본)면 ``finalize_submission_hwpx`` 로 안내문구 제거·
             유색→검정·linesegarray 제거를 적용한다(원본 out 은 temp 경유 후 교체 —
             out==in 금지 불변 유지). 한글 직접 납품용 전역 lineseg strip 포함.
+        preserve_template: True 면 정상 HWPX에 전역 cleanup/색상 정규화를 적용하지 않는다.
+            직접 업로드한 양식의 구조·서식을 유지하는 production 경로가 사용한다.
 
     Returns:
         SubmitReport — final 은 항상 실제 존재하는 최종 경로.
@@ -146,8 +242,15 @@ def submit_hwpx(
     report.notes.extend(fill_rep.notes)
     report.final = str(out)
 
+    semantic_ok = _check_and_repair_semantics(report, out)
+    if semantic_ok and report.routing_status == NORMAL and fill_rep.overflow_cells:
+        report.routing_status = LOCAL_LAYOUT_RISK
+        report.notes.append(
+            "LOCAL_LAYOUT_RISK — overflow_cells 기록만 남기고 글자 크기 자동 축소 생략"
+        )
+
     # 1.5) 제출본 공통 후처리(안내문구·유색·lineseg) — temp 경유 후 원자적 교체.
-    if submission_cleanup:
+    if submission_cleanup and not preserve_template:
         cleaned = out.with_name(f"{out.stem}.__cleanup__.{os.getpid()}{out.suffix}")
         try:
             stats = finalize_submission_hwpx(
@@ -172,7 +275,7 @@ def submit_hwpx(
                     cleaned.unlink()
                 except OSError:
                     pass
-    elif normalize_colors:
+    elif normalize_colors and not preserve_template:
         # cleanup opt-out 시에만 기존 유색→검정 단독 경로 사용.
         try:
             n_black = normalize_colors_in_hwpx(out)
@@ -211,7 +314,7 @@ def submit_hwpx(
         report.submittable = False
         return report
 
-    if gate.final_status == "PASS":
+    if gate.final_status == "PASS" and semantic_ok:
         report.ok = True
         report.final_output_allowed = True
         report.submittable = True
@@ -226,7 +329,7 @@ def submit_hwpx(
             f"·안내문구 {acc.get('guides', 0)}·linesegarray {acc.get('linesegarray', 0)}"
             f"·예시이름 {acc.get('dummy_names', 0)} (제출 전 후처리 필요)"
         )
-    else:
+    elif not report.draft_reason:
         report.draft_reason = f"공통 무결성 gate {gate.final_status}: {messages}"
     for result in failed:
         if result.validator_status != "EXECUTED":

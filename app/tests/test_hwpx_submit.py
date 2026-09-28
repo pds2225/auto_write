@@ -36,7 +36,7 @@ def _header_xml(*, colored: bool) -> bytes:
     )
     return (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        f'<hh:head xmlns:hh="{_HH}"><hh:refList><hh:charProperties>'
+        f'<hh:head xmlns:hh="{_HH}"><hh:refList><hh:charProperties itemCnt="1">'
         f"{cp}</hh:charProperties></hh:refList></hh:head>"
     ).encode("utf-8")
 
@@ -368,3 +368,309 @@ def test_submit_leftover_dummy_name_forces_draft(tmp_path):
     )
     assert ok.acceptance.get("dummy_names", -1) == 0
     assert ok.ok is True
+
+
+def test_submit_semantic_exception_is_unknown_review_required(clean_hwpx, tmp_path, monkeypatch):
+    def _boom(path):
+        raise RuntimeError("semantic unavailable (simulated)")
+
+    monkeypatch.setattr(hs, "check_hwpx_semantics", _boom)
+    out = tmp_path / "out.hwpx"
+    rep = submit_hwpx(clean_hwpx, out, identity={"기업명": "검토(주)"})
+
+    assert rep.routing_status == hs.UNKNOWN_REVIEW_REQUIRED
+    assert rep.ok is False
+    assert Path(rep.final).name == "out_DRAFT.hwpx"
+    assert "semantic 검사 불능" in rep.error
+    assert "REVIEW_REQUIRED" in " ".join(rep.notes)
+    assert "수용검사 fail" not in rep.draft_reason
+
+
+def test_preserve_template_normal_does_not_apply_global_cleanup(tmp_path, monkeypatch):
+    """정상 HWPX는 전역 cleanup·table repair를 호출하지 않는다."""
+    src = tmp_path / "guide_form.hwpx"
+    with zipfile.ZipFile(src, "w") as z:
+        zi = zipfile.ZipInfo("mimetype")
+        zi.compress_type = zipfile.ZIP_STORED
+        z.writestr(zi, _MIMETYPE)
+        z.writestr("Contents/header.xml", _header_xml(colored=False))
+        z.writestr("Contents/section0.xml", _section_with_guide())
+    out = tmp_path / "out.hwpx"
+
+    def _forbid_repair(*_args, **_kwargs):
+        raise AssertionError("NORMAL 문서에 table repair를 호출하면 안 된다")
+
+    monkeypatch.setattr(hs, "finalize_layout_hwpx", _forbid_repair)
+    rep = submit_hwpx(
+        src,
+        out,
+        identity={"기업명": "보존(주)"},
+        normalize_colors=True,
+        submission_cleanup=True,
+        preserve_template=True,
+    )
+
+    assert rep.routing_status == hs.NORMAL
+    assert rep.repair == {}
+    assert rep.semantic_before.get("ok") is True
+    assert rep.semantic_after.get("ok") is True
+    assert not any(note.startswith("제출 cleanup:") for note in rep.notes)
+    final = Path(rep.final)
+    assert final.exists()
+    with zipfile.ZipFile(final) as z:
+        section = z.read("Contents/section0.xml").decode("utf-8")
+    assert "작성방법" in section
+
+
+def _section_with_guide() -> bytes:
+    guide_tbl = (
+        '<hp:tbl rowCnt="1" colCnt="1"><hp:tr>'
+        '<hp:tc><hp:cellAddr colAddr="0" rowAddr="0"/>'
+        '<hp:cellSpan colSpan="1" rowSpan="1"/>'
+        '<hp:subList><hp:p><hp:run charPrIDRef="0">'
+        '<hp:t>작성방법 ※삭제 후 제출</hp:t></hp:run></hp:p></hp:subList></hp:tc>'
+        '</hp:tr></hp:tbl>'
+    )
+    rows = "".join([_row(0, "상호", ""), _row(1, "대표자", "")])
+    return (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f'<hs:sec xmlns:hp="{_HP}" xmlns:hs="{_HS}">'
+        f'<hp:p><hp:run charPrIDRef="0">{guide_tbl}</hp:run></hp:p>'
+        f'<hp:p><hp:run charPrIDRef="0">'
+        f'<hp:tbl rowCnt="2" colCnt="2">{rows}</hp:tbl>'
+        f'</hp:run></hp:p></hs:sec>'
+    ).encode("utf-8")
+
+
+def _sized_section_xml() -> bytes:
+    def sized_cell(col: int, row: int, text: str) -> str:
+        return (
+            f'<hp:tc><hp:cellAddr colAddr="{col}" rowAddr="{row}"/>'
+            '<hp:cellSpan colSpan="1" rowSpan="1"/>'
+            '<hp:cellSz width="100" height="10"/>'
+            '<hp:subList><hp:p><hp:run charPrIDRef="0">'
+            f"<hp:t>{text}</hp:t></hp:run></hp:p></hp:subList></hp:tc>"
+        )
+
+    rows = "".join(
+        f"<hp:tr>{sized_cell(0, row, label)}{sized_cell(1, row, value)}</hp:tr>"
+        for row, label, value in [(0, "상호", "")]
+    )
+    return (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f'<hs:sec xmlns:hp="{_HP}" xmlns:hs="{_HS}">'
+        f'<hp:p><hp:run charPrIDRef="0"><hp:tbl rowCnt="1" colCnt="2">'
+        f"{rows}</hp:tbl></hp:run></hp:p></hs:sec>"
+    ).encode("utf-8")
+
+
+def test_local_layout_risk_records_overflow_without_font_shrink(tmp_path):
+    src = tmp_path / "sized_form.hwpx"
+    with zipfile.ZipFile(src, "w") as z:
+        zi = zipfile.ZipInfo("mimetype")
+        zi.compress_type = zipfile.ZIP_STORED
+        z.writestr(zi, _MIMETYPE)
+        z.writestr("Contents/header.xml", _header_xml(colored=False))
+        z.writestr("Contents/section0.xml", _sized_section_xml())
+    out = tmp_path / "out.hwpx"
+    value = "아주 긴 입력값" * 20
+
+    rep = submit_hwpx(
+        src,
+        out,
+        identity={"기업명": value},
+        normalize_colors=False,
+        submission_cleanup=False,
+        preserve_template=True,
+    )
+
+    assert rep.routing_status == hs.LOCAL_LAYOUT_RISK
+    assert rep.ok is True
+    assert rep.filled == {"기업명": value}
+    assert rep.acceptance.get("ok") is True
+    assert any("overflow_cells" in note for note in rep.notes)
+    assert any("자동 축소 생략" in note for note in rep.notes)
+    with zipfile.ZipFile(out) as z:
+        section = z.read("Contents/section0.xml").decode("utf-8")
+    assert value in section
+    assert 'height="10"' in section
+
+
+def test_local_lineseg_is_limited_to_edited_region(tmp_path):
+    """linesegarray는 채운 칸만 제거하고, 미편집 문단 캐시는 남긴다."""
+    label = (
+        '<hp:tc><hp:cellAddr colAddr="0" rowAddr="0"/>'
+        '<hp:cellSpan colSpan="1" rowSpan="1"/><hp:subList><hp:p>'
+        '<hp:run charPrIDRef="0"><hp:t>상호</hp:t></hp:run></hp:p></hp:subList></hp:tc>'
+    )
+    value = (
+        '<hp:tc><hp:cellAddr colAddr="1" rowAddr="0"/>'
+        '<hp:cellSpan colSpan="1" rowSpan="1"/><hp:subList><hp:p>'
+        '<hp:linesegarray><hp:lineseg textpos="0" vertpos="120"/></hp:linesegarray>'
+        '<hp:run charPrIDRef="0"><hp:t></hp:t></hp:run></hp:p></hp:subList></hp:tc>'
+    )
+    section = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f'<hs:sec xmlns:hp="{_HP}" xmlns:hs="{_HS}">'
+        '<hp:p><hp:linesegarray><hp:lineseg textpos="0" vertpos="0"/></hp:linesegarray>'
+        '<hp:run charPrIDRef="0">'
+        f'<hp:tbl rowCnt="1" colCnt="2"><hp:tr>{label}{value}</hp:tr></hp:tbl>'
+        "</hp:run></hp:p></hs:sec>"
+    ).encode("utf-8")
+    src = tmp_path / "lineseg.hwpx"
+    with zipfile.ZipFile(src, "w") as z:
+        zi = zipfile.ZipInfo("mimetype")
+        zi.compress_type = zipfile.ZIP_STORED
+        z.writestr(zi, _MIMETYPE)
+        z.writestr("Contents/header.xml", _header_xml(colored=False))
+        z.writestr("Contents/section0.xml", section)
+    out = tmp_path / "out.hwpx"
+    rep = submit_hwpx(
+        src, out, identity={"기업명": "부분수정(주)"},
+        normalize_colors=False, submission_cleanup=False, preserve_template=True,
+    )
+    assert rep.filled.get("기업명") == "부분수정(주)"
+    assert not any(note.startswith("제출 cleanup:") for note in rep.notes)
+    with zipfile.ZipFile(rep.final) as z:
+        sec = z.read("Contents/section0.xml").decode("utf-8")
+    assert sec.count("<hp:linesegarray") == 1
+    assert 'vertpos="0"' in sec
+    assert 'vertpos="120"' not in sec
+
+
+def test_normal_direct_fill_preserves_unrelated_package_parts(tmp_path, monkeypatch):
+    """허용 변경은 목표 텍스트뿐이다. BinData·관계·무관 표 기하·repair는 불변."""
+    unrelated = (
+        '<hp:tbl rowCnt="1" colCnt="1" id="keep"><hp:tr>'
+        '<hp:tc><hp:cellAddr colAddr="0" rowAddr="0"/>'
+        '<hp:cellSpan colSpan="1" rowSpan="1"/>'
+        '<hp:cellSz width="4242" height="800"/>'
+        '<hp:subList><hp:p><hp:run charPrIDRef="0">'
+        '<hp:t>고정문구</hp:t></hp:run></hp:p></hp:subList></hp:tc>'
+        '</hp:tr></hp:tbl>'
+    )
+    rows = _row(0, "상호", "")
+    section = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f'<hs:sec xmlns:hp="{_HP}" xmlns:hs="{_HS}">'
+        '<hp:p><hp:run charPrIDRef="0">'
+        f'<hp:tbl rowCnt="1" colCnt="2">{rows}</hp:tbl>'
+        f'{unrelated}'
+        "</hp:run></hp:p></hs:sec>"
+    ).encode("utf-8")
+    content_hpf = b'<opf:item id="image1" href="BinData/pic.bin"/>'
+    blob = b"PNGDATA-UNCHANGED"
+    src = tmp_path / "preserve.hwpx"
+    with zipfile.ZipFile(src, "w") as z:
+        zi = zipfile.ZipInfo("mimetype")
+        zi.compress_type = zipfile.ZIP_STORED
+        z.writestr(zi, _MIMETYPE)
+        z.writestr("Contents/header.xml", _header_xml(colored=False))
+        z.writestr("Contents/section0.xml", section)
+        z.writestr("Contents/content.hpf", content_hpf)
+        z.writestr("BinData/pic.bin", blob)
+
+    def _forbid_repair(*_args, **_kwargs):
+        raise AssertionError("NORMAL 문서에 table repair를 호출하면 안 된다")
+
+    monkeypatch.setattr(hs, "finalize_layout_hwpx", _forbid_repair)
+    out = tmp_path / "out.hwpx"
+    before = hashlib.sha256(src.read_bytes()).hexdigest()
+    rep = submit_hwpx(
+        src, out, identity={"기업명": "보존값"},
+        normalize_colors=False, submission_cleanup=False, preserve_template=True,
+    )
+    assert hashlib.sha256(src.read_bytes()).hexdigest() == before
+    assert rep.routing_status == hs.NORMAL
+    assert rep.repair == {}
+    assert rep.filled == {"기업명": "보존값"}
+    with zipfile.ZipFile(out) as z:
+        assert z.read("mimetype") == _MIMETYPE
+        assert z.read("BinData/pic.bin") == blob
+        assert z.read("Contents/content.hpf") == content_hpf
+        sec = z.read("Contents/section0.xml").decode("utf-8")
+    assert "보존값" in sec
+    assert 'width="4242"' in sec
+    assert 'width="4242" height="800"' in sec
+    assert "고정문구" in sec
+
+
+def _broken_grid_section_xml() -> bytes:
+    rows = []
+    for row_addr in (0, 1, 2, 2):
+        cells = "".join(
+            f'<hp:tc><hp:cellAddr colAddr="{col}" rowAddr="{row_addr}"/>'
+            '<hp:cellSpan colSpan="1" rowSpan="1"/>'
+            '<hp:subList><hp:p><hp:run charPrIDRef="0"><hp:t>'
+            f"{('기업명' if row_addr == 0 and col == 0 else '')}"
+            "</hp:t></hp:run></hp:p></hp:subList></hp:tc>"
+            for col in (0, 1)
+        )
+        rows.append(f"<hp:tr>{cells}</hp:tr>")
+    return (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f'<hs:sec xmlns:hp="{_HP}" xmlns:hs="{_HS}">'
+        f'<hp:p><hp:run charPrIDRef="0"><hp:tbl rowCnt="4" colCnt="2">'
+        f"{''.join(rows)}</hp:tbl></hp:run></hp:p></hs:sec>"
+    ).encode("utf-8")
+
+
+def test_structural_repairable_repairs_grid_and_rechecks(tmp_path):
+    src = tmp_path / "broken_grid.hwpx"
+    with zipfile.ZipFile(src, "w") as z:
+        zi = zipfile.ZipInfo("mimetype")
+        zi.compress_type = zipfile.ZIP_STORED
+        z.writestr(zi, _MIMETYPE)
+        z.writestr("Contents/header.xml", _header_xml(colored=False))
+        z.writestr("Contents/section0.xml", _broken_grid_section_xml())
+    out = tmp_path / "out.hwpx"
+
+    rep = submit_hwpx(
+        src,
+        out,
+        identity={"기업명": "복구(주)"},
+        normalize_colors=False,
+        submission_cleanup=False,
+        preserve_template=True,
+    )
+
+    assert rep.routing_status == hs.STRUCTURAL_REPAIRABLE
+    assert rep.semantic_before.get("broken_tables")
+    assert rep.semantic_after.get("ok") is True
+    assert rep.semantic_after.get("broken_tables") == []
+    assert rep.repair.get("grid_cells_fixed", 0) > 0
+    assert rep.ok is True
+    assert Path(rep.final) == out
+
+
+def test_structural_unsafe_never_repairs_dangling_reference(tmp_path, monkeypatch):
+    src = tmp_path / "unsafe.hwpx"
+    section = _section_xml().replace(b'charPrIDRef="0"', b'charPrIDRef="99"')
+    with zipfile.ZipFile(src, "w") as z:
+        zi = zipfile.ZipInfo("mimetype")
+        zi.compress_type = zipfile.ZIP_STORED
+        z.writestr(zi, _MIMETYPE)
+        z.writestr("Contents/header.xml", _header_xml(colored=False))
+        z.writestr("Contents/section0.xml", section)
+    out = tmp_path / "out.hwpx"
+
+    def _forbid_repair(*_args, **_kwargs):
+        raise AssertionError("STRUCTURAL_UNSAFE 에서 repair를 호출하면 안 된다")
+
+    monkeypatch.setattr(hs, "finalize_layout_hwpx", _forbid_repair)
+    rep = submit_hwpx(
+        src,
+        out,
+        identity={"기업명": "검토(주)"},
+        normalize_colors=False,
+        submission_cleanup=False,
+        preserve_template=True,
+    )
+
+    assert rep.routing_status == hs.STRUCTURAL_UNSAFE
+    assert rep.semantic_before.get("dangling_refs")
+    assert rep.semantic_after.get("ok") is False
+    assert rep.repair == {}
+    assert rep.ok is False
+    assert Path(rep.final).name == "out_DRAFT.hwpx"
+    assert "자동 교정 근거 없음" in rep.draft_reason

@@ -108,6 +108,24 @@ class ProjectService:
     def analyze_uploaded_template(self, file_name: str, content: bytes) -> TemplateProfile:
         template_id, output_path = self.storage.create_template_space(file_name)
         output_path.write_bytes(content)
+        if output_path.suffix.lower() == ".hwpx":
+            # HWPX is an immutable source package.  Do not convert it to DOCX
+            # for the production fill path; the existing HWPX engine is used
+            # when the project is generated.
+            from .submission_gates import assert_not_announcement_form
+
+            assert_not_announcement_form(output_path)
+            profile = TemplateProfile(
+                template_id=template_id,
+                template_name=output_path.name,
+                source_docx="",
+                source_hwpx=str(output_path),
+                analysis_notes=[
+                    "HWPX 원본 보존 모드: DOCX 변환 없이 기존 direct-fill 경로를 사용합니다."
+                ],
+            )
+            self.storage.save_template_profile(profile)
+            return profile
         analysis_path, conversion_notes = ensure_template_docx(output_path)
         profile = analyze_template(analysis_path)
         profile.template_id = template_id
@@ -141,10 +159,15 @@ class ProjectService:
         profile.template_id = template_id
         folder = self.storage.template_dir(template_id)
         docx_files = sorted(folder.glob("*.docx"))
-        if not docx_files:
+        hwpx_files = sorted(folder.glob("*.hwpx"))
+        if not docx_files and not hwpx_files:
             raise ValueError("원본 DOCX 파일을 찾지 못했습니다. 템플릿을 다시 업로드해 주세요.")
-        source_docx = docx_files[0]
-        profile.source_docx = str(source_docx)
+        if profile.template_name.lower().endswith(".hwpx") or not docx_files:
+            profile.source_docx = ""
+            profile.source_hwpx = str(hwpx_files[0])
+        else:
+            profile.source_docx = str(docx_files[0])
+            profile.source_hwpx = ""
         profile = sanitize_template_profile(profile)
         self.storage.save_template_profile(profile)
         return profile
@@ -165,6 +188,19 @@ class ProjectService:
 
     def _pin_template_source_to_project(self, profile: TemplateProfile, project_id: str) -> TemplateProfile:
         """Copy template DOCX into the project folder so generation survives missing template files."""
+        if profile.source_hwpx or profile.template_name.lower().endswith(".hwpx"):
+            try:
+                source_hwpx = self._resolve_source_hwpx(profile, project_id)
+            except ValueError:
+                return profile
+            project_dir = self.storage.project_dir(project_id)
+            pinned = project_dir / "template_source.hwpx"
+            if source_hwpx.resolve() != pinned.resolve():
+                pinned.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source_hwpx, pinned)
+            profile.source_docx = ""
+            profile.source_hwpx = str(pinned)
+            return profile
         try:
             source_docx = self._resolve_source_docx(profile, project_id)
         except ValueError:
@@ -178,6 +214,8 @@ class ProjectService:
         return profile
 
     def template_docx_ready(self, profile: TemplateProfile) -> bool:
+        if profile.source_hwpx or profile.template_name.lower().endswith(".hwpx"):
+            return bool(profile.source_hwpx and Path(profile.source_hwpx).is_file())
         candidates: list[Path] = []
         if profile.source_docx:
             candidates.append(Path(profile.source_docx))
@@ -197,6 +235,12 @@ class ProjectService:
         return False
 
     def template_source_status(self, profile: TemplateProfile, project_id: str) -> dict[str, Any]:
+        if profile.source_hwpx or profile.template_name.lower().endswith(".hwpx"):
+            try:
+                path = self._resolve_source_hwpx(profile, project_id)
+                return {"ready": True, "path": str(path), "message": ""}
+            except ValueError as exc:
+                return {"ready": False, "path": "", "message": str(exc)}
         try:
             path = self._resolve_source_docx(profile, project_id)
             return {"ready": True, "path": str(path), "message": ""}
@@ -227,6 +271,27 @@ class ProjectService:
             "홈 화면에서 동일한 양식 DOCX를 다시 업로드한 뒤, 이 프로젝트를 새로 만드세요."
         )
 
+    def _resolve_source_hwpx(self, profile: TemplateProfile, project_id: str) -> Path:
+        candidates: list[Path] = []
+        if profile.source_hwpx:
+            candidates.append(Path(profile.source_hwpx))
+        project_dir = self.storage.project_dir(project_id)
+        candidates.append(project_dir / "template_source.hwpx")
+        candidates.extend(sorted(project_dir.glob("*.hwpx")))
+        template_folder = self.storage.template_dir(profile.template_id)
+        candidates.extend(sorted(template_folder.glob("*.hwpx")))
+        seen: set[str] = set()
+        for path in candidates:
+            key = str(path).lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            if path.is_file():
+                return path.resolve()
+        raise ValueError(
+            "HWPX 원본 파일이 없습니다. 템플릿을 다시 업로드해 주세요."
+        )
+
     def save_project_form(
         self,
         project_id: str,
@@ -240,6 +305,7 @@ class ProjectService:
         improve_partial: bool = True,
         psst_only: bool = True,
         disable_images: bool = True,
+        hwpx_identity: dict[str, str] | None = None,
     ) -> ProjectInput:
         profile = self.load_profile_for_project(project_id)
         existing_input: ProjectInput | None
@@ -316,6 +382,15 @@ class ProjectService:
             "psst_only": bool(psst_only),
             "disable_images": bool(disable_images),
         }
+        existing_identity = (existing_input.project_meta or {}).get("hwpx_identity") if existing_input else None
+        if isinstance(existing_identity, dict):
+            project_meta["hwpx_identity"] = {
+                str(k): str(v) for k, v in existing_identity.items() if str(v).strip()
+            }
+        if hwpx_identity:
+            project_meta["hwpx_identity"] = {
+                str(k): str(v) for k, v in hwpx_identity.items() if str(v).strip()
+            }
         if resolved_writing_provider:
             project_meta["writing_provider"] = resolved_writing_provider
         if resolved_writing_model:
@@ -909,6 +984,8 @@ class ProjectService:
     def generate(self, project_id: str) -> ArtifactBundle:
         profile = self.load_profile_for_project(project_id)
         project_input = self.storage.load_project_input(project_id)
+        if profile.source_hwpx or profile.template_name.lower().endswith(".hwpx"):
+            return self._generate_hwpx_direct(project_id, profile, project_input)
         # P0(SFT): AI 변형 전 입력 스냅샷 — 부수효과, 실패해도 생성 계속.
         pre_answer_keys = set(project_input.answers)
         self._save_sft_input_snapshot(project_id, project_input)
@@ -1014,6 +1091,88 @@ class ProjectService:
             psst_only=psst_only,
             disable_images=disable_images,
             transfer_mode=transfer_mode,
+        )
+
+    def _generate_hwpx_direct(
+        self,
+        project_id: str,
+        profile: TemplateProfile,
+        project_input: ProjectInput,
+    ) -> ArtifactBundle:
+        """Fill the uploaded HWPX package directly and gate it before publish."""
+        from .hwpx_submit import submit_hwpx
+
+        source = self._resolve_source_hwpx(profile, project_id)
+        output_dir = self.storage.project_dir(project_id) / "output"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_path = output_dir / "output.hwpx"
+        identity: dict[str, str] = {}
+        raw_identity = (project_input.project_meta or {}).get("hwpx_identity")
+        if isinstance(raw_identity, dict):
+            identity.update({str(k): str(v) for k, v in raw_identity.items() if str(v).strip()})
+        organization_name = str((project_input.organization_profile or {}).get("name", "")).strip()
+        if organization_name:
+            identity.setdefault("기업명", organization_name)
+        for key, value in (project_input.answers or {}).items():
+            if key in {"user_brief", "user_notes"} or not isinstance(value, (str, int, float)):
+                continue
+            if str(value).strip():
+                identity.setdefault(str(key), str(value))
+
+        report = submit_hwpx(
+            source,
+            output_path,
+            identity=identity,
+            replacements=(project_input.project_meta or {}).get("hwpx_replacements") or {},
+            acceptance_gate=True,
+            normalize_colors=False,
+            submission_cleanup=False,
+            preserve_template=True,
+        )
+        results_dir = self.storage.results_dir(project_id)
+        results_dir.mkdir(parents=True, exist_ok=True)
+        final_path = Path(report.final)
+        result_copy = results_dir / final_path.name
+        if final_path.is_file() and final_path.resolve() != result_copy.resolve():
+            shutil.copy2(final_path, result_copy)
+        try:
+            from .hwp_docx_convert import hancom_com_available
+            visual_render = (
+                "ENVIRONMENT_BLOCKED" if not hancom_com_available() else "REVIEW_REQUIRED"
+            )
+        except Exception:
+            visual_render = "ENVIRONMENT_BLOCKED"
+        report_path = output_dir / "hwpx_route.json"
+        write_json(
+            report_path,
+            {
+                "engine": "existing hwpx_fill direct-fill",
+                "source": str(source),
+                "output": str(final_path),
+                "visual_render": visual_render,
+                "routing": report.as_dict(),
+            },
+        )
+        (results_dir / "generation_summary.txt").write_text(
+            "HWPX 직접 채움 경로\n"
+            f"상태: {report.routing_status}\n"
+            f"제출가능: {'예' if report.ok else '아니오(_DRAFT 또는 REVIEW_REQUIRED)'}\n"
+            f"시각 렌더: {visual_render}\n",
+            encoding="utf-8",
+        )
+        project_input.project_meta = dict(project_input.project_meta or {})
+        project_input.project_meta["hwpx_routing_status"] = report.routing_status
+        self.storage.save_project_input(project_id, project_input)
+        return ArtifactBundle(
+            output_docx="",
+            qa_report=str(report_path),
+            sources="",
+            results_dir=str(results_dir),
+            results_hwpx=str(result_copy) if result_copy.is_file() else "",
+            output_hwpx=str(final_path) if final_path.is_file() else "",
+            hwp_paste="",
+            copy_blocks="",
+            fill_map="",
         )
 
     def _render_and_publish(
