@@ -2239,8 +2239,10 @@ def commit_t02_label_writes(
     from core.docx.services.hwpx_protected_regions import (
         authorization_is_current,
         authorize_merged_value_writes,
+        authorize_nested_leaf_writes,
         authorize_t02_writes,
         merged_authorization_is_current,
+        nested_authorization_is_current,
     )
     grants = {
         grant.field_label: grant
@@ -2251,6 +2253,11 @@ def commit_t02_label_writes(
         if grant.field_label in grants:
             continue
         if merged_authorization_is_current(index, grant):
+            grants[grant.field_label] = grant
+    for grant in authorize_nested_leaf_writes(index):
+        if grant.field_label in grants:
+            continue
+        if nested_authorization_is_current(index, grant):
             grants[grant.field_label] = grant
     exact: list[ExactTextTarget] = []
     for key, value in wanted.items():

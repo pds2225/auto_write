@@ -1053,6 +1053,82 @@ def find_merged_value_targets(index: HwpxStructureIndex) -> tuple[T02Target, ...
     return tuple(target for target in pending if label_counts[target.field_label] == 1)
 
 
+def find_nested_leaf_targets(index: HwpxStructureIndex) -> tuple[T02Target, ...]:
+    """A unique label and one empty run inside a nested table.
+
+    The cell that contains the nested table is not a write target.
+    A merged or multi-run cell inside the nested table stays out.
+    """
+    if index.analysis_status != "COMPLETE":
+        return ()
+    occupied = {item.field_label for item in find_t02_auto_targets(index)}
+    occupied.update(item.field_label for item in find_merged_value_targets(index))
+    blocked = _protected_label_paragraphs(index)
+    counted: dict[tuple[int, int, str], int] = {}
+    located = []
+    for section in index.sections:
+        for table_index in section.table_indexes:
+            table = index.tables[table_index]
+            if table.story_scope != "body" or table.parent_table_index is None:
+                continue
+            for cell in table.cells:
+                if cell.has_nested_table or cell.has_non_text_object or not _cell_placed(cell):
+                    continue
+                if cell.row_span != 1 or cell.col_span != 1:
+                    continue
+                if any((section.section_index, item) in blocked for item in cell.paragraph_indexes):
+                    continue
+                label_paragraphs = [section.paragraphs[item] for item in cell.paragraph_indexes]
+                if any(item.story_scope != "body" for item in label_paragraphs):
+                    continue
+                label = _t02_label(_cell_joined(section, cell))
+                if label is None or label in occupied:
+                    continue
+                key = (section.section_index, table.table_index, label)
+                counted[key] = counted.get(key, 0) + 1
+                located.append((section, table, cell, label))
+    claims = _value_claim_counts(index)
+    pending: list[T02Target] = []
+    for section, table, cell, label in located:
+        if counted.get((section.section_index, table.table_index, label), 0) != 1:
+            continue
+        value = _right_value_cell(table, cell)
+        if value is None or value.has_nested_table or value.has_non_text_object or not _cell_placed(value):
+            continue
+        if value.row_span != 1 or value.col_span != 1:
+            continue
+        if not _merged_span_clear(table, value):
+            continue
+        if value.col in _repeated_value_columns(section, table):
+            continue
+        if (
+            _repeated_entry_row(section, table, value)
+            or _blank_continuation(section, table, value)
+            or _above_label_conflict(section, table, value)
+        ):
+            continue
+        claim_key = (section.section_index, table.table_index, value.row, value.col)
+        if claims.get(claim_key, 0) != 1:
+            continue
+        if _neighbor_is_guidance(section, table, value):
+            continue
+        if _cell_joined(section, value).strip():
+            continue
+        if len(value.paragraph_indexes) != 1:
+            continue
+        paragraph = section.paragraphs[value.paragraph_indexes[0]]
+        if paragraph.story_scope != "body" or len(paragraph.runs) != 1:
+            continue
+        run = paragraph.runs[0]
+        if run.has_nested_table or not _plain_empty_run(run):
+            continue
+        pending.append(_target_from_value(section, table, value, label, run))
+    label_counts: dict[str, int] = {}
+    for target in pending:
+        label_counts[target.field_label] = label_counts.get(target.field_label, 0) + 1
+    return tuple(target for target in pending if label_counts[target.field_label] == 1)
+
+
 @dataclass(frozen=True)
 class FieldAssessment:
     field_label: str | None
@@ -1490,6 +1566,67 @@ def authorize_merged_value_writes(index: HwpxStructureIndex) -> tuple[T02WriteAu
 def merged_authorization_is_current(index: HwpxStructureIndex, grant: T02WriteAuthorization) -> bool:
     """A merged grant is current only when this index would issue the same one."""
     return any(item == grant for item in authorize_merged_value_writes(index))
+
+
+def _nested_writer_supports(index: HwpxStructureIndex, target: T02Target) -> bool:
+    """The exact writer can change one empty hp:t in a nested leaf cell."""
+    if target.row_span != 1 or target.col_span != 1 or target.expected_raw_text != "":
+        return False
+    if target.table_index >= len(index.tables):
+        return False
+    table = index.tables[target.table_index]
+    if table.story_scope != "body" or table.parent_table_index is None:
+        return False
+    section = next((item for item in index.sections if item.section_index == target.section_index), None)
+    if section is None or target.paragraph_index >= len(section.paragraphs):
+        return False
+    paragraph = section.paragraphs[target.paragraph_index]
+    if paragraph.story_scope != "body" or paragraph.table_index != target.table_index or len(paragraph.runs) != 1:
+        return False
+    run = paragraph.runs[0]
+    if run.run_index != target.run_index or run.has_nested_table or run.has_non_text_object:
+        return False
+    if len(run.text_nodes) > 1 or (run.raw_text or "").strip():
+        return False
+    if run.text_nodes and (run.text_nodes[0].raw_text != "" or run.text_nodes[0].text_node_index != target.text_node_index):
+        return False
+    if not run.text_nodes and target.text_node_index is not None:
+        return False
+    return True
+
+
+def authorize_nested_leaf_writes(index: HwpxStructureIndex) -> tuple[T02WriteAuthorization, ...]:
+    """Grant a leaf cell inside a nested table. The containing cell stays closed."""
+    if index.analysis_status != "COMPLETE" or not index.source_sha256:
+        return ()
+    grants: list[T02WriteAuthorization] = []
+    for target in find_nested_leaf_targets(index):
+        if not _nested_writer_supports(index, target):
+            continue
+        section = next(item for item in index.sections if item.section_index == target.section_index)
+        paragraph = section.paragraphs[target.paragraph_index]
+        grants.append(T02WriteAuthorization(
+            source_sha256=index.source_sha256,
+            field_label=target.field_label,
+            section_member=target.section_member,
+            section_index=target.section_index,
+            table_index=target.table_index,
+            row=target.row,
+            col=target.col,
+            row_span=target.row_span,
+            col_span=target.col_span,
+            paragraph_index=target.paragraph_index,
+            run_index=target.run_index,
+            text_node_index=target.text_node_index,
+            expected_raw_text=target.expected_raw_text,
+            story_scope=paragraph.story_scope,
+        ))
+    return tuple(grants)
+
+
+def nested_authorization_is_current(index: HwpxStructureIndex, grant: T02WriteAuthorization) -> bool:
+    """A nested grant is current only when this index would issue the same one."""
+    return any(item == grant for item in authorize_nested_leaf_writes(index))
 
 
 def t02_write_authorized(index: HwpxStructureIndex, field: FieldAssessment) -> bool:
