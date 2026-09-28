@@ -1875,6 +1875,7 @@ class ExactTextTarget:
     row: int | None = None
     col: int | None = None
     preserve_prefix: bool = False
+    choice_flip: bool = False
 
 
 @dataclass
@@ -1932,6 +1933,13 @@ def _section_runs(root) -> dict[tuple[int, int], Any]:
             run_index += 1
         paragraph_index += 1
     return found
+
+
+def _is_exact_choice_flip(before: str, after: str) -> bool:
+    """True when the only change is the leading empty box becoming a checked box."""
+    if not before or not after or before[0] not in "□☐" or after[0] != "■":
+        return False
+    return before[1:] == after[1:]
 
 
 def _protected_existing_text(text: str) -> bool:
@@ -2066,20 +2074,24 @@ def commit_exact_text_writes(
                 f"EXPECTED_TEXT_MISMATCH:{target.paragraph_index}:{target.run_index}:{target.text_node_index}"
             )
             continue
-        if current.strip() and not target.preserve_prefix:
+        choice_ok = (
+            target.choice_flip
+            and current == target.expected_raw_text
+            and _is_exact_choice_flip(current, target.value)
+        )
+        if current.strip() and not target.preserve_prefix and not choice_ok:
             report.reasons.append(
                 f"EXISTING_VALUE:{target.paragraph_index}:{target.run_index}:{target.text_node_index}"
             )
             continue
-        if _protected_existing_text(current):
+        if _protected_existing_text(current) and not choice_ok:
             report.reasons.append(
                 f"PROTECTED_TEXT:{target.paragraph_index}:{target.run_index}:{target.text_node_index}"
             )
             continue
-        if current.strip():
+        if current.strip() and target.preserve_prefix:
             prefix_ok = (
-                target.preserve_prefix
-                and current == target.expected_raw_text
+                current == target.expected_raw_text
                 and target.value.startswith(current)
                 and target.value[len(current):].strip() != ""
             )
@@ -2253,10 +2265,13 @@ def commit_t02_label_writes(
         authorization_is_current,
         authorize_merged_value_writes,
         authorize_nested_leaf_writes,
+        authorize_checkbox_writes,
         authorize_guidance_narrative_writes,
         authorize_inline_field_writes,
         authorize_repeated_row_writes,
         authorize_t02_writes,
+        checkbox_authorization_is_current,
+        checkbox_replacement,
         guidance_authorization_is_current,
         inline_authorization_is_current,
         merged_authorization_is_current,
@@ -2293,6 +2308,11 @@ def commit_t02_label_writes(
             continue
         if inline_authorization_is_current(index, grant):
             grants[grant.field_label] = grant
+    for grant in authorize_checkbox_writes(index):
+        if grant.field_label in grants:
+            continue
+        if checkbox_authorization_is_current(index, grant):
+            grants[grant.field_label] = grant
     exact: list[ExactTextTarget] = []
     for key, value in wanted.items():
         grant = grants.get(key)
@@ -2301,7 +2321,16 @@ def commit_t02_label_writes(
             continue
         written = value
         preserve = False
-        if grant.expected_raw_text:
+        choice = False
+        mark = grant.expected_raw_text[:1]
+        flipped = checkbox_replacement(grant.expected_raw_text, value) if mark and mark in "□☐" else None
+        if mark and mark in "□☐":
+            if flipped is None:
+                report.reasons.append(f"NOT_AUTHORIZED:{key}")
+                continue
+            written = flipped
+            choice = True
+        elif grant.expected_raw_text:
             prefix = grant.expected_raw_text
             written = prefix + value if prefix[-1].isspace() else prefix + " " + value
             preserve = True
@@ -2312,6 +2341,7 @@ def commit_t02_label_writes(
             row=None if grant.row < 0 else grant.row,
             col=None if grant.col < 0 else grant.col,
             preserve_prefix=preserve,
+            choice_flip=choice,
         ))
     if report.reasons or len(exact) != len(wanted):
         report.reason = report.reasons[0] if report.reasons else "NOT_AUTHORIZED"

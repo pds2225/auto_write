@@ -1447,6 +1447,61 @@ def find_inline_field_targets(index: HwpxStructureIndex) -> tuple[T02Target, ...
     return tuple(target for target in pending if label_counts[target.field_label] == 1)
 
 
+_BOX_LINE_RE = re.compile(r"^[□☐]\s*(예|아니오|동의|비동의)$")
+
+
+def checkbox_replacement(expected: str, value: str) -> str | None:
+    """Return the checked line, or None when the value is not that option."""
+    match = _BOX_LINE_RE.fullmatch((expected or "").strip())
+    if match is None or value != match.group(1) or not expected or expected[0] not in "□☐":
+        return None
+    return "■" + expected[1:]
+
+
+def find_checkbox_targets(index: HwpxStructureIndex) -> tuple[T02Target, ...]:
+    """One unchecked option line. Date scaffolds and signature lines are not options."""
+    if index.analysis_status != "COMPLETE":
+        return ()
+    pending: list[T02Target] = []
+    for section in index.sections:
+        for paragraph in section.paragraphs:
+            if paragraph.story_scope != "body" or len(paragraph.runs) != 1:
+                continue
+            run = paragraph.runs[0]
+            if run.has_nested_table or run.has_non_text_object or len(run.text_nodes) != 1:
+                continue
+            raw = run.text_nodes[0].raw_text
+            match = _BOX_LINE_RE.fullmatch(raw.strip())
+            if match is None or _SIGNATURE_RE.search(raw) or _is_date_scaffold_paragraph(raw):
+                continue
+            table = None if paragraph.table_index is None else index.tables[paragraph.table_index]
+            if table is not None and table.story_scope != "body":
+                continue
+            owner = None
+            if table is not None:
+                owner = next((cell for cell in table.cells if paragraph.paragraph_index in cell.paragraph_indexes), None)
+                if owner is None or not _cell_placed(owner):
+                    continue
+            pending.append(T02Target(
+                field_label=match.group(1),
+                section_member=section.section_member,
+                section_index=section.section_index,
+                paragraph_index=paragraph.paragraph_index,
+                run_index=run.run_index,
+                text_node_index=run.text_nodes[0].text_node_index,
+                expected_raw_text=raw,
+                table_index=-1 if table is None else table.table_index,
+                row=-1 if owner is None else owner.row,
+                col=-1 if owner is None else owner.col,
+                row_span=1 if owner is None else owner.row_span,
+                col_span=1 if owner is None else owner.col_span,
+            ))
+    label_counts: dict[str, int] = {}
+    for target in pending:
+        label_counts[target.field_label] = label_counts.get(target.field_label, 0) + 1
+    return tuple(target for target in pending if label_counts[target.field_label] == 1)
+
+
 @dataclass(frozen=True)
 class FieldAssessment:
     field_label: str | None
@@ -2095,6 +2150,40 @@ def authorize_inline_field_writes(index: HwpxStructureIndex) -> tuple[T02WriteAu
 def inline_authorization_is_current(index: HwpxStructureIndex, grant: T02WriteAuthorization) -> bool:
     """An inline grant is current only when this index would issue the same one."""
     return any(item == grant for item in authorize_inline_field_writes(index))
+
+
+def authorize_checkbox_writes(index: HwpxStructureIndex) -> tuple[T02WriteAuthorization, ...]:
+    """Grant one unchecked option. This does not grant a date or a signature."""
+    if index.analysis_status != "COMPLETE" or not index.source_sha256:
+        return ()
+    grants: list[T02WriteAuthorization] = []
+    fresh = {item: item for item in find_checkbox_targets(index)}
+    for target in fresh:
+        if target not in fresh:
+            continue
+        section = next(item for item in index.sections if item.section_index == target.section_index)
+        grants.append(T02WriteAuthorization(
+            source_sha256=index.source_sha256,
+            field_label=target.field_label,
+            section_member=target.section_member,
+            section_index=target.section_index,
+            table_index=target.table_index,
+            row=target.row,
+            col=target.col,
+            row_span=target.row_span,
+            col_span=target.col_span,
+            paragraph_index=target.paragraph_index,
+            run_index=target.run_index,
+            text_node_index=target.text_node_index,
+            expected_raw_text=target.expected_raw_text,
+            story_scope=section.paragraphs[target.paragraph_index].story_scope,
+        ))
+    return tuple(grants)
+
+
+def checkbox_authorization_is_current(index: HwpxStructureIndex, grant: T02WriteAuthorization) -> bool:
+    """A checkbox grant is current only when this index would issue the same one."""
+    return any(item == grant for item in authorize_checkbox_writes(index))
 
 
 def t02_write_authorized(index: HwpxStructureIndex, field: FieldAssessment) -> bool:
