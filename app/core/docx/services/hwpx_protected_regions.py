@@ -652,7 +652,11 @@ def _touches(left, right) -> bool:
 
 def _neighbor_is_guidance(section, table, value) -> bool:
     for other in table.cells:
-        if other is value or not _cell_placed(other) or not _touches(value, other):
+        if other is value or not _cell_placed(other):
+            continue
+        row_overlap = value.row < other.row + other.row_span and other.row < value.row + value.row_span
+        col_touch = value.col + value.col_span == other.col or other.col + other.col_span == value.col
+        if not (row_overlap and col_touch):
             continue
         text = _cell_joined(section, other).strip()
         if "※" in text or guidance_status(text) == "guidance":
@@ -678,23 +682,36 @@ def _value_claim_counts(index: HwpxStructureIndex) -> dict[tuple[int, int, int, 
 
 
 def _repeated_entry_row(section, table, value_cell) -> bool:
-    """Blank rows under the same value column, with no label of their own."""
-    extras = 0
-    for other in table.cells:
-        if other is value_cell or not _cell_placed(other):
-            continue
-        if other.col != value_cell.col or abs(other.row - value_cell.row) != 1:
-            continue
-        if other.row_span != 1 or other.col_span != 1 or _cell_joined(section, other).strip():
-            continue
+    """Continuation blank rows under the same value column, with no label of their own."""
+
+    def unlabeled_blank_at(row: int) -> bool:
+        matches = [
+            other for other in table.cells
+            if other is not value_cell and _cell_placed(other)
+            and other.col == value_cell.col and other.row == row
+            and other.row_span == 1 and other.col_span == 1
+        ]
+        if len(matches) != 1:
+            return False
+        other = matches[0]
+        if _cell_joined(section, other).strip():
+            return False
         left = [
             cell for cell in table.cells
             if cell is not other and _cell_placed(cell) and cell.col + cell.col_span == other.col
             and cell.row < other.row + other.row_span and other.row < cell.row + cell.row_span
         ]
-        if not left or all(not _cell_joined(section, cell).strip() for cell in left):
+        return not left or all(not _cell_joined(section, cell).strip() for cell in left)
+
+    extras = 0
+    for step in (-1, 1):
+        cursor = value_cell.row + step
+        while unlabeled_blank_at(cursor):
             extras += 1
-    return extras >= 1
+            cursor += step
+            if extras >= 2:
+                return True
+    return False
 
 
 def _above_label_conflict(section, table, value_cell) -> bool:
@@ -744,6 +761,35 @@ def _protected_label_paragraphs(index: HwpxStructureIndex) -> set[tuple[int, int
     return blocked
 
 
+def _left_t02_label_for_value_cell(section, table, value_cell, protection: dict[tuple[int, int], ProtectionDecision]) -> str | None:
+    """Immediate logical-left label for non-auto assessment records."""
+    if not _cell_placed(value_cell):
+        return None
+    candidates = []
+    for other in table.cells:
+        if other is value_cell or other.has_nested_table or other.has_non_text_object or not _cell_placed(other):
+            continue
+        same_row = other.row < value_cell.row + value_cell.row_span and value_cell.row < other.row + other.row_span
+        if same_row and other.col + other.col_span == value_cell.col:
+            candidates.append(other)
+    if len(candidates) != 1:
+        return None
+    label_cell = candidates[0]
+    unsafe_roles = {
+        "GUIDANCE", "SIGNATURE", "DATE_SCAFFOLD",
+        "CHOICE_HEADER", "CHOICE_MARK", "HEADING", "UNCONFIRMED_CHOICE",
+    }
+    for paragraph_index in label_cell.paragraph_indexes:
+        decision = protection.get((section.section_index, paragraph_index))
+        if decision is None:
+            continue
+        if decision.role == "AMBIGUOUS" and _ambiguous_guidance_phrase(decision.observed_text):
+            return None
+        if decision.role in unsafe_roles:
+            return None
+    return _t02_label(_cell_joined(section, label_cell))
+
+
 def _repeated_value_columns(section, table) -> set[int]:
     """Columns with a heading cell and 3 or more following empty instance rows."""
     by_col: dict[int, list] = {}
@@ -781,12 +827,40 @@ def _repeated_value_columns(section, table) -> set[int]:
     return repeated
 
 
+def _plain_empty_run(run) -> bool:
+    if run.has_nested_table or run.has_non_text_object or (run.raw_text or "").strip():
+        return False
+    if len(run.text_nodes) > 1:
+        return False
+    if len(run.text_nodes) == 1 and run.text_nodes[0].raw_text != "":
+        return False
+    return True
+
+
+def _t02_value_run(section, paragraph):
+    """Return the run identity for a T02 value cell, or None if unsupported."""
+    if len(paragraph.runs) == 1:
+        run = paragraph.runs[0]
+        return run if _plain_empty_run(run) else None
+    if section.section_index > 0 and paragraph.runs and all(_plain_empty_run(run) for run in paragraph.runs):
+        return paragraph.runs[0]
+    return None
+
+
+def _t02_value_span_supported(section, value_cell) -> bool:
+    if value_cell.row_span != 1:
+        return False
+    if value_cell.col_span == 1:
+        return True
+    return section.section_index > 0 and value_cell.col_span is not None and value_cell.col_span > 1
+
+
 def find_t02_auto_targets(index: HwpxStructureIndex) -> tuple[T02Target, ...]:
     """Return only label-plus-completely-empty-cell targets. Nothing else is AUTO."""
     if index.analysis_status != "COMPLETE":
         return ()
     blocked = _protected_label_paragraphs(index)
-    counted: list[str] = []
+    counted: dict[tuple[int, int, str], int] = {}
     located = []
     for section in index.sections:
         for table_index in section.table_indexes:
@@ -796,7 +870,7 @@ def find_t02_auto_targets(index: HwpxStructureIndex) -> tuple[T02Target, ...]:
             for cell in table.cells:
                 if cell.has_nested_table or cell.has_non_text_object or not _cell_placed(cell):
                     continue
-                if cell.row_span != 1 or cell.col_span != 1:
+                if cell.row_span != 1:
                     continue
                 if any((section.section_index, item) in blocked for item in cell.paragraph_indexes):
                     continue
@@ -806,17 +880,18 @@ def find_t02_auto_targets(index: HwpxStructureIndex) -> tuple[T02Target, ...]:
                 label = _t02_label(_cell_joined(section, cell))
                 if label is None:
                     continue
-                counted.append(label)
+                key = (section.section_index, table.table_index, label)
+                counted[key] = counted.get(key, 0) + 1
                 located.append((section, table, cell, label))
     claims = _value_claim_counts(index)
     results: list[T02Target] = []
     for section, table, cell, label in located:
-        if counted.count(label) != 1:
+        if counted.get((section.section_index, table.table_index, label), 0) != 1:
             continue
         value = _right_value_cell(table, cell)
         if value is None or value.has_nested_table or value.has_non_text_object or not _cell_placed(value):
             continue
-        if value.row_span != 1 or value.col_span != 1:
+        if not _t02_value_span_supported(section, value):
             continue
         if value.col in _repeated_value_columns(section, table):
             continue
@@ -834,14 +909,8 @@ def find_t02_auto_targets(index: HwpxStructureIndex) -> tuple[T02Target, ...]:
         paragraph = section.paragraphs[value.paragraph_indexes[0]]
         if paragraph.story_scope != "body":
             continue
-        if len(paragraph.runs) != 1:
-            continue
-        run = paragraph.runs[0]
-        if run.has_nested_table or run.has_non_text_object or (run.raw_text or "").strip():
-            continue
-        if len(run.text_nodes) > 1:
-            continue
-        if len(run.text_nodes) == 1 and run.text_nodes[0].raw_text != "":
+        run = _t02_value_run(section, paragraph)
+        if run is None:
             continue
         results.append(T02Target(
             field_label=label,
@@ -1071,6 +1140,8 @@ def assess_fields(index: HwpxStructureIndex) -> tuple[FieldAssessment, ...]:
             if paragraph.table_index is not None:
                 table = index.tables[paragraph.table_index]
                 owner = next((cell for cell in table.cells if paragraph.paragraph_index in cell.paragraph_indexes), None)
+                if owner is not None and not text.strip():
+                    label = _left_t02_label_for_value_cell(section, table, owner, protection)
                 if owner is not None and owner.has_nested_table:
                     types.append("T13")
                     reasons.append("NESTED_TABLE")

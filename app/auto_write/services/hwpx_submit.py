@@ -19,16 +19,24 @@ B②(게이트 배선) + B③(제출 파이프라인). 기존 자산만 조립�
   항상 실제 존재하는 경로를 가리킨다(댕글링 금지).
 
 원본(in_hwpx)은 fill_hwpx 의 안전가드(out==in ValueError·읽기전용)로 절대 수정되지 않는다.
+
+T02 Analyzer 배선(P1.4-2)
+------------------------
+현재 인덱스 허가(``authorize_t02_writes`` + ``authorization_is_current``)만
+``commit_t02_label_writes`` 로 쓴다. 허가 없는 적격 T02 는 레거시 ``fill_hwpx``
+에도 넘기지 않고 ``AUTHORIZATION_PENDING`` 으로 남긴다. 평가는 AUTO 로 바꾸지 않는다.
 """
 
 from __future__ import annotations
 
+import hashlib
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
-from .hwpx_fill import fill_hwpx
+from .hwpx_fill import commit_t02_label_writes, fill_hwpx
 from .hwpx_acceptance import run_hwpx_acceptance
 from .hwpx_integrity_gate import run_hwpx_integrity_gate
 from .hwpx_layout_fix import (
@@ -201,6 +209,82 @@ def _check_and_repair_semantics(report: SubmitReport, out: Path, *, preserve_tem
     return True
 
 
+def _t02_label_key(key: str) -> str:
+    """Match Analyzer field labels the same way commit_t02_label_writes does."""
+    return re.sub(r"\s+", "", str(key)).rstrip(":：")
+
+
+@dataclass
+class T02AnalyzerWire:
+    """Result of applying current T02 grants without touching legacy fill rules."""
+
+    fill_source: Path
+    legacy_identity: dict[str, str]
+    written: dict[str, str]
+    pending: tuple[str, ...]
+
+
+def apply_t02_analyzer_writes(
+    source: Path,
+    staging: Path,
+    identity: Optional[dict[str, str]],
+    *,
+    authorize_t02_writes: Callable[..., tuple],
+    authorization_is_current: Callable[..., bool],
+    commit_t02_label_writes: Callable[..., Any],
+) -> T02AnalyzerWire:
+    """Write identity values only when the index currently grants that label.
+
+    Eligible T02 labels without a current grant are removed from the identity
+    passed to legacy ``fill_hwpx``. Assessment decisions stay unchanged.
+    """
+    from core.docx.services.hwpx_analysis_adapter import index_hwpx_structure
+    from core.docx.services.hwpx_protected_regions import assess_fields
+
+    raw = {
+        str(key): "" if value is None else str(value)
+        for key, value in dict(identity or {}).items()
+    }
+    index = index_hwpx_structure(source)
+    current = tuple(
+        grant for grant in authorize_t02_writes(index)
+        if authorization_is_current(index, grant)
+    )
+    granted_labels = {grant.field_label for grant in current if grant.field_label}
+    pending_labels = {
+        field.field_label
+        for field in assess_fields(index)
+        if field.field_type == "T02"
+        and field.eligible
+        and field.field_label
+        and field.auto_write_allowed is False
+        and field.field_label not in granted_labels
+    }
+    legacy: dict[str, str] = {}
+    analyzer: dict[str, str] = {}
+    held: list[str] = []
+    for key, value in raw.items():
+        label = _t02_label_key(key)
+        if str(value).strip() and label in granted_labels:
+            analyzer[label] = str(value)
+            continue
+        if str(value).strip() and label in pending_labels:
+            held.append(label)
+            continue
+        legacy[key] = value
+    if not analyzer:
+        return T02AnalyzerWire(source, legacy, {}, tuple(dict.fromkeys(held)))
+    if source.resolve() == staging.resolve():
+        raise ValueError("T02 analyzer staging path must differ from the source")
+    commit_report = commit_t02_label_writes(source, staging, analyzer)
+    if getattr(commit_report, "ok", False) and staging.is_file():
+        return T02AnalyzerWire(staging, legacy, dict(analyzer), tuple(dict.fromkeys(held)))
+    if staging.exists():
+        staging.unlink()
+    held.extend(label for label in analyzer if label not in held)
+    return T02AnalyzerWire(source, legacy, {}, tuple(dict.fromkeys(held)))
+
+
 def submit_hwpx(
     in_hwpx: str | Path,
     out_hwpx: str | Path,
@@ -245,19 +329,61 @@ def submit_hwpx(
     out = Path(out_hwpx)
     report = SubmitReport(input=str(src), output=str(out))
 
-    # 1) 채움 — 원본미수정·원자적쓰기·덮어쓰기금지는 fill_hwpx 에 내장.
-    fill_options: dict[str, Any] = {"identity": identity, "replacements": replacements}
-    if field_writes:
-        fill_options["field_writes"] = field_writes
-    if expected_sha256:
-        fill_options["expected_sha256"] = expected_sha256
-    if region_edits is not None:
-        fill_options["region_edits"] = region_edits
-    if preserve_template:
-        fill_options["force_black"] = False
-    fill_rep = fill_hwpx(src, out, **fill_options)
+    # 1) 현재 T02 허가만 Analyzer commit. 허가 없는 적격 라벨은 fill 에도 넘기지 않는다.
+    from core.docx.services.hwpx_protected_regions import (
+        authorization_is_current,
+        authorize_t02_writes,
+    )
+
+    staging_path = out.with_name(f"{out.stem}.__t02_auth__.{os.getpid()}{out.suffix}")
+    wire = apply_t02_analyzer_writes(
+        src,
+        staging_path,
+        identity,
+        authorize_t02_writes=authorize_t02_writes,
+        authorization_is_current=authorization_is_current,
+        commit_t02_label_writes=commit_t02_label_writes,
+    )
+    fill_source = wire.fill_source
+    fill_identity = wire.legacy_identity
+    fill_expected = expected_sha256
+    if wire.written and expected_sha256:
+        original_sha = hashlib.sha256(src.read_bytes()).hexdigest()
+        if original_sha.lower() == str(expected_sha256).lower():
+            fill_expected = hashlib.sha256(fill_source.read_bytes()).hexdigest()
+    analyzer_written = wire.written
+    analyzer_pending = wire.pending
+    try:
+        # 채움 — 원본미수정·원자적쓰기·덮어쓰기금지는 fill_hwpx 에 내장.
+        fill_options: dict[str, Any] = {"identity": fill_identity, "replacements": replacements}
+        if field_writes:
+            fill_options["field_writes"] = field_writes
+        if fill_expected:
+            fill_options["expected_sha256"] = fill_expected
+        if region_edits is not None:
+            fill_options["region_edits"] = region_edits
+        if preserve_template:
+            fill_options["force_black"] = False
+        fill_rep = fill_hwpx(fill_source, out, **fill_options)
+    finally:
+        if staging_path is not None and staging_path.exists() and staging_path.resolve() != out.resolve():
+            try:
+                staging_path.unlink()
+            except OSError:
+                pass
     report.filled = dict(fill_rep.filled)
+    report.filled.update(analyzer_written)
     report.residual = list(fill_rep.residual)
+    for label in analyzer_pending:
+        if label not in report.residual:
+            report.residual.append(label)
+        note = f"[t02] {label} AUTHORIZATION_PENDING"
+        if note not in report.notes:
+            report.notes.append(note)
+    for label in analyzer_written:
+        note = f"[t02] {label} GRANT_WRITTEN"
+        if note not in report.notes:
+            report.notes.append(note)
     report.overflow_cells = list(fill_rep.overflow_cells)
     report.notes.extend(fill_rep.notes)
     for key, mode in fill_rep.field_writes_written.items():
@@ -322,8 +448,8 @@ def submit_hwpx(
 
     # 2) 공통 HWPX 무결성 gate — 구조/수용 validator를 같은 entry point로 실행.
     allowed_names = [
-        str(v) for src in (identity, replacements) if src
-        for v in src.values() if str(v or "").strip()
+        str(v) for src_map in (identity, replacements) if src_map
+        for v in src_map.values() if str(v or "").strip()
     ]
     render_validator = None
     if preserve_template:
