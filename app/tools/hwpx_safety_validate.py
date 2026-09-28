@@ -49,6 +49,7 @@ UNIT_FILES = [
     "app/tests/test_hwpx_guidance_narrative.py",
     "app/tests/test_hwpx_inline_field.py",
     "app/tests/test_hwpx_choice_date_sign.py",
+    "app/tests/test_hwpx_existing_value_form.py",
     "app/tests/test_hwpx_safety_runner.py",
 ]
 GOLDEN_FILES = ["app/tests/test_hwpx_safety_golden10.py"]
