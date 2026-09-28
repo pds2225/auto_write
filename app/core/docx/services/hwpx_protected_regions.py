@@ -813,7 +813,7 @@ def find_t02_auto_targets(index: HwpxStructureIndex) -> tuple[T02Target, ...]:
             for cell in table.cells:
                 if cell.has_nested_table or cell.has_non_text_object or not _cell_placed(cell):
                     continue
-                if cell.row_span != 1 or cell.col_span != 1:
+                if cell.row_span != 1:
                     continue
                 if any((section.section_index, item) in blocked for item in cell.paragraph_indexes):
                     continue
