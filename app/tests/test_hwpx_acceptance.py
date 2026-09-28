@@ -200,6 +200,26 @@ def test_core_without_aux_not_guide(tmp_path):
     assert rep.guides == 0
 
 
+def test_core_heading_without_aux_is_guide(tmp_path):
+    """FINDING-QA-001: 핵심 표제만 있는 안내문도 센다. 본문은 바꾸지 않는다."""
+    core_only = tmp_path / "core_heading.hwpx"
+    section = _section_xml(_table("사업개요", "작성방법: 예시를 참고하십시오"))
+    _make_hwpx(core_only, header=_header_xml(_charpr(0, "#000000")), section=section)
+    before = hashlib.sha256(core_only.read_bytes()).hexdigest()
+    rep = run_hwpx_acceptance(core_only)
+    assert rep.guides == 1
+    assert rep.ok is False
+    assert "작성방법" in rep.guides_samples[0]
+    assert hashlib.sha256(core_only.read_bytes()).hexdigest() == before
+
+    both = tmp_path / "core_aux.hwpx"
+    section = _section_xml(_p("작성방법: 작성 후 삭제 후 제출하십시오"))
+    _make_hwpx(both, header=_header_xml(_charpr(0, "#000000")), section=section)
+    both_rep = run_hwpx_acceptance(both)
+    assert both_rep.guides == 1
+    assert both_rep.ok is False
+
+
 # --------------------------------------------------------------------------- #
 # ③ linesegarray(겹침 위험)
 # --------------------------------------------------------------------------- #
