@@ -118,6 +118,19 @@ def _split_value_spans(tc) -> bool:
 
 def _note_unfilled_span(bucket: list, label: str, tc=None) -> None:
     """run/span 경계 때문에 안 채운 칸을 residual 과 별도로 남긴다."""
+    _note_region(bucket, "span", label, tc)
+
+
+# 손글씨·도장 이미지. line/rect 는 빈칸 밑줄로 자주 쓰이므로 여기 넣지 않는다.
+_HANDWRITTEN_OBJECT_TAGS = ("pic", "ole", "drawText", "textart")
+_SEAL_PAREN_RE = re.compile(
+    r"[\(（]\s*(?:서명|날인|직인|인감|인|印|署名|捺印|도장|sign|seal)\s*[\)）]",
+    re.IGNORECASE,
+)
+
+
+def _note_region(bucket: list, kind: str, label: str, tc=None) -> None:
+    """안 채운 칸의 이유를 ``[kind] … UNFILLED`` 로 남긴다."""
     row = col = None
     if tc is not None:
         addr = next(iter(_direct(tc, "cellAddr")), None)
@@ -127,11 +140,52 @@ def _note_unfilled_span(bucket: list, label: str, tc=None) -> None:
             if addr.get("colAddr") is not None:
                 col = _int_attr(addr, "colAddr", -1)
     if row is not None and col is not None:
-        note = f"[span] {label} row={row} col={col} UNFILLED"
+        note = f"[{kind}] {label} row={row} col={col} UNFILLED"
     else:
-        note = f"[span] {label} UNFILLED"
+        note = f"[{kind}] {label} UNFILLED"
     if note not in bucket:
         bucket.append(note)
+
+
+def _nearest_cell(el):
+    cur = el
+    while cur is not None:
+        if _local(getattr(cur, "tag", "")) == "tc":
+            return cur
+        cur = cur.getparent()
+    return None
+
+
+def _has_handwritten_object(tc) -> bool:
+    """이 셀 자신의 그림·OLE·글상자가 있으면 True. 중첩 표 안 객체는 제외."""
+    if tc is None:
+        return False
+    for name in _HANDWRITTEN_OBJECT_TAGS:
+        for el in tc.iter(_q(name)):
+            if _nearest_cell(el) is tc:
+                return True
+    return False
+
+
+def _signature_seal_label(text: str) -> bool:
+    """서명·날인·직인 칸. ``부서명``·``겸직인력``·``성명 (서명)`` 은 제외.
+
+    괄호 안 도장 표시를 뺀 뒤에 남은 라벨만 본다. ``성명 (서명)`` 의 값칸은
+    이름 칸이고, ``서명`` / ``서명 : ______`` 은 서명 칸이다.
+    """
+    stripped = _SEAL_PAREN_RE.sub("", str(text or ""))
+    compact = re.sub(r"\s+", "", stripped).rstrip(":：_")
+    if not compact:
+        return bool(str(text or "").strip())
+    without_department = compact.replace("부서명", "")
+    if "서명" in without_department or "날인" in without_department:
+        return True
+    without_concurrent = compact.replace("겸직인", "")
+    if "직인" in without_concurrent:
+        return True
+    if "인감" in compact and "인감증명" not in compact:
+        return True
+    return False
 
 
 def _int_attr(el, name: str, default: int) -> int:
@@ -399,12 +453,13 @@ def _set_cell_text(tc, value: str, black: Optional[_BlackCharPr] = None) -> bool
 
     L086: 폼 컨트롤(checkBtn 등)이 든 칸에는 텍스트를 절대 기입하지 않는다 —
     ``_cell_is_fillable`` 우회·resume 경로에서도 이중 표시를 막기 위한 최종 방어핀.
+    그림·OLE·글상자(손글씨/도장)가 있는 칸도 같은 이유로 기입하지 않는다.
 
     L002/L145: 기입에 성공하면 그 칸의 ``hp:linesegarray`` 를 즉시 제거한다.
     호출자가 ``fill_hwpx`` 파이프라인·별도 strip 을 잊어도 옛 줄좌표에 새 글씨가
     겹치지 않는다. 형제 칸은 건드리지 않는다(L074).
     """
-    if _has_form_control(tc):
+    if _has_form_control(tc) or _has_handwritten_object(tc):
         return False
     if _split_value_spans(tc):
         return False
@@ -530,6 +585,13 @@ def _fill_inline_fields_in_p(
                 continue
             if not _label_matches(field_key, want_key):
                 continue
+            if _signature_seal_label(label_raw) or _signature_seal_label(lbl):
+                _note_region(span_notes, "signature", lbl, _tc_of(p))
+                break
+            owner = _tc_of(p)
+            if owner is not None and _has_handwritten_object(owner):
+                _note_region(span_notes, "handwritten", lbl, owner)
+                break
             if _span_crosses_text_nodes(p, f_start, f_end):
                 _note_unfilled_span(span_notes, lbl, _tc_of(p))
                 break
@@ -1159,6 +1221,12 @@ def _fill_section_xml(
                         continue
                     if _is_label_like(target):
                         continue  # 값칸 후보가 또 라벨 → 기입 금지
+                    if _signature_seal_label(_cell_text(tc)) or _signature_seal_label(lbl):
+                        _note_region(span_notes, "signature", lbl, target)
+                        break
+                    if _has_handwritten_object(target):
+                        _note_region(span_notes, "handwritten", lbl, target)
+                        break
                     if not _cell_is_fillable(target):
                         continue  # 실제 값 있는 칸/폼컨트롤 칸 — 기입 금지
                     if _split_value_spans(target):
