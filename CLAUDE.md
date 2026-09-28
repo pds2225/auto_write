@@ -19,6 +19,9 @@
 >
 > **스킬 훅(전역):** 스킬을 만들게 한 **요청 원문**을 `description` 훅 최우선으로 넣는다.
 > 텍스트 프롬프트에 자동으로 안 걸리면 효용이 줄어든다. 상세 `AGENTS.md` §7.
+>
+> **PR·코드리뷰 언어:** 「v_up처럼 코드리뷰나 pr 한글로나오게해줘」.
+> 제목 설명, 본문, 리뷰 코멘트는 한국어. 경로·심볼·해시·명령 원문은 유지. 상세 `AGENTS.md` §9.
 
 ## 프로젝트 개요
 
@@ -194,6 +197,7 @@ submission_orchestrator·image_apply). 신규 에이전트는 `cross-form-filler
 | 2026-08-20 | session-resume 스킬 신설. 배너 스킬/후크는 일회성이라 철회 | 신규 `.claude/skills/session-resume/SKILL.md` · `.claude/hooks/session_resume_hook.js` · 삭제 promo-banner-localize | CLAUDE.md 가 session-resume 을 가리키는데 파일이 없음 = 매 세션 빈손. K-Navi 배너 한/영은 다음 요청 0회 예상이라 스킬·GenerateImage 후크 철회. 후크는 「세션마무리/이어서」만 |
 | 2026-08-20 | 케이네비 MVP 하이라이트 스킬 수확 + 위키 3페이지 | 신규 `.claude/skills/k-navi-mvp-highlight` · `.omc/wiki/k-navi-mvp-highlight-edit.md` · `k-navi-cloud-drive-ingest.md` · `session-2026-08-20-k-navi-mvp.md` · RESUME | KICXUP 실녹화 컷시트 재실행용. 클라우드=Windows 경로 불가, Drive MCP 10MB, gdown 후 공유 제한. 보이는 것만 주장(랜드마크/KASS 금지). bizdoc-hub 라우팅 아님. 엔진 코드 무변경 |
 | 2026-08-20 | 세션 마무리 깃발을 GitHub 파일(`.session/closeout_due.json`)로 공유 — 로컬/클라우드/GitHub × Cursor/Claude/Codex | 신규 scripts/session_closeout.py·.session/·app/tests/test_session_closeout.py·.claude/skills/session-closeout-all | 한 창은 다른 창 대화를 저장할 수 없음. 저장소 깃발+pull 후 각 (agent,location)이 RESUME.md 를 스스로 갱신·ack. due 는 cancel 전까지 유지. 로컬 Claude 훅은 sync-disk |
+| 2026-09-28 | PR·코드리뷰 한국어 고정 | AGENTS.md §9 · CLAUDE.md · `.github/PULL_REQUEST_TEMPLATE.md` · `.cursor/BUGBOT.md` · `app/tests/test_korean_pr_review.py` | 사용자 요청 「v_up처럼 코드리뷰나 pr 한글로나오게해줘」. 에이전트 PR 본문과 Bugbot 리뷰가 한글로 나오게 함 |
 
 > **이전 이력 35건은 [docs/CHANGELOG.md](docs/CHANGELOG.md) 로 옮겼다**(2026-07-20).
 > 이 표가 파일의 80%(42KB)를 차지했고, `CLAUDE.md` 는 매 세션 통째로 로드되기 때문이다.
