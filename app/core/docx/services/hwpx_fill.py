@@ -32,6 +32,7 @@ OWPML 표 구조(실측)
 - **날조 0**: 사용자가 준 identity/replacements 값만 입력한다. 없으면 안 채운다.
 - **덮어쓰기 금지**: 비었거나 '명백한 예시 플레이스홀더'인 칸에만 입력한다.
   실제 값이 든 칸·라벨 칸은 절대 덮지 않는다(오매칭<빈칸<덮어쓰기).
+  실값 때문에 건너뛴 identity 는 ``[existing] … EXISTING_VALUE`` 로 남긴다.
   replacements(직접 치환)도 채울 수 있는 칸 안에서만 적용한다(라벨/실값 보호).
 - AI 호출 없음 — 동일 입력, 동일 결과(결정론).
 
@@ -58,6 +59,7 @@ from .cross_form_autofill import (
     _CHECK_MARK,
     _EMPTY_BOX_RE,
     _cluster_rep,
+    _is_fill_blank,
     _is_noise_label,
     _is_obvious_placeholder,
     _is_visible_blank,
@@ -119,6 +121,47 @@ def _split_value_spans(tc) -> bool:
 def _note_unfilled_span(bucket: list, label: str, tc=None) -> None:
     """run/span 경계 때문에 안 채운 칸을 residual 과 별도로 남긴다."""
     _note_region(bucket, "span", label, tc)
+
+
+def _real_existing_text(text: str) -> bool:
+    """Real prose or numbers. Empty scaffolds and fill-in placeholders are not.
+
+    Obvious placeholders (``0000년 00월 00일``, ``000-00-00000``, ``000억원``),
+    underscore blanks, date scaffolds, and choice marks stay on their own gates.
+    """
+    raw = str(text or "")
+    if not raw.strip():
+        return False
+    if _is_obvious_placeholder(raw) or _is_fill_blank(raw):
+        return False
+    from core.docx.services.hwpx_protected_regions import (
+        _CHOICE_MARK_RE,
+        _is_date_scaffold_paragraph,
+    )
+    if _is_date_scaffold_paragraph(raw) or _CHOICE_MARK_RE.search(raw):
+        return False
+    return True
+
+
+def _note_existing_value(bucket: list, label: str, tc=None, labels: list | None = None) -> None:
+    """Record a skipped write when the cell already holds a real value."""
+    row = col = None
+    if tc is not None:
+        addr = next(iter(_direct(tc, "cellAddr")), None)
+        if addr is not None:
+            if addr.get("rowAddr") is not None:
+                row = _int_attr(addr, "rowAddr", -1)
+            if addr.get("colAddr") is not None:
+                col = _int_attr(addr, "colAddr", -1)
+    shown = str(label or "value")
+    if row is not None and col is not None:
+        note = f"[existing] {shown} row={row} col={col} EXISTING_VALUE"
+    else:
+        note = f"[existing] {shown} EXISTING_VALUE"
+    if note not in bucket:
+        bucket.append(note)
+    if labels is not None and label and label not in labels:
+        labels.append(label)
 
 
 # 손글씨·도장 이미지. line/rect 는 빈칸 밑줄로 자주 쓰이므로 여기 넣지 않는다.
@@ -551,6 +594,7 @@ def _splice_run_text(p, fill_start: int, fill_end: int, value: str) -> bool:
 
 def _fill_inline_fields_in_p(
     p, wants, used_keys: set, filled: dict, span_notes: Optional[list] = None,
+    existing_labels: Optional[list] = None,
 ) -> bool:
     """hp:p 하나의 인라인 필드(`라벨 : ______`)를 채운다 — 1.5(셀)·1.8(본문) 공용 커널.
 
@@ -559,12 +603,15 @@ def _fill_inline_fields_in_p(
     의 직계 hp:t 를 문서순 그대로 결합(공백 정규화 금지, AC9)하고, 역순 스플라이스로
     앞 필드 offset 을 보존한다. 형제 run 의 텍스트·charPrIDRef 보존은 _splice_run_text
     가 보장(대상 hp:t 부분 교체만). 구간이 둘 이상의 hp:t 에 걸치면 채우지 않고
-    span_notes 에 ``[span] … UNFILLED`` 를 남긴다. used_keys 는 표(1)/인라인(1.5)/
+    span_notes 에 ``[span] … UNFILLED`` 를 남긴다. 콜론 뒤가 실값이면 덮지 않고
+    ``[existing] … EXISTING_VALUE`` 를 남긴다. used_keys 는 표(1)/인라인(1.5)/
     체크박스(1.7)/본문(1.8)이 공유한다(이중 기입 금지). 반환: 이 단락에서 하나라도
     채웠으면 True.
     """
     if span_notes is None:
         span_notes = []
+    if existing_labels is None:
+        existing_labels = []
     ts = _inline_texts(p)
     if not ts:
         return False
@@ -575,7 +622,9 @@ def _fill_inline_fields_in_p(
     fields = list(_iter_line_fields(flat))
     # 역순 스플라이스: 뒤 구간부터 교체해야 앞 필드 offset 이 유효.
     for label_raw, value_raw, f_start, f_end in reversed(fields):
-        if not _is_visible_blank(value_raw):
+        visible = _is_visible_blank(value_raw)
+        real_value = _real_existing_text(value_raw)
+        if not visible and not real_value:
             continue
         field_key = _key(label_raw)
         if not field_key:
@@ -591,6 +640,9 @@ def _fill_inline_fields_in_p(
             owner = _tc_of(p)
             if owner is not None and _has_handwritten_object(owner):
                 _note_region(span_notes, "handwritten", lbl, owner)
+                break
+            if not visible:
+                _note_existing_value(span_notes, lbl, owner, existing_labels)
                 break
             if _span_crosses_text_nodes(p, f_start, f_end):
                 _note_unfilled_span(span_notes, lbl, _tc_of(p))
@@ -930,6 +982,13 @@ def _is_label_like(tc) -> bool:
     return _cluster_rep(norm) is not None or _is_noise_label(txt, norm)
 
 
+def _cell_has_real_value(tc) -> bool:
+    """값칸에 플레이스홀더가 아닌 사용자 글자가 있으면 True."""
+    if tc is None or _is_label_like(tc):
+        return False
+    return _real_existing_text(_cell_text(tc))
+
+
 def _in_protected_cell(t) -> bool:
     """hp:t 가 '채울 수 없는'(라벨·실값) 표 셀 안에 있으면 True(치환 보호 대상).
 
@@ -1173,6 +1232,7 @@ def _fill_section_xml(
     field_writes: Optional[dict[str, str]] = None,
     f01_bucket: Optional[dict[str, dict]] = None,
     span_notes: Optional[list] = None,
+    existing_labels: Optional[list] = None,
 ) -> tuple[bytes, dict[str, str], int, set[str]]:
     """한 섹션 XML 에서 표 라벨-값 칸(1) + 셀 인라인 빈칸(1.5) + 체크박스(1.7) +
     그리드 선택칸(1.75, □ 없음) + 표 밖 본문 단락 인라인 빈칸(1.8) 채움 +
@@ -1191,6 +1251,8 @@ def _fill_section_xml(
     root = etree.fromstring(xml_bytes)
     if span_notes is None:
         span_notes = []
+    if existing_labels is None:
+        existing_labels = []
     filled: dict[str, str] = {}
     used_keys: set[str] = set()
     replaced = 0
@@ -1228,7 +1290,10 @@ def _fill_section_xml(
                         _note_region(span_notes, "handwritten", lbl, target)
                         break
                     if not _cell_is_fillable(target):
-                        continue  # 실제 값 있는 칸/폼컨트롤 칸 — 기입 금지
+                        # 실값만 EXISTING_VALUE. ____·더미날짜·□ 는 각자 게이트에 남긴다.
+                        if _cell_has_real_value(target):
+                            _note_existing_value(span_notes, lbl, target, existing_labels)
+                        break
                     if _split_value_spans(target):
                         _note_unfilled_span(span_notes, lbl, target)
                         break
@@ -1249,7 +1314,9 @@ def _fill_section_xml(
         for tc in root.iter(_q("tc")):
             for sub in _direct(tc, "subList"):
                 for p in _direct(sub, "p"):
-                    if _fill_inline_fields_in_p(p, wants, used_keys, filled, span_notes):
+                    if _fill_inline_fields_in_p(
+                        p, wants, used_keys, filled, span_notes, existing_labels,
+                    ):
                         changed = True
                         edited.append(p)
 
@@ -1347,7 +1414,9 @@ def _fill_section_xml(
     #      used_keys 공유(표/인라인/체크박스와 이중 기입 금지)·형제 run 보존.
     if wants:
         for p in _direct(root, "p"):
-            if _fill_inline_fields_in_p(p, wants, used_keys, filled, span_notes):
+            if _fill_inline_fields_in_p(
+                p, wants, used_keys, filled, span_notes, existing_labels,
+            ):
                 changed = True
                 edited.append(p)
 
@@ -1362,6 +1431,12 @@ def _fill_section_xml(
             if not cur:
                 continue
             if _in_protected_cell(t):       # 라벨·실값 칸의 hp:t 보호
+                cell = _nearest_cell(t)
+                if cell is not None and _cell_has_real_value(cell) and any(
+                    old and str(rep or "").strip() and old in cur
+                    for old, rep in replacements.items()
+                ):
+                    _note_existing_value(span_notes, _left_label_text(cell) or "value", cell)
                 continue
             new = cur
             for old, rep in replacements.items():
@@ -1550,6 +1625,7 @@ def fill_hwpx(
     line_report: dict[str, Any] = {"applied": 0, "notes": []}
     f01_bucket: dict[str, dict] = {"written": {}, "skipped": {}, "style": {}}
     span_notes: list[str] = []
+    existing_labels: list[str] = []
     for name in section_names:
         try:
             new_bytes, filled, replaced, used = _fill_section_xml(
@@ -1560,6 +1636,7 @@ def fill_hwpx(
                 field_writes=requested_writes if name == "Contents/section0.xml" else None,
                 f01_bucket=f01_bucket if name == "Contents/section0.xml" else None,
                 span_notes=span_notes,
+                existing_labels=existing_labels,
             )
         except etree.XMLSyntaxError as exc:
             report.notes.append(f"{name} 파싱 실패(건너뜀): {exc}")
@@ -1668,6 +1745,9 @@ def fill_hwpx(
         for lbl, val in identity.items()
         if str(val or "").strip() and _key(lbl) not in all_used
     ]
+    for label in existing_labels:
+        if label not in report.residual:
+            report.residual.append(label)
     report.check_residual = [o for o in check_options if o not in check_done]
     if report.check_residual:
         report.notes.append(
@@ -2374,6 +2454,23 @@ def commit_exact_text_writes(
     return report
 
 
+def _labels_holding_real_values(index) -> set[str]:
+    """T02 labels whose value cell already holds prose or a number."""
+    from core.docx.services.hwpx_protected_regions import _cell_joined, _label_value_pairs
+
+    sections = {section.section_index: section for section in index.sections}
+    found: set[str] = set()
+    for section_index, _table_index, label, value, empty in _label_value_pairs(index):
+        if empty or not label:
+            continue
+        section = sections.get(section_index)
+        if section is None:
+            continue
+        if _real_existing_text(_cell_joined(section, value)):
+            found.add(label)
+    return found
+
+
 def commit_t02_label_writes(
     in_hwpx: str | Path,
     out_hwpx: str | Path,
@@ -2401,6 +2498,7 @@ def commit_t02_label_writes(
         report.reasons.append("EMPTY_PLAN")
         return report
     from core.docx.services.hwpx_protected_regions import authorization_is_current, authorize_t02_writes
+    real_labels = _labels_holding_real_values(index)
     grants = {
         grant.field_label: grant
         for grant in authorize_t02_writes(index)
@@ -2411,6 +2509,8 @@ def commit_t02_label_writes(
         grant = grants.get(key)
         if grant is None or grant.source_sha256 != index.source_sha256:
             report.reasons.append(f"NOT_AUTHORIZED:{key}")
+            if key in real_labels:
+                report.reasons.append(f"EXISTING_VALUE:{key}")
             continue
         exact.append(ExactTextTarget(
             grant.section_member, grant.paragraph_index, grant.run_index, grant.text_node_index,
