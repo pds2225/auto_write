@@ -13,15 +13,17 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 from auto_write.models import ProjectInput, TemplateProfile
-from auto_write.services.hwpx_fill import fill_hwpx
+from auto_write.services.hwpx_fill import commit_t02_label_writes, fill_hwpx
 from auto_write.services.hwpx_submit import submit_hwpx
 from auto_write.services.project_service import ProjectService
 from core.docx.services.hwpx_analysis_adapter import index_hwpx_structure
 from core.docx.services.hwpx_protected_regions import (
     assess_fields,
     authorize_t02_writes,
+    document_duplicate_unfilled_cells,
     find_t02_auto_targets,
     repeated_row_unfilled_cells,
+    t02_write_authorized,
 )
 
 _HP = "http://www.hancom.co.kr/hwpml/2011/paragraph"
@@ -278,3 +280,91 @@ def test_generate_hwpx_direct_keeps_repeated_row_residual(tmp_path: Path) -> Non
     assert all(field.decision != "AUTO" and field.auto_write_allowed is False for field in output_fields)
     pending = next(field for field in output_fields if field.field_label == "참고사항")
     assert pending.review_reason == ("AUTHORIZATION_PENDING",)
+
+
+def _company_row() -> str:
+    return _table([[_cell("기업명", 0, 0), _cell("", 0, 1)]])
+
+
+def _assert_duplicate_empty_label_gets_no_grant(src: Path, tmp_path: Path, expected_cells: set[tuple]) -> None:
+    """Same empty label in two places: zero grants, zero writes, both cells reported."""
+    index = index_hwpx_structure(src)
+    targets = [target for target in find_t02_auto_targets(index) if target.field_label == "기업명"]
+    assert len(targets) == 2
+    fields = [
+        field for field in assess_fields(index)
+        if field.field_label == "기업명" and field.field_type == "T02"
+    ]
+    assert len(fields) == 2
+    assert all(
+        field.decision == "REVIEW_REQUIRED"
+        and field.review_reason == ("AUTHORIZATION_PENDING",)
+        and field.auto_write_allowed is False
+        and field.eligible is True
+        for field in fields
+    )
+    assert repeated_row_unfilled_cells(index) == ()
+    assert [grant for grant in authorize_t02_writes(index) if grant.field_label == "기업명"] == []
+    assert all(t02_write_authorized(index, field) is False for field in fields)
+
+    refused = tmp_path / "refused.hwpx"
+    commit = commit_t02_label_writes(src, refused, {"기업명": "첫번째"})
+    assert commit.ok is False
+    assert "NOT_AUTHORIZED:기업명" in commit.reasons
+    assert not refused.exists()
+
+    out = tmp_path / "out.hwpx"
+    report = submit_hwpx(
+        src,
+        out,
+        identity={"기업명": "첫번째"},
+        normalize_colors=False,
+        submission_cleanup=False,
+    )
+    final = Path(report.final)
+    texts = _texts(final)
+    assert texts.count("기업명") == 2
+    assert "첫번째" not in texts
+    assert "기업명" in report.residual
+    assert any(note == "[t02] 기업명 AUTHORIZATION_PENDING" for note in report.notes)
+    assert not any("기업명" in note and note.endswith("GRANT_WRITTEN") for note in report.notes)
+    assert repeated_row_unfilled_cells(index_hwpx_structure(final)) == ()
+    leftover = document_duplicate_unfilled_cells(index_hwpx_structure(final))
+    assert set(leftover) == expected_cells
+    for label, section_index, table_index, row, col in expected_cells:
+        note = (
+            f"[duplicate-label] {label} section={section_index} "
+            f"table={table_index} row={row} col={col} UNFILLED"
+        )
+        assert note in report.notes
+    output_fields = [
+        field for field in assess_fields(index_hwpx_structure(final))
+        if field.field_label == "기업명" and field.field_type == "T02"
+    ]
+    assert len(output_fields) == 2
+    assert all(
+        field.decision == "REVIEW_REQUIRED"
+        and field.review_reason == ("AUTHORIZATION_PENDING",)
+        and field.auto_write_allowed is False
+        for field in output_fields
+    )
+
+
+def test_two_tables_duplicate_empty_label_gets_zero_grants(tmp_path: Path) -> None:
+    src = tmp_path / "two-tables.hwpx"
+    _hwpx(src, [_section(_company_row() + _company_row())])
+    _assert_duplicate_empty_label_gets_no_grant(
+        src,
+        tmp_path,
+        {("기업명", 0, 0, 0, 1), ("기업명", 0, 1, 0, 1)},
+    )
+
+
+def test_two_sections_duplicate_empty_label_gets_zero_grants(tmp_path: Path) -> None:
+    src = tmp_path / "two-sections.hwpx"
+    _hwpx(src, [_section(_company_row()), _section(_company_row())])
+    _assert_duplicate_empty_label_gets_no_grant(
+        src,
+        tmp_path,
+        {("기업명", 0, 0, 0, 1), ("기업명", 1, 1, 0, 1)},
+    )

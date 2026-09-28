@@ -855,13 +855,13 @@ def _t02_value_span_supported(section, value_cell) -> bool:
     return section.section_index > 0 and value_cell.col_span is not None and value_cell.col_span > 1
 
 
-def _label_value_pairs(index: HwpxStructureIndex) -> list[tuple[int, str, object, bool]]:
+def _label_value_pairs(index: HwpxStructureIndex) -> list[tuple[int, int, str, object, bool]]:
     """Body label cells paired with their logical-right value cell.
 
-    Each item is ``(table_index, label, value_cell, value_empty)``.
+    Each item is ``(section_index, table_index, label, value_cell, value_empty)``.
     Nested tables and cells without exactly one right neighbor are omitted.
     """
-    pairs: list[tuple[int, str, object, bool]] = []
+    pairs: list[tuple[int, int, str, object, bool]] = []
     for section in index.sections:
         for table_index in section.table_indexes:
             table = index.tables[table_index]
@@ -877,14 +877,14 @@ def _label_value_pairs(index: HwpxStructureIndex) -> list[tuple[int, str, object
                 if value is None or value.has_nested_table or value.has_non_text_object or not _cell_placed(value):
                     continue
                 empty = not _cell_joined(section, value).strip()
-                pairs.append((table.table_index, label, value, empty))
+                pairs.append((section.section_index, table.table_index, label, value, empty))
     return pairs
 
 
 def _repeated_label_keys(index: HwpxStructureIndex) -> set[tuple[int, str]]:
     """Labels that sit on two or more value-bearing rows of the same table."""
     counts: dict[tuple[int, str], int] = {}
-    for table_index, label, _value, _empty in _label_value_pairs(index):
+    for _section_index, table_index, label, _value, _empty in _label_value_pairs(index):
         key = (table_index, label)
         counts[key] = counts.get(key, 0) + 1
     return {key for key, count in counts.items() if count >= 2}
@@ -897,7 +897,7 @@ def repeated_row_unfilled_cells(index: HwpxStructureIndex) -> tuple[tuple[str, i
     change T02 eligibility.
     """
     grouped: dict[tuple[int, str], list[tuple[object, bool]]] = {}
-    for table_index, label, value, empty in _label_value_pairs(index):
+    for _section_index, table_index, label, value, empty in _label_value_pairs(index):
         grouped.setdefault((table_index, label), []).append((value, empty))
     found: list[tuple[str, int, int]] = []
     for (_table_index, label), cells in grouped.items():
@@ -920,6 +920,37 @@ def repeated_row_unfilled_labels(index: HwpxStructureIndex) -> tuple[str, ...]:
         if label not in labels:
             labels.append(label)
     return tuple(labels)
+
+
+def document_duplicate_unfilled_cells(
+    index: HwpxStructureIndex,
+) -> tuple[tuple[str, int, int, int, int], ...]:
+    """Empty value cells whose label also has another value cell in the document.
+
+    Counts across tables and sections. Same-table repeated rows are included
+    when one value is still empty. Does not authorize a write.
+    Each item is ``(label, section_index, table_index, row, col)``.
+    """
+    grouped: dict[str, list[tuple[int, int, object, bool]]] = {}
+    for section_index, table_index, label, value, empty in _label_value_pairs(index):
+        grouped.setdefault(label, []).append((section_index, table_index, value, empty))
+    found: list[tuple[str, int, int, int, int]] = []
+    for label, cells in grouped.items():
+        if len(cells) < 2 or not any(empty for *_rest, empty in cells):
+            continue
+        for section_index, table_index, value, empty in cells:
+            if empty and value.row is not None and value.col is not None:
+                found.append((label, section_index, table_index, int(value.row), int(value.col)))
+    return tuple(found)
+
+
+def labels_with_multiple_empty_values(index: HwpxStructureIndex) -> frozenset[str]:
+    """Labels with two or more empty value cells anywhere in the document."""
+    counts: dict[str, int] = {}
+    for _section_index, _table_index, label, _value, empty in _label_value_pairs(index):
+        if empty:
+            counts[label] = counts.get(label, 0) + 1
+    return frozenset(label for label, count in counts.items() if count >= 2)
 
 
 def find_t02_auto_targets(index: HwpxStructureIndex) -> tuple[T02Target, ...]:
@@ -1374,6 +1405,12 @@ def authorize_t02_writes(index: HwpxStructureIndex) -> tuple[T02WriteAuthorizati
             expected_raw_text=target.expected_raw_text,
             story_scope=field.story_scope,
         ))
+    # Table-local T02 candidates can repeat one label across tables or sections.
+    # A label with more than one empty value cell gets no grant. Assessment
+    # stays REVIEW_REQUIRED / AUTHORIZATION_PENDING and does not become AUTO.
+    blocked = labels_with_multiple_empty_values(index)
+    if blocked:
+        grants = [grant for grant in grants if grant.field_label not in blocked]
     return tuple(grants)
 
 

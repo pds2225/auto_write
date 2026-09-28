@@ -334,6 +334,7 @@ def submit_hwpx(
     from core.docx.services.hwpx_protected_regions import (
         authorization_is_current,
         authorize_t02_writes,
+        document_duplicate_unfilled_cells,
         repeated_row_unfilled_cells,
     )
 
@@ -390,10 +391,20 @@ def submit_hwpx(
     # filled. Identity residual drops the label once its key is used, so report
     # the still-empty cell here. This does not write and does not grant AUTO.
     if out.is_file():
-        for label, row, col in repeated_row_unfilled_cells(index_hwpx_structure(out)):
+        filled_index = index_hwpx_structure(out)
+        for label, row, col in repeated_row_unfilled_cells(filled_index):
             if label not in report.residual:
                 report.residual.append(label)
             note = f"[repeated-row] {label} row={row} col={col} UNFILLED"
+            if note not in report.notes:
+                report.notes.append(note)
+        for label, section_index, table_index, row, col in document_duplicate_unfilled_cells(filled_index):
+            if label not in report.residual:
+                report.residual.append(label)
+            note = (
+                f"[duplicate-label] {label} section={section_index} "
+                f"table={table_index} row={row} col={col} UNFILLED"
+            )
             if note not in report.notes:
                 report.notes.append(note)
     report.overflow_cells = list(fill_rep.overflow_cells)

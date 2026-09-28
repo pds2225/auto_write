@@ -1164,14 +1164,17 @@ class ProjectService:
             if wire.written:
                 from core.docx.services.hwpx_analysis_adapter import index_hwpx_structure
                 from core.docx.services.hwpx_protected_regions import (
+                    document_duplicate_unfilled_cells,
                     repeated_row_unfilled_labels,
                 )
 
                 scan_path = Path(report.final) if report.final else output_path
                 repeated_unfilled: set[str] = set()
                 if scan_path.is_file():
-                    repeated_unfilled = set(
-                        repeated_row_unfilled_labels(index_hwpx_structure(scan_path))
+                    scanned = index_hwpx_structure(scan_path)
+                    repeated_unfilled = set(repeated_row_unfilled_labels(scanned))
+                    repeated_unfilled.update(
+                        label for label, *_rest in document_duplicate_unfilled_cells(scanned)
                     )
                 report.residual = [
                     label for label in report.residual

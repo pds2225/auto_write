@@ -1578,9 +1578,16 @@ def fill_hwpx(
     # empty value cells. The write loop above is unchanged.
     if dst.is_file():
         from core.docx.services.hwpx_analysis_adapter import index_hwpx_structure
-        from core.docx.services.hwpx_protected_regions import repeated_row_unfilled_labels
+        from core.docx.services.hwpx_protected_regions import (
+            document_duplicate_unfilled_cells,
+            repeated_row_unfilled_labels,
+        )
 
-        for label in repeated_row_unfilled_labels(index_hwpx_structure(dst)):
+        filled_index = index_hwpx_structure(dst)
+        for label in repeated_row_unfilled_labels(filled_index):
+            if label not in report.residual:
+                report.residual.append(label)
+        for label, _section_index, _table_index, _row, _col in document_duplicate_unfilled_cells(filled_index):
             if label not in report.residual:
                 report.residual.append(label)
     return report
