@@ -89,8 +89,28 @@ def _direct(el, name: str) -> list:
 
 
 def _cell_texts(tc) -> list:
-    """셀 안의 모든 hp:t 요소(순서대로)."""
-    return [el for el in tc.iter(_q("t"))]
+    """이 셀 직속의 hp:t. 중첩 표 안 글자는 자식 칸의 것이다."""
+    return [el for el in tc.iter(_q("t")) if _nearest_cell(el) is tc]
+
+
+def _cell_has_nested_table(tc) -> bool:
+    """이 칸이 자식 표를 품으면 True. 더 안쪽 칸의 표는 그 칸 것이다."""
+    if tc is None:
+        return False
+    return any(_nearest_cell(tbl) is tc for tbl in tc.iter(_q("tbl")))
+
+
+def _hold_exact_label(held: set | None, cell_key: str, want_key: str) -> None:
+    """정확히 맞는 라벨 칸을 거절했을 때, 그 항목이 다른 라벨로 새지 않게 한다.
+
+    같은 라벨의 다른 빈 칸(반복 행)은 그대로 둔다. 동의어 칸은 자기 항목으로만 채운다.
+    """
+    if held is not None and cell_key == want_key:
+        held.add(want_key)
+
+
+def _held_for_other_label(held: set | None, cell_key: str, want_key: str) -> bool:
+    return bool(held) and want_key in held and cell_key != want_key
 
 
 def _cell_text(tc) -> str:
@@ -502,7 +522,7 @@ def _set_cell_text(tc, value: str, black: Optional[_BlackCharPr] = None) -> bool
     호출자가 ``fill_hwpx`` 파이프라인·별도 strip 을 잊어도 옛 줄좌표에 새 글씨가
     겹치지 않는다. 형제 칸은 건드리지 않는다(L074).
     """
-    if _has_form_control(tc) or _has_handwritten_object(tc):
+    if _has_form_control(tc) or _has_handwritten_object(tc) or _cell_has_nested_table(tc):
         return False
     if _split_value_spans(tc):
         return False
@@ -595,6 +615,7 @@ def _splice_run_text(p, fill_start: int, fill_end: int, value: str) -> bool:
 def _fill_inline_fields_in_p(
     p, wants, used_keys: set, filled: dict, span_notes: Optional[list] = None,
     existing_labels: Optional[list] = None,
+    exact_held: Optional[set] = None,
 ) -> bool:
     """hp:p 하나의 인라인 필드(`라벨 : ______`)를 채운다 — 1.5(셀)·1.8(본문) 공용 커널.
 
@@ -632,20 +653,26 @@ def _fill_inline_fields_in_p(
         for want_key, lbl, val in wants:
             if want_key in used_keys:
                 continue
+            if _held_for_other_label(exact_held, field_key, want_key):
+                continue
             if not _label_matches(field_key, want_key):
                 continue
             if _signature_seal_label(label_raw) or _signature_seal_label(lbl):
                 _note_region(span_notes, "signature", lbl, _tc_of(p))
+                _hold_exact_label(exact_held, field_key, want_key)
                 break
             owner = _tc_of(p)
             if owner is not None and _has_handwritten_object(owner):
                 _note_region(span_notes, "handwritten", lbl, owner)
+                _hold_exact_label(exact_held, field_key, want_key)
                 break
             if not visible:
                 _note_existing_value(span_notes, lbl, owner, existing_labels)
+                _hold_exact_label(exact_held, field_key, want_key)
                 break
             if _span_crosses_text_nodes(p, f_start, f_end):
                 _note_unfilled_span(span_notes, lbl, _tc_of(p))
+                _hold_exact_label(exact_held, field_key, want_key)
                 break
             if _splice_run_text(p, f_start, f_end, " " + str(val)):
                 filled[lbl] = str(val)
@@ -933,7 +960,7 @@ def _cell_is_fillable(tc) -> bool:
     폼 컨트롤(체크박스·입력필드 등)이 든 칸은 텍스트가 비어 보여도 채우지 않는다
     (컨트롤과 글자 이중 표시 방지 — 실측: 수원 멘토위원 신청서 ☐■ 이중).
     """
-    if _has_form_control(tc):
+    if _has_form_control(tc) or _cell_has_nested_table(tc):
         return False
     return _cell_text_fillable(tc)
 
@@ -1255,6 +1282,7 @@ def _fill_section_xml(
         existing_labels = []
     filled: dict[str, str] = {}
     used_keys: set[str] = set()
+    exact_held: set[str] = set()
     replaced = 0
     changed = False
     edited: list = []  # L074: lineseg strip 대상(편집된 tc/p)
@@ -1276,6 +1304,8 @@ def _fill_section_xml(
                 for want_key, lbl, val in wants:
                     if want_key in used_keys:
                         continue
+                    if _held_for_other_label(exact_held, cell_key, want_key):
+                        continue
                     if not _label_matches(cell_key, want_key):
                         continue
                     target = _value_cell(tc, cells)
@@ -1283,19 +1313,27 @@ def _fill_section_xml(
                         continue
                     if _is_label_like(target):
                         continue  # 값칸 후보가 또 라벨 → 기입 금지
+                    if _cell_has_nested_table(target):
+                        _note_region(span_notes, "nested", lbl, target)
+                        _hold_exact_label(exact_held, cell_key, want_key)
+                        break
                     if _signature_seal_label(_cell_text(tc)) or _signature_seal_label(lbl):
                         _note_region(span_notes, "signature", lbl, target)
+                        _hold_exact_label(exact_held, cell_key, want_key)
                         break
                     if _has_handwritten_object(target):
                         _note_region(span_notes, "handwritten", lbl, target)
+                        _hold_exact_label(exact_held, cell_key, want_key)
                         break
                     if not _cell_is_fillable(target):
                         # 실값만 EXISTING_VALUE. ____·더미날짜·□ 는 각자 게이트에 남긴다.
                         if _cell_has_real_value(target):
                             _note_existing_value(span_notes, lbl, target, existing_labels)
+                            _hold_exact_label(exact_held, cell_key, want_key)
                         break
                     if _split_value_spans(target):
                         _note_unfilled_span(span_notes, lbl, target)
+                        _hold_exact_label(exact_held, cell_key, want_key)
                         break
                     if _set_cell_text(target, str(val), black):
                         filled[lbl] = str(val)
@@ -1316,6 +1354,7 @@ def _fill_section_xml(
                 for p in _direct(sub, "p"):
                     if _fill_inline_fields_in_p(
                         p, wants, used_keys, filled, span_notes, existing_labels,
+                        exact_held,
                     ):
                         changed = True
                         edited.append(p)
@@ -1345,6 +1384,8 @@ def _fill_section_xml(
                     for want_key, lbl, val in wants:
                         if want_key in used_keys:
                             continue
+                        if _held_for_other_label(exact_held, group_key, want_key):
+                            continue
                         if not _label_matches(group_key, want_key):
                             continue
                         vnorm = _normalize_choice(_opt_key(str(val)))
@@ -1357,6 +1398,7 @@ def _fill_section_xml(
                             break   # 0개/다수 매칭 → 모호, 아무 박스도 안 건드림
                         if _span_crosses_text_nodes(p, hits[0], hits[0] + 1):
                             _note_unfilled_span(span_notes, lbl, tc)
+                            _hold_exact_label(exact_held, group_key, want_key)
                             break
                         if _splice_run_text(p, hits[0], hits[0] + 1, _CHECK_MARK):
                             filled[lbl] = str(val)
@@ -1382,6 +1424,8 @@ def _fill_section_xml(
             for label_key, mark, opts in _grid_choice_groups(tbl):
                 for want_key, lbl, val in wants:
                     if want_key in used_keys:
+                        continue
+                    if _held_for_other_label(exact_held, label_key, want_key):
                         continue
                     if not _label_matches(label_key, want_key):
                         continue
@@ -1416,6 +1460,7 @@ def _fill_section_xml(
         for p in _direct(root, "p"):
             if _fill_inline_fields_in_p(
                 p, wants, used_keys, filled, span_notes, existing_labels,
+                exact_held,
             ):
                 changed = True
                 edited.append(p)
