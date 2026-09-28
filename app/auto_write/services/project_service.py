@@ -1100,7 +1100,14 @@ class ProjectService:
         project_input: ProjectInput,
     ) -> ArtifactBundle:
         """Fill the uploaded HWPX package directly and gate it before publish."""
-        from .hwpx_submit import submit_hwpx
+        import hashlib
+
+        from core.docx.services.hwpx_protected_regions import (
+            authorization_is_current,
+            authorize_t02_writes,
+        )
+        from .hwpx_fill import commit_t02_label_writes
+        from .hwpx_submit import apply_t02_analyzer_writes, submit_hwpx
 
         source = self._resolve_source_hwpx(profile, project_id)
         output_dir = self.storage.project_dir(project_id) / "output"
@@ -1126,18 +1133,52 @@ class ProjectService:
                 continue
             identity.setdefault(str(key), str(value))
 
-        report = submit_hwpx(
+        staging = output_dir / f".t02-auth-{os.getpid()}.hwpx"
+        wire = apply_t02_analyzer_writes(
             source,
-            output_path,
-            identity=identity,
-            replacements=(project_input.project_meta or {}).get("hwpx_replacements") or {},
-            acceptance_gate=True,
-            normalize_colors=False,
-            submission_cleanup=False,
-            preserve_template=True,
-            field_writes=field_writes or None,
-            expected_sha256=F01_CANONICAL_SHA256 if field_writes else None,
+            staging,
+            identity,
+            authorize_t02_writes=authorize_t02_writes,
+            authorization_is_current=authorization_is_current,
+            commit_t02_label_writes=commit_t02_label_writes,
         )
+        expected_sha = F01_CANONICAL_SHA256 if field_writes else None
+        if wire.written and expected_sha:
+            original_sha = hashlib.sha256(source.read_bytes()).hexdigest()
+            if original_sha.lower() == expected_sha.lower():
+                expected_sha = hashlib.sha256(wire.fill_source.read_bytes()).hexdigest()
+        try:
+            report = submit_hwpx(
+                wire.fill_source,
+                output_path,
+                identity=identity,
+                replacements=(project_input.project_meta or {}).get("hwpx_replacements") or {},
+                acceptance_gate=True,
+                normalize_colors=False,
+                submission_cleanup=False,
+                preserve_template=True,
+                field_writes=field_writes or None,
+                expected_sha256=expected_sha,
+            )
+            report.filled.update(wire.written)
+            if wire.written:
+                report.residual = [
+                    label for label in report.residual
+                    if re.sub(r"\s+", "", str(label)).rstrip(":：") not in wire.written
+                ]
+            for label in wire.pending:
+                if label not in report.residual:
+                    report.residual.append(label)
+                note = f"[t02] {label} AUTHORIZATION_PENDING"
+                if note not in report.notes:
+                    report.notes.append(note)
+            for label in wire.written:
+                note = f"[t02] {label} GRANT_WRITTEN"
+                if note not in report.notes:
+                    report.notes.append(note)
+        finally:
+            if staging.exists():
+                staging.unlink()
         results_dir = self.storage.results_dir(project_id)
         results_dir.mkdir(parents=True, exist_ok=True)
         final_path = Path(report.final)
@@ -1159,6 +1200,10 @@ class ProjectService:
                 "source": str(source),
                 "output": str(final_path),
                 "visual_render": visual_render,
+                "t02_analyzer": {
+                    "written": sorted(wire.written),
+                    "pending": list(wire.pending),
+                },
                 "routing": report.as_dict(),
             },
         )
