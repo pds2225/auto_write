@@ -418,7 +418,8 @@ def test_combined_document_keeps_stacked_protections(tmp_path: Path) -> None:
     assert any(note == "[repeated-row] 직원명 row=14 col=1 UNFILLED" for note in submit.notes)
     assert any(note.startswith("[duplicate-label] 팩스 ") for note in submit.notes)
     assert not any("팩스" in note and note.endswith("GRANT_WRITTEN") for note in submit.notes)
-    assert not any("기업명" in note and note.endswith("GRANT_WRITTEN") for note in submit.notes)
+    assert "[t02] 속기업명 GRANT_WRITTEN" in submit.notes
+    assert "[t02] 기업명 GRANT_WRITTEN" not in submit.notes
     assert not any("서명" in note and note.endswith("GRANT_WRITTEN") for note in submit.notes)
     assert _body_runs(final) == before_runs
     assert _foreign_t(final) == 0
