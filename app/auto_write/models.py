@@ -64,8 +64,9 @@ class TemplateProfile(BaseModel):
     template_id: str
     template_name: str
     source_docx: str
-    # HWPX uploads stay as the immutable source of truth. ``source_docx`` is
-    # retained for the legacy DOCX flow and compatibility with stored profiles.
+    # HWPX uploads, and HWP uploads converted to HWPX, stay the immutable source
+    # of truth. ``source_docx`` is the legacy DOCX flow and an explicit HWP
+    # opt-in (``native_source["hwp_docx_opt_in"]``).
     source_hwpx: str = ""
     native_analysis: dict[str, Any] = Field(default_factory=dict)
     native_source: dict[str, Any] = Field(default_factory=dict)
