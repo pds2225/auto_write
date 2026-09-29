@@ -75,6 +75,13 @@ def _can_write_to_dir(path: Path) -> bool:
         return False
 
 
+def _resolve_results_root(app_root: Path) -> Path:
+    configured = os.getenv("AUTO_WRITE_RESULTS_ROOT", "").strip()
+    if configured:
+        return Path(configured)
+    return app_root.parent / "results"
+
+
 def _resolve_workspace_root(app_root: Path) -> Path:
     configured = os.getenv("AUTO_WRITE_WORKSPACE_ROOT", "").strip()
     if configured:
@@ -93,7 +100,7 @@ def get_settings() -> Settings:
     workspace_root = _resolve_workspace_root(app_root)
     template_root = workspace_root / "templates"
     project_root = workspace_root / "projects"
-    results_root = app_root.parent / "results"
+    results_root = _resolve_results_root(app_root)
     static_root = app_root / "auto_write" / "static"
     template_view_root = app_root / "auto_write" / "templates"
     reference_dir_env = os.getenv("AUTO_WRITE_REFERENCE_LIBRARY_DIR", "").strip()

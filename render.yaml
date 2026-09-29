@@ -1,0 +1,31 @@
+# Render Blueprint. Starter($7) + disk 10GB($2.50) stays on while the PC is off.
+# Set AUTO_WRITE_ACCESS_PASSWORD in the dashboard before the first deploy.
+# HWPX read/fill and DOCX generation run here. Binary HWP needs the Windows PC.
+services:
+  - type: web
+    name: auto-write-console
+    runtime: python
+    plan: starter
+    region: singapore
+    buildCommand: pip install -r app/requirements.txt
+    startCommand: cd app && python -m uvicorn auto_write.operator_main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips=*
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.8"
+      - key: AUTO_WRITE_HOST
+        value: 0.0.0.0
+      - key: AUTO_WRITE_WORKSPACE_ROOT
+        value: /var/data/workspace
+      - key: AUTO_WRITE_RESULTS_ROOT
+        value: /var/data/results
+      - key: AUTO_WRITE_ACCESS_PASSWORD
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+    disk:
+      name: auto-write-data
+      mountPath: /var/data
+      sizeGB: 10
