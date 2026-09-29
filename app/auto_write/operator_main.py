@@ -614,8 +614,22 @@ async def operator_lrules(
             rules=rules,
             summary=summary,
             filters={"q": q, "domain": domain, "category": category, "impact": impact},
+            message=request.query_params.get("message", ""),
+            error=request.query_params.get("error", ""),
         ),
     )
+
+
+@app.post("/console/lrules/verify")
+async def operator_lrules_verify():
+    message = quote(lrule_console.start_verify(None), safe="")
+    return RedirectResponse(url=f"/console/lrules?message={message}", status_code=303)
+
+
+@app.post("/console/lrules/{code}/verify")
+async def operator_lrule_verify(code: str):
+    message = quote(lrule_console.start_verify([code]), safe="")
+    return RedirectResponse(url=f"/console/lrules/{code.upper()}?message={message}", status_code=303)
 
 
 @app.get("/console/lrules/{code}", response_class=HTMLResponse)

@@ -4,10 +4,24 @@ import json
 import re
 import shutil
 import subprocess
+import threading
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from auto_write.services.lrule_verification import (
+    ENV_SKIPPED,
+    FAILING,
+    MISSING_GUARD,
+    NOT_RUN,
+    UNVERIFIED,
+    VERIFIED,
+    GuardIndex,
+    build_wiring,
+    git_head,
+    verify_lessons,
+)
 
 
 _RULE_CODE_RE = re.compile(r"\bL\d{3}\b", re.IGNORECASE)
@@ -43,9 +57,16 @@ class LRuleConsoleService:
         "domain",
     )
 
-    def __init__(self, repo_root: str | Path | None = None):
+    def __init__(self, repo_root: str | Path | None = None, cache_path: str | Path | None = None):
         self.repo_root = Path(repo_root or Path(__file__).resolve().parents[3])
         self.registry_path = self.repo_root / self.REGISTRY_RELATIVE
+        self.cache_path = Path(
+            cache_path or (self.repo_root / "results" / "operator" / "lrule_verification_cache.json")
+        )
+        self._index = GuardIndex(self.repo_root)
+        self._cache_lock = threading.Lock()
+        self._job_lock = threading.Lock()
+        self._job = {"running": False, "scope": "", "error": "", "message": ""}
 
     @staticmethod
     def rule_code(rule: dict[str, Any]) -> str:
@@ -116,8 +137,8 @@ class LRuleConsoleService:
                 continue
             rule["_code"] = code
             rule["_label"] = label
-            rule["_wiring"] = self.light_wiring(rule)
             rows.append(rule)
+        self._attach_wiring(rows, include_tests=False)
         return rows
 
     def get_rule(self, code: str) -> dict[str, Any]:
@@ -226,22 +247,57 @@ class LRuleConsoleService:
             returncode=proc.returncode,
         )
 
+    def _cache_rules(self) -> dict[str, Any]:
+        data = self._read_cache()
+        rules = data.get("rules")
+        return rules if isinstance(rules, dict) else {}
+
+    def _read_cache(self) -> dict[str, Any]:
+        if not self.cache_path.is_file():
+            return {"version": 1, "rules": {}}
+        try:
+            data = json.loads(self.cache_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {"version": 1, "rules": {}}
+        if not isinstance(data, dict):
+            return {"version": 1, "rules": {}}
+        if not isinstance(data.get("rules"), dict):
+            data["rules"] = {}
+        return data
+
+    def _write_cache(self, data: dict[str, Any]) -> None:
+        self.cache_path.parent.mkdir(parents=True, exist_ok=True)
+        temp = self.cache_path.with_suffix(".json.tmp")
+        temp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        json.loads(temp.read_text(encoding="utf-8"))
+        temp.replace(self.cache_path)
+
+    def _attach_wiring(self, rows: list[dict[str, Any]], *, include_tests: bool) -> None:
+        cache_rules = self._cache_rules()
+        head = git_head(self.repo_root)
+        for rule in rows:
+            rule["_wiring"] = build_wiring(
+                rule,
+                code=str(rule.get("_code") or self.rule_code(rule)),
+                repo=self.repo_root,
+                cache_rules=cache_rules,
+                head=head,
+                index=self._index,
+                include_tests=include_tests,
+            )
+
     def light_wiring(self, rule: dict[str, Any]) -> dict[str, Any]:
-        category = str(rule.get("category", "")).strip()
-        guard_ref = str(rule.get("guard_ref", "")).strip()
-        if category == "judgment":
-            status = "HUMAN_RULE"
-        elif category == "gap":
-            status = "GAP"
-        elif not guard_ref:
-            status = "DEAD_RULE"
-        else:
-            status = "DECLARED"
-        return {
-            "status": status,
-            "guard_declared": bool(guard_ref),
-            "registry": True,
-        }
+        """List-page status. Reads the verification cache and does not run pytest."""
+        code = str(rule.get("_code") or self.rule_code(rule))
+        return build_wiring(
+            rule,
+            code=code,
+            repo=self.repo_root,
+            cache_rules=self._cache_rules(),
+            head=git_head(self.repo_root),
+            index=self._index,
+            include_tests=False,
+        )
 
     def _paths_from_guard(self, guard_ref: str) -> list[str]:
         candidates = re.findall(r"(?:app|scripts|docs)/[A-Za-z0-9_./\-]+(?:\.py|\.md|\.json)?", guard_ref)
@@ -253,36 +309,35 @@ class LRuleConsoleService:
         return cleaned
 
     def inspect_wiring(self, rule: dict[str, Any]) -> dict[str, Any]:
-        category = str(rule.get("category", "")).strip()
         guard_ref = str(rule.get("guard_ref", "")).strip()
         paths = self._paths_from_guard(guard_ref)
         path_checks = [{"path": p, "exists": (self.repo_root / p).exists()} for p in paths]
         test_declared = "test_" in guard_ref.lower()
         missing = [row["path"] for row in path_checks if not row["exists"]]
-
-        if category == "judgment":
-            overall = "HUMAN_RULE"
-        elif category == "gap":
-            overall = "GAP"
-        elif not guard_ref:
-            overall = "DEAD_RULE"
-        elif missing:
-            overall = "PARTIALLY_CONNECTED"
-        elif not test_declared:
-            overall = "PARTIALLY_CONNECTED"
-        else:
-            overall = "DECLARED_CONNECTED"
-
-        return {
-            "overall": overall,
-            "registry": "CONNECTED",
-            "lrule_enforcer": "CONNECTED",
-            "guard_declared": bool(guard_ref),
-            "test_declared": test_declared,
-            "path_checks": path_checks,
-            "missing_paths": missing,
-            "note": "CONNECTED 판정은 실제 registry 로딩을 뜻하며 guard runtime 호출은 별도 검증 대상입니다.",
-        }
+        code = str(rule.get("_code") or self.rule_code(rule))
+        wiring = build_wiring(
+            rule,
+            code=code,
+            repo=self.repo_root,
+            cache_rules=self._cache_rules(),
+            head=git_head(self.repo_root),
+            index=self._index,
+            include_tests=True,
+        )
+        wiring.update(
+            {
+                "registry": "CONNECTED",
+                "lrule_enforcer": "CONNECTED",
+                "test_declared": test_declared,
+                "path_checks": path_checks,
+                "missing_paths": missing,
+                "note": (
+                    "VERIFIED 는 현재 HEAD에서 이 규칙의 가드 테스트가 실행되어 모두 통과한 경우만입니다. "
+                    "경로가 있다고 검증된 것이 아닙니다."
+                ),
+            }
+        )
+        return wiring
 
     def find_references(self, code: str, limit: int = 40) -> list[dict[str, Any]]:
         normalized = code.upper().strip()
@@ -327,7 +382,20 @@ class LRuleConsoleService:
         domains = sorted({str(r.get("domain", "")) for r in rules if r.get("domain")})
         categories = sorted({str(r.get("category", "")) for r in rules if r.get("category")})
         impacts = sorted({str(r.get("impact", "")) for r in rules if r.get("impact")})
-        light = [self.light_wiring(r)["status"] for r in rules]
+        cache_rules = self._cache_rules()
+        head = git_head(self.repo_root)
+        light = [
+            build_wiring(
+                rule,
+                code=self.rule_code(rule),
+                repo=self.repo_root,
+                cache_rules=cache_rules,
+                head=head,
+                index=self._index,
+                include_tests=False,
+            )["status"]
+            for rule in rules
+        ]
         return {
             "counts": data.get("counts", {}),
             "domains": domains,
@@ -336,6 +404,120 @@ class LRuleConsoleService:
             "dead": light.count("DEAD_RULE"),
             "gaps": light.count("GAP"),
             "human": light.count("HUMAN_RULE"),
-            "declared": light.count("DECLARED"),
+            "verified": light.count(VERIFIED),
+            "failing": light.count(FAILING),
+            "not_run": light.count(NOT_RUN),
+            "stale": light.count(UNVERIFIED),
+            "unverified": light.count(NOT_RUN) + light.count(UNVERIFIED),
+            "missing_guard": light.count(MISSING_GUARD),
+            "env_skipped": light.count(ENV_SKIPPED),
+            "head": head,
+            "job": self.job_snapshot(),
             "registry_path": str(self.REGISTRY_RELATIVE).replace("\\", "/"),
         }
+
+    def job_snapshot(self) -> dict[str, Any]:
+        with self._job_lock:
+            return dict(self._job)
+
+    def start_verify(self, codes: list[str] | None = None) -> str:
+        """Start guard pytest in the background. The list page does not run tests itself."""
+        normalized = [code.upper().strip() for code in codes] if codes else None
+        if normalized:
+            known = {self.rule_code(rule): rule for rule in self.load()["lessons"]}
+            missing = [code for code in normalized if code not in known]
+            if missing:
+                return f"L 규칙을 찾을 수 없습니다: {', '.join(missing)}"
+            non_mechanized = [
+                code for code in normalized if str(known[code].get("category", "")) != "mechanized"
+            ]
+            if non_mechanized and len(non_mechanized) == len(normalized):
+                return "선택한 규칙은 기계화 가드가 아니라 테스트를 실행하지 않습니다."
+        with self._job_lock:
+            if self._job.get("running"):
+                return "이미 가드 검증이 실행 중입니다. 잠시 후 새로고침하세요."
+            self._job = {
+                "running": True,
+                "scope": ",".join(normalized) if normalized else "all",
+                "error": "",
+                "message": "가드 테스트 검증 실행 중",
+            }
+
+        def _run() -> None:
+            message = ""
+            error = ""
+            try:
+                summary = self.verify_rules(normalized)
+                message = (
+                    "검증 완료 "
+                    f"VERIFIED {summary.get('verified', 0)} / "
+                    f"FAILING {summary.get('failing', 0)} / "
+                    f"MISSING_GUARD {summary.get('missing_guard', 0)} / "
+                    f"ENV_SKIPPED {summary.get('env_skipped', 0)} / "
+                    f"UNVERIFIED {summary.get('unverified', 0)}"
+                )
+            except Exception as exc:
+                error = f"{type(exc).__name__}: {exc}"
+            with self._job_lock:
+                self._job = {
+                    "running": False,
+                    "scope": ",".join(normalized) if normalized else "all",
+                    "error": error,
+                    "message": message,
+                }
+
+        threading.Thread(target=_run, name="lrule-verify", daemon=True).start()
+        return "가드 테스트 검증을 시작했습니다. 완료 후 새로고침하면 현재 HEAD 기준 상태가 반영됩니다."
+
+    def verify_rules(self, codes: list[str] | None = None) -> dict[str, Any]:
+        """Execute guard tests and cache results for this git HEAD. Does not edit the registry."""
+        head = git_head(self.repo_root)
+        lessons = self.load()["lessons"]
+        wanted = {code.upper().strip() for code in codes} if codes else None
+        records = verify_lessons(
+            lessons,
+            repo=self.repo_root,
+            index=self._index,
+            head=head,
+            codes=wanted,
+            rule_code_fn=self.rule_code,
+        )
+        with self._cache_lock:
+            data = self._read_cache()
+            data["version"] = 1
+            data["head"] = head
+            stored = data.setdefault("rules", {})
+            stored.update(records)
+            self._write_cache(data)
+        counts = {"verified": 0, "failing": 0, "missing_guard": 0, "env_skipped": 0, "unverified": 0}
+        problems: list[dict[str, str]] = []
+        cache_rules = self._cache_rules()
+        for rule in lessons:
+            code = self.rule_code(rule)
+            if code not in records:
+                continue
+            wiring = build_wiring(
+                rule,
+                code=code,
+                repo=self.repo_root,
+                cache_rules=cache_rules,
+                head=head,
+                index=self._index,
+                include_tests=True,
+            )
+            status = str(wiring["status"])
+            if status == VERIFIED:
+                counts["verified"] += 1
+            elif status == FAILING:
+                counts["failing"] += 1
+            elif status == MISSING_GUARD:
+                counts["missing_guard"] += 1
+            elif status == ENV_SKIPPED:
+                counts["env_skipped"] += 1
+            else:
+                counts["unverified"] += 1
+            if status in {FAILING, MISSING_GUARD, ENV_SKIPPED, UNVERIFIED}:
+                problems.append({"code": code, "status": status, "reason": str(wiring.get("reason", ""))})
+        counts["problems"] = problems
+        counts["head"] = head
+        return counts
