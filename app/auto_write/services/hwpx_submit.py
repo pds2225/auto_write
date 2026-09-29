@@ -54,6 +54,18 @@ STRUCTURAL_REPAIRABLE = "STRUCTURAL_REPAIRABLE"
 STRUCTURAL_UNSAFE = "STRUCTURAL_UNSAFE"
 UNKNOWN_REVIEW_REQUIRED = "UNKNOWN_REVIEW_REQUIRED"
 
+RHWP_ABSENT_REPAIR_NOTE = (
+    "rhwp 미설치 — 표 격자 자동 repair 생략. "
+    "레이아웃을 추정 수정하지 않고 패키지를 유지한다."
+)
+RHWP_ABSENT_RENDER_NOTE = (
+    "RHWP_ABSENT: 네이티브 재열기/렌더 생략 — "
+    "L005 픽셀·L050 동일명 PDF는 ENV_BLOCKED (재열기 PASS로 기록하지 않음)"
+)
+XML_OVERFLOW_NOT_L005_NOTE = (
+    "고정 셀 높이는 XML 추정 — L005 한글 픽셀 재열기 PASS가 아님"
+)
+
 
 @dataclass
 class SubmitReport:
@@ -61,7 +73,8 @@ class SubmitReport:
 
     - ``output``: 요청한 출력 경로(rename 전 이름).
     - ``final``: 실제 최종 파일 경로(_DRAFT 강제 시 바뀐 이름). 항상 실존 경로.
-    - ``ok``: True = 공통 무결성 게이트 통과.
+    - ``ok``: True = 구조·수용 HARD_FAIL이 없다. rhwp 부재와 XML 고정셀
+      추정은 노트로 남기며 L005 픽셀·L050 PDF PASS가 아니다.
     - ``acceptance``: run_hwpx_acceptance 결과 dict. 검사불능이면
       ``{"ok": False, "exception": "..."}`` (CLI exit 3 판별 근거).
     """
@@ -86,6 +99,8 @@ class SubmitReport:
     error: str = ""
     integrity: dict[str, Any] = field(default_factory=dict)
     native_render: dict[str, Any] = field(default_factory=dict)
+    pdf_pair: dict[str, Any] = field(default_factory=dict)
+    l005_review: dict[str, Any] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
@@ -109,8 +124,43 @@ class SubmitReport:
             "error": self.error,
             "integrity": dict(self.integrity),
             "native_render": dict(self.native_render),
+            "pdf_pair": dict(self.pdf_pair),
+            "l005_review": dict(self.l005_review),
             "notes": list(self.notes),
         }
+
+
+def _seal_submit_report(report: SubmitReport) -> SubmitReport:
+    """제출 가능 최종본에만 L050 동일명 PDF 를 시도한다. L005 는 상태만 붙인다.
+
+    PDF 생성 실패는 패키지 제출 플래그를 바꾸지 않는다. L005 PASS 는
+    한글 GUI 증거 파일이 있을 때만이고, 이 함수는 그 파일을 만들지 않는다.
+    """
+    from .submission_gates import l005_pixel_review_status, sibling_pdf_attempt
+
+    report.l005_review = l005_pixel_review_status()
+    final = Path(report.final) if report.final else None
+    if not (
+        report.submittable
+        and final is not None
+        and final.is_file()
+        and final.suffix.lower() in {".hwp", ".hwpx", ".docx"}
+    ):
+        return report
+    attempt = sibling_pdf_attempt(final)
+    report.pdf_pair = attempt
+    if attempt.get("missing"):
+        note = f"L050: 동일명 PDF 없음 ({attempt.get('reason')})"
+        if note not in report.notes:
+            report.notes.append(note)
+    elif attempt.get("generated"):
+        note = (
+            "L050: rhwp export-pdf 로 동일명 PDF 를 만들었다. "
+            "mechanized 아님 — Windows 실측 전까지 gap"
+        )
+        if note not in report.notes:
+            report.notes.append(note)
+    return report
 
 
 def _mark_draft(report: SubmitReport, out: Path, src: Path) -> Path:
@@ -163,10 +213,11 @@ def _check_and_repair_semantics(report: SubmitReport, out: Path, *, preserve_tem
             report.notes.append("semantic PASS — table repair 생략")
         return True
 
-    if preserve_template:
+    if preserve_template and not _rhwp_present():
+        # rhwp로 다시 열 수 없으면 주소 재지정을 만들지 않는다.
         report.semantic_after = before
-        report.draft_reason = "보호 양식의 표 구조 결함 — 외곽 구조 자동 변경 금지"
-        report.notes.append("원본 보존 모드: 표 격자 자동 repair 생략")
+        report.draft_reason = "rhwp 미설치 — 보호 양식의 표 격자 결함은 자동 교정하지 않음"
+        report.notes.append(RHWP_ABSENT_REPAIR_NOTE)
         return False
 
     repaired = out.with_name(f"{out.stem}.__grid_repair__.{os.getpid()}{out.suffix}")
@@ -207,6 +258,51 @@ def _check_and_repair_semantics(report: SubmitReport, out: Path, *, preserve_tem
         f"STRUCTURAL_REPAIRABLE — 안전한 table grid만 repair ({report.repair.get('grid_cells_fixed', 0)} cells)"
     )
     return True
+
+
+def _rhwp_present() -> bool:
+    from core.docx.services.native_hwp import rhwp_available
+
+    return rhwp_available()
+
+
+def _nonblocking_review(result: Any) -> bool:
+    """XML 고정셀 추정은 기록만 한다. 한글 픽셀 재열기 PASS가 아니다."""
+    if getattr(result, "severity", "") != "REVIEW_REQUIRED":
+        return False
+    if getattr(result, "source_validator", "") != "fixed_cell_height_guard":
+        return False
+    evidence = getattr(result, "evidence", None) or {}
+    return evidence.get("render_confirmed") is False
+
+
+def _package_blocked(gate: Any) -> bool:
+    """HARD_FAIL·실제 렌더 실패는 제출을 막는다.
+
+    rhwp 부재(UNAVAILABLE→PASS)와 render_confirmed=False 인 고정셀 추정은
+    패키지 게이트를 막지 않는다. L005/L050 PASS를 만들지 않는다.
+    """
+    validators = list(getattr(gate, "validators", []) or [])
+    if not validators:
+        return True
+    for result in validators:
+        if getattr(result, "severity", "") == "PASS":
+            continue
+        if _nonblocking_review(result):
+            continue
+        return True
+    return False
+
+
+def _note_native_render(report: SubmitReport) -> None:
+    native = report.native_render or {}
+    if not native:
+        return
+    if native.get("render_status") == "UNAVAILABLE":
+        if RHWP_ABSENT_RENDER_NOTE not in report.notes:
+            report.notes.append(RHWP_ABSENT_RENDER_NOTE)
+    if native.get("l005_pixel") == "PASS" or native.get("pixel_reopen_claimed") is True:
+        report.notes.append("L005 픽셀 PASS 주장은 제출 성공으로 쓰지 않음")
 
 
 def _t02_label_key(key: str) -> str:
@@ -361,6 +457,9 @@ def submit_hwpx(
             out==in 금지 불변 유지). 한글 직접 납품용 전역 lineseg strip 포함.
         preserve_template: True 면 정상 HWPX에 전역 cleanup/색상 정규화를 적용하지 않는다.
             직접 업로드한 양식의 구조·서식을 유지하는 production 경로가 사용한다.
+            rhwp가 없으면 표 격자 자동 repair와 네이티브 재열기/렌더를 건너뛰고
+            그 사실을 노트에 남긴다(L005 픽셀·L050 PDF PASS로 기록하지 않음).
+            rhwp가 있으면 깨진 표 주소만 교정하며 채움·보호 구간 텍스트는 지우지 않는다.
 
     Returns:
         SubmitReport — final 은 항상 실제 존재하는 최종 경로.
@@ -374,9 +473,12 @@ def submit_hwpx(
     report = SubmitReport(input=str(src), output=str(out))
 
     # 1) 현재 T02 허가만 Analyzer commit. 허가 없는 적격 라벨은 fill 에도 넘기지 않는다.
+    from core.docx.services.hwpx_analysis_adapter import index_hwpx_structure
     from core.docx.services.hwpx_protected_regions import (
         authorization_is_current,
         authorize_t02_writes,
+        document_duplicate_unfilled_cells,
+        repeated_row_unfilled_cells,
     )
 
     staging_path = out.with_name(f"{out.stem}.__t02_auth__.{os.getpid()}{out.suffix}")
@@ -428,6 +530,26 @@ def submit_hwpx(
         note = f"[t02] {label} GRANT_WRITTEN"
         if note not in report.notes:
             report.notes.append(note)
+    # Same label on a later row can stay empty after the first value cell is
+    # filled. Identity residual drops the label once its key is used, so report
+    # the still-empty cell here. This does not write and does not grant AUTO.
+    if out.is_file():
+        filled_index = index_hwpx_structure(out)
+        for label, row, col in repeated_row_unfilled_cells(filled_index):
+            if label not in report.residual:
+                report.residual.append(label)
+            note = f"[repeated-row] {label} row={row} col={col} UNFILLED"
+            if note not in report.notes:
+                report.notes.append(note)
+        for label, section_index, table_index, row, col in document_duplicate_unfilled_cells(filled_index):
+            if label not in report.residual:
+                report.residual.append(label)
+            note = (
+                f"[duplicate-label] {label} section={section_index} "
+                f"table={table_index} row={row} col={col} UNFILLED"
+            )
+            if note not in report.notes:
+                report.notes.append(note)
     report.overflow_cells = list(fill_rep.overflow_cells)
     report.notes.extend(fill_rep.notes)
     for key, mode in fill_rep.field_writes_written.items():
@@ -446,7 +568,7 @@ def submit_hwpx(
             "TEMPLATE_MISMATCH — F01 canonical SHA256과 다른 양식에는 field_writes를 적용하지 않음"
         )
         report.final = str(_mark_draft(report, out, src))
-        return report
+        return _seal_submit_report(report)
 
     semantic_ok = _check_and_repair_semantics(report, out, preserve_template=preserve_template)
     if semantic_ok and report.routing_status == NORMAL and fill_rep.overflow_cells:
@@ -513,6 +635,9 @@ def submit_hwpx(
     )
     report.integrity = gate.as_dict()
     report.acceptance = gate.acceptance_report
+    _note_native_render(report)
+    if report.overflow_cells and XML_OVERFLOW_NOT_L005_NOTE not in report.notes:
+        report.notes.append(XML_OVERFLOW_NOT_L005_NOTE)
 
     # 명시적 bypass 요청도 최종 제출본으로 통과시키지 않는다.
     # 진단 목적의 호출은 결과를 남기되 _DRAFT/ok=False로 fail-closed 처리한다.
@@ -527,13 +652,13 @@ def submit_hwpx(
         report.ok = False
         report.final_output_allowed = False
         report.submittable = False
-        return report
+        return _seal_submit_report(report)
 
-    if gate.final_status == "PASS" and semantic_ok:
+    if semantic_ok and not _package_blocked(gate):
         report.ok = True
         report.final_output_allowed = True
         report.submittable = True
-        return report
+        return _seal_submit_report(report)
 
     failed = [v for v in gate.validators if v.severity != "PASS"]
     messages = "; ".join(v.message for v in failed[:3])
@@ -554,4 +679,4 @@ def submit_hwpx(
     report.ok = False
     report.final_output_allowed = False
     report.submittable = False
-    return report
+    return _seal_submit_report(report)

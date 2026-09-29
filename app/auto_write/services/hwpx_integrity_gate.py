@@ -259,6 +259,32 @@ def _run_render_validator(
             severity=REVIEW_REQUIRED,
             exc=exc,
         )
+    # rhwp/한글이 없는 환경은 재열기 실패가 아니다. 패키지 게이트를 막지 않되
+    # L005 픽셀·L050 PDF를 PASS로 적지 않는다. 도구 없음 + 재열기 PASS 주장은 거부.
+    if str(data.get("render_status") or "") == "UNAVAILABLE":
+        claimed = (
+            data.get("reopen_status") == "PASS"
+            or data.get("l005_pixel") == "PASS"
+            or data.get("l050_pdf") == "PASS"
+            or data.get("pixel_reopen_claimed") is True
+        )
+        if claimed:
+            return ValidatorResult(
+                source_validator="rendering_validator",
+                validator_status=ERROR,
+                severity=REVIEW_REQUIRED,
+                message="rhwp 없음인데 재열기/픽셀 PASS로 표시됨 — 판정 거부",
+                defect_code="RENDER_CLAIM_WITHOUT_TOOL",
+                evidence={"report": data},
+            )
+        return ValidatorResult(
+            source_validator="rendering_validator",
+            validator_status=UNAVAILABLE,
+            severity=PASS,
+            message=str(data.get("message") or "rhwp 없음 — 네이티브 재열기/렌더 생략"),
+            defect_code="RHWP_ABSENT",
+            evidence={"report": data},
+        )
     ok = bool(data.get("ok"))
     severity = data.get("severity") if data.get("severity") in _SEVERITY_RANK else (PASS if ok else REVIEW_REQUIRED)
     return ValidatorResult(

@@ -23,6 +23,10 @@ def test_snapshot_properties():
 
 
 def test_blocks_hoffice130(monkeypatch):
+    monkeypatch.setattr(
+        "core.docx.services.hancom_com_guard.sys.platform",
+        "win32",
+    )
     snap = HancomComSnapshot(
         hwpframe_localserver32=r"C:\Hnc\Office 2024\HOffice130\Bin\Hwp.exe -Automation",
         hwp_document_130_localserver32=None,
@@ -42,6 +46,10 @@ def test_blocks_hoffice130(monkeypatch):
 
 
 def test_allow_2024_opt_in(monkeypatch):
+    monkeypatch.setattr(
+        "core.docx.services.hancom_com_guard.sys.platform",
+        "win32",
+    )
     snap = HancomComSnapshot(
         hwpframe_localserver32=r"C:\Hnc\Office 2024\HOffice130\Bin\Hwp.exe -Automation",
         hwp_document_130_localserver32=None,

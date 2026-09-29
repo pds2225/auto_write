@@ -6,6 +6,7 @@ L040 필수서식은 usage_acceptance.check_missing_required_documents 가 이�
 """
 from __future__ import annotations
 
+import json
 import re
 import shutil
 import subprocess
@@ -14,7 +15,7 @@ import zipfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 
 # L059 — 상태 접미사(_DRAFT)만 허용. 작업서술·중간산출물은 제출 폴더 오염.
 WORK_SUFFIXES: tuple[str, ...] = (
@@ -386,20 +387,65 @@ class PdfPairGenerateResult:
     skipped: bool
     blocked: bool
     reason: str
+    evidence: str = ""
 
 
 def hangul_pdf_tool() -> str | None:
-    """제출 품질 PDF 도구. LibreOffice(soffice) 는 한글 레이아웃이 달라 인정하지 않는다."""
-    if shutil.which("rhwp"):
-        return "rhwp"
-    return None
+    """제출 품질 PDF 실행 파일. ``RHWP_EXE`` 절대경로 다음 PATH ``rhwp``.
+
+    LibreOffice(soffice) 는 한글 레이아웃이 달라 인정하지 않는다.
+    한글 COM PDF 저장으로 대체하지 않는다.
+    """
+    from .native_hwp import resolve_rhwp_executable
+
+    return resolve_rhwp_executable()
+
+
+def l050_evidence_path(pdf: str | Path) -> Path:
+    pdf_p = Path(pdf)
+    return pdf_p.with_name(f"{pdf_p.stem}.l050.json")
+
+
+def _executable_basename(tool: str) -> str:
+    """Windows 증거 JSON 의 ``C:\\...\\rhwp.exe`` 도 Linux 에서 이름만 뽑는다."""
+    normalized = str(tool).strip().strip('"').replace("\\", "/")
+    return normalized.rsplit("/", 1)[-1].lower()
+
+
+def _write_l050_evidence(source: Path, dest: Path, tool: str) -> str:
+    """Windows 실측 성공만 증거 파일을 남긴다. Linux 성공으로 mechanized 를 만들지 않는다."""
+    if sys.platform != "win32":
+        return ""
+    evidence = l050_evidence_path(dest)
+    payload = {
+        "lesson": "L050",
+        "generated": True,
+        "platform": "win32",
+        "tool": tool,
+        "soffice": False,
+        "source": str(source.resolve()),
+        "pdf": str(dest.resolve()),
+        "pdf_bytes": dest.stat().st_size,
+        "note": (
+            "Windows rhwp export-pdf 산출. lessons_coverage 의 L050 은 "
+            "Mimo 실측 전까지 gap 이다. 이 파일만으로 mechanized 가 아니다."
+        ),
+    }
+    try:
+        evidence.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except OSError:
+        return ""
+    return str(evidence)
 
 
 def try_generate_sibling_pdf(path: str | Path) -> PdfPairGenerateResult:
-    """동일 stem PDF 를 만들 수 있으면 만든다. 도구 없으면 BLOCKED (L050 gap 유지).
+    """동일 stem PDF 를 ``rhwp export-pdf`` 로 만든다. 도구 없으면 BLOCKED.
 
-    초안은 생성하지 않는다. soffice 폴백 없음. Hangul COM PDF 저장은 아직 미배선
-    (Windows 한글에서 사람이 같은 이름으로 PDF 저장 = Wave D 규약).
+    초안은 생성하지 않는다. soffice 폴백 없음. Hangul COM PDF 는 호출하지 않는다
+    (미배선). ``RHWP_EXE`` 가 가리키는 실행 파일을 PATH 이름 ``rhwp`` 보다 먼저 쓴다.
     """
     p = Path(path)
     if is_draft_artifact(p):
@@ -410,17 +456,36 @@ def try_generate_sibling_pdf(path: str | Path) -> PdfPairGenerateResult:
     if dest.is_file() and dest.stat().st_size > 0:
         return PdfPairGenerateResult(False, True, False, "pdf already exists")
     tool = hangul_pdf_tool()
-    if tool == "rhwp":
+    if tool:
         dest.parent.mkdir(parents=True, exist_ok=True)
-        proc = subprocess.run(
-            ["rhwp", "export-pdf", str(p.resolve()), "-o", str(dest.resolve())],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-        )
+        run_kwargs: dict[str, Any] = {
+            "capture_output": True,
+            "text": True,
+            "encoding": "utf-8",
+            "errors": "replace",
+            "timeout": 120,
+        }
+        if sys.platform == "win32":
+            run_kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        try:
+            proc = subprocess.run(
+                [tool, "export-pdf", str(p.resolve()), "-o", str(dest.resolve())],
+                **run_kwargs,
+            )
+        except subprocess.TimeoutExpired:
+            return PdfPairGenerateResult(False, False, True, "BLOCKED: rhwp export-pdf timeout")
+        except OSError as exc:
+            return PdfPairGenerateResult(
+                False, False, True, f"BLOCKED: rhwp launch failed {exc}"
+            )
         if dest.is_file() and dest.stat().st_size > 0:
-            return PdfPairGenerateResult(True, False, False, "rhwp")
+            evidence = _write_l050_evidence(p, dest, tool)
+            return PdfPairGenerateResult(True, False, False, f"rhwp:{tool}", evidence)
+        if dest.is_file() and dest.stat().st_size == 0:
+            try:
+                dest.unlink()
+            except OSError:
+                pass
         err = (proc.stderr or proc.stdout or "").strip()[:200]
         return PdfPairGenerateResult(
             False, False, True, f"BLOCKED: rhwp failed rc={proc.returncode} {err}"
@@ -430,7 +495,7 @@ def try_generate_sibling_pdf(path: str | Path) -> PdfPairGenerateResult:
             False,
             False,
             True,
-            "BLOCKED: Hangul COM PDF 미배선 — 한글에서 같은 stem 으로 PDF 저장",
+            "BLOCKED: Hangul COM PDF 미배선 — RHWP_EXE 의 rhwp export-pdf 가 필요",
         )
     return PdfPairGenerateResult(
         False,
@@ -440,18 +505,266 @@ def try_generate_sibling_pdf(path: str | Path) -> PdfPairGenerateResult:
     )
 
 
-def l005_pixel_review_status() -> dict[str, str | bool]:
-    """L005: pytest·로직 리뷰는 검증이 아니다. 한글 GUI 픽셀이 필요하다.
+def l050_mechanization_status(evidence: str | Path | None = None) -> dict[str, Any]:
+    """L050 JSON 을 mechanized 로 올릴 자격이 있는지.
 
-    이 클라우드(Linux) 는 항상 BLOCKED. Windows 도 한글 미설치면 NEEDS_HANGUL_GUI.
+    Linux/클라우드는 증거 파일이 있어도 BLOCKED. Windows 도 증거 파일이
+    rhwp export-pdf 성공을 증명하기 전에는 BLOCKED. 증명돼도 ``mechanized`` 는
+    false — 커버리지 분류는 Mimo 실측 뒤에만 바꾼다.
     """
-    status = "BLOCKED" if sys.platform != "win32" else "NEEDS_HANGUL_GUI"
-    return {
-        "status": status,
-        "logic_review_is_verification": False,
+    blocked = {
+        "status": "BLOCKED",
+        "mechanized": False,
         "platform": sys.platform,
-        "rule": (
-            "Open the output in 한글 2022 (한컴오피스). Check overlap, page count, "
-            "table grid, image size on screen. Screenshot. pytest PASS is not L005."
+        "generated": False,
+        "reason": "BLOCKED: L050 stays gap until a Windows rhwp evidence artifact exists",
+    }
+    if sys.platform != "win32":
+        blocked["reason"] = "BLOCKED: this platform cannot claim L050 generation (cloud/Linux)"
+        return blocked
+    if not evidence:
+        blocked["reason"] = "BLOCKED: Windows rhwp evidence artifact missing"
+        return blocked
+    path = Path(evidence)
+    if not path.is_file():
+        blocked["reason"] = "BLOCKED: Windows rhwp evidence artifact missing"
+        return blocked
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        blocked["reason"] = "BLOCKED: L050 evidence unreadable"
+        return blocked
+    if not isinstance(data, dict):
+        blocked["reason"] = "BLOCKED: L050 evidence is not an object"
+        return blocked
+    pdf = Path(str(data.get("pdf") or ""))
+    tool_name = _executable_basename(str(data.get("tool") or ""))
+    proven = (
+        data.get("lesson") == "L050"
+        and data.get("generated") is True
+        and data.get("platform") == "win32"
+        and data.get("soffice") is False
+        and "soffice" not in tool_name
+        and "libreoffice" not in tool_name
+        and (tool_name == "rhwp" or tool_name.startswith("rhwp."))
+        and pdf.is_file()
+        and pdf.suffix.lower() == ".pdf"
+        and pdf.stat().st_size > 0
+    )
+    if not proven:
+        blocked["reason"] = "BLOCKED: L050 evidence does not prove Windows rhwp export-pdf"
+        return blocked
+    return {
+        "status": "GENERATED",
+        "mechanized": False,
+        "platform": sys.platform,
+        "generated": True,
+        "reason": (
+            "Windows rhwp sibling PDF recorded. lessons_coverage stays gap until "
+            "Mimo proves the live export. Do not mark mechanized from this status alone."
+        ),
+        "evidence": str(path),
+        "pdf": str(pdf),
+    }
+
+
+def sibling_pdf_attempt(path: str | Path) -> dict[str, Any]:
+    """제출 경로가 호출하는 L050 시도. mechanized 는 항상 false."""
+    gen = try_generate_sibling_pdf(path)
+    claim = l050_mechanization_status(gen.evidence or None)
+    return {
+        "generated": gen.generated,
+        "skipped": gen.skipped,
+        "blocked": gen.blocked,
+        "reason": gen.reason,
+        "evidence": gen.evidence,
+        "missing": missing_pdf_pair(path),
+        "mechanized": False,
+        "claim_status": claim["status"],
+    }
+
+
+# ---------------------------------------------------------------------------
+# L005 — 한글 GUI 픽셀. pytest PASS 는 검증이 아니다. 증거 파일이 있어야 PASS.
+# ---------------------------------------------------------------------------
+
+L005_CHECKLIST: tuple[str, ...] = ("overlap", "page_count", "table_grid", "image_size")
+_L005_SHOT_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
+_HANGUL_GUI_DIRS = (
+    r"C:\Program Files (x86)\HNC",
+    r"C:\Program Files\HNC",
+)
+_L005_RULE = (
+    "Open the output in 한글 2022 (한컴오피스). Check overlap, page count, "
+    "table grid, image size on screen. Screenshot. pytest PASS is not L005."
+)
+
+
+def hangul_gui_available() -> bool:
+    """한글 GUI 설치 흔적만 본다. COM Dispatch 와 PDF 저장은 하지 않는다."""
+    if sys.platform != "win32":
+        return False
+    try:
+        from .hwp_docx_convert import hancom_com_available
+
+        if hancom_com_available():
+            return True
+    except Exception:
+        pass
+    return any(Path(folder).is_dir() for folder in _HANGUL_GUI_DIRS)
+
+
+def _l005_base() -> dict[str, Any]:
+    return {
+        "logic_review_is_verification": False,
+        "pytest_pass_counts": False,
+        "platform": sys.platform,
+        "hangul_gui": hangul_gui_available(),
+        "rule": _L005_RULE,
+        "checklist": list(L005_CHECKLIST),
+    }
+
+
+def _safe_screenshot(folder: Path, named: str) -> Path | None:
+    if not named or Path(named).is_absolute() or ".." in Path(named).parts:
+        return None
+    shot = folder / named
+    try:
+        shot.resolve().relative_to(folder.resolve())
+    except ValueError:
+        return None
+    if (
+        shot.is_file()
+        and shot.stat().st_size > 0
+        and shot.suffix.lower() in _L005_SHOT_SUFFIXES
+    ):
+        return shot
+    return None
+
+
+def _l005_packet_ok(folder: Path) -> tuple[bool, str]:
+    checklist_path = folder / "l005_checklist.json"
+    if not checklist_path.is_file():
+        return False, "checklist missing"
+    try:
+        data = json.loads(checklist_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False, "checklist unreadable"
+    if not isinstance(data, dict) or data.get("lesson") != "L005":
+        return False, "not an L005 checklist"
+    if data.get("pytest_pass_counts") is True:
+        return False, "pytest PASS cannot satisfy L005"
+    checks = data.get("checklist")
+    if not isinstance(checks, dict):
+        return False, "checklist object missing"
+    for key in L005_CHECKLIST:
+        if checks.get(key) is not True:
+            return False, f"checklist incomplete: {key}"
+    named = _safe_screenshot(folder, str(data.get("screenshot") or ""))
+    if named is not None:
+        return True, str(named)
+    for fallback in ("hangul_gui.png", "hangul_gui.jpg", "hangul_gui.jpeg", "hangul_gui.webp"):
+        found = _safe_screenshot(folder, fallback)
+        if found is not None:
+            return True, str(found)
+    return False, "screenshot missing"
+
+
+def write_l005_review_template(
+    dest_dir: str | Path,
+    *,
+    document: str | Path | None = None,
+) -> Path:
+    """체크리스트를 전부 false 로 만든다. 스크린샷은 만들지 않으며 PASS 가 아니다."""
+    folder = Path(dest_dir)
+    folder.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "lesson": "L005",
+        "document": "" if document is None else str(document),
+        "checklist": {key: False for key in L005_CHECKLIST},
+        "screenshot": "hangul_gui.png",
+        "pytest_pass_counts": False,
+        "note": (
+            "한글 2022 GUI에서 글자겹침(overlap)·쪽수(page_count)·"
+            "표격자(table_grid)·그림크기(image_size)를 보고 "
+            "hangul_gui.png 를 이 폴더에 둔 뒤 checklist 값을 true 로 바꾼다. "
+            "pytest PASS 와 rhwp PDF 는 L005 가 아니다."
         ),
     }
+    path = folder / "l005_checklist.json"
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return path
+
+
+def record_l005_pixel_review(
+    evidence_dir: str | Path,
+    *,
+    document: str | Path,
+    checklist: dict[str, bool],
+    screenshot: str | Path,
+) -> dict[str, Any]:
+    """스크린샷과 체크리스트를 증거 폴더에 기록한다.
+
+    반환 상태는 ``l005_pixel_review_status`` 와 같다. 파일을 써도 Linux 는
+    BLOCKED 이고, 네 항목이 모두 true 이고 스크린샷이 있을 때만 Windows+한글에서 PASS.
+    """
+    folder = Path(evidence_dir)
+    folder.mkdir(parents=True, exist_ok=True)
+    shot = Path(screenshot)
+    suffix = shot.suffix.lower() if shot.suffix.lower() in _L005_SHOT_SUFFIXES else ".png"
+    dest_name = f"hangul_gui{suffix}"
+    target = folder / dest_name
+    if shot.is_file() and shot.stat().st_size > 0 and shot.suffix.lower() in _L005_SHOT_SUFFIXES:
+        if shot.resolve() != target.resolve():
+            shutil.copyfile(shot, target)
+        stored = dest_name
+    else:
+        stored = ""
+    payload = {
+        "lesson": "L005",
+        "document": str(document),
+        "checklist": {key: checklist.get(key) is True for key in L005_CHECKLIST},
+        "screenshot": stored,
+        "pytest_pass_counts": False,
+        "note": (
+            "한글 GUI에서 읽은 네 항목과 스크린샷. pytest PASS 는 이 기록을 대신하지 않는다."
+        ),
+    }
+    (folder / "l005_checklist.json").write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return l005_pixel_review_status(folder)
+
+
+def l005_pixel_review_status(
+    evidence_dir: str | Path | None = None,
+) -> dict[str, Any]:
+    """L005: pytest·로직 리뷰는 검증이 아니다. 한글 GUI 픽셀 증거가 필요하다.
+
+    Linux 는 증거 폴더가 있어도 BLOCKED. Windows 에서 PASS 는 한글 GUI 가 있고
+    체크리스트 4항이 true 이며 비어 있지 않은 스크린샷 파일이 있을 때만.
+    """
+    base = _l005_base()
+    if sys.platform != "win32":
+        base["status"] = "BLOCKED"
+        base["reason"] = "BLOCKED: no Hangul GUI on this platform (evidence ignored)"
+        return base
+    if not hangul_gui_available():
+        base["status"] = "NEEDS_HANGUL_GUI"
+        base["reason"] = "NEEDS_HANGUL_GUI: Windows but Hangul GUI was not detected"
+        return base
+    if evidence_dir is None:
+        base["status"] = "REVIEW_REQUIRED"
+        base["reason"] = "REVIEW_REQUIRED: Hangul GUI available; screenshot and checklist not recorded"
+        return base
+    ok, detail = _l005_packet_ok(Path(evidence_dir))
+    if not ok:
+        base["status"] = "REVIEW_REQUIRED"
+        base["reason"] = f"REVIEW_REQUIRED: {detail}"
+        return base
+    base["status"] = "PASS"
+    base["reason"] = "Hangul GUI checklist and screenshot exist"
+    base["screenshot"] = detail
+    base["evidence_dir"] = str(Path(evidence_dir))
+    return base

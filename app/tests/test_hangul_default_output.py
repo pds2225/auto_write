@@ -10,6 +10,7 @@ L014 생성표 서식은 이 경로에서 호출하지 않는다. L050 PDF 는 �
 from __future__ import annotations
 
 import inspect
+import sys
 import zipfile
 from datetime import datetime
 from pathlib import Path
@@ -333,4 +334,8 @@ def test_submission_pipeline_user_facing_is_hwpx(tmp_path: Path) -> None:
     assert Path(report["final"]).suffix == ".hwpx"
     assert Path(report["final_docx"]).suffix == ".docx"
     assert Path(report["final_docx"]).is_file()
+    assert report["l050_pdf"]["mechanized"] is False
+    if sys.platform != "win32":
+        assert report["l050_pdf"]["claim_status"] == "BLOCKED"
+        assert report["l050_pdf"]["generated"] is False
 

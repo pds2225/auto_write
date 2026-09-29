@@ -616,6 +616,14 @@ def _broken_grid_section_xml() -> bytes:
 
 
 def test_structural_repairable_repairs_grid_and_rechecks(tmp_path):
+    """preserve_template 표 격자.
+
+    rhwp가 있으면 셀 주소만 교정하고 재검사한다.
+    rhwp가 없으면 추정 수정을 하지 않고, 유효한 패키지와 노트만 남긴 채 제출을 막는다.
+    L005 픽셀 PASS는 어느 쪽이든 기록하지 않는다.
+    """
+    from core.docx.services.native_hwp import rhwp_available
+
     src = tmp_path / "broken_grid.hwpx"
     with zipfile.ZipFile(src, "w") as z:
         zi = zipfile.ZipInfo("mimetype")
@@ -624,6 +632,7 @@ def test_structural_repairable_repairs_grid_and_rechecks(tmp_path):
         z.writestr("Contents/header.xml", _header_xml(colored=False))
         z.writestr("Contents/section0.xml", _broken_grid_section_xml())
     out = tmp_path / "out.hwpx"
+    before = hashlib.sha256(src.read_bytes()).hexdigest()
 
     rep = submit_hwpx(
         src,
@@ -634,13 +643,32 @@ def test_structural_repairable_repairs_grid_and_rechecks(tmp_path):
         preserve_template=True,
     )
 
+    assert hashlib.sha256(src.read_bytes()).hexdigest() == before
+    final = Path(rep.final)
+    assert final.is_file()
+    assert zipfile.is_zipfile(final)
+    with zipfile.ZipFile(final) as z:
+        assert z.testzip() is None
+        sec = z.read("Contents/section0.xml").decode("utf-8")
+    assert "복구(주)" in sec
     assert rep.routing_status == hs.STRUCTURAL_REPAIRABLE
     assert rep.semantic_before.get("broken_tables")
-    assert rep.semantic_after.get("ok") is True
-    assert rep.semantic_after.get("broken_tables") == []
-    assert rep.repair.get("grid_cells_fixed", 0) > 0
-    assert rep.ok is True
-    assert Path(rep.final) == out
+    assert rep.native_render.get("l005_pixel") != "PASS"
+    assert rep.native_render.get("pixel_reopen_claimed") is not True
+    if rhwp_available():
+        assert rep.semantic_after.get("ok") is True
+        assert rep.semantic_after.get("broken_tables") == []
+        assert rep.repair.get("grid_cells_fixed", 0) > 0
+    else:
+        assert rep.repair == {}
+        assert rep.ok is False
+        assert rep.submittable is False
+        assert rep.semantic_after.get("ok") is False
+        assert any("repair 생략" in note for note in rep.notes)
+        assert sec.count('rowAddr="2"') == 4
+        assert final.name == "out_DRAFT.hwpx"
+        assert not out.exists()
+        assert not any(path.name.startswith("out.__grid_repair__") for path in tmp_path.iterdir())
 
 
 def test_structural_unsafe_never_repairs_dangling_reference(tmp_path, monkeypatch):
