@@ -20,6 +20,12 @@ def file_sha256(path: str | Path) -> str:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
+def rhwp_available() -> bool:
+    """True only when RHWP_EXE or PATH rhwp points at a real file."""
+    executable = os.environ.get("RHWP_EXE") or shutil.which("rhwp")
+    return bool(executable and Path(executable).is_file())
+
+
 def _rhwp_json(*args: str, timeout: int = 60) -> dict[str, Any]:
     executable = os.environ.get("RHWP_EXE") or shutil.which("rhwp")
     if not executable or not Path(executable).is_file():
@@ -80,6 +86,9 @@ def verify_hwpx_native(path: str | Path) -> dict[str, Any]:
         "ok": False, "severity": "REVIEW_REQUIRED", "renderer": "rhwp",
         "render_status": "NOT_RUN", "reopen_status": "NOT_RUN",
         "visual_review": "NOT_RUN", "pdf": "", "page_count": 0,
+        # L005 픽셀·L050 동일 stem PDF는 이 함수의 PASS가 아니다.
+        "l005_pixel": "NOT_RUN", "l050_pdf": "NOT_RUN",
+        "pixel_reopen_claimed": False,
     }
     try:
         if candidate.suffix.lower() != ".hwpx":
@@ -107,11 +116,26 @@ def verify_hwpx_native(path: str | Path) -> dict[str, Any]:
             raise ValueError("HWPX 전체 페이지와 렌더 PDF 쪽수가 일치하지 않습니다.")
         if file_sha256(snapshot) != expected or file_sha256(candidate) != expected:
             raise ValueError("검수 도중 후보 파일 변경 감지 — 이전 렌더 무효")
-        evidence.update(render_status="PASS", pdf=str(pdf), pdf_sha256=file_sha256(pdf),
-                        render_source_sha256=expected, rendered_count=actual_pages,
-                        message="HWPX 재열기·전체 쪽 렌더 완료. 실제 페이지 품질 검토가 필요합니다.")
+        evidence.update(
+            render_status="PASS", pdf=str(pdf), pdf_sha256=file_sha256(pdf),
+            render_source_sha256=expected, rendered_count=actual_pages,
+            visual_review="NOT_RUN", l005_pixel="JUDGMENT", l050_pdf="NOT_SIBLING",
+            pixel_reopen_claimed=False,
+            message=(
+                "HWPX 재열기·전체 쪽 렌더 완료. 실제 페이지 품질 검토가 필요합니다. "
+                "L005 한글 픽셀과 L050 동일명 PDF는 이 결과로 PASS가 아닙니다."
+            ),
+        )
     except FileNotFoundError as exc:
-        evidence.update(render_status="UNAVAILABLE", message=str(exc))
+        evidence.update(
+            render_status="UNAVAILABLE",
+            reopen_status="NOT_RUN",
+            visual_review="ENV_BLOCKED",
+            l005_pixel="ENV_BLOCKED",
+            l050_pdf="ENV_BLOCKED",
+            pixel_reopen_claimed=False,
+            message=str(exc),
+        )
     except subprocess.TimeoutExpired:
         evidence.update(render_status="TIMEOUT", message="HWPX 재열기/렌더 시간 초과")
     except Exception as exc:

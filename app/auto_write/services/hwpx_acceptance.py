@@ -16,8 +16,11 @@ DOCX 로 변환한 뒤 검사하면, 변환 과정에서 유색 텍스트·양�
 1. ``colored``       — ``header.xml`` 의 ``charPr@textColor`` 가 흰(#FFFFFF)·검정(#000000)
                        외의 정규 6자리 hex 색(예: 회색 예시문구·파랑 안내). ``none``/``auto``/
                        미지정은 기본색이라 세지 않는다(오탐 0).
-2. ``guides``        — ``section*.xml`` 에서 '작성방법/작성요령/기재요령'(핵심) + '삭제 후
-                       제출/도식화/유의사항'(보조)을 **동시에** 담은 표·단락 개수(양식 안내문구).
+2. ``guides``        — ``section*.xml`` 의 양식 안내문구 표·단락 개수.
+                       (가) '작성방법/작성요령/기재요령'(핵심) + '삭제 후 제출/도식화/유의사항'(보조)
+                       동시, (나) 보조 없이 핵심 표제만 있는 지시문
+                       (예: '작성방법: 예시를 참고하십시오').
+                       핵심어가 본문에 섞인 문장('작성요령을 잘 따르십시오')은 세지 않는다.
 3. ``linesegarray``  — ``section*.xml`` 의 ``hp:linesegarray`` 잔존 개수. 줄위치 캐시로,
                        .hwpx 를 직접 납품할 때 글씨 겹침/뭉침을 유발할 수 있어 결함으로 센다.
 
@@ -41,9 +44,11 @@ _SECTION_RE = re.compile(r"Contents/section\d+\.xml$", re.IGNORECASE)
 _HEADER_RE = re.compile(r"header\.xml$", re.IGNORECASE)
 _HEX6_RE = re.compile(r"^[0-9A-F]{6}$")
 
-# 양식 안내문구(작성요령/삭제 후 제출 지시) 시그니처 — 핵심 + 보조 동시 충족 시 카운트.
+# 양식 안내문구. 핵심+보조를 함께 담거나, 보조 없이 핵심 표제(`작성방법:`)만 있는 지시문.
 _GUIDE_CORE = ("작성방법", "작성요령", "기재요령", "작성 요령")
 _GUIDE_AUX = ("삭제 후 제출", "삭제후 제출", "도식화", "항목 자율", "자율 변경", "유의사항")
+# 핵심 토큰 직후의 콜론만 표제로 본다. '작성요령을 …' 같은 본문 언급은 제외.
+_CORE_HEADING_RE = re.compile(r"(?:작성방법|기재요령|작성\s*요령)\s*[:：]")
 
 _SAMPLE_LIMIT = 5
 
@@ -90,7 +95,12 @@ def count_colored_charpr(header_root) -> tuple[int, list[str]]:
 
 
 def _is_guide_text(txt: str) -> bool:
-    return any(c in txt for c in _GUIDE_CORE) and any(a in txt for a in _GUIDE_AUX)
+    """양식 안내문구. 핵심+보조, 또는 보조 없는 핵심 표제 지시문."""
+    if not any(token in txt for token in _GUIDE_CORE):
+        return False
+    if any(token in txt for token in _GUIDE_AUX):
+        return True
+    return _CORE_HEADING_RE.search(txt) is not None
 
 
 def _within_any(el, ancestors: list) -> bool:
@@ -105,7 +115,7 @@ def _within_any(el, ancestors: list) -> bool:
 
 
 def count_form_guides(section_root) -> tuple[int, list[str]]:
-    """섹션에서 양식 안내문구(핵심+보조 동시)를 담은 표·단락 개수와 샘플을 센다.
+    """섹션에서 양식 안내문구(핵심+보조, 또는 핵심 표제)를 담은 표·단락 개수와 샘플을 센다.
 
     안내 표 안의 단락은 표에서 이미 세었으므로 이중 카운트하지 않는다(조상 표 확인).
     핵심·보조가 표의 서로 다른 셀에 흩어진 경우엔 표 텍스트 결합으로 표 1건만 잡힌다.

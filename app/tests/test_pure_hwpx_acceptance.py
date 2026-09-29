@@ -7,7 +7,8 @@ ZIP 으로만 돌린다(실 HWP/COM 불사용, 원본 미수정). 야간 안전�
 
 여기서 고정하는 계약:
 - 유색 판정은 정규 6자리 hex 만 — none/auto/미지정/흰·검정은 세지 않는다(오탐 0).
-- 안내문구는 핵심(작성요령 등)+보조(삭제 후 제출 등) **동시** 충족만, 안내 표 안
+- 안내문구는 핵심(작성요령 등)+보조(삭제 후 제출 등) 동시 충족, 또는 핵심 표제만
+  있는 지시문(`작성방법: …`). 핵심어가 본문에 섞인 문장은 제외. 안내 표 안
   단락은 이중 카운트하지 않는다.
 - ok = colored·guides·linesegarray 셋 다 0. 판정만 하고 문서는 절대 수정하지 않는다.
 """
@@ -64,7 +65,7 @@ def test_colored_samples_capped_at_five():
 # --- count_form_guides --------------------------------------------------------------
 
 def test_guide_needs_core_and_aux_together():
-    # 핵심(작성요령)만 있는 단락은 본문일 수 있어 세지 않는다 — 동시 충족만 카운트.
+    # 핵심(작성요령)만 있는 본문 문장은 세지 않는다. 표제+보조는 1건.
     root = _root(
         "<sec>"
         "<p><t>작성요령을 잘 따르십시오</t></p>"
@@ -74,6 +75,31 @@ def test_guide_needs_core_and_aux_together():
     n, samples = count_form_guides(root)
     assert n == 1
     assert "삭제 후 제출" in samples[0]
+
+
+def test_core_heading_split_across_runs_is_guide():
+    """FINDING-QA-001 유지: 이어 붙인 핵심 표제는 안내문. 본문 분할은 0."""
+    guided, samples = count_form_guides(_root(
+        "<sec><p><t>작성방법:</t><t> 예시를 참고하십시오</t></p></sec>"))
+    assert guided == 1
+    assert "작성방법" in samples[0]
+    prose, prose_samples = count_form_guides(_root(
+        "<sec><p><t>작성방법을</t><t> 참고하여 자유롭게 기술</t></p></sec>"))
+    assert prose == 0 and prose_samples == []
+
+
+def test_core_heading_without_aux_is_guide():
+    """FINDING-QA-001: 보조 토큰 없는 핵심 표제는 안내문. 핵심+보조도 유지."""
+    core_only, samples = count_form_guides(_root(
+        "<sec><p><t>작성방법: 예시를 참고하십시오</t></p></sec>"))
+    assert core_only == 1
+    assert "예시를 참고하십시오" in samples[0]
+    both, _ = count_form_guides(_root(
+        "<sec><p><t>작성방법: 작성 후 삭제 후 제출하십시오</t></p></sec>"))
+    assert both == 1
+    prose, prose_samples = count_form_guides(_root(
+        "<sec><p><t>작성방법을 참고하여 자유롭게 기술</t></p></sec>"))
+    assert prose == 0 and prose_samples == []
 
 
 def test_guide_table_counted_once_without_inner_paragraph_double_count():
