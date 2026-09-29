@@ -5,7 +5,39 @@
 {% block content %}
 {% if message %}<div class="alert alert-success">{{ message }}</div>{% endif %}
 {% if error %}<div class="alert alert-error"><pre>{{ error }}</pre></div>{% endif %}
-{% if summary.job.running %}<div class="notice-box"><strong>검증 실행 중</strong><span>{{ summary.job.scope }} · 페이지를 새로고침하면 끝난 결과가 반영됩니다. 목록을 열 때는 테스트를 돌리지 않습니다.</span></div>{% endif %}
+{% if summary.job.running %}
+<div class="notice-box" id="verify-job" data-started="{{ summary.job.started_at }}">
+  <strong>검증 실행 중</strong>
+  <span id="verify-job-status">{{ summary.job.scope }} · 경과 <b id="verify-elapsed">0초</b>. 끝나면 이 페이지를 다시 불러옵니다. 목록을 열 때는 테스트를 돌리지 않습니다.</span>
+  <span id="verify-job-error" class="error-text"></span>
+</div>
+<script>
+(function () {
+  var box = document.getElementById("verify-job");
+  var started = Number(box.getAttribute("data-started"));
+  if (!started) started = Date.now() / 1000;
+  var elapsed = document.getElementById("verify-elapsed");
+  var errorBox = document.getElementById("verify-job-error");
+  function paint() {
+    var sec = Math.max(0, Math.floor(Date.now() / 1000 - started));
+    if (elapsed) elapsed.textContent = sec + "초";
+  }
+  paint();
+  setInterval(paint, 1000);
+  setInterval(function () {
+    fetch("/console/lrules/verify/status", {headers: {"Accept": "application/json"}})
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (data && data.error && errorBox) errorBox.textContent = data.error;
+        if (data && data.running === false) location.reload();
+      })
+      .catch(function () {});
+  }, 4000);
+})();
+</script>
+{% elif summary.job.error %}
+<div class="alert alert-error" id="verify-job-error"><pre>{{ summary.job.error }}</pre></div>
+{% endif %}
 <section class="summary-strip cols-5 compact">
   <div><span>검증됨</span><strong>{{ summary.verified }}</strong><small>VERIFIED · 현재 HEAD 통과</small></div>
   <div><span>실패</span><strong>{{ summary.failing }}</strong><small>FAILING</small></div>

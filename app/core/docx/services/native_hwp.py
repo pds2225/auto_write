@@ -8,9 +8,11 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -48,25 +50,167 @@ def resolve_rhwp_executable() -> str | None:
     return None
 
 
+class UnsupportedRhwpError(RuntimeError):
+    """설치된 rhwp 가 ``--json`` 계약을 말하지 않는다."""
+
+
+# 실행 파일 경로 → (JSON 가능 여부, 버전 또는 오류 문장). 프로세스당 1회.
+_CAPABILITY: dict[str, tuple[bool, str]] = {}
+_CAPABILITY_LOCK = threading.Lock()
+_VERSION_RE = re.compile(r"(\d+\.\d+\.\d+(?:\.\d+)*)")
+# 문서 없이 JSON 객체를 돌려주는 현재 rhwp 계약. 0.7.19 는 이 명령을 모른다.
+_JSON_CAPABILITY_ARGS = ("capabilities", "--search", "info", "--json")
+
+
+def clear_rhwp_capability_cache() -> None:
+    """테스트가 같은 경로의 목 응답을 바꿀 때 캐시를 비운다."""
+    with _CAPABILITY_LOCK:
+        _CAPABILITY.clear()
+
+
+def _run_rhwp(executable: str, args: list[str] | tuple[str, ...], timeout: int) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [executable, *args],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=timeout,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+
+
+def _version_label(text: str) -> str:
+    match = _VERSION_RE.search(text or "")
+    return match.group(1) if match else "unknown"
+
+
+def _read_rhwp_version(executable: str) -> str:
+    try:
+        proc = _run_rhwp(executable, ["--version"], timeout=20)
+    except (OSError, subprocess.TimeoutExpired):
+        return "unknown"
+    return _version_label(f"{proc.stdout or ''}\n{proc.stderr or ''}")
+
+
+def _unsupported_message(version: str, stderr: str, stdout: str = "") -> str:
+    err = (stderr or "").strip()
+    out = (stdout or "").strip()
+    text = f"unsupported rhwp version {version}: stderr: {err[-800:] if err else '(empty)'}"
+    if out and not _json_object(out):
+        text += f" stdout: {out[-800:]}"
+    return text
+
+
+def _json_object(stdout: str) -> dict[str, Any] | None:
+    text = (stdout or "").strip()
+    if not text:
+        return None
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    return payload
+
+
+def _unsupported_protocol(stdout: str, stderr: str, returncode: int) -> bool:
+    """exit 0 인데 stdout 이 비었거나 JSON 이 아니거나 stderr 가 있으면 미지원.
+
+    0.7.19 는 ``--json`` 을 무시하고 한국어 평문을 stdout 에 쓰거나,
+    오류를 stderr 에만 쓰고 exit 0 을 반환한다.
+    """
+    if returncode:
+        return False
+    if (stderr or "").strip():
+        return True
+    return _json_object(stdout) is None
+
+
+def _remember_capability(executable: str, ok: bool, detail: str) -> None:
+    with _CAPABILITY_LOCK:
+        _CAPABILITY[executable] = (ok, detail)
+
+
+def _cached_capability(executable: str) -> tuple[bool, str] | None:
+    with _CAPABILITY_LOCK:
+        found = _CAPABILITY.get(executable)
+        return None if found is None else (found[0], found[1])
+
+
+def _probe_rhwp_capability(executable: str) -> tuple[bool, str]:
+    """실행 파일마다 JSON 지원을 한 번만 확인하고 캐시한다."""
+    cached = _cached_capability(executable)
+    if cached is not None:
+        return cached
+    version = _read_rhwp_version(executable)
+    try:
+        proc = _run_rhwp(executable, list(_JSON_CAPABILITY_ARGS), timeout=20)
+    except subprocess.TimeoutExpired:
+        detail = f"unsupported rhwp version {version}: capability probe timeout"
+        _remember_capability(executable, False, detail)
+        return False, detail
+    except OSError as exc:
+        detail = f"unsupported rhwp version {version}: {exc}"
+        _remember_capability(executable, False, detail)
+        return False, detail
+    payload = _json_object(proc.stdout or "")
+    if proc.returncode == 0 and payload is not None and not (proc.stderr or "").strip():
+        reported = payload.get("version")
+        if isinstance(reported, str) and reported.strip():
+            version = reported.strip()
+        elif version == "unknown":
+            version = _version_label(proc.stdout or "")
+        _remember_capability(executable, True, version)
+        return True, version
+    if proc.returncode:
+        err = (proc.stderr or proc.stdout or "").strip()
+        detail = (
+            f"unsupported rhwp version {version}: exit {proc.returncode}: "
+            f"{err[-1200:] or '(stderr empty)'}"
+        )
+    else:
+        detail = _unsupported_message(version, proc.stderr or "", proc.stdout or "")
+    _remember_capability(executable, False, detail)
+    return False, detail
+
+
 def rhwp_available() -> bool:
-    """True only when RHWP_EXE or PATH rhwp points at a real file."""
-    return resolve_rhwp_executable() is not None
+    """JSON 계약을 말하는 rhwp 만 설치된 것으로 본다.
+
+    바이너리는 있으나 ``--json`` 을 모르는 버전(예: 0.7.19)은 미설치와 같다.
+    ``RHWP_EXE`` 가 비어 있지 않은데 파일이 없으면 PATH 로 넘어가지 않는다.
+    """
+    executable = resolve_rhwp_executable()
+    if not executable:
+        return False
+    ok, _detail = _probe_rhwp_capability(executable)
+    return ok
 
 
 def _rhwp_json(*args: str, timeout: int = 60) -> dict[str, Any]:
     executable = resolve_rhwp_executable()
     if not executable:
         raise FileNotFoundError("rhwp 미설치: RHWP_EXE에 실행 파일 경로를 지정하세요.")
-    proc = subprocess.run(
-        [executable, *args, "--json"], capture_output=True, text=True,
-        encoding="utf-8", errors="replace", timeout=timeout,
-        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-    )
+    capable, detail = _probe_rhwp_capability(executable)
+    if not capable:
+        raise UnsupportedRhwpError(detail)
+    try:
+        proc = _run_rhwp(executable, [*args, "--json"], timeout=timeout)
+    except OSError as exc:
+        raise FileNotFoundError(f"rhwp 실행 실패: {exc}") from exc
     if proc.returncode:
-        raise ValueError(f"rhwp {args[0]} 실패(exit {proc.returncode}): {proc.stderr[-1200:]}")
-    payload = json.loads(proc.stdout)
-    if not isinstance(payload, dict):
-        raise ValueError("rhwp 결과가 JSON 객체가 아닙니다.")
+        raise ValueError(f"rhwp {args[0]} 실패(exit {proc.returncode}): {(proc.stderr or '')[-1200:]}")
+    if _unsupported_protocol(proc.stdout or "", proc.stderr or "", proc.returncode):
+        message = _unsupported_message(detail or "unknown", proc.stderr or "", proc.stdout or "")
+        _remember_capability(executable, False, message)
+        raise UnsupportedRhwpError(message)
+    payload = _json_object(proc.stdout or "")
+    if payload is None:
+        message = _unsupported_message(detail or "unknown", proc.stderr or "", proc.stdout or "")
+        _remember_capability(executable, False, message)
+        raise UnsupportedRhwpError(message)
     return payload
 
 
@@ -153,7 +297,8 @@ def verify_hwpx_native(path: str | Path) -> dict[str, Any]:
                 "L005 한글 픽셀과 L050 동일명 PDF는 이 결과로 PASS가 아닙니다."
             ),
         )
-    except FileNotFoundError as exc:
+    except (FileNotFoundError, UnsupportedRhwpError) as exc:
+        # 미설치와 미지원 버전은 같다. REVIEW_REQUIRED/_DRAFT 로 올리지 않는다.
         evidence.update(
             render_status="UNAVAILABLE",
             reopen_status="NOT_RUN",

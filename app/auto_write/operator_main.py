@@ -668,6 +668,12 @@ async def operator_lrules(
     )
 
 
+@app.get("/console/lrules/verify/status")
+async def operator_lrules_verify_status():
+    """로컬 기본값(access_gate)과 같은 콘솔 경로. 공개 바인드는 비밀번호 없이 열리지 않는다."""
+    return lrule_console.verify_status()
+
+
 @app.post("/console/lrules/verify")
 async def operator_lrules_verify():
     message = quote(lrule_console.start_verify(None), safe="")
