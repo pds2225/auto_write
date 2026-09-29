@@ -553,49 +553,98 @@ def _pythonpath(repo: Path) -> str:
     return os.pathsep.join(parts)
 
 
+def canonical_nodeid(nodeid: str) -> str:
+    """Keep pytest's ``\\uXXXX`` parameter escapes. Only normalize the file path."""
+    text = (nodeid or "").strip()
+    if "::" not in text:
+        return text.replace("\\", "/")
+    file, rest = text.split("::", 1)
+    return file.replace("\\", "/") + "::" + rest
+
+
+def parent_nodeid(nodeid: str) -> str:
+    """Function id without ``[param]``. Pytest runs every parameter of that test."""
+    text = canonical_nodeid(nodeid)
+    if "::" not in text:
+        return text
+    file, rest = text.split("::", 1)
+    parts = rest.split("::")
+    parts[-1] = parts[-1].split("[", 1)[0]
+    return file + "::" + "::".join(parts)
+
+
+def execution_targets(targets: list[str]) -> list[str]:
+    parents: list[str] = []
+    seen: set[str] = set()
+    for target in targets:
+        parent = parent_nodeid(target)
+        if parent and parent not in seen:
+            seen.add(parent)
+            parents.append(parent)
+    return parents
+
+
 def collect_pytest_nodes(repo: Path, files: list[str], *, timeout: int = 300) -> tuple[dict[str, list[str]], str]:
     if not files:
         return {}, ""
+    report_dir = Path(tempfile.mkdtemp(prefix="lrule-collect-"))
+    collect_path = report_dir / "nodes.txt"
     cmd = [
         *_pytest_argv(),
         "--rootdir",
         str(repo),
         "--confcutdir",
         str(repo),
+        "-p",
+        "auto_write.services.lrule_verification",
         "--collect-only",
         "-q",
         *files,
     ]
+    env = {
+        **os.environ,
+        "PYTHONPATH": _pythonpath(repo),
+        "PYTHONIOENCODING": "utf-8",
+        "LRULE_VERIFY_COLLECT": str(collect_path),
+    }
     try:
-        proc = subprocess.run(
-            cmd,
-            cwd=repo,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=timeout,
-            env={**os.environ, "PYTHONPATH": _pythonpath(repo)},
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        return {}, "pytest collect timeout"
-    except OSError as exc:
-        return {}, f"pytest collect could not start: {type(exc).__name__}: {exc}"
-    output = "\n".join(part for part in (proc.stdout, proc.stderr) if part)
-    grouped: dict[str, list[str]] = {file: [] for file in files}
-    for line in output.splitlines():
-        nodeid = line.strip().replace("\\", "/")
-        if ".py::" not in nodeid:
-            continue
-        file = nodeid.split("::", 1)[0]
-        grouped.setdefault(file, []).append(nodeid)
-    error = ""
-    if proc.returncode not in {0, 5} and not any(grouped.values()):
-        error = output.strip()[-2000:] or f"pytest collect exit {proc.returncode}"
-    elif proc.returncode not in {0, 5}:
-        error = output.strip()[-2000:]
-    return grouped, error
+        try:
+            proc = subprocess.run(
+                cmd,
+                cwd=repo,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=timeout,
+                env=env,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            return {}, "pytest collect timeout"
+        except OSError as exc:
+            return {}, f"pytest collect could not start: {type(exc).__name__}: {exc}"
+        output = "\n".join(part for part in (proc.stdout, proc.stderr) if part)
+        grouped: dict[str, list[str]] = {file: [] for file in files}
+        if collect_path.is_file():
+            repo_prefix = str(repo).replace("\\", "/") + "/"
+            for line in collect_path.read_text(encoding="utf-8", errors="replace").splitlines():
+                nodeid = canonical_nodeid(line)
+                if ".py::" not in nodeid:
+                    continue
+                file = nodeid.split("::", 1)[0]
+                if file.startswith(repo_prefix):
+                    file = file[len(repo_prefix) :]
+                    nodeid = file + "::" + nodeid.split("::", 1)[1]
+                grouped.setdefault(file, []).append(nodeid)
+        error = ""
+        if proc.returncode not in {0, 5} and not any(grouped.values()):
+            error = output.strip()[-2000:] or f"pytest collect exit {proc.returncode}"
+        elif proc.returncode not in {0, 5}:
+            error = output.strip()[-2000:]
+        return grouped, error
+    finally:
+        shutil.rmtree(report_dir, ignore_errors=True)
 
 
 def _map_outcome(raw: str, message: str) -> str:
@@ -612,7 +661,7 @@ def fold_reports(rows: list[dict[str, Any]]) -> dict[str, dict[str, str]]:
     rank = {"failed": 5, "error": 5, "xfailed": 4, "skipped": 3, "xpassed": 2, "passed": 1}
     best: dict[str, dict[str, Any]] = {}
     for row in rows:
-        nodeid = str(row.get("nodeid") or "").replace("\\", "/")
+        nodeid = canonical_nodeid(str(row.get("nodeid") or ""))
         if not nodeid:
             continue
         raw = str(row.get("outcome") or "")
@@ -643,7 +692,7 @@ def execute_pytest(repo: Path, targets: list[str], *, timeout: int = 1800) -> tu
         "auto_write.services.lrule_verification",
         "-q",
         "--tb=line",
-        *targets,
+        *execution_targets(targets),
     ]
     env = {**os.environ, "PYTHONPATH": _pythonpath(repo), "LRULE_VERIFY_REPORT": str(report_path)}
     try:
@@ -704,6 +753,15 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
 
 
 _REPORT_FH: Any = None
+
+
+def pytest_collection_modifyitems(config: Any, items: list[Any]) -> None:
+    path = os.environ.get("LRULE_VERIFY_COLLECT", "").strip()
+    if not path:
+        return
+    with open(path, "w", encoding="utf-8") as handle:
+        for item in items:
+            handle.write(canonical_nodeid(str(getattr(item, "nodeid", "") or "")) + "\n")
 
 
 def pytest_configure(config: Any) -> None:
@@ -855,14 +913,15 @@ def verify_lessons(
                 all_nodeids.append(nodeid)
 
     outcomes, run_error, returncode = execute(repo, all_nodeids) if all_nodeids else ({}, "", 0)
+    invocation_error = bool(run_error) and not outcomes and returncode != 124
     for code, rule, nodeids, missing in pending:
         guard_ref = str(rule.get("guard_ref", "")).strip()
         nodes: list[dict[str, str]] = []
         absent = list(missing)
         for nodeid in nodeids:
-            found = outcomes.get(nodeid)
+            found = outcomes.get(canonical_nodeid(nodeid))
             if found is None:
-                if returncode == 124:
+                if returncode == 124 or invocation_error:
                     continue
                 if run_error:
                     nodes.append({"nodeid": nodeid, "outcome": "failed", "message": run_error[:1200]})
@@ -870,6 +929,11 @@ def verify_lessons(
                     absent.append(f"결과 없음: {nodeid}")
                 continue
             nodes.append(found)
+        error = ""
+        if returncode == 124:
+            error = "pytest timeout"
+        elif invocation_error:
+            error = run_error[:1200]
         records[code] = _record(
             head=head,
             guard_ref=guard_ref,
@@ -878,7 +942,7 @@ def verify_lessons(
             missing=absent,
             nodes=nodes,
             ran_at=ran_at,
-            error="pytest timeout" if returncode == 124 else "",
+            error=error,
         )
     return records
 

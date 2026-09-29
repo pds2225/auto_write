@@ -21,6 +21,9 @@ from auto_write.services.lrule_verification import (
     VERIFIED,
     GuardIndex,
     build_wiring,
+    canonical_nodeid,
+    collect_pytest_nodes,
+    execute_pytest,
     file_stats,
     git_head,
     resolve_guard,
@@ -201,6 +204,31 @@ def test_not_run_without_cache(tmp_path: Path):
     )
     assert wiring["status"] == NOT_RUN
     assert wiring["status"] != VERIFIED
+
+
+def test_unicode_param_nodeid_is_not_rewritten_and_runs(tmp_path: Path):
+    repo = tmp_path / "repo"
+    path = repo / "app" / "tests" / "test_unicode_guard.py"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        "import pytest\n\n"
+        "@pytest.mark.parametrize('label', ['본문'])\n"
+        "def test_label(label):\n"
+        "    assert label == '본문'\n",
+        encoding="utf-8",
+    )
+    raw = "app/tests/test_unicode_guard.py::test_label[\\ubcf8\\ubb38]"
+    assert "\\u" in canonical_nodeid(raw)
+    assert "/ubcf8" not in canonical_nodeid(raw)
+    grouped, err = collect_pytest_nodes(repo, ["app/tests/test_unicode_guard.py"], timeout=60)
+    assert not err
+    nodes = grouped["app/tests/test_unicode_guard.py"]
+    assert nodes
+    assert all("/ubcf8" not in node for node in nodes)
+    folded, note, code = execute_pytest(repo, nodes, timeout=60)
+    assert code == 0, note
+    assert folded
+    assert all(item["outcome"] == "passed" for item in folded.values())
 
 
 def test_selector_does_not_swallow_next_filename():
