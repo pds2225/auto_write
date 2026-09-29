@@ -99,6 +99,8 @@ class SubmitReport:
     error: str = ""
     integrity: dict[str, Any] = field(default_factory=dict)
     native_render: dict[str, Any] = field(default_factory=dict)
+    pdf_pair: dict[str, Any] = field(default_factory=dict)
+    l005_review: dict[str, Any] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
@@ -122,8 +124,43 @@ class SubmitReport:
             "error": self.error,
             "integrity": dict(self.integrity),
             "native_render": dict(self.native_render),
+            "pdf_pair": dict(self.pdf_pair),
+            "l005_review": dict(self.l005_review),
             "notes": list(self.notes),
         }
+
+
+def _seal_submit_report(report: SubmitReport) -> SubmitReport:
+    """제출 가능 최종본에만 L050 동일명 PDF 를 시도한다. L005 는 상태만 붙인다.
+
+    PDF 생성 실패는 패키지 제출 플래그를 바꾸지 않는다. L005 PASS 는
+    한글 GUI 증거 파일이 있을 때만이고, 이 함수는 그 파일을 만들지 않는다.
+    """
+    from .submission_gates import l005_pixel_review_status, sibling_pdf_attempt
+
+    report.l005_review = l005_pixel_review_status()
+    final = Path(report.final) if report.final else None
+    if not (
+        report.submittable
+        and final is not None
+        and final.is_file()
+        and final.suffix.lower() in {".hwp", ".hwpx", ".docx"}
+    ):
+        return report
+    attempt = sibling_pdf_attempt(final)
+    report.pdf_pair = attempt
+    if attempt.get("missing"):
+        note = f"L050: 동일명 PDF 없음 ({attempt.get('reason')})"
+        if note not in report.notes:
+            report.notes.append(note)
+    elif attempt.get("generated"):
+        note = (
+            "L050: rhwp export-pdf 로 동일명 PDF 를 만들었다. "
+            "mechanized 아님 — Windows 실측 전까지 gap"
+        )
+        if note not in report.notes:
+            report.notes.append(note)
+    return report
 
 
 def _mark_draft(report: SubmitReport, out: Path, src: Path) -> Path:
@@ -487,7 +524,7 @@ def submit_hwpx(
             "TEMPLATE_MISMATCH — F01 canonical SHA256과 다른 양식에는 field_writes를 적용하지 않음"
         )
         report.final = str(_mark_draft(report, out, src))
-        return report
+        return _seal_submit_report(report)
 
     semantic_ok = _check_and_repair_semantics(report, out, preserve_template=preserve_template)
     if semantic_ok and report.routing_status == NORMAL and fill_rep.overflow_cells:
@@ -571,13 +608,13 @@ def submit_hwpx(
         report.ok = False
         report.final_output_allowed = False
         report.submittable = False
-        return report
+        return _seal_submit_report(report)
 
     if semantic_ok and not _package_blocked(gate):
         report.ok = True
         report.final_output_allowed = True
         report.submittable = True
-        return report
+        return _seal_submit_report(report)
 
     failed = [v for v in gate.validators if v.severity != "PASS"]
     messages = "; ".join(v.message for v in failed[:3])
@@ -598,4 +635,4 @@ def submit_hwpx(
     report.ok = False
     report.final_output_allowed = False
     report.submittable = False
-    return report
+    return _seal_submit_report(report)
