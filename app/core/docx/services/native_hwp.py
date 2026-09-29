@@ -20,15 +20,42 @@ def file_sha256(path: str | Path) -> str:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
+def _rhwp_basename_ok(path: Path) -> bool:
+    """Accept rhwp / rhwp.exe. Never treat soffice as rhwp."""
+    name = path.name.lower()
+    if "soffice" in name or "libreoffice" in name:
+        return False
+    return name == "rhwp" or name.startswith("rhwp.")
+
+
+def resolve_rhwp_executable() -> str | None:
+    """RHWP_EXE 가 실제 파일이면 그 경로, 아니면 PATH 의 rhwp.
+
+    RHWP_EXE 가 비어 있지 않은데 파일이 없으면 PATH 로 넘어가지 않는다.
+    LibreOffice(soffice) 는 반환하지 않는다.
+    """
+    raw = os.environ.get("RHWP_EXE")
+    if raw is not None and raw.strip():
+        path = Path(raw.strip().strip('"'))
+        if path.is_file() and _rhwp_basename_ok(path):
+            return str(path)
+        return None
+    found = shutil.which("rhwp")
+    if found:
+        path = Path(found)
+        if path.is_file() and _rhwp_basename_ok(path):
+            return str(path)
+    return None
+
+
 def rhwp_available() -> bool:
     """True only when RHWP_EXE or PATH rhwp points at a real file."""
-    executable = os.environ.get("RHWP_EXE") or shutil.which("rhwp")
-    return bool(executable and Path(executable).is_file())
+    return resolve_rhwp_executable() is not None
 
 
 def _rhwp_json(*args: str, timeout: int = 60) -> dict[str, Any]:
-    executable = os.environ.get("RHWP_EXE") or shutil.which("rhwp")
-    if not executable or not Path(executable).is_file():
+    executable = resolve_rhwp_executable()
+    if not executable:
         raise FileNotFoundError("rhwp 미설치: RHWP_EXE에 실행 파일 경로를 지정하세요.")
     proc = subprocess.run(
         [executable, *args, "--json"], capture_output=True, text=True,

@@ -149,12 +149,12 @@ AW-008과 합치지 않음. 원본 덮어쓰기 금지. git add -A 금지. py -3
 | ID | 분류 | 이 클라우드 | Windows 한글에서 할 일 |
 |----|------|-------------|------------------------|
 | L003 | mechanized (spy) | Linux `kill_hangul_processes` no-op. `_dispatch_hwp` 직전 호출은 유닛 spy | `taskkill /F /IM Hwp.exe` 실측. 이 프로세스 PID 는 대상 아님 |
-| L005 | **judgment / BLOCKED** | 한글 GUI 없음. pytest PASS ≠ 픽셀 검증. `l005_pixel_review_status()` | 산출물을 **한글 2022(한컴오피스)** 로 연다. 글자겹침·쪽수·표격자·그림크기를 화면에서 본다. 스크린샷을 남긴다. 로직 리뷰는 검증이 아니다 |
-| L050 | **gap / BLOCKED** | `missing_pdf_pair` + `try_generate_sibling_pdf`(rhwp 없으면 BLOCKED). soffice 는 레이아웃이 달라 인정하지 않음 | 최종본(비 `_DRAFT`) HWP/HWPX와 **같은 stem PDF** 를 한글 저장 또는 `rhwp export-pdf` 로 만든다. 초안은 쌍 불필요. 생성이 실제로 되기 전에는 mechanized 금지 |
+| L005 | **judgment / BLOCKED** | 한글 GUI 없음. pytest PASS ≠ 픽셀 검증. `l005_pixel_review_status()` 는 증거 파일이 있어도 BLOCKED | `record_l005_pixel_review` / `l005_checklist.json` + 스크린샷(`hangul_gui.png`). 체크리스트는 글자겹침·쪽수·표격자·그림크기. 한글 GUI가 있고 그 파일이 있을 때만 PASS. rhwp PDF·pytest 는 대체 불가 |
+| L050 | **gap / BLOCKED** | `RHWP_EXE` 다음 PATH. `try_generate_sibling_pdf` 는 `rhwp export-pdf`. 도구 없으면 BLOCKED. `l050_mechanization_status` 는 증거 없어도, Linux 에서는 증거가 있어도 BLOCKED. soffice·한글 COM PDF 미사용 | `RHWP_EXE` 가 `rhwp.exe` 를 가리키면 최종본(비 `_DRAFT`)과 같은 stem PDF 를 `export-pdf` 로 만든다. 성공 시 `*.l050.json`. 그 상태가 GENERATED 여도 mechanized 는 false. Mimo 실측 전 JSON gap 유지 |
 
 - [x] L003 spy 배선 (`test_lockdown_wave_bc.py`)
-- [x] L005 규약 문서 + BLOCKED 상태 함수. 카테고리 judgment 유지
-- [x] L050 쌍 검사 + 생성 시도가 도구 없으면 BLOCKED. 카테고리 gap 유지
+- [x] L005 규약 문서 + BLOCKED 상태 함수. 카테고리 judgment 유지. PASS 는 Windows 한글 GUI 증거 파일(체크리스트 4항 + 스크린샷)이 있을 때만. 이 클라우드 BLOCKED
+- [x] L050 쌍 검사 + `RHWP_EXE`/`export-pdf` 시도. 도구 없거나 증거 없으면 BLOCKED. 카테고리 gap 유지. 4점 중 런타임 배선은 됐으나 JSON mechanized 승격은 Mimo 실측 전 금지
 
 ### Wave E — 에이전트 규약
 
@@ -180,4 +180,4 @@ AW-008과 합치지 않음. 원본 덮어쓰기 금지. git add -A 금지. py -3
 | L049 | `build_submit_layout_dir` → `YYYYMMDD 공고명/제출`. cross_form·파이프라인 `notice_folder` | mechanized |
 | L072 | 품질 오케스트레이터 점수 열등이면 백업 원복 | mechanized |
 | L105 | `skill_frontmatter` `yaml.safe_load`. `description: [한글]` 거부 | mechanized |
-| L050 | `missing_pdf_pair` + `try_generate_sibling_pdf`. rhwp 없으면 BLOCKED. soffice 미인정 | **gap / BLOCKED** |
+| L050 | `missing_pdf_pair` + `try_generate_sibling_pdf`(`RHWP_EXE` 다음 PATH, `export-pdf`). soffice·COM PDF 미인정. `l050_mechanization_status` 는 Windows `*.l050.json` 없이 BLOCKED | **gap / BLOCKED** |

@@ -398,10 +398,7 @@ def run_pipeline(
     if write_submit_copy:
         hwpx_src = result.get("outputs", {}).get("hwpx")
         if hwpx_src and Path(hwpx_src).is_file() and result.get("output_status") == "PASS":
-            from auto_write.services.submission_gates import (
-                missing_pdf_pair,
-                try_generate_sibling_pdf,
-            )
+            from auto_write.services.submission_gates import sibling_pdf_attempt
 
             output_source = hwpx_base if hwpx_base is not None else target
             named = resolve_user_output_path(
@@ -416,10 +413,11 @@ def run_pipeline(
             shutil.copyfile(hwpx_src, ws_named)
             result["workspace_named"] = str(ws_named)
             result["submit_filename"] = named.name
-            gen = try_generate_sibling_pdf(named)
-            if missing_pdf_pair(named):
+            attempt = sibling_pdf_attempt(named)
+            result["l050_pdf"] = attempt
+            if attempt.get("missing"):
                 result.setdefault("needs_input", []).append(
-                    f"L050: 제출 HWPX 동일명 PDF 없음 ({gen.reason})"
+                    f"L050: 제출 HWPX 동일명 PDF 없음 ({attempt.get('reason')})"
                 )
         elif hwpx_src and Path(hwpx_src).is_file():
             result["submit_blocked"] = {
