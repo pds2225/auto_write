@@ -82,7 +82,7 @@
       "summary": "블라인드 공고는 성명·대학명·직장명을 ○ 마스킹하고 실명 잔존을 fail로 검출(마스킹 ○○○는 자리표시 오탐 제외)",
       "mechanizable": "yes",
       "category": "mechanized",
-      "guard_ref": "app/auto_write/services/usage_acceptance.py:check_masking_violation(456, blind_review 시 활성)·_is_masked_value(400) / app/tests/test_usage_acceptance.py::test_blind_review_allows_masking·test_blind_review_detects_real_names + blind_review CLI 전파(test_auto_write_apply.py:703~·test_submission_pipeline.py:608~)·test_pure_force_draft_and_mask.py",
+      "guard_ref": "app/auto_write/services/usage_acceptance.py:check_masking_violation(456, blind_review 시 활성)·_is_masked_value(400) / app/tests/test_usage_acceptance.py::test_blind_review_allows_masking·test_blind_review_detects_real_names + blind_review CLI 전파(test_auto_write_apply.py::test_autopilot_forwards_blind_review_to_config·test_autopilot_cli_forwards_blind_review·test_bizplan_forwards_blind_review_to_autopilot·test_bizplan_cli_forwards_blind_review·test_self_diagnose_cli_forwards_blind_review·test_submission_pipeline.py:608~)·test_pure_force_draft_and_mask.py",
       "gap_desc": "",
       "impact": "high",
       "domain": "business_plan"
@@ -102,7 +102,7 @@
       "summary": "없는 실적·수치는 지어내지 말고 [확인필요]/공란 — [확인필요] 잔존 문서는 게이트가 fail→_DRAFT로 제출차단",
       "mechanizable": "partial",
       "category": "mechanized",
-      "guard_ref": "app/auto_write/services/usage_acceptance.py unresolved_markers(_MARKER_RE) 검출→DRAFT + bizplan_ai_writer.py:40·186([확인필요] 강제) / app/tests/test_gate_faildraft_invariant.py(marker→_DRAFT)·test_document_quality_harness.py:328·test_auto_write_apply.py:828(_RESIDUAL_RE)",
+      "guard_ref": "app/auto_write/services/usage_acceptance.py unresolved_markers(_MARKER_RE) 검출→DRAFT + bizplan_ai_writer.py:40·186([확인필요] 강제) / app/tests/test_gate_faildraft_invariant.py(marker→_DRAFT)·test_document_quality_harness.py:328·test_auto_write_apply.py::test_residual_re_matches_confirmation_needed (_RESIDUAL_RE)",
       "gap_desc": "",
       "impact": "high",
       "domain": "business_plan"
@@ -532,7 +532,7 @@
       "summary": "부문(체크박스)과 분야(텍스트)는 별도 행 유지, 원문 구분자(재무·자금)를 '/'로 변조 금지.",
       "mechanizable": "partial",
       "category": "mechanized",
-      "guard_ref": "cross_form_autofill.py:find_checkbox_targets/match_checkbox_groups + tests/test_cross_form_autofill.py::test_checkbox_other_options_preserved (체크박스 별도 그룹·비매칭옵션 보존, 값 verbatim 채움→구분자 미변조)",
+      "guard_ref": "cross_form_autofill.py:find_checkbox_targets/match_checkbox_groups + app/tests/test_hwpx_fill.py::test_checkbox_other_options_preserved (체크박스 별도 그룹·비매칭옵션 보존, 값 verbatim 채움→구분자 미변조)",
       "gap_desc": "",
       "impact": "med",
       "domain": "consultant_application"
