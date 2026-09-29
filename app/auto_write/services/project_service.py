@@ -105,9 +105,17 @@ class ProjectService:
         self._library_snippets: list[dict[str, str]] | None = None
         logging.getLogger("pypdf").setLevel(logging.ERROR)
 
-    def analyze_uploaded_template(self, file_name: str, content: bytes) -> TemplateProfile:
+    def analyze_uploaded_template(
+        self,
+        file_name: str,
+        content: bytes,
+        *,
+        allow_docx_for_hwp: bool = False,
+    ) -> TemplateProfile:
         template_id, output_path = self.storage.create_template_space(file_name)
         output_path.write_bytes(content)
+        if output_path.suffix.lower() == ".hwp" and not allow_docx_for_hwp:
+            return self._analyze_hwp_as_hwpx(template_id, output_path)
         if output_path.suffix.lower() == ".hwpx":
             # HWPX is an immutable source package.  Do not convert it to DOCX
             # for the production fill path; the existing HWPX engine is used
@@ -147,6 +155,66 @@ class ProjectService:
                 except Exception:
                     pass
         profile = sanitize_template_profile(profile)
+        if output_path.suffix.lower() == ".hwp" and allow_docx_for_hwp:
+            native_source = dict(profile.native_source or {})
+            native_source["hwp_docx_opt_in"] = True
+            note = (
+                "HWP 양식을 DOCX로 진행하도록 명시했습니다. "
+                "원본 한글 양식 레이아웃은 이 경로에서 보존되지 않습니다."
+            )
+            notes = list(profile.analysis_notes)
+            if note not in notes:
+                notes.append(note)
+            profile = profile.model_copy(
+                update={"native_source": native_source, "analysis_notes": notes}
+            )
+        self.storage.save_template_profile(profile)
+        return profile
+
+    def _analyze_hwp_as_hwpx(self, template_id: str, output_path: Path) -> TemplateProfile:
+        """Convert an uploaded HWP to HWPX and pin that package. Never fall back to DOCX."""
+        from .hwp_docx_convert import HWP_TO_HWPX_UNAVAILABLE_NOTE, hwp_to_hwpx
+        from .submission_gates import assert_not_announcement_form
+
+        assert_not_announcement_form(output_path)
+        original = output_path.read_bytes()
+        hwpx_path = output_path.with_suffix(".hwpx")
+        try:
+            report = hwp_to_hwpx(output_path, hwpx_path)
+        except Exception:
+            if output_path.is_file() and output_path.read_bytes() != original:
+                output_path.write_bytes(original)
+            if hwpx_path.exists():
+                hwpx_path.unlink()
+            raise
+        if output_path.read_bytes() != original:
+            output_path.write_bytes(original)
+            raise ValueError(
+                "변환 중 HWP 원본이 바뀌어 업로드 바이트로 되돌렸습니다. "
+                + HWP_TO_HWPX_UNAVAILABLE_NOTE
+            )
+        if not report.ok or not hwpx_path.is_file() or hwpx_path.stat().st_size <= 0:
+            if hwpx_path.exists():
+                hwpx_path.unlink()
+            message = next(
+                (note for note in report.notes if "DOCX로 진행" in note),
+                HWP_TO_HWPX_UNAVAILABLE_NOTE,
+            )
+            extras = [note for note in report.notes if note and note != message]
+            if extras:
+                message = f"{message} ({' / '.join(extras)})"
+            raise ValueError(message)
+        profile = TemplateProfile(
+            template_id=template_id,
+            template_name=output_path.name,
+            source_docx="",
+            source_hwpx=str(hwpx_path),
+            native_source={
+                "conversion": report.method,
+                "source_hwp": str(output_path),
+            },
+            analysis_notes=list(report.notes),
+        )
         self.storage.save_template_profile(profile)
         return profile
 
@@ -981,11 +1049,29 @@ class ProjectService:
         except Exception as exc:  # noqa: BLE001 — provenance 실패는 생성에 영향 없음
             log_line(f"[WARN] SFT provenance 저장 실패(무시): {exc}")
 
+    def _hangul_direct_or_refuse(
+        self,
+        project_id: str,
+        profile: TemplateProfile,
+        project_input: ProjectInput,
+    ) -> ArtifactBundle | None:
+        """Route HWP/HWPX to direct-fill. HWP without a pinned HWPX does not become DOCX."""
+        name = profile.template_name.lower()
+        opt_in = bool((profile.native_source or {}).get("hwp_docx_opt_in"))
+        if profile.source_hwpx or name.endswith(".hwpx"):
+            return self._generate_hwpx_direct(project_id, profile, project_input)
+        if name.endswith(".hwp") and not opt_in:
+            from .hwp_docx_convert import HWP_TO_HWPX_UNAVAILABLE_NOTE
+
+            raise ValueError(HWP_TO_HWPX_UNAVAILABLE_NOTE)
+        return None
+
     def generate(self, project_id: str) -> ArtifactBundle:
         profile = self.load_profile_for_project(project_id)
         project_input = self.storage.load_project_input(project_id)
-        if profile.source_hwpx or profile.template_name.lower().endswith(".hwpx"):
-            return self._generate_hwpx_direct(project_id, profile, project_input)
+        hangul = self._hangul_direct_or_refuse(project_id, profile, project_input)
+        if hangul is not None:
+            return hangul
         # P0(SFT): AI 변형 전 입력 스냅샷 — 부수효과, 실패해도 생성 계속.
         pre_answer_keys = set(project_input.answers)
         self._save_sft_input_snapshot(project_id, project_input)

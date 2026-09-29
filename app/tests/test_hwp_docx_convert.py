@@ -16,7 +16,14 @@ import pytest
 from docx import Document
 
 from auto_write.services import hwp_docx_convert as mod
-from auto_write.services.hwp_docx_convert import convert, docx_to_hwp, hwp_to_docx
+from auto_write.services.hwp_docx_convert import (
+    HWP_TO_HWPX_UNAVAILABLE_NOTE,
+    convert,
+    docx_to_hwp,
+    hwp_to_docx,
+    hwp_to_hwpx,
+)
+from core.docx.services import native_hwp
 
 
 # --- 픽스처 도우미 ------------------------------------------------------------
@@ -281,6 +288,100 @@ def test_convert_auto_direction(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(mod, "hancom_com_available", lambda: False)
     r2 = convert(str(docx), str(tmp_path / "o2.hwp"))
     assert r2.direction == "docx->hwp" and r2.ok is False
+
+
+def test_hwp_to_hwpx_without_converter_does_not_write_docx(tmp_path: Path, monkeypatch) -> None:
+    src = tmp_path / "양식.hwp"
+    original = b"OLE-HWP-BYTES"
+    src.write_bytes(original)
+    monkeypatch.setattr(native_hwp, "rhwp_available", lambda: False)
+    monkeypatch.setattr(mod, "hancom_com_available", lambda: False)
+    called: list[str] = []
+
+    def _docx_fallback(*_args, **_kwargs):
+        called.append("docx")
+        raise AssertionError("HWP→HWPX 실패가 DOCX 폴백으로 이어지면 안 됩니다.")
+
+    monkeypatch.setattr("auto_write.document_ingest._convert_hwp_to_docx", _docx_fallback)
+
+    report = hwp_to_hwpx(src, tmp_path / "양식.hwpx")
+
+    assert report.ok is False
+    assert report.direction == "hwp->hwpx"
+    assert HWP_TO_HWPX_UNAVAILABLE_NOTE in report.notes
+    assert "HWPX" in HWP_TO_HWPX_UNAVAILABLE_NOTE
+    assert "DOCX로 진행" in HWP_TO_HWPX_UNAVAILABLE_NOTE
+    assert src.read_bytes() == original
+    assert called == []
+    assert list(tmp_path.glob("*.docx")) == []
+    assert not (tmp_path / "양식.hwpx").exists()
+
+
+def test_hwp_to_hwpx_uses_hangul_com_saveas(tmp_path: Path, monkeypatch) -> None:
+    src = tmp_path / "양식.hwp"
+    original = b"OLE-HWP-BYTES"
+    src.write_bytes(original)
+    out = tmp_path / "양식.hwpx"
+    fake = _FakeHwpCom()
+    monkeypatch.setattr(native_hwp, "rhwp_available", lambda: False)
+    monkeypatch.setattr(mod, "hancom_com_available", lambda: True)
+    monkeypatch.setattr(mod, "_dispatch_hwp", lambda: fake)
+
+    report = hwp_to_hwpx(src, out)
+
+    assert report.ok is True
+    assert report.method == "hancom_com"
+    assert out.read_bytes() == b"FAKE-HWP-BINARY"
+    assert fake.saved[0][1] == "HWPX"
+    assert src.read_bytes() == original
+    assert list(tmp_path.glob("*.docx")) == []
+
+
+def test_hwp_to_hwpx_prefers_rhwp_when_available(tmp_path: Path, monkeypatch) -> None:
+    src = tmp_path / "양식.hwp"
+    src.write_bytes(b"OLE-HWP-BYTES")
+    out = tmp_path / "양식.hwpx"
+    dispatched: list[str] = []
+
+    def _prepare(source, output):
+        assert Path(source).read_bytes() == b"OLE-HWP-BYTES"
+        Path(output).write_bytes(b"PK\x03\x04hwpx")
+        return Path(output), {"conversion": "VERIFIED"}
+
+    monkeypatch.setattr(native_hwp, "rhwp_available", lambda: True)
+    monkeypatch.setattr(native_hwp, "prepare_native_source", _prepare)
+    monkeypatch.setattr(mod, "hancom_com_available", lambda: True)
+    monkeypatch.setattr(mod, "_dispatch_hwp", lambda: dispatched.append("com"))
+
+    report = hwp_to_hwpx(src, out)
+
+    assert report.ok is True
+    assert report.method == "rhwp"
+    assert out.read_bytes().startswith(b"PK")
+    assert dispatched == []
+    assert src.read_bytes() == b"OLE-HWP-BYTES"
+
+
+def test_hwp_to_hwpx_uses_com_after_rhwp_failure(tmp_path: Path, monkeypatch) -> None:
+    src = tmp_path / "양식.hwp"
+    src.write_bytes(b"OLE-HWP-BYTES")
+    out = tmp_path / "양식.hwpx"
+    fake = _FakeHwpCom()
+
+    def _boom(_source, _output):
+        raise RuntimeError("verify failed")
+
+    monkeypatch.setattr(native_hwp, "rhwp_available", lambda: True)
+    monkeypatch.setattr(native_hwp, "prepare_native_source", _boom)
+    monkeypatch.setattr(mod, "hancom_com_available", lambda: True)
+    monkeypatch.setattr(mod, "_dispatch_hwp", lambda: fake)
+
+    report = hwp_to_hwpx(src, out)
+
+    assert report.ok is True
+    assert report.method == "hancom_com"
+    assert any("rhwp" in note for note in report.notes)
+    assert fake.saved[0][1] == "HWPX"
 
 
 def test_cli_main(tmp_path: Path) -> None:

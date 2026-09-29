@@ -15,7 +15,7 @@
     <div class="work-card-head"><div class="number-box">01</div><div><h2>문서 작성</h2><p>신규 작성과 기존 자료 활용을 한 화면에서 처리합니다. 입력 자료를 기존 엔진이 분석합니다.</p></div></div>
     <form class="stack-form" method="post" action="/console/documents/write" enctype="multipart/form-data">
       <div class="field-grid">
-        <label><span>사업계획서 양식 <b class="required">필수</b></span><input type="file" name="template_file" accept=".docx,.hwp,.hwpx" required><small>실제 repo가 지원하는 템플릿 형식만 허용합니다.</small></label>
+        <label><span>사업계획서 양식 <b class="required">필수</b></span><input type="file" name="template_file" accept=".docx,.hwp,.hwpx" required><small>DOCX는 워드 경로입니다. HWP/HWPX는 한글 양식을 유지하고, HWP는 HWPX로 변환합니다.</small></label>
         <label><span>참고자료</span><input type="file" name="reference_files" multiple><small>공고문·기존 사업계획서·기업자료·상담메모 등을 함께 선택</small></label>
       </div>
       <div class="field-grid">
@@ -23,6 +23,7 @@
         <label><span>기업명</span><input type="text" name="organization_name" placeholder="예: 주식회사 예시"></label>
       </div>
       <label><span>작성 지시</span><textarea name="instruction" rows="4" placeholder="예: 기존 자료의 사실만 활용하고 이번 공고 평가항목에 맞게 사업계획서를 작성해줘."></textarea></label>
+      <label><span>HWP 예외</span><span class="inline-note"><input type="checkbox" name="allow_docx_for_hwp" value="1"> DOCX로 진행 (원본 HWP 레이아웃은 유지되지 않습니다. 기본은 한글 HWPX 변환)</span></label>
       <div class="form-actions"><button class="btn btn-primary" type="submit">기존 엔진으로 문서 작성</button><span class="inline-note">양식 분석 → DomainRouter → L 규칙 참조 → ProjectService.generate</span></div>
     </form>
   </article>
@@ -32,6 +33,7 @@
       <label><span>기존 문서 <b class="required">필수</b></span><input type="file" name="document_file" accept=".docx,.hwp,.hwpx" required></label>
       <label><span>수정 지시 <b class="required">필수</b></span><textarea name="instruction" rows="4" required placeholder="예: 시장분석 부분만 수치 근거 중심으로 보완하고 나머지 구조는 유지해줘."></textarea></label>
       <label><span>결과 문서명</span><input type="text" name="project_title" placeholder="비워두면 원본명 + 수정본"></label>
+      <label><span>HWP 예외</span><span class="inline-note"><input type="checkbox" name="allow_docx_for_hwp" value="1"> DOCX로 진행 (원본 HWP 레이아웃은 유지되지 않습니다. 기본은 한글 HWPX 변환)</span></label>
       <button class="btn btn-secondary" type="submit">수정본 생성</button>
     </form>
   </article>
