@@ -12,6 +12,7 @@ from pathlib import Path
 from auto_write.services import hwpx_submit as hs
 from auto_write.services.submission_gates import (
     L005_CHECKLIST,
+    hangul_gui_available,
     hangul_pdf_tool,
     l005_pixel_review_status,
     l050_mechanization_status,
@@ -89,8 +90,18 @@ def test_rhwp_exe_beats_path_and_export_args(tmp_path: Path, monkeypatch) -> Non
     assert calls[0][1:4] == ["export-pdf", str(src.resolve()), "-o"]
     assert calls[0][4] == str((tmp_path / "신청서.pdf").resolve())
     assert "soffice" not in " ".join(calls[0]).lower()
-    assert gen.evidence == ""
-    assert not (tmp_path / "신청서.l050.json").exists()
+    # Evidence JSON is written only on win32. Either host must keep mechanized false,
+    # and a call with no artifact path stays BLOCKED.
+    if sys.platform == "win32":
+        evidence = Path(gen.evidence)
+        assert evidence.name == "신청서.l050.json"
+        assert evidence.is_file()
+        proved = l050_mechanization_status(evidence)
+        assert proved["status"] == "GENERATED"
+        assert proved["mechanized"] is False
+    else:
+        assert gen.evidence == ""
+        assert not (tmp_path / "신청서.l050.json").exists()
     claim = l050_mechanization_status()
     assert claim["status"] == "BLOCKED"
     assert claim["mechanized"] is False
@@ -169,9 +180,15 @@ def test_linux_ignores_windows_l050_evidence(tmp_path: Path, monkeypatch) -> Non
         encoding="utf-8",
     )
     claim = l050_mechanization_status(evidence)
-    assert sys.platform != "win32"
-    assert claim["status"] == "BLOCKED"
     assert claim["mechanized"] is False
+    if sys.platform == "win32":
+        assert claim["status"] == "GENERATED"
+    else:
+        assert claim["status"] == "BLOCKED"
+    monkeypatch.setattr(gates.sys, "platform", "linux")
+    ignored = l050_mechanization_status(evidence)
+    assert ignored["status"] == "BLOCKED"
+    assert ignored["mechanized"] is False
     monkeypatch.setattr(gates.sys, "platform", "win32")
     promoted = l050_mechanization_status(evidence)
     assert promoted["status"] == "GENERATED"
@@ -198,21 +215,31 @@ def test_win32_export_writes_evidence_but_not_mechanized(tmp_path: Path, monkeyp
     assert _lesson("L050")["category"] == "gap"
 
 
-def test_l005_linux_stays_blocked_even_with_screenshot(tmp_path: Path) -> None:
+def test_l005_linux_stays_blocked_even_with_screenshot(tmp_path: Path, monkeypatch) -> None:
     assert _lesson("L005")["category"] == "judgment"
     shot = tmp_path / "screen.png"
     shot.write_bytes(b"\x89PNG\r\nnot-a-hangul-pixel-review")
+    packet = tmp_path / "packet"
     status = record_l005_pixel_review(
-        tmp_path / "packet",
+        packet,
         document=tmp_path / "신청서.hwpx",
         checklist={key: True for key in L005_CHECKLIST},
         screenshot=shot,
     )
-    assert status["status"] == "BLOCKED"
     assert status["logic_review_is_verification"] is False
     assert status["pytest_pass_counts"] is False
-    bare = l005_pixel_review_status(tmp_path / "packet")
-    assert bare["status"] == "BLOCKED"
+    assert status["status"] == l005_pixel_review_status(packet)["status"]
+    if sys.platform != "win32":
+        assert status["status"] == "BLOCKED"
+    elif hangul_gui_available():
+        assert status["status"] == "PASS"
+    else:
+        assert status["status"] == "NEEDS_HANGUL_GUI"
+    monkeypatch.setattr(gates.sys, "platform", "linux")
+    blocked = l005_pixel_review_status(packet)
+    assert blocked["status"] == "BLOCKED"
+    assert blocked["logic_review_is_verification"] is False
+    assert blocked["pytest_pass_counts"] is False
 
 
 def test_l005_template_and_incomplete_packet_are_not_pass(tmp_path: Path, monkeypatch) -> None:
@@ -303,7 +330,11 @@ def test_submit_hwpx_attempts_sibling_pdf_only_when_submittable(tmp_path: Path, 
     assert calls == [requested]
     assert report.pdf_pair["mechanized"] is False
     assert report.pdf_pair["claim_status"] == "BLOCKED"
-    assert report.l005_review["status"] == "BLOCKED"
+    # submit_hwpx does not record a screenshot, so L005 cannot be PASS.
+    live_l005 = l005_pixel_review_status()
+    assert live_l005["status"] != "PASS"
+    assert live_l005["logic_review_is_verification"] is False
+    assert report.l005_review["status"] == live_l005["status"]
     assert report.l005_review["logic_review_is_verification"] is False
     assert not (tmp_path / "result.pdf").exists()
 
@@ -318,7 +349,9 @@ def test_submit_hwpx_attempts_sibling_pdf_only_when_submittable(tmp_path: Path, 
     )
     assert blocked.submittable is False
     assert calls == []
-    assert blocked.l005_review["status"] == "BLOCKED"
+    assert blocked.l005_review["status"] == live_l005["status"]
+    assert blocked.l005_review["status"] != "PASS"
+    assert blocked.l005_review["logic_review_is_verification"] is False
 
 
 def test_document_pdf_uses_rhwp_exe(tmp_path: Path, monkeypatch) -> None:
