@@ -309,7 +309,8 @@ def test_web_stacked_protections_match_direct_submit(client, tmp_path):
     assert any(note == "[repeated-row] 직원명 row=14 col=1 UNFILLED" for note in notes)
     assert any(note.startswith("[duplicate-label] 팩스 ") for note in notes)
     assert not any("팩스" in note and note.endswith("GRANT_WRITTEN") for note in notes)
-    assert not any("기업명" in note and note.endswith("GRANT_WRITTEN") for note in notes)
+    assert "[t02] 속기업명 GRANT_WRITTEN" in notes
+    assert "[t02] 기업명 GRANT_WRITTEN" not in notes
     assert not any("서명" in note and note.endswith("GRANT_WRITTEN") for note in notes)
     assert "성명" not in routing["filled"]
     assert "매출" not in routing["filled"]

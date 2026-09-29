@@ -43,6 +43,13 @@ UNIT_FILES = [
     "app/tests/test_hwpx_protected_regions.py",
     "app/tests/test_hwpx_exact_write.py",
     "app/tests/test_hwpx_t02_auto.py",
+    "app/tests/test_hwpx_merged_value.py",
+    "app/tests/test_hwpx_nested_leaf.py",
+    "app/tests/test_hwpx_repeated_row.py",
+    "app/tests/test_hwpx_guidance_narrative.py",
+    "app/tests/test_hwpx_inline_field.py",
+    "app/tests/test_hwpx_choice_date_sign.py",
+    "app/tests/test_hwpx_existing_value_form.py",
     "app/tests/test_hwpx_safety_runner.py",
 ]
 GOLDEN_FILES = ["app/tests/test_hwpx_safety_golden10.py"]
