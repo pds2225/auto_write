@@ -8,7 +8,7 @@ from urllib.parse import quote
 from fastapi import File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
-from core.docx.services.cross_form_autofill import autofill_from_source
+from core.docx.services.cross_form_autofill import autofill_from_source, extract_source_fields
 from core.docx.services.hwp_docx_convert import docx_to_hwp, hwp_to_docx
 
 from .access_gate import git_writes_allowed
@@ -231,6 +231,34 @@ def _prefill_template_from_references(
     return template_name, template_bytes, stats
 
 
+def _hwpx_identity_from_references(
+    refs: list[tuple[str, bytes]], organization_name: str = ""
+) -> dict[str, str]:
+    """Build direct-fill labels from supplied DOCX facts only.
+
+    The target HWPX is never converted.  Existing source-field extraction is
+    reused for DOCX references; HWP/HWPX references remain available as
+    references for provenance/text extraction but are not guessed into fields.
+    """
+    identity: dict[str, str] = {}
+    if organization_name.strip():
+        identity["기업명"] = organization_name.strip()
+    for name, content in refs:
+        if Path(name).suffix.lower() != ".docx" or not content:
+            continue
+        with tempfile.TemporaryDirectory(prefix="auto_write_hwpx_source_") as work_dir:
+            source = Path(work_dir) / Path(name).name
+            try:
+                source.write_bytes(content)
+                fields = extract_source_fields(str(source))
+            except Exception:
+                continue
+        for label, value in fields.items():
+            if str(value).strip():
+                identity.setdefault(str(label), str(value))
+    return identity
+
+
 async def _read_upload(upload: UploadFile) -> tuple[str, bytes]:
     name = sanitize_user_filename(upload.filename or "upload.bin")
     return name, await upload.read()
@@ -267,7 +295,13 @@ async def _run_document_generation(
             "errors": [],
             "reason": "수정·보완 경로는 기존 문서를 직접 재작성 입력으로 사용",
         }
-        if run_kind == "write":
+        is_hwpx_template = Path(template_name).suffix.lower() == ".hwpx"
+        if is_hwpx_template:
+            cross_form_stats["mode"] = "hwpx_direct_fill"
+            cross_form_stats["reason"] = (
+                "HWPX 원본을 source of truth로 유지하고 기존 direct-fill을 사용"
+            )
+        if run_kind == "write" and not is_hwpx_template:
             workflow_monitor.start_step(
                 run_id,
                 "cross_form",
@@ -324,6 +358,11 @@ async def _run_document_generation(
                 organization_name=organization_name,
                 evidence_topics="",
                 reference_files=refs,
+                hwpx_identity=(
+                    _hwpx_identity_from_references(refs, organization_name)
+                    if is_hwpx_template
+                    else None
+                ),
                 improve_partial=True,
                 psst_only=True,
                 disable_images=True,
@@ -344,9 +383,12 @@ async def _run_document_generation(
             project_service.generate(project_id)
 
         result = _result_docx(project_id)
-        if not result or not result.is_file() or result.stat().st_size <= 0:
-            raise RuntimeError("생성 엔진이 비어 있지 않은 DOCX 작업본을 만들지 못했습니다.")
         hangul = _result_hangul(project_id)
+        if (
+            (not result or not result.is_file() or result.stat().st_size <= 0)
+            and (not hangul or not hangul.is_file() or hangul.stat().st_size <= 0)
+        ):
+            raise RuntimeError("생성 엔진이 비어 있지 않은 DOCX/HWPX 산출물을 만들지 못했습니다.")
         user_facing = hangul if hangul is not None else result
 
         workflow_monitor.finish_run(
@@ -473,9 +515,11 @@ async def operator_convert_document(
 async def operator_result(request: Request, project_id: str):
     result = _result_docx(project_id)
     if not result:
-        raise HTTPException(status_code=404, detail="결과 DOCX를 찾을 수 없습니다.")
+        result = _result_hangul(project_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="결과 DOCX/HWPX를 찾을 수 없습니다.")
     lock_path = _project_output_dir(project_id) / "user_locks.json"
-    blocks = docx_editor.load_blocks(result)
+    blocks = docx_editor.load_blocks(result) if result.suffix.lower() == ".docx" else []
     locks = docx_editor.load_locks(lock_path)
     for block in blocks:
         block["locked"] = block["id"] in locks

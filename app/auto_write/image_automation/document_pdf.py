@@ -77,15 +77,26 @@ def convert_docx_to_pdf(docx_path: Path, pdf_path: Path) -> Path:
 
 
 def convert_hwp_family_to_pdf(src: Path, pdf_path: Path) -> Path:
-    """rhwp export-pdf <입력> -o <출력>."""
+    """``RHWP_EXE`` 또는 PATH 의 rhwp 로 ``export-pdf <입력> -o <출력>``.
+
+    soffice 와 한글 COM PDF 는 쓰지 않는다.
+    """
+    from core.docx.services.native_hwp import resolve_rhwp_executable
+
     src = Path(src).resolve()
     pdf_path = Path(pdf_path).resolve()
     pdf_path.parent.mkdir(parents=True, exist_ok=True)
-    cmd = ["rhwp", "export-pdf", str(src), "-o", str(pdf_path)]
+    exe = resolve_rhwp_executable()
+    if not exe:
+        raise RuntimeError(
+            "rhwp 가 없습니다. RHWP_EXE 또는 PATH 의 rhwp 가 필요합니다. "
+            "LibreOffice/soffice 와 한글 COM PDF 는 이 경로에서 쓰지 않습니다."
+        )
+    cmd = [exe, "export-pdf", str(src), "-o", str(pdf_path)]
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     except FileNotFoundError as exc:
-        raise RuntimeError("rhwp 가 PATH에 없습니다. HWP/HWPX→PDF 변환에 필요합니다.") from exc
+        raise RuntimeError("rhwp 실행 파일을 띄우지 못했습니다. RHWP_EXE 경로를 확인하세요.") from exc
     if proc.returncode != 0 or not pdf_path.is_file():
         raise RuntimeError(
             f"rhwp export-pdf 실패 (exit={proc.returncode}): {(proc.stderr or proc.stdout)[:400]}"

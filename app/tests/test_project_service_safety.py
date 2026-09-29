@@ -4,6 +4,7 @@ import json
 import os
 import tempfile
 import unittest
+import zipfile
 from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
@@ -19,6 +20,38 @@ from auto_write.services.project_service import ProjectService
 from auto_write.services.qa_service import QAService
 from auto_write.services.render_service import RenderService
 from auto_write.storage import Storage
+
+
+_HP = "http://www.hancom.co.kr/hwpml/2011/paragraph"
+_HS = "http://www.hancom.co.kr/hwpml/2011/section"
+_HH = "http://www.hancom.co.kr/hwpml/2011/head"
+
+
+def _minimal_hwpx_bytes() -> bytes:
+    header = (
+        f'<hh:head xmlns:hh="{_HH}"><hh:refList>'
+        '<hh:charProperties itemCnt="1"><hh:charPr id="0" textColor="000000"/>'
+        "</hh:charProperties></hh:refList></hh:head>"
+    ).encode("utf-8")
+    section = (
+        f'<hs:sec xmlns:hp="{_HP}" xmlns:hs="{_HS}">'
+        '<hp:p><hp:run charPrIDRef="0"><hp:tbl rowCnt="1" colCnt="2">'
+        '<hp:tr><hp:tc><hp:cellAddr colAddr="0" rowAddr="0"/>'
+        '<hp:cellSpan colSpan="1" rowSpan="1"/><hp:subList><hp:p>'
+        '<hp:run charPrIDRef="0"><hp:t>상호</hp:t></hp:run></hp:p></hp:subList>'
+        '</hp:tc><hp:tc><hp:cellAddr colAddr="1" rowAddr="0"/>'
+        '<hp:cellSpan colSpan="1" rowSpan="1"/><hp:subList><hp:p>'
+        '<hp:run charPrIDRef="0"><hp:t></hp:t></hp:run></hp:p></hp:subList>'
+        "</hp:tc></hp:tr></hp:tbl></hp:run></hp:p></hs:sec>"
+    ).encode("utf-8")
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        info = zipfile.ZipInfo("mimetype")
+        info.compress_type = zipfile.ZIP_STORED
+        archive.writestr(info, b"application/hwp+zip")
+        archive.writestr("Contents/header.xml", header)
+        archive.writestr("Contents/section0.xml", section)
+    return buffer.getvalue()
 
 
 def build_settings(root: Path, reference_library_dir: Path | None = None) -> Settings:
@@ -280,6 +313,41 @@ class ProjectServiceSafetyTests(unittest.TestCase):
         self.assertEqual(source_path.name, "정부 지원서 2026.docx")
         self.assertEqual(source_path.parent, self.storage.template_dir(profile.template_id))
         self.assertTrue(source_path.exists())
+
+    def test_hwpx_upload_skips_docx_conversion_and_generates_directly(self):
+        source_bytes = _minimal_hwpx_bytes()
+        with patch(
+            "auto_write.services.project_service.ensure_template_docx",
+            side_effect=AssertionError("HWPX must not enter DOCX conversion"),
+        ) as convert:
+            profile = self.service.analyze_uploaded_template("form.hwpx", source_bytes)
+            project_id = self.service.create_project(profile.template_id, "HWPX 직접 작성")
+            self.service.save_project_form(
+                project_id=project_id,
+                answers={},
+                project_title="HWPX 직접 작성",
+                organization_name="직접입력(주)",
+                evidence_topics="",
+                reference_files=[],
+            )
+            artifacts = self.service.generate(project_id)
+
+        convert.assert_not_called()
+        self.assertEqual(profile.source_docx, "")
+        self.assertTrue(profile.source_hwpx.endswith("form.hwpx"))
+        self.assertEqual(artifacts.output_docx, "")
+        self.assertTrue(Path(artifacts.output_hwpx).is_file())
+        self.assertTrue(Path(artifacts.results_hwpx).is_file())
+        self.assertTrue(Path(artifacts.qa_report).is_file())
+        self.assertFalse((self.storage.project_dir(project_id) / "output" / "output.docx").exists())
+        self.assertEqual(
+            self.storage.load_project_input(project_id).project_meta.get("hwpx_routing_status"),
+            "NORMAL",
+        )
+        self.assertEqual(
+            Path(profile.source_hwpx).read_bytes(),
+            source_bytes,
+        )
 
     def test_storage_rejects_path_like_internal_ids(self):
         for invalid_id in ("../outside", r"..\outside", r"C:\outside", r"\\server\share", ".", ""):

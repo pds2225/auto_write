@@ -102,7 +102,12 @@ def test_l005_stays_judgment_and_pixel_review_blocked_here():
         assert status["status"] == "BLOCKED"
 
 
-def test_l050_stays_gap_and_generate_blocked_without_rhwp(tmp_path: Path):
+def test_l050_stays_gap_and_generate_blocked_without_rhwp(tmp_path: Path, monkeypatch):
+    monkeypatch.delenv("RHWP_EXE", raising=False)
+    monkeypatch.setattr(
+        "core.docx.services.native_hwp.shutil.which",
+        lambda _name: None,
+    )
     row = _lesson("L050")
     assert row["category"] == "gap"
     final = tmp_path / "신청서.hwpx"

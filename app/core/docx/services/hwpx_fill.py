@@ -32,6 +32,7 @@ OWPML 표 구조(실측)
 - **날조 0**: 사용자가 준 identity/replacements 값만 입력한다. 없으면 안 채운다.
 - **덮어쓰기 금지**: 비었거나 '명백한 예시 플레이스홀더'인 칸에만 입력한다.
   실제 값이 든 칸·라벨 칸은 절대 덮지 않는다(오매칭<빈칸<덮어쓰기).
+  실값 때문에 건너뛴 identity 는 ``[existing] … EXISTING_VALUE`` 로 남긴다.
   replacements(직접 치환)도 채울 수 있는 칸 안에서만 적용한다(라벨/실값 보호).
 - AI 호출 없음 — 동일 입력, 동일 결과(결정론).
 
@@ -42,6 +43,8 @@ OWPML 표 구조(실측)
 from __future__ import annotations
 
 import copy
+import hashlib
+import io
 import os
 import re
 import zipfile
@@ -56,6 +59,7 @@ from .cross_form_autofill import (
     _CHECK_MARK,
     _EMPTY_BOX_RE,
     _cluster_rep,
+    _is_fill_blank,
     _is_noise_label,
     _is_obvious_placeholder,
     _is_visible_blank,
@@ -85,14 +89,166 @@ def _direct(el, name: str) -> list:
 
 
 def _cell_texts(tc) -> list:
-    """셀 안의 모든 hp:t 요소(순서대로)."""
-    return [el for el in tc.iter(_q("t"))]
+    """이 셀 직속의 hp:t. 중첩 표 안 글자는 자식 칸의 것이다."""
+    return [el for el in tc.iter(_q("t")) if _nearest_cell(el) is tc]
+
+
+def _cell_has_nested_table(tc) -> bool:
+    """이 칸이 자식 표를 품으면 True. 더 안쪽 칸의 표는 그 칸 것이다."""
+    if tc is None:
+        return False
+    return any(_nearest_cell(tbl) is tc for tbl in tc.iter(_q("tbl")))
+
+
+def _hold_exact_label(held: set | None, cell_key: str, want_key: str) -> None:
+    """정확히 맞는 라벨 칸을 거절했을 때, 그 항목이 다른 라벨로 새지 않게 한다.
+
+    같은 라벨의 다른 빈 칸(반복 행)은 그대로 둔다. 동의어 칸은 자기 항목으로만 채운다.
+    """
+    if held is not None and cell_key == want_key:
+        held.add(want_key)
+
+
+def _held_for_other_label(held: set | None, cell_key: str, want_key: str) -> bool:
+    return bool(held) and want_key in held and cell_key != want_key
 
 
 def _cell_text(tc) -> str:
     """셀의 표시 텍스트(hp:t 결합, 공백 정규화)."""
     parts = [str(el.text or "") for el in _cell_texts(tc)]
     return re.sub(r"\s+", " ", "".join(parts)).strip()
+
+
+def _split_value_spans(tc) -> bool:
+    """값 글자가 둘 이상의 hp:t 에 나뉘어 있으면 True.
+
+    ``_set_cell_text`` 는 첫 hp:t 에 값을 넣고 나머지 hp:t 를 비운다.
+    공백이 아닌 글자가 뒤 span 에 있거나, 그 글자가 첫 span 이 아니면
+    형제 run 을 지우거나 빈 span 으로 합친다. 그 칸은 기입하지 않는다.
+    전부 비어 있는 추가 hp:t 는 기존 빈 칸 기입을 막지 않는다.
+    """
+    nodes = _cell_texts(tc)
+    if len(nodes) <= 1:
+        return False
+    meaningful = [
+        index for index, node in enumerate(nodes) if (node.text or "").strip()
+    ]
+    if len(meaningful) >= 2:
+        return True
+    return bool(meaningful) and meaningful[0] != 0
+
+
+def _note_unfilled_span(bucket: list, label: str, tc=None) -> None:
+    """run/span 경계 때문에 안 채운 칸을 residual 과 별도로 남긴다."""
+    _note_region(bucket, "span", label, tc)
+
+
+def _real_existing_text(text: str) -> bool:
+    """Real prose or numbers. Empty scaffolds and fill-in placeholders are not.
+
+    Obvious placeholders (``0000년 00월 00일``, ``000-00-00000``, ``000억원``),
+    underscore blanks, date scaffolds, and choice marks stay on their own gates.
+    """
+    raw = str(text or "")
+    if not raw.strip():
+        return False
+    if _is_obvious_placeholder(raw) or _is_fill_blank(raw):
+        return False
+    from core.docx.services.hwpx_protected_regions import (
+        _CHOICE_MARK_RE,
+        _is_date_scaffold_paragraph,
+    )
+    if _is_date_scaffold_paragraph(raw) or _CHOICE_MARK_RE.search(raw):
+        return False
+    return True
+
+
+def _note_existing_value(bucket: list, label: str, tc=None, labels: list | None = None) -> None:
+    """Record a skipped write when the cell already holds a real value."""
+    row = col = None
+    if tc is not None:
+        addr = next(iter(_direct(tc, "cellAddr")), None)
+        if addr is not None:
+            if addr.get("rowAddr") is not None:
+                row = _int_attr(addr, "rowAddr", -1)
+            if addr.get("colAddr") is not None:
+                col = _int_attr(addr, "colAddr", -1)
+    shown = str(label or "value")
+    if row is not None and col is not None:
+        note = f"[existing] {shown} row={row} col={col} EXISTING_VALUE"
+    else:
+        note = f"[existing] {shown} EXISTING_VALUE"
+    if note not in bucket:
+        bucket.append(note)
+    if labels is not None and label and label not in labels:
+        labels.append(label)
+
+
+# 손글씨·도장 이미지. line/rect 는 빈칸 밑줄로 자주 쓰이므로 여기 넣지 않는다.
+_HANDWRITTEN_OBJECT_TAGS = ("pic", "ole", "drawText", "textart")
+_SEAL_PAREN_RE = re.compile(
+    r"[\(（]\s*(?:서명|날인|직인|인감|인|印|署名|捺印|도장|sign|seal)\s*[\)）]",
+    re.IGNORECASE,
+)
+
+
+def _note_region(bucket: list, kind: str, label: str, tc=None) -> None:
+    """안 채운 칸의 이유를 ``[kind] … UNFILLED`` 로 남긴다."""
+    row = col = None
+    if tc is not None:
+        addr = next(iter(_direct(tc, "cellAddr")), None)
+        if addr is not None:
+            if addr.get("rowAddr") is not None:
+                row = _int_attr(addr, "rowAddr", -1)
+            if addr.get("colAddr") is not None:
+                col = _int_attr(addr, "colAddr", -1)
+    if row is not None and col is not None:
+        note = f"[{kind}] {label} row={row} col={col} UNFILLED"
+    else:
+        note = f"[{kind}] {label} UNFILLED"
+    if note not in bucket:
+        bucket.append(note)
+
+
+def _nearest_cell(el):
+    cur = el
+    while cur is not None:
+        if _local(getattr(cur, "tag", "")) == "tc":
+            return cur
+        cur = cur.getparent()
+    return None
+
+
+def _has_handwritten_object(tc) -> bool:
+    """이 셀 자신의 그림·OLE·글상자가 있으면 True. 중첩 표 안 객체는 제외."""
+    if tc is None:
+        return False
+    for name in _HANDWRITTEN_OBJECT_TAGS:
+        for el in tc.iter(_q(name)):
+            if _nearest_cell(el) is tc:
+                return True
+    return False
+
+
+def _signature_seal_label(text: str) -> bool:
+    """서명·날인·직인 칸. ``부서명``·``겸직인력``·``성명 (서명)`` 은 제외.
+
+    괄호 안 도장 표시를 뺀 뒤에 남은 라벨만 본다. ``성명 (서명)`` 의 값칸은
+    이름 칸이고, ``서명`` / ``서명 : ______`` 은 서명 칸이다.
+    """
+    stripped = _SEAL_PAREN_RE.sub("", str(text or ""))
+    compact = re.sub(r"\s+", "", stripped).rstrip(":：_")
+    if not compact:
+        return bool(str(text or "").strip())
+    without_department = compact.replace("부서명", "")
+    if "서명" in without_department or "날인" in without_department:
+        return True
+    without_concurrent = compact.replace("겸직인", "")
+    if "직인" in without_concurrent:
+        return True
+    if "인감" in compact and "인감증명" not in compact:
+        return True
+    return False
 
 
 def _int_attr(el, name: str, default: int) -> int:
@@ -353,17 +509,22 @@ def _set_cell_text(tc, value: str, black: Optional[_BlackCharPr] = None) -> bool
     """셀의 텍스트를 value 로 설정한다(첫 hp:t 에 기입, 나머지 hp:t 는 비움).
 
     빈/플레이스홀더 칸에만 호출되므로 잔여 hp:t 를 비워도 실데이터 손실은 없다.
+    다만 공백이 아닌 글자가 첫 hp:t 가 아닌 span 에 있거나 여러 span 에 나뉘면
+    False 를 반환하고 아무 글자도 바꾸지 않는다(형제 run 보존).
     hp:t/hp:run 이 없으면 단락 서식(charPrIDRef 승계)을 유지하며 최소 생성한다.
     black 이 주어지면 값이 들어간 run 의 유색 charPr 를 검정 클론으로 바꾼다.
 
     L086: 폼 컨트롤(checkBtn 등)이 든 칸에는 텍스트를 절대 기입하지 않는다 —
     ``_cell_is_fillable`` 우회·resume 경로에서도 이중 표시를 막기 위한 최종 방어핀.
+    그림·OLE·글상자(손글씨/도장)가 있는 칸도 같은 이유로 기입하지 않는다.
 
     L002/L145: 기입에 성공하면 그 칸의 ``hp:linesegarray`` 를 즉시 제거한다.
     호출자가 ``fill_hwpx`` 파이프라인·별도 strip 을 잊어도 옛 줄좌표에 새 글씨가
     겹치지 않는다. 형제 칸은 건드리지 않는다(L074).
     """
-    if _has_form_control(tc):
+    if _has_form_control(tc) or _has_handwritten_object(tc) or _cell_has_nested_table(tc):
+        return False
+    if _split_value_spans(tc):
         return False
     paras = list(tc.iter(_q("p")))
     if not paras:
@@ -410,14 +571,8 @@ def _inline_texts(p) -> list:
     return texts
 
 
-def _splice_run_text(p, fill_start: int, fill_end: int, value: str) -> bool:
-    """p 직계 텍스트 흐름의 flat 문자 구간 [fill_start, fill_end) 만 value 로 교체.
-
-    형제 run/hp:t 의 텍스트·charPrIDRef 는 전부 보존한다(대상 hp:t 의 text 만 수정).
-    flat 문자열은 _inline_texts(p) 의 text 를 공백 정규화 없이 그대로 이어붙인 것과
-    동일해야 한다. 구간이 두 hp:t 에 걸치면(cross-run span) 채우지 않고 False
-    (오채움<빈칸 — 보수적 skip).
-    """
+def _locate_inline_span(p, fill_start: int, fill_end: int):
+    """flat 구간이 걸친 (start hp:t, offset, end hp:t, offset). 못 찾으면 None."""
     ts = _inline_texts(p)
     pos = 0
     start_t = start_off = end_t = end_off = None
@@ -429,6 +584,24 @@ def _splice_run_text(p, fill_start: int, fill_end: int, value: str) -> bool:
             end_t, end_off = t, fill_end - pos
             break
         pos += len(s)
+    return start_t, start_off, end_t, end_off
+
+
+def _span_crosses_text_nodes(p, fill_start: int, fill_end: int) -> bool:
+    """채울 구간이 둘 이상의 hp:t(run 또는 같은 run 의 문자 span)에 걸치면 True."""
+    start_t, _, end_t, _ = _locate_inline_span(p, fill_start, fill_end)
+    return start_t is not None and end_t is not None and start_t is not end_t
+
+
+def _splice_run_text(p, fill_start: int, fill_end: int, value: str) -> bool:
+    """p 직계 텍스트 흐름의 flat 문자 구간 [fill_start, fill_end) 만 value 로 교체.
+
+    형제 run/hp:t 의 텍스트·charPrIDRef 는 전부 보존한다(대상 hp:t 의 text 만 수정).
+    flat 문자열은 _inline_texts(p) 의 text 를 공백 정규화 없이 그대로 이어붙인 것과
+    동일해야 한다. 구간이 두 hp:t 에 걸치면(cross-run/span) 채우지 않고 False
+    (오채움<빈칸 — 보수적 skip).
+    """
+    start_t, start_off, end_t, end_off = _locate_inline_span(p, fill_start, fill_end)
     if start_t is None or end_t is None:
         return False
     if start_t is not end_t:
@@ -439,16 +612,27 @@ def _splice_run_text(p, fill_start: int, fill_end: int, value: str) -> bool:
     return True
 
 
-def _fill_inline_fields_in_p(p, wants, used_keys: set, filled: dict) -> bool:
+def _fill_inline_fields_in_p(
+    p, wants, used_keys: set, filled: dict, span_notes: Optional[list] = None,
+    existing_labels: Optional[list] = None,
+    exact_held: Optional[set] = None,
+) -> bool:
     """hp:p 하나의 인라인 필드(`라벨 : ______`)를 채운다 — 1.5(셀)·1.8(본문) 공용 커널.
 
     '가시 빈칸'(밑줄/점/대시 채움선)만 채운다(_is_visible_blank) — '라벨 :'(콜론+공백만)
     은 옆 값칸·산문과 구별이 안 되므로 제외(_is_fill_blank 금지). flat 은 _inline_texts
     의 직계 hp:t 를 문서순 그대로 결합(공백 정규화 금지, AC9)하고, 역순 스플라이스로
     앞 필드 offset 을 보존한다. 형제 run 의 텍스트·charPrIDRef 보존은 _splice_run_text
-    가 보장(대상 hp:t 부분 교체만). used_keys 는 표(1)/인라인(1.5)/체크박스(1.7)/
-    본문(1.8)이 공유한다(이중 기입 금지). 반환: 이 단락에서 하나라도 채웠으면 True.
+    가 보장(대상 hp:t 부분 교체만). 구간이 둘 이상의 hp:t 에 걸치면 채우지 않고
+    span_notes 에 ``[span] … UNFILLED`` 를 남긴다. 콜론 뒤가 실값이면 덮지 않고
+    ``[existing] … EXISTING_VALUE`` 를 남긴다. used_keys 는 표(1)/인라인(1.5)/
+    체크박스(1.7)/본문(1.8)이 공유한다(이중 기입 금지). 반환: 이 단락에서 하나라도
+    채웠으면 True.
     """
+    if span_notes is None:
+        span_notes = []
+    if existing_labels is None:
+        existing_labels = []
     ts = _inline_texts(p)
     if not ts:
         return False
@@ -459,7 +643,9 @@ def _fill_inline_fields_in_p(p, wants, used_keys: set, filled: dict) -> bool:
     fields = list(_iter_line_fields(flat))
     # 역순 스플라이스: 뒤 구간부터 교체해야 앞 필드 offset 이 유효.
     for label_raw, value_raw, f_start, f_end in reversed(fields):
-        if not _is_visible_blank(value_raw):
+        visible = _is_visible_blank(value_raw)
+        real_value = _real_existing_text(value_raw)
+        if not visible and not real_value:
             continue
         field_key = _key(label_raw)
         if not field_key:
@@ -467,8 +653,27 @@ def _fill_inline_fields_in_p(p, wants, used_keys: set, filled: dict) -> bool:
         for want_key, lbl, val in wants:
             if want_key in used_keys:
                 continue
+            if _held_for_other_label(exact_held, field_key, want_key):
+                continue
             if not _label_matches(field_key, want_key):
                 continue
+            if _signature_seal_label(label_raw) or _signature_seal_label(lbl):
+                _note_region(span_notes, "signature", lbl, _tc_of(p))
+                _hold_exact_label(exact_held, field_key, want_key)
+                break
+            owner = _tc_of(p)
+            if owner is not None and _has_handwritten_object(owner):
+                _note_region(span_notes, "handwritten", lbl, owner)
+                _hold_exact_label(exact_held, field_key, want_key)
+                break
+            if not visible:
+                _note_existing_value(span_notes, lbl, owner, existing_labels)
+                _hold_exact_label(exact_held, field_key, want_key)
+                break
+            if _span_crosses_text_nodes(p, f_start, f_end):
+                _note_unfilled_span(span_notes, lbl, _tc_of(p))
+                _hold_exact_label(exact_held, field_key, want_key)
+                break
             if _splice_run_text(p, f_start, f_end, " " + str(val)):
                 filled[lbl] = str(val)
                 used_keys.add(want_key)
@@ -677,6 +882,11 @@ def _apply_line_edits(
                 if not _cell_is_fillable(hit[0]):
                     notes.append(f"칸에 이미 값 있음(덮어쓰기 금지, colAddr={col}): {anchor[:24]}")
                     continue
+                if _split_value_spans(hit[0]):
+                    notes.append(
+                        f"칸 기입 보류(run 경계 분할, colAddr={col}): {anchor[:24]}"
+                    )
+                    continue
                 if _set_cell_text(hit[0], str(val), black):
                     applied += 1
                     edited.append(hit[0])
@@ -750,9 +960,44 @@ def _cell_is_fillable(tc) -> bool:
     폼 컨트롤(체크박스·입력필드 등)이 든 칸은 텍스트가 비어 보여도 채우지 않는다
     (컨트롤과 글자 이중 표시 방지 — 실측: 수원 멘토위원 신청서 ☐■ 이중).
     """
-    if _has_form_control(tc):
+    if _has_form_control(tc) or _cell_has_nested_table(tc):
         return False
     return _cell_text_fillable(tc)
+
+
+_REGION_PROTECTED_LABEL_RE = re.compile(
+    r"서명|날인|직인|인감|동의|서약|확약|체크|선택|확인자|심사|평가위원"
+)
+
+
+def region_cell_is_writable(tc, label: str = "") -> bool:
+    """Exact-region v1 permits only empty, simple text cells, never controls.
+
+    The analyzer may impose additional label/region-map restrictions. This guard
+    independently checks the actual neighboring XML label, not caller metadata.
+    Placeholder prose and existing values require a later revision contract.
+    """
+    if tc.tag != _q("tc") or _cell_text(tc) or _has_form_control(tc):
+        return False
+    if _REGION_PROTECTED_LABEL_RE.search(f"{_left_label_text(tc)} {label}"):
+        return False
+    sublists = _direct(tc, "subList")
+    if len(sublists) != 1:
+        return False
+    # A containing cell must not absorb nested table/image/object content.
+    allowed_cell = {_q(n) for n in ("subList", "cellAddr", "cellSpan", "cellSz", "cellMargin")}
+    if any(child.tag not in allowed_cell for child in tc):
+        return False
+    sublist = sublists[0]
+    if not len(sublist) or any(child.tag != _q("p") for child in sublist):
+        return False
+    for paragraph in sublist:
+        if any(child.tag not in {_q("run"), _q("linesegarray")} for child in paragraph):
+            return False
+        for run in _direct(paragraph, "run"):
+            if any(child.tag != _q("t") or len(child) for child in run):
+                return False
+    return True
 
 
 def _is_label_like(tc) -> bool:
@@ -762,6 +1007,13 @@ def _is_label_like(tc) -> bool:
         return False
     norm = _key(txt)
     return _cluster_rep(norm) is not None or _is_noise_label(txt, norm)
+
+
+def _cell_has_real_value(tc) -> bool:
+    """값칸에 플레이스홀더가 아닌 사용자 글자가 있으면 True."""
+    if tc is None or _is_label_like(tc):
+        return False
+    return _real_existing_text(_cell_text(tc))
 
 
 def _in_protected_cell(t) -> bool:
@@ -899,6 +1151,10 @@ class HwpxFillReport:
     # 보류한 항목(needs_confirm, 오체크<미체크). 사람이 확인 후 직접 기입한다.
     grid_needs_confirm: list[str] = field(default_factory=list)
     line_edits_applied: int = 0   # 앵커 문단 편집(체크·치환) 성공 건수
+    field_writes_written: dict[str, str] = field(default_factory=dict)
+    field_write_skipped: dict[str, str] = field(default_factory=dict)
+    field_write_style: dict[str, str] = field(default_factory=dict)
+    template_status: str = ""
     sections_changed: int = 0
     overflow_cells: list[str] = field(default_factory=list)  # L097 한 줄 칸 넘침 가능
     pages_before: int = 0  # L095 XML 페이지 기준선 (한글 렌더 아님)
@@ -918,6 +1174,10 @@ class HwpxFillReport:
             "check_residual": list(self.check_residual),
             "grid_needs_confirm": list(self.grid_needs_confirm),
             "line_edits_applied": self.line_edits_applied,
+            "field_writes_written": dict(self.field_writes_written),
+            "field_write_skipped": dict(self.field_write_skipped),
+            "field_write_style": dict(self.field_write_style),
+            "template_status": self.template_status,
             "sections_changed": self.sections_changed,
             "overflow_cells": list(self.overflow_cells),
             "pages_before": self.pages_before,
@@ -996,6 +1256,10 @@ def _fill_section_xml(
     line_edits: Optional[list[dict]] = None,
     line_report: Optional[dict] = None,
     overflow_cells: Optional[list] = None,
+    field_writes: Optional[dict[str, str]] = None,
+    f01_bucket: Optional[dict[str, dict]] = None,
+    span_notes: Optional[list] = None,
+    existing_labels: Optional[list] = None,
 ) -> tuple[bytes, dict[str, str], int, set[str]]:
     """한 섹션 XML 에서 표 라벨-값 칸(1) + 셀 인라인 빈칸(1.5) + 체크박스(1.7) +
     그리드 선택칸(1.75, □ 없음) + 표 밖 본문 단락 인라인 빈칸(1.8) 채움 +
@@ -1012,8 +1276,13 @@ def _fill_section_xml(
     변경이 없으면 입력 바이트를 그대로 반환한다(불필요한 재직렬화·선언 변형 회피).
     """
     root = etree.fromstring(xml_bytes)
+    if span_notes is None:
+        span_notes = []
+    if existing_labels is None:
+        existing_labels = []
     filled: dict[str, str] = {}
     used_keys: set[str] = set()
+    exact_held: set[str] = set()
     replaced = 0
     changed = False
     edited: list = []  # L074: lineseg strip 대상(편집된 tc/p)
@@ -1035,6 +1304,8 @@ def _fill_section_xml(
                 for want_key, lbl, val in wants:
                     if want_key in used_keys:
                         continue
+                    if _held_for_other_label(exact_held, cell_key, want_key):
+                        continue
                     if not _label_matches(cell_key, want_key):
                         continue
                     target = _value_cell(tc, cells)
@@ -1042,8 +1313,28 @@ def _fill_section_xml(
                         continue
                     if _is_label_like(target):
                         continue  # 값칸 후보가 또 라벨 → 기입 금지
+                    if _cell_has_nested_table(target):
+                        _note_region(span_notes, "nested", lbl, target)
+                        _hold_exact_label(exact_held, cell_key, want_key)
+                        break
+                    if _signature_seal_label(_cell_text(tc)) or _signature_seal_label(lbl):
+                        _note_region(span_notes, "signature", lbl, target)
+                        _hold_exact_label(exact_held, cell_key, want_key)
+                        break
+                    if _has_handwritten_object(target):
+                        _note_region(span_notes, "handwritten", lbl, target)
+                        _hold_exact_label(exact_held, cell_key, want_key)
+                        break
                     if not _cell_is_fillable(target):
-                        continue  # 실제 값 있는 칸/폼컨트롤 칸 — 기입 금지
+                        # 실값만 EXISTING_VALUE. ____·더미날짜·□ 는 각자 게이트에 남긴다.
+                        if _cell_has_real_value(target):
+                            _note_existing_value(span_notes, lbl, target, existing_labels)
+                            _hold_exact_label(exact_held, cell_key, want_key)
+                        break
+                    if _split_value_spans(target):
+                        _note_unfilled_span(span_notes, lbl, target)
+                        _hold_exact_label(exact_held, cell_key, want_key)
+                        break
                     if _set_cell_text(target, str(val), black):
                         filled[lbl] = str(val)
                         used_keys.add(want_key)
@@ -1061,7 +1352,10 @@ def _fill_section_xml(
         for tc in root.iter(_q("tc")):
             for sub in _direct(tc, "subList"):
                 for p in _direct(sub, "p"):
-                    if _fill_inline_fields_in_p(p, wants, used_keys, filled):
+                    if _fill_inline_fields_in_p(
+                        p, wants, used_keys, filled, span_notes, existing_labels,
+                        exact_held,
+                    ):
                         changed = True
                         edited.append(p)
 
@@ -1090,6 +1384,8 @@ def _fill_section_xml(
                     for want_key, lbl, val in wants:
                         if want_key in used_keys:
                             continue
+                        if _held_for_other_label(exact_held, group_key, want_key):
+                            continue
                         if not _label_matches(group_key, want_key):
                             continue
                         vnorm = _normalize_choice(_opt_key(str(val)))
@@ -1100,6 +1396,10 @@ def _fill_section_xml(
                         ]
                         if len(hits) != 1:
                             break   # 0개/다수 매칭 → 모호, 아무 박스도 안 건드림
+                        if _span_crosses_text_nodes(p, hits[0], hits[0] + 1):
+                            _note_unfilled_span(span_notes, lbl, tc)
+                            _hold_exact_label(exact_held, group_key, want_key)
+                            break
                         if _splice_run_text(p, hits[0], hits[0] + 1, _CHECK_MARK):
                             filled[lbl] = str(val)
                             used_keys.add(want_key)
@@ -1124,6 +1424,8 @@ def _fill_section_xml(
             for label_key, mark, opts in _grid_choice_groups(tbl):
                 for want_key, lbl, val in wants:
                     if want_key in used_keys:
+                        continue
+                    if _held_for_other_label(exact_held, label_key, want_key):
                         continue
                     if not _label_matches(label_key, want_key):
                         continue
@@ -1156,7 +1458,10 @@ def _fill_section_xml(
     #      used_keys 공유(표/인라인/체크박스와 이중 기입 금지)·형제 run 보존.
     if wants:
         for p in _direct(root, "p"):
-            if _fill_inline_fields_in_p(p, wants, used_keys, filled):
+            if _fill_inline_fields_in_p(
+                p, wants, used_keys, filled, span_notes, existing_labels,
+                exact_held,
+            ):
                 changed = True
                 edited.append(p)
 
@@ -1171,6 +1476,12 @@ def _fill_section_xml(
             if not cur:
                 continue
             if _in_protected_cell(t):       # 라벨·실값 칸의 hp:t 보호
+                cell = _nearest_cell(t)
+                if cell is not None and _cell_has_real_value(cell) and any(
+                    old and str(rep or "").strip() and old in cur
+                    for old, rep in replacements.items()
+                ):
+                    _note_existing_value(span_notes, _left_label_text(cell) or "value", cell)
                 continue
             new = cur
             for old, rep in replacements.items():
@@ -1204,6 +1515,15 @@ def _fill_section_xml(
             line_report["applied"] = line_report.get("applied", 0) + applied
             line_report.setdefault("notes", []).extend(line_notes)
         if applied:
+            changed = True
+
+    if field_writes:
+        f01_changed, written, skipped, style = _apply_f01_on_root(root, field_writes, edited)
+        if f01_bucket is not None:
+            f01_bucket["written"].update(written)
+            f01_bucket["skipped"].update(skipped)
+            f01_bucket["style"].update(style)
+        if f01_changed:
             changed = True
 
     if not changed:
@@ -1247,6 +1567,8 @@ def fill_hwpx(
     check_options: Optional[list[str]] = None,
     line_edits: Optional[list[dict]] = None,
     force_black: bool = True,
+    field_writes: Optional[dict[str, str]] = None,
+    expected_sha256: str | None = None,
 ) -> HwpxFillReport:
     """HWPX 원본 양식의 빈 값 칸을 직접 채운다(변환 왕복 없음, 양식 100% 보존).
 
@@ -1283,7 +1605,14 @@ def fill_hwpx(
     dst = Path(out_hwpx)
     report = HwpxFillReport(input=str(src), output=str(dst))
 
-    identity = dict(identity or {})
+    identity = {
+        key: value for key, value in dict(identity or {}).items()
+        if key not in _F01_SPECS
+    }
+    requested_writes = {
+        key: str(value) for key, value in dict(field_writes or {}).items()
+        if key in _F01_SPECS and str(value or "").strip()
+    }
     replacements = dict(replacements or {})
     check_options = [str(o) for o in (check_options or []) if str(o or "").strip()]
     line_edits = [e for e in (line_edits or []) if isinstance(e, dict)]
@@ -1306,6 +1635,14 @@ def fill_hwpx(
     if not zipfile.is_zipfile(src):
         raise ValueError(f"올바른 HWPX(ZIP)가 아닙니다: {src.name}")
     report.pages_before = estimate_page_count(src)
+    if requested_writes and expected_sha256 and _sha256_file(src).lower() != expected_sha256.lower():
+        report.template_status = "TEMPLATE_MISMATCH"
+        report.notes.append(
+            "TEMPLATE_MISMATCH: canonical SHA256과 다른 양식에는 F01 field_writes를 적용하지 않음"
+        )
+        for key in requested_writes:
+            report.field_write_skipped[key] = "TEMPLATE_MISMATCH"
+        requested_writes = {}
 
     # 2) ZIP 전체를 읽어 들인다(엔트리 순서·압축방식·내용 보존용).
     with zipfile.ZipFile(src) as zin:
@@ -1331,6 +1668,9 @@ def fill_hwpx(
     grid_confirm: list[str] = []
     overflow_cells: list[str] = []
     line_report: dict[str, Any] = {"applied": 0, "notes": []}
+    f01_bucket: dict[str, dict] = {"written": {}, "skipped": {}, "style": {}}
+    span_notes: list[str] = []
+    existing_labels: list[str] = []
     for name in section_names:
         try:
             new_bytes, filled, replaced, used = _fill_section_xml(
@@ -1338,6 +1678,10 @@ def fill_hwpx(
                 grid_confirm=grid_confirm,
                 line_edits=line_edits, line_report=line_report,
                 overflow_cells=overflow_cells,
+                field_writes=requested_writes if name == "Contents/section0.xml" else None,
+                f01_bucket=f01_bucket if name == "Contents/section0.xml" else None,
+                span_notes=span_notes,
+                existing_labels=existing_labels,
             )
         except etree.XMLSyntaxError as exc:
             report.notes.append(f"{name} 파싱 실패(건너뜀): {exc}")
@@ -1348,6 +1692,12 @@ def fill_hwpx(
         report.filled.update(filled)
         report.replaced += replaced
         all_used |= used
+    report.field_writes_written.update(f01_bucket["written"])
+    report.field_write_skipped.update(f01_bucket["skipped"])
+    report.field_write_style.update(f01_bucket["style"])
+    for note in span_notes:
+        if note not in report.notes:
+            report.notes.append(note)
 
     # 3.3) 폼 컨트롤 체크박스(hp:checkBtn) 2-패스 — '문서 전체' 유일성 판정.
     #      (섹션 단위 판정은 다섹션 양식에서 전역 모호 라벨을 오체크 — 적대검증.)
@@ -1440,6 +1790,9 @@ def fill_hwpx(
         for lbl, val in identity.items()
         if str(val or "").strip() and _key(lbl) not in all_used
     ]
+    for label in existing_labels:
+        if label not in report.residual:
+            report.residual.append(label)
     report.check_residual = [o for o in check_options if o not in check_done]
     if report.check_residual:
         report.notes.append(
@@ -1490,9 +1843,728 @@ def fill_hwpx(
             "(XML 추정, 한글 렌더 쪽수는 L005)"
         )
 
-    report.ok = True
-    if not report.filled and not report.replaced and not report.checked:
+    report.ok = report.template_status != "TEMPLATE_MISMATCH"
+    if not report.filled and not report.replaced and not report.checked and not report.field_writes_written and not report.template_status:
         report.notes.append(
             "채운 칸이 없습니다 — 라벨이 양식과 일치하지 않거나 칸에 이미 값이 "
             "있을 수 있습니다(덮어쓰기 금지). identity 라벨/값을 확인하세요.")
+    # Reporting only: a repeated label used on the first row still leaves later
+    # empty value cells. The write loop above is unchanged.
+    if dst.is_file():
+        from core.docx.services.hwpx_analysis_adapter import index_hwpx_structure
+        from core.docx.services.hwpx_protected_regions import (
+            document_duplicate_unfilled_cells,
+            repeated_row_unfilled_labels,
+        )
+
+        filled_index = index_hwpx_structure(dst)
+        for label in repeated_row_unfilled_labels(filled_index):
+            if label not in report.residual:
+                report.residual.append(label)
+        for label, _section_index, _table_index, _row, _col in document_duplicate_unfilled_cells(filled_index):
+            if label not in report.residual:
+                report.residual.append(label)
     return report
+
+
+# F-01 GovTech 아이디어 기획서. Astra write map (2026-09-26)의 7개 위치만 기입한다.
+# 주제·문제해결·사업화의 새 문단은 원본에 빈 run이 없다.
+# 본문 스타일은 같은 양식 header의 charPr 35다.
+# 11pt(#000000), 굵게/기울임 없음, 자간 0. 안내문 49·67(회색 기울임)과
+# 짧은 입력칸 65(굵게, 자간 -4)는 새 서술 문단에 쓰지 않는다.
+# paraPr 1 / style 0 은 그 칸들의 바탕글이다.
+# rhwp에서 char 35와 65의 쪽 넘침은 빈 양식과 같은 page2 para 35/36, 7.5px뿐이었다.
+F01_CANONICAL_SHA256 = "e818bc0fa8a6ff9267b2379072e4e9e4f484f22ff7cac13b1619623e7508a187"
+F01_NEW_BODY_CHARPR = "35"
+_F01_NEW_PARA = {"paraPrIDRef": "1", "styleIDRef": "0", "pageBreak": "0", "columnBreak": "0", "merged": "0"}
+_F01_NEW_CHAR = F01_NEW_BODY_CHARPR
+
+# (table, row, col, colAddr, rowAddr, mode, fill_at or None)
+# fill_at = (paragraph_index, run_index) when an existing empty run receives the first paragraph.
+_F01_SPECS: dict[str, dict[str, Any]] = {
+    "participant_name": {
+        "table": 2, "row": 0, "col": 1, "col_addr": "1", "row_addr": "0",
+        "mode": "RIGHT_VALUE_CELL", "fill_at": (0, 0), "new_style": False,
+        "neighbor": (0, " 참가자(팀)명"),
+        "own": [(("65", None),)],
+    },
+    "project_topic": {
+        "table": 2, "row": 1, "col": 1, "col_addr": "1", "row_addr": "1",
+        "mode": "INSERT_AFTER_GUIDANCE", "fill_at": None, "new_style": True,
+        "neighbor": (0, " 참가작 주제"),
+        "own": [(("67", "※ 참가작 주제는 한 문장으로 참가작 내용, 목적 등을 명확하게 파악할 수 있도록 기재하여야 함"),)],
+    },
+    "project_summary": {
+        "table": 2, "row": 3, "col": 0, "col_addr": "0", "row_addr": "3",
+        "mode": "APPEND_PARAGRAPH_IN_CELL", "fill_at": (0, 0), "new_style": False,
+        "above": (2, 0, "참가작 주요내용 요약"),
+        "own": [(("65", None),)],
+    },
+    "problem_validity": {
+        "table": 5, "row": 1, "col": 0, "col_addr": "0", "row_addr": "1",
+        "mode": "APPEND_PARAGRAPH_IN_CELL", "fill_at": None, "new_style": True,
+        "titles": ((0, " 1. 문제 해결의 타당성"), (1, " ◈ 아이디어의 개발 동기, 배경 및 필요성")),
+        "own": [
+            (("35", " "), ("49", " 1-1. 아이디어에 대한 동기(내·외부적 동기 등) 및 배경 제시")),
+            (("49", "  1-2. 아이디어의 필요성 및 사회적 이슈와의 관련성"),),
+        ],
+    },
+    "commercialization": {
+        "table": 6, "row": 1, "col": 0, "col_addr": "0", "row_addr": "1",
+        "mode": "APPEND_PARAGRAPH_IN_CELL", "fill_at": None, "new_style": True,
+        "titles": ((0, " 2. 사업화 가능성"), (1, " ◈ 실행계획, 실현가능성 및 차별성")),
+        "own": [
+            (("35", "  "), ("49", "2-1. 구체적 실행계획 및 기술적 실현 가능성 ")),
+            (("49", "  2-2. 유사 아이디어 대비 차별성"),),
+        ],
+    },
+    "sustainability": {
+        "table": 7, "row": 1, "col": 0, "col_addr": "0", "row_addr": "1",
+        "mode": "INSERT_AFTER_GUIDANCE", "fill_at": (2, 0), "new_style": False,
+        "title_runs": (
+            (0, ((None, " 3. 지속가능성과"), (None, "    사회적 기여"))),
+        ),
+        "title_cell": (1, " ◈ 기술의 적절성, 성장가능성 및 공공서비스 혁신성"),
+        "own": [
+            (("49", " 3-1. 기술 활용의 적절성, 발전 가능성"),),
+            (("49", " 3-2. 기술 적용을 통한 국민 편익, 행정 효율 등 개선점 제시"),),
+            (("49", None),),
+        ],
+    },
+    "entrepreneurship": {
+        "table": 8, "row": 1, "col": 0, "col_addr": "0", "row_addr": "1",
+        "mode": "INSERT_AFTER_GUIDANCE", "fill_at": (2, 0), "new_style": False,
+        "titles": ((0, " 4. 기업가 정신"), (1, " ◈ 주도성 및 실행 의지")),
+        "own": [
+            (("35", "  "), ("49", "4-1. 아이디어 구체화를 위해 진행한 사항")),
+            (("49", "  ㅇ 현장 조사, 인터뷰, 기술 검토, 유사 사례 분석 등 사전 노력 기술"),),
+            (("49", None),),
+        ],
+    },
+}
+F01_FIELD_KEYS = frozenset(_F01_SPECS)
+
+
+@dataclass
+class F01WriteReport:
+    input: str
+    output: str
+    ok: bool = False
+    written: dict[str, str] = field(default_factory=dict)
+    skipped: dict[str, str] = field(default_factory=dict)
+    style_status: dict[str, str] = field(default_factory=dict)
+    notes: list[str] = field(default_factory=list)
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _run_payload(run) -> tuple[str, str | None]:
+    texts = _direct(run, "t")
+    if not texts:
+        return run.get("charPrIDRef") or "", None
+    return run.get("charPrIDRef") or "", "".join(t.text or "" for t in texts)
+
+
+def _cell_payload(tc) -> list[tuple[tuple[str, str | None], ...]]:
+    subs = _direct(tc, "subList")
+    if len(subs) != 1:
+        return []
+    rows = []
+    for para in _direct(subs[0], "p"):
+        rows.append(tuple(_run_payload(run) for run in _direct(para, "run")))
+    return rows
+
+
+def _cell_joined(tc) -> str:
+    return "".join(t.text or "" for t in _direct_all_t(tc))
+
+
+def _direct_all_t(tc) -> list:
+    subs = _direct(tc, "subList")
+    if len(subs) != 1:
+        return []
+    found = []
+    for para in _direct(subs[0], "p"):
+        for run in _direct(para, "run"):
+            found.extend(_direct(run, "t"))
+    return found
+
+
+def _tc_at(root, table: int, row: int, col: int):
+    tables = [el for el in root.iter(_q("tbl"))]
+    if table >= len(tables):
+        return None
+    rows = _direct(tables[table], "tr")
+    if row >= len(rows):
+        return None
+    cells = _direct(rows[row], "tc")
+    if col >= len(cells):
+        return None
+    return cells[col]
+
+
+def _addr_ok(tc, col_addr: str, row_addr: str) -> bool:
+    addr = next(iter(_direct(tc, "cellAddr")), None)
+    return addr is not None and addr.get("colAddr") == col_addr and addr.get("rowAddr") == row_addr
+
+
+def _f01_anchor_error(root, spec: dict[str, Any]) -> str:
+    tc = _tc_at(root, spec["table"], spec["row"], spec["col"])
+    if tc is None or not _addr_ok(tc, spec["col_addr"], spec["row_addr"]):
+        return "셀 주소 불일치"
+    if _cell_payload(tc) != [tuple(para) for para in spec["own"]]:
+        return "대상 셀 paragraph/run 불일치"
+    if "neighbor" in spec:
+        left = _tc_at(root, spec["table"], spec["row"], spec["neighbor"][0])
+        if left is None or _cell_joined(left) != spec["neighbor"][1]:
+            return "옆 라벨 불일치"
+    if "above" in spec:
+        above = _tc_at(root, spec["table"], spec["above"][0], spec["above"][1])
+        if above is None or _cell_joined(above) != spec["above"][2]:
+            return "위 제목 불일치"
+    title_row = _direct([el for el in root.iter(_q("tbl"))][spec["table"]], "tr")[0]
+    title_cells = _direct(title_row, "tc")
+    if "titles" in spec:
+        for index, text in spec["titles"]:
+            if index >= len(title_cells) or _cell_joined(title_cells[index]) != text:
+                return "제목 행 불일치"
+    if "title_cell" in spec:
+        index, text = spec["title_cell"]
+        if index >= len(title_cells) or _cell_joined(title_cells[index]) != text:
+            return "제목 행 불일치"
+    if "title_runs" in spec:
+        for index, expected in spec["title_runs"]:
+            if index >= len(title_cells):
+                return "제목 행 불일치"
+            paras = _cell_payload(title_cells[index])
+            flat_text = tuple("".join("" if text is None else text for _, text in para) for para in paras)
+            want = tuple(piece[1] for piece in expected)
+            if flat_text != want:
+                return "제목 행 문단 불일치"
+    return ""
+
+
+def _append_body_paragraph(sublist, text: str, *, para_attrs: dict[str, str], char_pr: str):
+    para = etree.Element(_q("p"))
+    para.set("id", "2147483648")
+    for key, value in para_attrs.items():
+        para.set(key, value)
+    run = etree.SubElement(para, _q("run"))
+    run.set("charPrIDRef", char_pr)
+    node = etree.SubElement(run, _q("t"))
+    node.text = text
+    sublist.append(para)
+    return para
+
+
+def _put_run_text(run, text: str) -> None:
+    node = etree.SubElement(run, _q("t"))
+    node.text = text
+    _invalidate_lineseg(run)
+
+
+def _paragraphs_of(value: str) -> list[str]:
+    return [line for line in str(value).splitlines() if line.strip()]
+
+
+def _apply_f01_on_root(root, values: dict[str, str], edited: list) -> tuple[bool, dict[str, str], dict[str, str], dict[str, str]]:
+    """section XML 루트에 F-01 7개 write target만 반영한다. ZIP 쓰기는 하지 않는다."""
+    written: dict[str, str] = {}
+    skipped: dict[str, str] = {}
+    style: dict[str, str] = {}
+    changed = False
+    for key, spec in _F01_SPECS.items():
+        raw = values.get(key)
+        if raw is None or not str(raw).strip():
+            continue
+        reason = _f01_anchor_error(root, spec)
+        if reason:
+            skipped[key] = f"REVIEW_REQUIRED: {reason}"
+            continue
+        paragraphs = _paragraphs_of(str(raw))
+        if not paragraphs:
+            continue
+        tc = _tc_at(root, spec["table"], spec["row"], spec["col"])
+        sublist = _direct(tc, "subList")[0]
+        paras = _direct(sublist, "p")
+        fill_at = spec["fill_at"]
+        body = paragraphs
+        if fill_at is not None:
+            para = paras[fill_at[0]]
+            run = _direct(para, "run")[fill_at[1]]
+            _put_run_text(run, body[0])
+            edited.append(para)
+            extra_attrs = {
+                "paraPrIDRef": para.get("paraPrIDRef") or "1",
+                "styleIDRef": para.get("styleIDRef") or "0",
+                "pageBreak": para.get("pageBreak") or "0",
+                "columnBreak": para.get("columnBreak") or "0",
+                "merged": para.get("merged") or "0",
+            }
+            extra_char = run.get("charPrIDRef") or _F01_NEW_CHAR
+            body = body[1:]
+        else:
+            extra_attrs = dict(_F01_NEW_PARA)
+            extra_char = _F01_NEW_CHAR
+        for text in body:
+            created = _append_body_paragraph(sublist, text, para_attrs=extra_attrs, char_pr=extra_char)
+            edited.append(created)
+        written[key] = spec["mode"]
+        if spec["new_style"]:
+            style[key] = "CONFIRMED_CHARPR_35"
+        changed = True
+    return changed, written, skipped, style
+
+
+def apply_f01_field_writes(
+    in_hwpx: str | Path,
+    out_hwpx: str | Path,
+    values: dict[str, str],
+    *,
+    expected_sha256: str | None = None,
+) -> F01WriteReport:
+    """F-01 7개 값을 ``fill_hwpx`` 한 경로로 기록한다."""
+    filled = fill_hwpx(
+        in_hwpx,
+        out_hwpx,
+        field_writes=values,
+        force_black=False,
+        expected_sha256=expected_sha256,
+    )
+    report = F01WriteReport(
+        input=filled.input,
+        output=filled.output,
+        written=dict(filled.field_writes_written),
+        skipped=dict(filled.field_write_skipped),
+        style_status=dict(filled.field_write_style),
+        notes=list(filled.notes),
+    )
+    report.ok = not report.skipped and bool(
+        report.written or not any(str(value or "").strip() for value in values.values())
+    )
+    return report
+
+
+@dataclass(frozen=True)
+class ExactTextTarget:
+    """One hp:t. The writer may replace that node's text and nothing else."""
+
+    section_member: str
+    paragraph_index: int
+    run_index: int
+    text_node_index: int | None
+    expected_raw_text: str
+    value: str
+    table_index: int | None = None
+    row: int | None = None
+    col: int | None = None
+
+
+@dataclass
+class ExactWriteReport:
+    input: str
+    output: str
+    ok: bool = False
+    cancelled: bool = True
+    reason: str = ""
+    written_count: int = 0
+    reasons: list[str] = field(default_factory=list)
+
+
+def _raw_text_node(node) -> str:
+    parts = [node.text or ""]
+    for child in list(node):
+        if child.tail:
+            parts.append(child.tail)
+    return "".join(parts)
+
+
+def _section_text_nodes(root) -> dict[tuple[int, int, int], Any]:
+    """Map indexer-order (paragraph, run, text) to the hp:t element."""
+    found: dict[tuple[int, int, int], Any] = {}
+    paragraph_index = 0
+    for paragraph in root.iter(_q("p")):
+        run_index = 0
+        for child in list(paragraph):
+            if _local(child.tag) != "run":
+                continue
+            text_index = 0
+            for sub in list(child):
+                if _local(sub.tag) != "t":
+                    continue
+                found[(paragraph_index, run_index, text_index)] = sub
+                text_index += 1
+            run_index += 1
+        paragraph_index += 1
+    return found
+
+
+def _snapshot_text(root) -> dict[tuple[int, int, int], str]:
+    return {key: _raw_text_node(node) for key, node in _section_text_nodes(root).items()}
+
+
+def _section_runs(root) -> dict[tuple[int, int], Any]:
+    found: dict[tuple[int, int], Any] = {}
+    paragraph_index = 0
+    for paragraph in root.iter(_q("p")):
+        run_index = 0
+        for child in list(paragraph):
+            if _local(child.tag) != "run":
+                continue
+            found[(paragraph_index, run_index)] = child
+            run_index += 1
+        paragraph_index += 1
+    return found
+
+
+def _protected_existing_text(text: str) -> bool:
+    """Refuse to replace guidance, a seal line, a date scaffold, or a choice mark."""
+    if not (text or "").strip():
+        return False
+    from core.docx.services.hwpx_protected_regions import (
+        _CHOICE_MARK_RE,
+        _SIGNATURE_RE,
+        _is_date_scaffold_paragraph,
+        guidance_status,
+    )
+    if guidance_status(text) == "guidance":
+        return True
+    if _SIGNATURE_RE.search(text) or _is_date_scaffold_paragraph(text):
+        return True
+    return _CHOICE_MARK_RE.search(text) is not None
+
+
+def _coordinates_match(src: Path, targets: list[ExactTextTarget]) -> str:
+    """Return a reason when a supplied table cell does not contain the run."""
+    if not any(target.table_index is not None for target in targets):
+        return ""
+    from core.docx.services.hwpx_analysis_adapter import index_hwpx_structure
+    index = index_hwpx_structure(src)
+    if index.analysis_status != "COMPLETE":
+        return "INDEX_INCOMPLETE"
+    for target in targets:
+        if target.table_index is None:
+            continue
+        section = next((item for item in index.sections if item.section_member == target.section_member), None)
+        if section is None or target.paragraph_index >= len(section.paragraphs):
+            return "COORDINATE_MISMATCH"
+        paragraph = section.paragraphs[target.paragraph_index]
+        if paragraph.table_index != target.table_index or target.table_index >= len(index.tables):
+            return "COORDINATE_MISMATCH"
+        table = index.tables[target.table_index]
+        owner = next((cell for cell in table.cells if target.paragraph_index in cell.paragraph_indexes), None)
+        if owner is None or owner.row != target.row or owner.col != target.col:
+            return "COORDINATE_MISMATCH"
+        if target.run_index >= len(paragraph.runs):
+            return "COORDINATE_MISMATCH"
+    return ""
+
+
+def commit_exact_text_writes(
+    in_hwpx: str | Path,
+    out_hwpx: str | Path,
+    targets: list[ExactTextTarget],
+    *,
+    source_sha256: str,
+) -> ExactWriteReport:
+    """Write exact hp:t nodes, or write nothing.
+
+    Legacy ``fill_hwpx`` is unchanged. This path refuses partial writes, header
+    edits, substring search, and any change outside the approved text nodes.
+    """
+    src = Path(in_hwpx)
+    dst = Path(out_hwpx)
+    report = ExactWriteReport(input=str(src), output=str(dst))
+    if not src.exists():
+        raise FileNotFoundError(src)
+    if _same_file(src, dst):
+        raise ValueError("출력이 입력과 같습니다. 원본 덮어쓰기는 금지입니다.")
+    before_src = src.read_bytes()
+    actual_sha = hashlib.sha256(before_src).hexdigest()
+    if actual_sha.lower() != str(source_sha256 or "").lower():
+        report.reason = "SHA_MISMATCH"
+        report.reasons.append("SHA_MISMATCH")
+        return report
+    if not targets:
+        report.reason = "EMPTY_PLAN"
+        report.reasons.append("EMPTY_PLAN")
+        return report
+    seen: set[tuple[str, int, int, int]] = set()
+    for target in targets:
+        key = (target.section_member, target.paragraph_index, target.run_index, target.text_node_index)
+        if key in seen:
+            report.reason = "DUPLICATE_TARGET"
+            report.reasons.append("DUPLICATE_TARGET")
+            return report
+        seen.add(key)
+
+    with zipfile.ZipFile(src) as zin:
+        infos = zin.infolist()
+        data = {info.filename: zin.read(info.filename) for info in infos}
+    original = dict(data)
+    roots: dict[str, Any] = {}
+    located: dict[tuple[str, int, int, int], Any] = {}
+    for target in targets:
+        if target.section_member not in data:
+            report.reasons.append(f"SECTION_MISSING:{target.section_member}")
+            continue
+        if target.section_member not in roots:
+            try:
+                roots[target.section_member] = etree.fromstring(data[target.section_member])
+            except etree.XMLSyntaxError:
+                report.reasons.append(f"SECTION_XML:{target.section_member}")
+                continue
+        if target.text_node_index is None:
+            run = _section_runs(roots[target.section_member]).get((target.paragraph_index, target.run_index))
+            direct_children = list(run) if run is not None else []
+            has_text = any(_local(child.tag) == "t" for child in direct_children)
+            has_table = any(_local(child.tag) == "tbl" for child in direct_children)
+            if run is None or has_text or has_table or target.expected_raw_text != "":
+                report.reasons.append(
+                    f"EMPTY_RUN_MISMATCH:{target.paragraph_index}:{target.run_index}"
+                )
+                continue
+            if _protected_existing_text("".join(_raw_text_node(child) for child in direct_children)):
+                report.reasons.append(
+                    f"PROTECTED_TEXT:{target.paragraph_index}:{target.run_index}"
+                )
+                continue
+            located[(target.section_member, target.paragraph_index, target.run_index, None)] = run
+            continue
+        nodes = _section_text_nodes(roots[target.section_member])
+        node = nodes.get((target.paragraph_index, target.run_index, target.text_node_index))
+        if node is None:
+            report.reasons.append(
+                f"TARGET_MISSING:{target.paragraph_index}:{target.run_index}:{target.text_node_index}"
+            )
+            continue
+        if list(node):
+            report.reasons.append(
+                f"SPAN_NOT_PLAIN:{target.paragraph_index}:{target.run_index}:{target.text_node_index}"
+            )
+            continue
+        current = _raw_text_node(node)
+        if current != target.expected_raw_text:
+            report.reasons.append(
+                f"EXPECTED_TEXT_MISMATCH:{target.paragraph_index}:{target.run_index}:{target.text_node_index}"
+            )
+            continue
+        if current.strip():
+            report.reasons.append(
+                f"EXISTING_VALUE:{target.paragraph_index}:{target.run_index}:{target.text_node_index}"
+            )
+            continue
+        if _protected_existing_text(current):
+            report.reasons.append(
+                f"PROTECTED_TEXT:{target.paragraph_index}:{target.run_index}:{target.text_node_index}"
+            )
+            continue
+        located[(target.section_member, target.paragraph_index, target.run_index, target.text_node_index)] = node
+    if report.reasons or len(located) != len(targets):
+        report.reason = report.reasons[0] if report.reasons else "PLAN_REJECTED"
+        report.cancelled = True
+        report.ok = False
+        return report
+    coordinate_reason = _coordinates_match(src, targets)
+    if coordinate_reason:
+        report.reason = coordinate_reason
+        report.reasons.append(coordinate_reason)
+        report.cancelled = True
+        report.ok = False
+        return report
+
+    snapshots = {name: _snapshot_text(root) for name, root in roots.items()}
+    for target in targets:
+        node = located[(target.section_member, target.paragraph_index, target.run_index, target.text_node_index)]
+        if target.text_node_index is None:
+            created = etree.SubElement(node, _q("t"))
+            created.text = target.value
+        else:
+            node.text = target.value
+    for name, root in roots.items():
+        after = _snapshot_text(root)
+        before = snapshots[name]
+        approved = {
+            (target.paragraph_index, target.run_index, 0 if target.text_node_index is None else target.text_node_index): target.value
+            for target in targets if target.section_member == name
+        }
+        expected_keys = set(before)
+        expected_keys.update(approved)
+        if set(after) != expected_keys:
+            report.reason = "STRUCTURE_CHANGED"
+            report.reasons.append("STRUCTURE_CHANGED")
+            return report
+        for key, raw in after.items():
+            if key in approved:
+                if raw != approved[key]:
+                    report.reason = "WRITE_SPAN_MISMATCH"
+                    report.reasons.append("WRITE_SPAN_MISMATCH")
+                    return report
+            elif raw != before[key]:
+                report.reason = "OUT_OF_SCOPE_TEXT"
+                report.reasons.append("OUT_OF_SCOPE_TEXT")
+                return report
+        standalone = _detect_standalone(original[name])
+        data[name] = etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone=standalone)
+
+    for name, payload in data.items():
+        if name not in roots and payload != original[name]:
+            report.reason = "OUT_OF_SCOPE_XML"
+            report.reasons.append("OUT_OF_SCOPE_XML")
+            return report
+
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dst.with_name(f"{dst.stem}.{os.getpid()}.exact.tmp")
+    replaced = False
+
+    def _drop_output() -> None:
+        nonlocal replaced
+        if tmp.exists():
+            tmp.unlink()
+        if replaced and dst.exists():
+            dst.unlink()
+            replaced = False
+
+    try:
+        with zipfile.ZipFile(tmp, "w") as zout:
+            if "mimetype" in data:
+                info = zipfile.ZipInfo("mimetype")
+                info.compress_type = zipfile.ZIP_STORED
+                zout.writestr(info, data["mimetype"])
+            for info in infos:
+                if info.filename == "mimetype":
+                    continue
+                copied = zipfile.ZipInfo(info.filename, date_time=info.date_time)
+                copied.compress_type = info.compress_type
+                copied.external_attr = info.external_attr
+                copied.internal_attr = info.internal_attr
+                copied.create_system = info.create_system
+                zout.writestr(copied, data[info.filename])
+        if src.read_bytes() != before_src:
+            report.reason = "SOURCE_MUTATED"
+            report.reasons.append("SOURCE_MUTATED")
+            report.ok = False
+            report.cancelled = True
+            return report
+        from core.docx.services.hwpx_xml_scope_diff import XmlScopeTarget, compare_hwpx_xml_scope
+        try:
+            diff = compare_hwpx_xml_scope(
+                src, tmp,
+                [XmlScopeTarget(item.section_member, item.paragraph_index, item.run_index, item.text_node_index) for item in targets],
+                expected_sha256=actual_sha,
+            )
+        except Exception as exc:
+            report.reason = "XML_SCOPE_ERROR"
+            report.reasons.append(f"XML_SCOPE_ERROR:{exc.__class__.__name__}")
+            report.ok = False
+            report.cancelled = True
+            return report
+        if src.read_bytes() != before_src:
+            report.reason = "SOURCE_MUTATED"
+            report.reasons.append("SOURCE_MUTATED")
+            report.ok = False
+            report.cancelled = True
+            return report
+        if not diff.ok or diff.unexpected_count or not diff.sha_ok:
+            report.reason = "OUT_OF_SCOPE_XML_CHANGE"
+            report.reasons.append("OUT_OF_SCOPE_XML_CHANGE")
+            report.ok = False
+            report.cancelled = True
+            return report
+        os.replace(tmp, dst)
+        replaced = True
+        if src.read_bytes() != before_src:
+            report.reason = "SOURCE_MUTATED"
+            report.reasons.append("SOURCE_MUTATED")
+            report.ok = False
+            report.cancelled = True
+            _drop_output()
+            return report
+    except BaseException:
+        _drop_output()
+        raise
+    finally:
+        if tmp.exists():
+            tmp.unlink()
+    report.ok = True
+    report.cancelled = False
+    report.reason = "WRITTEN"
+    report.written_count = len(targets)
+    return report
+
+
+def _labels_holding_real_values(index) -> set[str]:
+    """T02 labels whose value cell already holds prose or a number."""
+    from core.docx.services.hwpx_protected_regions import _cell_joined, _label_value_pairs
+
+    sections = {section.section_index: section for section in index.sections}
+    found: set[str] = set()
+    for section_index, _table_index, label, value, empty in _label_value_pairs(index):
+        if empty or not label:
+            continue
+        section = sections.get(section_index)
+        if section is None:
+            continue
+        if _real_existing_text(_cell_joined(section, value)):
+            found.add(label)
+    return found
+
+
+def commit_t02_label_writes(
+    in_hwpx: str | Path,
+    out_hwpx: str | Path,
+    values: dict[str, str],
+) -> ExactWriteReport:
+    """Refuse analyzer writes until an internal authorization recheck passes.
+
+    A T02 candidate is not a write. ``auto_write_allowed`` on a caller-built
+    record is ignored. Legacy ``commit_exact_text_writes`` stays a separate
+    coordinate contract.
+    """
+    from core.docx.services.hwpx_analysis_adapter import index_hwpx_structure
+
+    src = Path(in_hwpx)
+    dst = Path(out_hwpx)
+    report = ExactWriteReport(input=str(src), output=str(dst))
+    index = index_hwpx_structure(src)
+    if index.analysis_status != "COMPLETE":
+        report.reason = "INDEX_INCOMPLETE"
+        report.reasons.append("INDEX_INCOMPLETE")
+        return report
+    wanted = {re.sub(r"\s+", "", key).rstrip(":："): str(value) for key, value in values.items() if str(value or "").strip()}
+    if not wanted:
+        report.reason = "EMPTY_PLAN"
+        report.reasons.append("EMPTY_PLAN")
+        return report
+    from core.docx.services.hwpx_protected_regions import authorization_is_current, authorize_t02_writes
+    real_labels = _labels_holding_real_values(index)
+    grants = {
+        grant.field_label: grant
+        for grant in authorize_t02_writes(index)
+        if authorization_is_current(index, grant)
+    }
+    exact: list[ExactTextTarget] = []
+    for key, value in wanted.items():
+        grant = grants.get(key)
+        if grant is None or grant.source_sha256 != index.source_sha256:
+            report.reasons.append(f"NOT_AUTHORIZED:{key}")
+            if key in real_labels:
+                report.reasons.append(f"EXISTING_VALUE:{key}")
+            continue
+        exact.append(ExactTextTarget(
+            grant.section_member, grant.paragraph_index, grant.run_index, grant.text_node_index,
+            grant.expected_raw_text, value,
+            table_index=grant.table_index, row=grant.row, col=grant.col,
+        ))
+    if report.reasons or len(exact) != len(wanted):
+        report.reason = report.reasons[0] if report.reasons else "NOT_AUTHORIZED"
+        report.cancelled = True
+        report.ok = False
+        return report
+    return commit_exact_text_writes(src, dst, exact, source_sha256=index.source_sha256)
