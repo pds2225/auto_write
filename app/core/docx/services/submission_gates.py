@@ -406,6 +406,12 @@ def l050_evidence_path(pdf: str | Path) -> Path:
     return pdf_p.with_name(f"{pdf_p.stem}.l050.json")
 
 
+def _executable_basename(tool: str) -> str:
+    """Windows 증거 JSON 의 ``C:\\...\\rhwp.exe`` 도 Linux 에서 이름만 뽑는다."""
+    normalized = str(tool).strip().strip('"').replace("\\", "/")
+    return normalized.rsplit("/", 1)[-1].lower()
+
+
 def _write_l050_evidence(source: Path, dest: Path, tool: str) -> str:
     """Windows 실측 성공만 증거 파일을 남긴다. Linux 성공으로 mechanized 를 만들지 않는다."""
     if sys.platform != "win32":
@@ -532,8 +538,7 @@ def l050_mechanization_status(evidence: str | Path | None = None) -> dict[str, A
         blocked["reason"] = "BLOCKED: L050 evidence is not an object"
         return blocked
     pdf = Path(str(data.get("pdf") or ""))
-    tool = str(data.get("tool") or "")
-    tool_name = Path(tool).name.lower()
+    tool_name = _executable_basename(str(data.get("tool") or ""))
     proven = (
         data.get("lesson") == "L050"
         and data.get("generated") is True
