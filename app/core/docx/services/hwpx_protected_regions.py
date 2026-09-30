@@ -1568,6 +1568,9 @@ def find_inline_field_targets(index: HwpxStructureIndex) -> tuple[T02Target, ...
                         expected = ""
             if label is None or run is None:
                 continue
+            if owner is not None and table is not None and _right_value_cell(table, owner) is not None:
+                # 라벨 칸 옆 값 칸이 있으면 값은 그 칸에만 쓴다. 라벨 글자는 유지한다.
+                continue
             pending.append(T02Target(
                 field_label=label,
                 section_member=section.section_member,

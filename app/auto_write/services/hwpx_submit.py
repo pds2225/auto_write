@@ -36,7 +36,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from .hwpx_fill import commit_t02_label_writes, fill_hwpx
+from .hwpx_fill import commit_t02_label_writes, fill_hwpx, relax_t02_written_layout
 from .hwpx_acceptance import run_hwpx_acceptance
 from .hwpx_integrity_gate import run_hwpx_integrity_gate
 from .hwpx_layout_fix import (
@@ -385,36 +385,38 @@ def apply_t02_analyzer_writes(
         grant for grant in authorize_t02_writes(index)
         if authorization_is_current(index, grant)
     )
-    granted_labels = {grant.field_label for grant in current if grant.field_label}
-    granted_labels.update(
-        grant.field_label
-        for grant in authorize_merged_value_writes(index)
-        if merged_authorization_is_current(index, grant) and grant.field_label
+    written_grants = [grant for grant in current if grant.field_label]
+    granted_labels = {grant.field_label for grant in written_grants}
+    def _take(grants) -> None:
+        for grant in grants:
+            if not grant.field_label:
+                continue
+            granted_labels.add(grant.field_label)
+            written_grants.append(grant)
+
+    _take(
+        grant for grant in authorize_merged_value_writes(index)
+        if merged_authorization_is_current(index, grant)
     )
-    granted_labels.update(
-        grant.field_label
-        for grant in authorize_nested_leaf_writes(index)
-        if nested_authorization_is_current(index, grant) and grant.field_label
+    _take(
+        grant for grant in authorize_nested_leaf_writes(index)
+        if nested_authorization_is_current(index, grant)
     )
-    granted_labels.update(
-        grant.field_label
-        for grant in authorize_repeated_row_writes(index)
-        if repeated_authorization_is_current(index, grant) and grant.field_label
+    _take(
+        grant for grant in authorize_repeated_row_writes(index)
+        if repeated_authorization_is_current(index, grant)
     )
-    granted_labels.update(
-        grant.field_label
-        for grant in authorize_guidance_narrative_writes(index)
-        if guidance_authorization_is_current(index, grant) and grant.field_label
+    _take(
+        grant for grant in authorize_guidance_narrative_writes(index)
+        if guidance_authorization_is_current(index, grant)
     )
-    granted_labels.update(
-        grant.field_label
-        for grant in authorize_inline_field_writes(index)
-        if inline_authorization_is_current(index, grant) and grant.field_label
+    _take(
+        grant for grant in authorize_inline_field_writes(index)
+        if inline_authorization_is_current(index, grant)
     )
-    granted_labels.update(
-        grant.field_label
-        for grant in authorize_checkbox_writes(index)
-        if checkbox_authorization_is_current(index, grant) and grant.field_label
+    _take(
+        grant for grant in authorize_checkbox_writes(index)
+        if checkbox_authorization_is_current(index, grant)
     )
     pending_labels = {
         field.field_label
@@ -443,6 +445,21 @@ def apply_t02_analyzer_writes(
         raise ValueError("T02 analyzer staging path must differ from the source")
     commit_report = commit_t02_label_writes(source, staging, analyzer)
     if getattr(commit_report, "ok", False) and staging.is_file():
+        chosen = {}
+        for grant in written_grants:
+            if grant.field_label and grant.field_label not in chosen:
+                chosen[grant.field_label] = grant
+        specs = [
+            {
+                "section_member": grant.section_member,
+                "paragraph_index": grant.paragraph_index,
+                "run_index": grant.run_index,
+                "expected_raw_text": grant.expected_raw_text,
+            }
+            for label, grant in chosen.items()
+            if label in analyzer
+        ]
+        relax_t02_written_layout(staging, specs)
         return T02AnalyzerWire(staging, legacy, dict(analyzer), tuple(dict.fromkeys(held)))
     if staging.exists():
         staging.unlink()

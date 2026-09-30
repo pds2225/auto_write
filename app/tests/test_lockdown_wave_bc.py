@@ -5,6 +5,7 @@ L154–L156 은 lessons.md 에 없으면 coverage JSON 에 넣지 않고 코드+
 """
 from __future__ import annotations
 
+import inspect
 import sys
 import types
 from pathlib import Path
@@ -355,3 +356,17 @@ def test_l003_dispatch_calls_kill_before_com(monkeypatch):
     hwp_docx_convert._dispatch_hwp(skip_com_guard=True)
     assert calls[0] == "kill"
     assert calls[1] == "dispatch:HWPFrame.HwpObject"
+
+
+def test_l003_kill_does_not_taskkill_every_hangul():
+    """전역 이미지 종료는 하지 않는다. 이번 호출의 PID 만 닫는다."""
+    source = inspect.getsource(kill_hangul_processes)
+    assert "taskkill" not in source
+    assert "/IM" not in source
+    assert kill_hangul_processes() == []
+    owned = inspect.getsource(hwp_docx_convert._kill_owned_pids)
+    assert "/PID" in owned
+    assert "/IM" not in owned
+    convert = inspect.getsource(hwp_docx_convert._convert_via_com)
+    assert "owned_pids" in convert
+    assert "/IM" not in convert

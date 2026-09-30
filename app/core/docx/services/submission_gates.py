@@ -462,10 +462,20 @@ def _try_hangul_com_pdf(source: Path, dest: Path) -> PdfPairGenerateResult | Non
                 dest.unlink()
             except OSError:
                 pass
-        return PdfPairGenerateResult(False, False, True, "BLOCKED: Hangul COM PDF 저장 실패")
+        return PdfPairGenerateResult(
+            False,
+            False,
+            True,
+            "BLOCKED-by-form: Hangul refused SaveAs PDF for this form",
+        )
     if dest.is_file() and dest.stat().st_size > 0:
         return PdfPairGenerateResult(True, False, False, "Hangul COM SaveAs PDF", "")
-    return PdfPairGenerateResult(False, False, True, "BLOCKED: Hangul COM PDF 미생성")
+    return PdfPairGenerateResult(
+        False,
+        False,
+        True,
+        "BLOCKED-by-form: Hangul refused SaveAs PDF for this form",
+    )
 
 
 def try_generate_sibling_pdf(path: str | Path) -> PdfPairGenerateResult:

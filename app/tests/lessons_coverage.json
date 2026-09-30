@@ -513,7 +513,7 @@
       "mechanizable": "partial",
       "category": "gap",
       "guard_ref": "submission_gates.missing_pdf_pair + try_generate_sibling_pdf (RHWP_EXE then PATH export-pdf; Windows 한글 COM SaveAs 는 rhwp 없을 때만, soffice 미인정, COM 성공은 *.l050.json 이 아님) + l050_mechanization_status / app/tests/test_lockdown_wave_de.py::test_l050_stays_gap_and_generate_blocked_without_rhwp + test_l005_l050_evidence.py::test_hangul_com_saveas_writes_sibling_pdf_without_mechanizing",
-      "gap_desc": "동일 stem PDF 는 rhwp export-pdf 가 우선이다. rhwp 가 없고 Windows 한글 COM 이 있으면 SaveAs PDF 로 같은 이름 PDF 를 만든다. COM 이 없어도 예외 없이 미생성으로 기록한다. COM 성공은 mechanized 가 아니다. Windows rhwp *.l050.json 실측 전 gap.",
+      "gap_desc": "동일 stem PDF 는 rhwp export-pdf 가 우선이다. rhwp 가 없고 Windows 한글 COM 이 있으면 SaveAs PDF 로 같은 이름 PDF 를 만든다. COM 이 없거나 그 양식 자체가 PDF 저장을 거부하면 예외 없이 BLOCKED-by-form 으로 기록한다. COM 성공은 mechanized 가 아니다. Windows rhwp *.l050.json 실측 전 gap.",
       "impact": "med",
       "domain": "business_plan"
     },

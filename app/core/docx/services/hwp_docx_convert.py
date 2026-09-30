@@ -27,8 +27,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
-_HANGUL_PROCESS_IM = ("Hwp.exe",)
-
 _HWP_EXTS = {".hwp", ".hwpx"}
 _COM_PROGID = "HWPFrame.HwpObject"
 
@@ -78,22 +76,48 @@ def hancom_com_available() -> bool:
 
 
 def kill_hangul_processes() -> list[str]:
-    """L003: COM Dispatch 직전 Hwp.exe 를 종료한다.
+    """L003: Dispatch 직전 훅. 사용자의 한글 창은 닫지 않는다.
 
-    실측 종료는 Windows ``taskkill /F /IM Hwp.exe`` 만. 이 프로세스 PID 는
-    대상이 아니다. 비-Windows 는 no-op(빈 목록) — 유닛은 이 함수 호출 spy.
+    열려 있는 한글을 이미지 이름 전체로 종료하지 않는다. 빈 목록을 돌려 주고,
+    이번 호출이 새로 띄운 프로세스만 ``_convert_via_com`` 이 닫는다.
     """
+    return []
+
+
+def _hangul_image_pids() -> set[int]:
+    """지금 떠 있는 Hwp.exe PID. 비-Windows 이거나 조회 실패면 빈 집합."""
     if sys.platform != "win32":
-        return []
-    done: list[str] = []
-    for im in _HANGUL_PROCESS_IM:
+        return set()
+    try:
+        proc = subprocess.run(
+            ["tasklist", "/FI", "IMAGENAME eq Hwp.exe", "/FO", "CSV", "/NH"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return set()
+    found: set[int] = set()
+    for line in (proc.stdout or "").splitlines():
+        parts = [piece.strip().strip('"') for piece in line.split(",")]
+        if len(parts) >= 2 and parts[0].lower() == "hwp.exe" and parts[1].isdigit():
+            found.add(int(parts[1]))
+    return found
+
+
+def _kill_owned_pids(pids: set[int]) -> None:
+    """이 호출이 새로 띄운 Hwp.exe PID 만 종료한다."""
+    if sys.platform != "win32" or not pids:
+        return
+    still = _hangul_image_pids()
+    for pid in pids:
+        if pid not in still:
+            continue
         subprocess.run(
-            ["taskkill", "/F", "/IM", im],
+            ["taskkill", "/F", "/PID", str(pid)],
             capture_output=True,
             check=False,
         )
-        done.append(im)
-    return done
 
 
 def _dispatch_hwp(*, skip_com_guard: bool = False):
@@ -101,7 +125,7 @@ def _dispatch_hwp(*, skip_com_guard: bool = False):
 
     기본: ``hancom_com_guard`` 로 HOffice130(2024·로그인) COM 기동을 차단한다.
   ``skip_com_guard=True`` 또는 ``AUTO_WRITE_ALLOW_HANCOM_2024_COM=1`` 로만 우회.
-    L003: Dispatch 직전에 ``kill_hangul_processes``.
+    L003: Dispatch 직전에 ``kill_hangul_processes``. 그 함수는 전역 종료를 하지 않는다.
     """
     kill_hangul_processes()
     if not skip_com_guard:
@@ -124,7 +148,9 @@ def _convert_via_com(src: Path, dst: Path, save_formats: tuple[str, ...]) -> Non
     주의: 백그라운드/서비스 세션에서는 한글 GUI COM 서버가 안 떠서
     Dispatch/Open 단계에서 실패할 수 있다(호출측이 폴백을 처리한다).
     """
+    before_pids = _hangul_image_pids()
     hwp = _dispatch_hwp()
+    owned_pids = _hangul_image_pids() - before_pids
     # 자동화 중 화면에 창이 뜨는 것을 방지(버전에 따라 미지원일 수 있어 무시하고 진행)
     try:
         hwp.XHwpWindows.Item(0).Visible = False
@@ -153,14 +179,18 @@ def _convert_via_com(src: Path, dst: Path, save_formats: tuple[str, ...]) -> Non
                 continue
         raise RuntimeError(f"한글 저장 실패(시도 포맷 {save_formats}): {dst}")
     finally:
-        try:
-            hwp.Clear(1)
-        except Exception:
-            pass
-        try:
-            hwp.Quit()
-        except Exception:
-            pass
+        # 이미 떠 있던 한글에 붙은 경우에는 Clear/Quit 하지 않는다.
+        # 이번 호출이 새로 만든 프로세스만 닫고, 그 PID 만 종료한다.
+        if owned_pids:
+            try:
+                hwp.Clear(1)
+            except Exception:
+                pass
+            try:
+                hwp.Quit()
+            except Exception:
+                pass
+            _kill_owned_pids(owned_pids)
 
 
 # --- 경로/검증 도우미 ---------------------------------------------------------

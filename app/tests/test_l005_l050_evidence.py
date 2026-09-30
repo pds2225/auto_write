@@ -133,6 +133,10 @@ def test_broken_rhwp_exe_does_not_fall_through_to_path(tmp_path: Path, monkeypat
     src.write_bytes(b"PK")
     called: list = []
     monkeypatch.setattr(gates.subprocess, "run", lambda *args, **kwargs: called.append(args))
+    monkeypatch.setattr(
+        "core.docx.services.hwp_docx_convert.hancom_com_available",
+        lambda: False,
+    )
     gen = try_generate_sibling_pdf(src)
     assert called == []
     assert gen.generated is False
@@ -148,6 +152,10 @@ def test_default_skips_rhwp_export_pdf_even_if_exe_is_set(tmp_path: Path, monkey
     monkeypatch.setenv("RHWP_EXE", str(exe))
     called: list = []
     monkeypatch.setattr(gates.subprocess, "run", lambda *args, **kwargs: called.append(args))
+    monkeypatch.setattr(
+        "core.docx.services.hwp_docx_convert.hancom_com_available",
+        lambda: False,
+    )
     assert hangul_pdf_tool() is None
     src = tmp_path / "신청서.hwpx"
     src.write_bytes(b"PK")
@@ -157,6 +165,34 @@ def test_default_skips_rhwp_export_pdf_even_if_exe_is_set(tmp_path: Path, monkey
     assert gen.blocked is True
     assert not (tmp_path / "신청서.pdf").exists()
     assert _lesson("L050")["category"] == "gap"
+
+
+def test_hangul_refuses_pdf_records_blocked_by_form(tmp_path: Path, monkeypatch) -> None:
+    """양식 자체가 PDF 저장을 거부하면 BLOCKED-by-form 이고 크래시·mechanized 가 아니다."""
+    _hide_rhwp(monkeypatch)
+    monkeypatch.setattr(gates.sys, "platform", "win32")
+    monkeypatch.setattr(
+        "core.docx.services.hwp_docx_convert.hancom_com_available",
+        lambda: True,
+    )
+
+    def export_pdf(_src, _dest) -> None:
+        raise OSError("Hangul refused SaveAs PDF")
+
+    monkeypatch.setattr(
+        "core.docx.services.hwp_docx_convert.export_pdf_via_com",
+        export_pdf,
+    )
+    src = tmp_path / "신청서.hwpx"
+    src.write_bytes(b"PK")
+    gen = try_generate_sibling_pdf(src)
+    assert gen.generated is False
+    assert gen.blocked is True
+    assert "BLOCKED-by-form" in gen.reason
+    assert not (tmp_path / "신청서.pdf").exists()
+    assert l050_mechanization_status()["mechanized"] is False
+    assert _lesson("L050")["category"] == "gap"
+    assert _lesson("L050")["mechanizable"] != "yes"
 
 
 def test_soffice_is_not_a_hangul_pdf_tool(tmp_path: Path, monkeypatch) -> None:

@@ -472,6 +472,10 @@ def test_default_rhwp_does_not_spawn_or_draft(tmp_path, monkeypatch):
     src = tmp_path / "form.hwpx"
     _write(src, _section_clean())
     out = tmp_path / "out.hwpx"
+    monkeypatch.setattr(
+        "core.docx.services.hwp_docx_convert.hancom_com_available",
+        lambda: False,
+    )
     rep = submit_hwpx(
         src,
         out,
