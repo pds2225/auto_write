@@ -62,6 +62,15 @@ RHWP_ABSENT_RENDER_NOTE = (
     "RHWP_ABSENT: 네이티브 재열기/렌더 생략 — "
     "L005 픽셀·L050 동일명 PDF는 ENV_BLOCKED (재열기 PASS로 기록하지 않음)"
 )
+RHWP_DISABLED_REPAIR_NOTE = (
+    "rhwp 기본 끔(AUTO_WRITE_ENABLE_RHWP 없음) — 표 격자 자동 repair 생략. "
+    "레이아웃을 추정 수정하지 않고 패키지를 유지한다."
+)
+RHWP_DISABLED_RENDER_NOTE = (
+    "RHWP_DISABLED: 네이티브 재열기/렌더 기본 끔(NOT_RUN). "
+    "AUTO_WRITE_ENABLE_RHWP=1 일 때만 rhwp 를 실행한다. "
+    "L005 픽셀·L050 동일명 PDF는 PASS로 기록하지 않음"
+)
 XML_OVERFLOW_NOT_L005_NOTE = (
     "고정 셀 높이는 XML 추정 — L005 한글 픽셀 재열기 PASS가 아님"
 )
@@ -222,9 +231,15 @@ def _check_and_repair_semantics(report: SubmitReport, out: Path, *, preserve_tem
 
     if preserve_template and not _rhwp_present():
         # rhwp로 다시 열 수 없으면 주소 재지정을 만들지 않는다.
+        from core.docx.services.native_hwp import rhwp_enabled
+
         report.semantic_after = before
-        report.draft_reason = "rhwp 미설치 — 보호 양식의 표 격자 결함은 자동 교정하지 않음"
-        report.notes.append(RHWP_ABSENT_REPAIR_NOTE)
+        if rhwp_enabled():
+            report.draft_reason = "rhwp 미설치 — 보호 양식의 표 격자 결함은 자동 교정하지 않음"
+            report.notes.append(RHWP_ABSENT_REPAIR_NOTE)
+        else:
+            report.draft_reason = "rhwp 기본 끔 — 보호 양식의 표 격자 결함은 자동 교정하지 않음"
+            report.notes.append(RHWP_DISABLED_REPAIR_NOTE)
         return False
 
     repaired = out.with_name(f"{out.stem}.__grid_repair__.{os.getpid()}{out.suffix}")
@@ -305,7 +320,10 @@ def _note_native_render(report: SubmitReport) -> None:
     native = report.native_render or {}
     if not native:
         return
-    if native.get("render_status") == "UNAVAILABLE":
+    if native.get("render_status") == "NOT_RUN" and native.get("disabled") is True:
+        if RHWP_DISABLED_RENDER_NOTE not in report.notes:
+            report.notes.append(RHWP_DISABLED_RENDER_NOTE)
+    elif native.get("render_status") == "UNAVAILABLE":
         if RHWP_ABSENT_RENDER_NOTE not in report.notes:
             report.notes.append(RHWP_ABSENT_RENDER_NOTE)
     if native.get("l005_pixel") == "PASS" or native.get("pixel_reopen_claimed") is True:

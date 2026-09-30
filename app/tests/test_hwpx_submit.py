@@ -485,6 +485,7 @@ def _sized_section_xml() -> bytes:
 
 def _force_rhwp_absent(monkeypatch) -> None:
     """PATH 의 rhwp 버전과 무관하게 L006 가드가 리눅스와 같은 분기를 타게 한다."""
+    monkeypatch.delenv("AUTO_WRITE_ENABLE_RHWP", raising=False)
     from core.docx.services import native_hwp
 
     monkeypatch.setattr(native_hwp, "resolve_rhwp_executable", lambda: None)
@@ -750,6 +751,7 @@ def _fake_rhwp(tmp_path, monkeypatch, *, stdout: str, stderr: str, returncode: i
     exe = tmp_path / "rhwp.exe"
     exe.write_bytes(b"MZ")
     native_hwp.clear_rhwp_capability_cache()
+    monkeypatch.setenv("AUTO_WRITE_ENABLE_RHWP", "1")
     monkeypatch.setenv("RHWP_EXE", str(exe))
     calls: list[list[str]] = []
 
@@ -872,6 +874,7 @@ def test_invalid_rhwp_exe_does_not_fall_back_to_path(tmp_path, monkeypatch):
 
     decoy = tmp_path / "rhwp"
     decoy.write_bytes(b"decoy")
+    monkeypatch.setenv("AUTO_WRITE_ENABLE_RHWP", "1")
     monkeypatch.setenv("RHWP_EXE", str(tmp_path / "missing" / "rhwp.exe"))
     seen: list[str] = []
     monkeypatch.setattr(native_hwp.shutil, "which", lambda name: seen.append(name) or str(decoy))

@@ -1,7 +1,7 @@
 """Native HWP/HWPX I/O. Never calls Hancom COM or a DOCX converter.
 
-RHWP_EXE selects a locally installed rhwp executable. Rendering success is
-separate from visual approval: a readable PDF alone cannot authorize FINAL.
+P0 기본은 rhwp 를 쓰지 않는다. ``AUTO_WRITE_ENABLE_RHWP=1`` 일 때만
+``RHWP_EXE`` 또는 PATH 의 rhwp 를 찾는다. 렌더 성공은 화면 승인과 별개다.
 """
 from __future__ import annotations
 
@@ -22,6 +22,12 @@ def file_sha256(path: str | Path) -> str:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
+def rhwp_enabled() -> bool:
+    """확장 단계에서만 rhwp 를 켠다. 기본값은 끄짐."""
+    raw = os.environ.get("AUTO_WRITE_ENABLE_RHWP", "")
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _rhwp_basename_ok(path: Path) -> bool:
     """Accept rhwp / rhwp.exe. Never treat soffice as rhwp."""
     name = path.name.lower()
@@ -33,9 +39,12 @@ def _rhwp_basename_ok(path: Path) -> bool:
 def resolve_rhwp_executable() -> str | None:
     """RHWP_EXE 가 실제 파일이면 그 경로, 아니면 PATH 의 rhwp.
 
+    ``AUTO_WRITE_ENABLE_RHWP`` 가 없으면 설치 여부와 관계없이 None.
     RHWP_EXE 가 비어 있지 않은데 파일이 없으면 PATH 로 넘어가지 않는다.
     LibreOffice(soffice) 는 반환하지 않는다.
     """
+    if not rhwp_enabled():
+        return None
     raw = os.environ.get("RHWP_EXE")
     if raw is not None and raw.strip():
         path = Path(raw.strip().strip('"'))
@@ -179,9 +188,13 @@ def _probe_rhwp_capability(executable: str) -> tuple[bool, str]:
 def rhwp_available() -> bool:
     """JSON 계약을 말하는 rhwp 만 설치된 것으로 본다.
 
-    바이너리는 있으나 ``--json`` 을 모르는 버전(예: 0.7.19)은 미설치와 같다.
-    ``RHWP_EXE`` 가 비어 있지 않은데 파일이 없으면 PATH 로 넘어가지 않는다.
+    기본값은 False 다. ``AUTO_WRITE_ENABLE_RHWP=1`` 이 아니면 프로세스를
+    띄우지 않는다. 바이너리는 있으나 ``--json`` 을 모르는 버전(예: 0.7.19)은
+    미설치와 같다. ``RHWP_EXE`` 가 비어 있지 않은데 파일이 없으면 PATH 로
+    넘어가지 않는다.
     """
+    if not rhwp_enabled():
+        return False
     executable = resolve_rhwp_executable()
     if not executable:
         return False
@@ -190,6 +203,10 @@ def rhwp_available() -> bool:
 
 
 def _rhwp_json(*args: str, timeout: int = 60) -> dict[str, Any]:
+    if not rhwp_enabled():
+        raise FileNotFoundError(
+            "rhwp disabled: AUTO_WRITE_ENABLE_RHWP=1 이 없으면 rhwp 를 실행하지 않습니다."
+        )
     executable = resolve_rhwp_executable()
     if not executable:
         raise FileNotFoundError("rhwp 미설치: RHWP_EXE에 실행 파일 경로를 지정하세요.")
@@ -250,8 +267,36 @@ def prepare_native_source(source: str | Path, output: str | Path) -> tuple[Path,
                  "verify": conversion["verify"], "verify_pages": conversion["verifyPages"]}
 
 
+def _disabled_render_evidence() -> dict[str, Any]:
+    """기본 끔. REVIEW_REQUIRED 로 올리지 않고 rhwp 를 호출하지 않는다."""
+    return {
+        "ok": False,
+        "severity": "PASS",
+        "renderer": "disabled",
+        "render_status": "NOT_RUN",
+        "reopen_status": "NOT_RUN",
+        "visual_review": "NOT_RUN",
+        "pdf": "",
+        "page_count": 0,
+        "l005_pixel": "NOT_RUN",
+        "l050_pdf": "NOT_RUN",
+        "pixel_reopen_claimed": False,
+        "disabled": True,
+        "message": (
+            "rhwp disabled — AUTO_WRITE_ENABLE_RHWP=1 이 없으면 "
+            "재열기/렌더를 실행하지 않음(NOT_RUN)"
+        ),
+    }
+
+
 def verify_hwpx_native(path: str | Path) -> dict[str, Any]:
-    """Reopen and render the exact candidate; never use a stale sibling PDF."""
+    """Reopen and render the exact candidate; never use a stale sibling PDF.
+
+    기본값은 검사를 실행하지 않는다. 결과는 NOT_RUN/disabled 이고
+    REVIEW_REQUIRED 가 아니다.
+    """
+    if not rhwp_enabled():
+        return _disabled_render_evidence()
     candidate = Path(path)
     evidence: dict[str, Any] = {
         "ok": False, "severity": "REVIEW_REQUIRED", "renderer": "rhwp",
@@ -260,6 +305,7 @@ def verify_hwpx_native(path: str | Path) -> dict[str, Any]:
         # L005 픽셀·L050 동일 stem PDF는 이 함수의 PASS가 아니다.
         "l005_pixel": "NOT_RUN", "l050_pdf": "NOT_RUN",
         "pixel_reopen_claimed": False,
+        "disabled": False,
     }
     try:
         if candidate.suffix.lower() != ".hwpx":

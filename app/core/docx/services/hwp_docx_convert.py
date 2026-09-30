@@ -289,8 +289,9 @@ def docx_to_hwp(in_path: str | Path, out_path: Optional[str | Path] = None) -> C
 def hwp_to_hwpx(in_path: str | Path, out_path: Optional[str | Path] = None) -> ConvertReport:
     """HWP를 HWPX로 변환한다. DOCX로 폴백하지 않는다.
 
-    1. rhwp ``export-hwpx`` (``native_hwp.prepare_native_source``) 가 있으면 검증 변환.
-    2. 없거나 실패하면 한글 COM ``_convert_via_com`` (XHwpWindows + HWPX SaveAs).
+    P0 기본은 한글 COM ``_convert_via_com`` (XHwpWindows + HWPX SaveAs) 만 쓴다.
+    ``AUTO_WRITE_ENABLE_RHWP=1`` 이고 JSON rhwp 가 있을 때만
+    ``prepare_native_source`` 를 먼저 시도하고, 실패하면 COM 으로 넘긴다.
     둘 다 없으면 ``ok=False`` 와 한글 재저장/DOCX 명시 선택 안내만 반환한다.
     """
     from core.docx.services import native_hwp as _native_hwp

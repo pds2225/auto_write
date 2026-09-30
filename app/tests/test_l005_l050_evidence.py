@@ -42,6 +42,10 @@ def _hide_rhwp(monkeypatch) -> None:
     monkeypatch.setattr(native_hwp.shutil, "which", lambda _name: None)
 
 
+def _enable_rhwp(monkeypatch) -> None:
+    monkeypatch.setenv("AUTO_WRITE_ENABLE_RHWP", "1")
+
+
 def _fake_run(dest_bytes: bytes):
     def run(cmd, **_kwargs):
         out = Path(cmd[cmd.index("-o") + 1])
@@ -59,6 +63,7 @@ def _fake_run(dest_bytes: bytes):
 
 
 def test_rhwp_exe_beats_path_and_export_args(tmp_path: Path, monkeypatch) -> None:
+    _enable_rhwp(monkeypatch)
     exe = tmp_path / "rhwp.exe"
     exe.write_bytes(b"MZ")
     decoy = tmp_path / "rhwp"
@@ -109,6 +114,7 @@ def test_rhwp_exe_beats_path_and_export_args(tmp_path: Path, monkeypatch) -> Non
 
 
 def test_path_rhwp_used_when_env_unset(tmp_path: Path, monkeypatch) -> None:
+    _enable_rhwp(monkeypatch)
     exe = tmp_path / "rhwp"
     exe.write_bytes(b"#!/bin/sh\n")
     monkeypatch.delenv("RHWP_EXE", raising=False)
@@ -117,6 +123,7 @@ def test_path_rhwp_used_when_env_unset(tmp_path: Path, monkeypatch) -> None:
 
 
 def test_broken_rhwp_exe_does_not_fall_through_to_path(tmp_path: Path, monkeypatch) -> None:
+    _enable_rhwp(monkeypatch)
     decoy = tmp_path / "rhwp"
     decoy.write_bytes(b"decoy")
     monkeypatch.setenv("RHWP_EXE", str(tmp_path / "missing" / "rhwp.exe"))
@@ -134,7 +141,26 @@ def test_broken_rhwp_exe_does_not_fall_through_to_path(tmp_path: Path, monkeypat
     assert not (tmp_path / "신청서.pdf").exists()
 
 
+def test_default_skips_rhwp_export_pdf_even_if_exe_is_set(tmp_path: Path, monkeypatch) -> None:
+    exe = tmp_path / "rhwp.exe"
+    exe.write_bytes(b"MZ")
+    monkeypatch.delenv("AUTO_WRITE_ENABLE_RHWP", raising=False)
+    monkeypatch.setenv("RHWP_EXE", str(exe))
+    called: list = []
+    monkeypatch.setattr(gates.subprocess, "run", lambda *args, **kwargs: called.append(args))
+    assert hangul_pdf_tool() is None
+    src = tmp_path / "신청서.hwpx"
+    src.write_bytes(b"PK")
+    gen = try_generate_sibling_pdf(src)
+    assert called == []
+    assert gen.generated is False
+    assert gen.blocked is True
+    assert not (tmp_path / "신청서.pdf").exists()
+    assert _lesson("L050")["category"] == "gap"
+
+
 def test_soffice_is_not_a_hangul_pdf_tool(tmp_path: Path, monkeypatch) -> None:
+    _enable_rhwp(monkeypatch)
     soffice = tmp_path / "soffice"
     soffice.write_bytes(b"lo")
     monkeypatch.delenv("RHWP_EXE", raising=False)
@@ -148,6 +174,7 @@ def test_soffice_is_not_a_hangul_pdf_tool(tmp_path: Path, monkeypatch) -> None:
 
 
 def test_export_failure_stays_blocked(tmp_path: Path, monkeypatch) -> None:
+    _enable_rhwp(monkeypatch)
     exe = tmp_path / "rhwp.exe"
     exe.write_bytes(b"MZ")
     monkeypatch.setenv("RHWP_EXE", str(exe))
@@ -198,6 +225,7 @@ def test_linux_ignores_windows_l050_evidence(tmp_path: Path, monkeypatch) -> Non
 
 
 def test_win32_export_writes_evidence_but_not_mechanized(tmp_path: Path, monkeypatch) -> None:
+    _enable_rhwp(monkeypatch)
     exe = tmp_path / "rhwp.exe"
     exe.write_bytes(b"MZ")
     monkeypatch.setenv("RHWP_EXE", str(exe))
@@ -357,6 +385,7 @@ def test_submit_hwpx_attempts_sibling_pdf_only_when_submittable(tmp_path: Path, 
 def test_document_pdf_uses_rhwp_exe(tmp_path: Path, monkeypatch) -> None:
     from auto_write.image_automation import document_pdf as dp
 
+    _enable_rhwp(monkeypatch)
     exe = tmp_path / "rhwp.exe"
     exe.write_bytes(b"MZ")
     monkeypatch.setenv("RHWP_EXE", str(exe))

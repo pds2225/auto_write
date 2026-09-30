@@ -36,7 +36,10 @@ import auto_write.main as main
 import auto_write.operator_main  # noqa: F401  — 콘솔 라우트를 같은 app에 붙인다
 from auto_write.services.hwp_docx_convert import hancom_com_available
 from auto_write.services.hwpx_acceptance import run_hwpx_acceptance
-from auto_write.services.hwpx_submit import RHWP_ABSENT_RENDER_NOTE, RHWP_ABSENT_REPAIR_NOTE
+from auto_write.services.hwpx_submit import (
+    RHWP_DISABLED_RENDER_NOTE,
+    RHWP_DISABLED_REPAIR_NOTE,
+)
 from core.docx.services.hwpx_analysis_adapter import index_hwpx_structure
 from core.docx.services.hwpx_protected_regions import assess_fields
 from test_hwpx_cross_feature_integration import (
@@ -221,10 +224,12 @@ def test_web_happy_path_returns_intact_filled_package(client, tmp_path):
     assert routing["submittable"] is True
     assert routing["final_output_allowed"] is True
     assert Path(routing["final"]).name == "output.hwpx"
-    assert RHWP_ABSENT_RENDER_NOTE in routing["notes"]
-    assert routing["native_render"]["render_status"] == "UNAVAILABLE"
-    assert routing["native_render"]["l005_pixel"] == "ENV_BLOCKED"
-    assert routing["native_render"]["l050_pdf"] == "ENV_BLOCKED"
+    assert RHWP_DISABLED_RENDER_NOTE in routing["notes"]
+    assert routing["native_render"]["render_status"] == "NOT_RUN"
+    assert routing["native_render"]["disabled"] is True
+    assert routing["native_render"]["l005_pixel"] == "NOT_RUN"
+    assert routing["native_render"]["l050_pdf"] == "NOT_RUN"
+    assert routing["native_render"]["severity"] == "PASS"
     assert routing["native_render"]["pixel_reopen_claimed"] is False
     # COM 설치 여부와 rhwp 부재는 별개다. L005 픽셀 PASS는 여기 기대값이 아니다.
     assert route["visual_render"] == (
@@ -326,7 +331,8 @@ def test_web_stacked_protections_match_direct_submit(client, tmp_path):
     assert _member(final, "Contents/header.xml") == header
     assert _member(final, "Contents/content.hpf") == package
     assert _foreign_t(final) == 0
-    assert RHWP_ABSENT_RENDER_NOTE in notes
+    assert RHWP_DISABLED_RENDER_NOTE in notes
+    assert routing["native_render"]["render_status"] == "NOT_RUN"
     assert routing["native_render"]["l005_pixel"] != "PASS"
     assert routing["native_render"]["l050_pdf"] != "PASS"
     _source_unchanged(template_id, project_id, "combined.hwpx", original)
@@ -392,10 +398,12 @@ def test_web_broken_grid_rhwp_absent_keeps_package_and_drafts(client, tmp_path):
     assert routing["ok"] is False
     assert routing["submittable"] is False
     assert routing["repair"] == {}
-    assert RHWP_ABSENT_REPAIR_NOTE in routing["notes"]
-    assert RHWP_ABSENT_RENDER_NOTE in routing["notes"]
+    assert RHWP_DISABLED_REPAIR_NOTE in routing["notes"]
+    assert RHWP_DISABLED_RENDER_NOTE in routing["notes"]
     assert routing["native_render"]["reopen_status"] == "NOT_RUN"
-    assert routing["native_render"]["l005_pixel"] == "ENV_BLOCKED"
+    assert routing["native_render"]["render_status"] == "NOT_RUN"
+    assert routing["native_render"]["l005_pixel"] == "NOT_RUN"
+    assert routing["native_render"]["severity"] == "PASS"
     assert Path(routing["final"]).name == "output_DRAFT.hwpx"
     assert client.get(f"/downloads/{project_id}/output.hwpx").status_code == 404
     final = _download_final(client, project_id, route, tmp_path / "broken-out.hwpx")

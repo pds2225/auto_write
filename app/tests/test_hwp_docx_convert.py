@@ -337,7 +337,38 @@ def test_hwp_to_hwpx_uses_hangul_com_saveas(tmp_path: Path, monkeypatch) -> None
     assert list(tmp_path.glob("*.docx")) == []
 
 
+def test_hwp_to_hwpx_default_uses_com_even_if_rhwp_exe_is_set(tmp_path: Path, monkeypatch) -> None:
+    src = tmp_path / "양식.hwp"
+    src.write_bytes(b"OLE-HWP-BYTES")
+    out = tmp_path / "양식.hwpx"
+    exe = tmp_path / "rhwp.exe"
+    exe.write_bytes(b"MZ")
+    monkeypatch.delenv("AUTO_WRITE_ENABLE_RHWP", raising=False)
+    monkeypatch.setenv("RHWP_EXE", str(exe))
+    calls: list = []
+
+    def _forbid(*_args, **_kwargs):
+        calls.append("rhwp")
+        raise AssertionError("기본 경로에서 rhwp 를 호출하면 안 됩니다.")
+
+    fake = _FakeHwpCom()
+    monkeypatch.setattr(native_hwp.subprocess, "run", _forbid)
+    monkeypatch.setattr(native_hwp, "prepare_native_source", _forbid)
+    monkeypatch.setattr(mod, "hancom_com_available", lambda: True)
+    monkeypatch.setattr(mod, "_dispatch_hwp", lambda: fake)
+
+    report = hwp_to_hwpx(src, out)
+
+    assert report.ok is True
+    assert report.method == "hancom_com"
+    assert calls == []
+    assert fake.saved[0][1] == "HWPX"
+    assert out.read_bytes() == b"FAKE-HWP-BINARY"
+    assert src.read_bytes() == b"OLE-HWP-BYTES"
+
+
 def test_hwp_to_hwpx_prefers_rhwp_when_available(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("AUTO_WRITE_ENABLE_RHWP", "1")
     src = tmp_path / "양식.hwp"
     src.write_bytes(b"OLE-HWP-BYTES")
     out = tmp_path / "양식.hwpx"
@@ -363,6 +394,7 @@ def test_hwp_to_hwpx_prefers_rhwp_when_available(tmp_path: Path, monkeypatch) ->
 
 
 def test_hwp_to_hwpx_uses_com_after_rhwp_failure(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("AUTO_WRITE_ENABLE_RHWP", "1")
     src = tmp_path / "양식.hwp"
     src.write_bytes(b"OLE-HWP-BYTES")
     out = tmp_path / "양식.hwpx"
