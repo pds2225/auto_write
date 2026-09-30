@@ -305,23 +305,32 @@ def run_hwpx_integrity_gate(
     acceptance_validator: Callable[..., Any] = run_hwpx_acceptance,
     render_validator: Callable[[str], Any] | None = None,
     fixed_cell_overflow: list[str] | tuple[str, ...] = (),
+    acceptance_baseline: str | None = None,
 ) -> IntegrityGateReport:
     """HWPX 구조·수용검사를 공통 계약으로 실행하고 severity를 집계한다.
 
     ``fixed_cell_overflow`` 는 XML 폭/높이 가드가 발견한 렌더링 위험 후보다.
     실제 한글 렌더링으로 확정하지 않으므로 HARD_FAIL이 아니라 REVIEW_REQUIRED로
     기록한다. 빈 목록이면 해당 validator를 생략해 기존 정상 출력 계약을 보존한다.
+
+    ``acceptance_baseline`` 이 있으면 수용검사에 원본 양식을 넘긴다. 양식에 있던
+    유색·안내문구·미편집 문단의 linesegarray 는 결함이 아니다. 생략하면 산출물
+    절대 개수(기존 계약)이고, baseline 인자를 받지 않는 커스텀 validator 에는
+    넘기지 않는다.
     """
     report = IntegrityGateReport(source=str(path))
     report.validators.append(
         _run_structural_validator("check_hwpx_semantics", semantic_validator, path)
     )
+    acceptance_kwargs: dict[str, Any] = {"allowed_names": tuple(allowed_names)}
+    if acceptance_baseline:
+        acceptance_kwargs["baseline"] = acceptance_baseline
     report.validators.append(
         _run_structural_validator(
             "run_hwpx_acceptance",
             acceptance_validator,
             path,
-            allowed_names=tuple(allowed_names),
+            **acceptance_kwargs,
         )
     )
     if fixed_cell_overflow:

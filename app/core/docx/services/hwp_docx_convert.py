@@ -37,6 +37,7 @@ _SAVE_FORMATS = {
     ".docx": ("DOCX", "OOXML", "MSWORD"),
     ".hwp": ("HWP",),
     ".hwpx": ("HWPX", "HWPML2X"),
+    ".pdf": ("PDF",),
 }
 
 # HWP 양식 업로드가 변환 불가일 때 DOCX로 내려가지 않고 이 안내를 그대로 보여 준다.
@@ -110,6 +111,11 @@ def _dispatch_hwp(*, skip_com_guard: bool = False):
     import win32com.client as win32
 
     return win32.Dispatch(_COM_PROGID)
+
+
+def export_pdf_via_com(src: str | Path, dst: str | Path) -> None:
+    """한글 COM SaveAs PDF. 한글이 없으면 예외. 호출측이 없음을 먼저 가른다."""
+    _convert_via_com(Path(src), Path(dst), _SAVE_FORMATS[".pdf"])
 
 
 def _convert_via_com(src: Path, dst: Path, save_formats: tuple[str, ...]) -> None:

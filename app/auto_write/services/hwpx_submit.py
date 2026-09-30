@@ -154,10 +154,17 @@ def _seal_submit_report(report: SubmitReport) -> SubmitReport:
         if note not in report.notes:
             report.notes.append(note)
     elif attempt.get("generated"):
-        note = (
-            "L050: rhwp export-pdf 로 동일명 PDF 를 만들었다. "
-            "mechanized 아님 — Windows 실측 전까지 gap"
-        )
+        how = str(attempt.get("reason") or "")
+        if how.startswith("rhwp:"):
+            note = (
+                "L050: rhwp export-pdf 로 동일명 PDF 를 만들었다. "
+                "mechanized 아님 — Windows 실측 전까지 gap"
+            )
+        else:
+            note = (
+                "L050: 한글 COM SaveAs 로 동일명 PDF 를 만들었다. "
+                "mechanized 아님 — rhwp *.l050.json 증거는 없음"
+            )
         if note not in report.notes:
             report.notes.append(note)
     return report
@@ -632,6 +639,7 @@ def submit_hwpx(
         acceptance_validator=run_hwpx_acceptance,
         fixed_cell_overflow=report.overflow_cells,
         render_validator=render_validator,
+        acceptance_baseline=str(src),
     )
     report.integrity = gate.as_dict()
     report.acceptance = gate.acceptance_report

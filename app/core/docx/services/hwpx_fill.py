@@ -653,6 +653,8 @@ def _fill_inline_fields_in_p(
         for want_key, lbl, val in wants:
             if want_key in used_keys:
                 continue
+            if _exact_identity_blocks_synonym(field_key, want_key, wants, used_keys):
+                continue
             if _held_for_other_label(exact_held, field_key, want_key):
                 continue
             if not _label_matches(field_key, want_key):
@@ -1043,6 +1045,22 @@ def _label_matches(cell_key: str, want_key: str) -> bool:
     return rep_c is not None and rep_c == rep_w
 
 
+def _exact_identity_blocks_synonym(cell_key: str, want_key: str, wants, used_keys) -> bool:
+    """칸 라벨 자체가 아직 안 쓴 identity 키면 동의어 매칭을 막는다.
+
+    기업명·팀명은 같은 동의어 묶음이다. identity 에 둘 다 있으면 팀명 칸이
+    기업명 값을 먼저 가져가지 않게, 그 칸과 같은 키를 우선한다.
+    """
+    if not cell_key or cell_key == want_key:
+        return False
+    for other_key, _lbl, _val in wants:
+        if other_key in used_keys:
+            continue
+        if other_key == cell_key:
+            return True
+    return False
+
+
 def _value_cell(label_tc, cells: list):
     """라벨 칸의 값 칸을 찾는다 — cellAddr 우선(병합 안전), 없으면 위치 i+1 폴백.
 
@@ -1304,6 +1322,8 @@ def _fill_section_xml(
                 for want_key, lbl, val in wants:
                     if want_key in used_keys:
                         continue
+                    if _exact_identity_blocks_synonym(cell_key, want_key, wants, used_keys):
+                        continue
                     if _held_for_other_label(exact_held, cell_key, want_key):
                         continue
                     if not _label_matches(cell_key, want_key):
@@ -1384,6 +1404,8 @@ def _fill_section_xml(
                     for want_key, lbl, val in wants:
                         if want_key in used_keys:
                             continue
+                        if _exact_identity_blocks_synonym(group_key, want_key, wants, used_keys):
+                            continue
                         if _held_for_other_label(exact_held, group_key, want_key):
                             continue
                         if not _label_matches(group_key, want_key):
@@ -1424,6 +1446,8 @@ def _fill_section_xml(
             for label_key, mark, opts in _grid_choice_groups(tbl):
                 for want_key, lbl, val in wants:
                     if want_key in used_keys:
+                        continue
+                    if _exact_identity_blocks_synonym(label_key, want_key, wants, used_keys):
                         continue
                     if _held_for_other_label(exact_held, label_key, want_key):
                         continue

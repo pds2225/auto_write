@@ -441,11 +441,39 @@ def _write_l050_evidence(source: Path, dest: Path, tool: str) -> str:
     return str(evidence)
 
 
-def try_generate_sibling_pdf(path: str | Path) -> PdfPairGenerateResult:
-    """동일 stem PDF 를 ``rhwp export-pdf`` 로 만든다. 도구 없으면 BLOCKED.
+def _try_hangul_com_pdf(source: Path, dest: Path) -> PdfPairGenerateResult | None:
+    """Windows 한글 COM SaveAs PDF.
 
-    초안은 생성하지 않는다. soffice 폴백 없음. Hangul COM PDF 는 호출하지 않는다
-    (미배선). ``RHWP_EXE`` 가 가리키는 실행 파일을 PATH 이름 ``rhwp`` 보다 먼저 쓴다.
+    COM 이 없으면 None. 성공해도 rhwp 증거 파일은 쓰지 않고 mechanized 로
+    올리지 않는다. 예외는 삼키고 BLOCKED 를 돌려 제출을 깨지 않는다.
+    """
+    if sys.platform != "win32":
+        return None
+    from .hwp_docx_convert import export_pdf_via_com, hancom_com_available
+
+    if not hancom_com_available():
+        return None
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        export_pdf_via_com(source, dest)
+    except Exception:
+        if dest.is_file() and dest.stat().st_size == 0:
+            try:
+                dest.unlink()
+            except OSError:
+                pass
+        return PdfPairGenerateResult(False, False, True, "BLOCKED: Hangul COM PDF 저장 실패")
+    if dest.is_file() and dest.stat().st_size > 0:
+        return PdfPairGenerateResult(True, False, False, "Hangul COM SaveAs PDF", "")
+    return PdfPairGenerateResult(False, False, True, "BLOCKED: Hangul COM PDF 미생성")
+
+
+def try_generate_sibling_pdf(path: str | Path) -> PdfPairGenerateResult:
+    """동일 stem PDF 를 만든다. rhwp 가 있으면 export-pdf, 없으면 Windows 한글 COM.
+
+    초안은 생성하지 않는다. soffice 폴백 없음. COM 성공은 파일을 만들 뿐
+    mechanized 근거(``*.l050.json``)가 아니다. ``RHWP_EXE`` 를 PATH ``rhwp`` 보다
+    먼저 쓴다.
     """
     p = Path(path)
     if is_draft_artifact(p):
@@ -490,12 +518,15 @@ def try_generate_sibling_pdf(path: str | Path) -> PdfPairGenerateResult:
         return PdfPairGenerateResult(
             False, False, True, f"BLOCKED: rhwp failed rc={proc.returncode} {err}"
         )
+    com = _try_hangul_com_pdf(p, dest)
+    if com is not None:
+        return com
     if sys.platform == "win32":
         return PdfPairGenerateResult(
             False,
             False,
             True,
-            "BLOCKED: Hangul COM PDF 미배선 — RHWP_EXE 의 rhwp export-pdf 가 필요",
+            "BLOCKED: rhwp 없음, 한글 COM PDF 도 사용할 수 없음",
         )
     return PdfPairGenerateResult(
         False,

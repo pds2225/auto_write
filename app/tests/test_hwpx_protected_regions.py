@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import re
+import time
 import zipfile
 from pathlib import Path
 
@@ -10,8 +12,23 @@ import pytest
 
 from core.docx.services.hwpx_analysis_adapter import index_hwpx_structure
 from core.docx.services.hwpx_protected_regions import (
+    _compact,
+    authorization_is_current,
+    authorize_checkbox_writes,
+    authorize_guidance_narrative_writes,
+    authorize_inline_field_writes,
+    authorize_merged_value_writes,
+    authorize_nested_leaf_writes,
+    authorize_repeated_row_writes,
+    authorize_t02_writes,
+    checkbox_authorization_is_current,
     classify_protected_regions,
+    guidance_authorization_is_current,
+    inline_authorization_is_current,
     is_guidance_paragraph,
+    merged_authorization_is_current,
+    nested_authorization_is_current,
+    repeated_authorization_is_current,
 )
 
 _HP = "http://www.hancom.co.kr/hwpml/2011/paragraph"
@@ -394,3 +411,55 @@ def test_real_guidance_paragraph_is_not_an_empty_write_target() -> None:
             assert any(item.observed_text.strip() for item in related)
             assert paragraph.raw_text.strip() != ""
     assert found
+
+
+def test_compact_matches_whitespace_regex() -> None:
+    sample = "기 업\u00a0명\n팀\u3000명\t:\r\n123-45"
+    assert _compact(sample) == re.sub(r"\s+", "", sample)
+    assert _compact("") == ""
+    assert _compact("기업명") == "기업명"
+
+
+def test_large_section_authorization_finishes_quickly(tmp_path: Path) -> None:
+    """DIPS 양식처럼 라벨이 많아도 authorize×is_current 가 수 초 안에 끝난다."""
+    rows = []
+    for index in range(120):
+        label = f"항목{index:03d}"
+        rows.append(
+            "<hp:tr>"
+            f'<hp:tc><hp:subList><hp:p><hp:run><hp:t>{label}</hp:t></hp:run></hp:p></hp:subList>'
+            f'<hp:cellAddr rowAddr="{index}" colAddr="0"/>'
+            '<hp:cellSpan rowSpan="1" colSpan="1"/></hp:tc>'
+            '<hp:tc><hp:subList><hp:p><hp:run><hp:t></hp:t></hp:run></hp:p></hp:subList>'
+            f'<hp:cellAddr rowAddr="{index}" colAddr="1"/>'
+            '<hp:cellSpan rowSpan="1" colSpan="1"/></hp:tc>'
+            "</hp:tr>"
+        )
+    fat = ("년  월\t일\n" * 4000) + ("참고 안내 " * 2000)
+    body = (
+        f'<hp:p><hp:run><hp:tbl rowCnt="120" colCnt="2">{"".join(rows)}</hp:tbl></hp:run></hp:p>'
+        f"<hp:p><hp:run><hp:t>{fat}</hp:t></hp:run></hp:p>"
+    )
+    src = tmp_path / "large.hwpx"
+    _hwpx(src, body)
+    started = time.perf_counter()
+    index = index_hwpx_structure(src)
+    assert index.analysis_status == "COMPLETE"
+    scans = (
+        (authorize_t02_writes, authorization_is_current),
+        (authorize_merged_value_writes, merged_authorization_is_current),
+        (authorize_nested_leaf_writes, nested_authorization_is_current),
+        (authorize_repeated_row_writes, repeated_authorization_is_current),
+        (authorize_guidance_narrative_writes, guidance_authorization_is_current),
+        (authorize_inline_field_writes, inline_authorization_is_current),
+        (authorize_checkbox_writes, checkbox_authorization_is_current),
+    )
+    grant_count = 0
+    for authorize, is_current in scans:
+        grants = authorize(index)
+        grant_count += len(grants)
+        for grant in grants:
+            assert is_current(index, grant) is True
+    elapsed = time.perf_counter() - started
+    assert grant_count >= 50
+    assert elapsed < 8.0, f"authorization scan took {elapsed:.2f}s"

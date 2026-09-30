@@ -384,8 +384,13 @@ def test_document_pdf_uses_rhwp_exe(tmp_path: Path, monkeypatch) -> None:
 
 
 def test_com_pdf_not_used_when_rhwp_missing_on_windows(tmp_path: Path, monkeypatch) -> None:
+    """rhwp 도 한글 COM 도 없으면 PDF 를 만들지 않고 예외 없이 BLOCKED."""
     _hide_rhwp(monkeypatch)
     monkeypatch.setattr(gates.sys, "platform", "win32")
+    monkeypatch.setattr(
+        "core.docx.services.hwp_docx_convert.hancom_com_available",
+        lambda: False,
+    )
     src = tmp_path / "신청서.docx"
     src.write_bytes(b"PK")
     called: list = []
@@ -394,5 +399,39 @@ def test_com_pdf_not_used_when_rhwp_missing_on_windows(tmp_path: Path, monkeypat
     assert called == []
     assert gen.generated is False
     assert gen.blocked is True
-    assert "미배선" in gen.reason
-    assert "RHWP_EXE" in gen.reason
+    assert "BLOCKED" in gen.reason
+    assert not (tmp_path / "신청서.pdf").exists()
+    assert _lesson("L050")["category"] == "gap"
+    assert _lesson("L050")["mechanizable"] != "yes"
+
+
+def test_hangul_com_saveas_writes_sibling_pdf_without_mechanizing(tmp_path: Path, monkeypatch) -> None:
+    """Windows 에서 rhwp 가 없고 한글 COM 이 있으면 같은 이름 PDF 를 만든다."""
+    _hide_rhwp(monkeypatch)
+    monkeypatch.setattr(gates.sys, "platform", "win32")
+    monkeypatch.setattr(
+        "core.docx.services.hwp_docx_convert.hancom_com_available",
+        lambda: True,
+    )
+
+    def export_pdf(src, dest) -> None:
+        Path(dest).write_bytes(b"%PDF-1.4 com")
+
+    monkeypatch.setattr(
+        "core.docx.services.hwp_docx_convert.export_pdf_via_com",
+        export_pdf,
+    )
+    src = tmp_path / "신청서.hwpx"
+    src.write_bytes(b"PK")
+    gen = try_generate_sibling_pdf(src)
+    pdf = tmp_path / "신청서.pdf"
+    assert gen.generated is True
+    assert gen.blocked is False
+    assert pdf.is_file() and pdf.stat().st_size > 0
+    assert pdf.stem == src.stem
+    assert gen.evidence == ""
+    assert not (tmp_path / "신청서.l050.json").exists()
+    claim = l050_mechanization_status(gen.evidence or None)
+    assert claim["mechanized"] is False
+    assert claim["status"] == "BLOCKED"
+    assert _lesson("L050")["category"] == "gap"

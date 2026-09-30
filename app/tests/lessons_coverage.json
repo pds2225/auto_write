@@ -1,16 +1,16 @@
 {
   "counts": {
-    "mechanized": 66,
+    "mechanized": 69,
     "gap": 1,
-    "judgment": 84,
-    "total": 151
+    "judgment": 101,
+    "total": 171
   },
-  "coverage_note": "2026-08-31 Wave D·E 규약 잠금. mechanized 66(43%)·갭 1(0%)·사람판단 84(55%). L050 은 RHWP_EXE export-pdf 배선이 있어도 gap. Linux 목과 pytest 는 mechanized 가 아님. Windows *.l050.json 실측은 Mimo. L005 픽셀은 judgment. PASS 는 한글 GUI 스크린샷+체크리스트가 있을 때만이고 이 클라우드 BLOCKED. L008 위계 judgment. 닫힘≠머지. L154–L156 JSON 미수록.",
+  "coverage_note": "2026-09-30 L152–L171 분류. 중복이던 뒤쪽 L163/L164 는 lessons.md 에서 L170/L171 로 번호를 바꿨다. mechanized 69·갭 1·사람판단 101·합계 171. L154–L156 은 lessons.md 에 있고 require_sample_ok·safe_body_accent·REF_IMAGE_FRAME_MM 가드가 있어 mechanized. L050 은 gap·mechanized false. rhwp export-pdf 우선, 없으면 Windows 한글 COM SaveAs. COM 성공과 Linux 목은 mechanized 가 아니다. Windows *.l050.json 실측은 Mimo. L005 픽셀은 judgment. PASS 는 한글 GUI 스크린샷+체크리스트가 있을 때만이고 이 클라우드 BLOCKED.",
   "top_gaps": [
     {
       "id": "L050",
       "rule": "최종 제출본·증빙 확정 시 동일 파일명 .pdf를 병행 생성(초안은 불필요).",
-      "proposed_guard": "missing_pdf_pair + try_generate_sibling_pdf (RHWP_EXE 다음 PATH, export-pdf). rhwp 없으면 BLOCKED. soffice·한글 COM PDF 미인정. l050_mechanization_status 는 Windows *.l050.json 없이 BLOCKED. Mimo 실측 전 gap.",
+      "proposed_guard": "missing_pdf_pair + try_generate_sibling_pdf. rhwp export-pdf 우선. 없으면 Windows 한글 COM SaveAs PDF. COM 없거나 실패면 BLOCKED(크래시 없음). soffice 미인정. COM 성공은 *.l050.json 을 쓰지 않으며 mechanized 가 아니다. l050_mechanization_status 는 Windows rhwp 증거 없이 BLOCKED. Mimo 실측 전 gap.",
       "target_files": "app/core/docx/services/submission_gates.py / app/cross_form_hwp_pipeline.py",
       "impact": "med",
       "effort": "M"
@@ -512,8 +512,8 @@
       "summary": "최종 제출본·증빙 확정 시 동일 파일명 .pdf를 병행 생성(초안은 불필요).",
       "mechanizable": "partial",
       "category": "gap",
-      "guard_ref": "submission_gates.missing_pdf_pair + try_generate_sibling_pdf (RHWP_EXE then PATH, export-pdf, soffice/COM PDF 미인정) + l050_mechanization_status / app/tests/test_lockdown_wave_gaps.py::test_l050_pair_check_skips_draft_and_flags_final + test_lockdown_wave_de.py::test_l050_stays_gap_and_generate_blocked_without_rhwp + test_l005_l050_evidence.py",
-      "gap_desc": "동일 stem PDF 생성 코드는 RHWP_EXE export-pdf 까지 배선됐다. 이 클라우드에서는 BLOCKED. Windows *.l050.json 실측 전 gap. Linux 목 성공으로 mechanized 금지. soffice·한글 COM PDF 는 제출 품질로 인정하지 않음.",
+      "guard_ref": "submission_gates.missing_pdf_pair + try_generate_sibling_pdf (RHWP_EXE then PATH export-pdf; Windows 한글 COM SaveAs 는 rhwp 없을 때만, soffice 미인정, COM 성공은 *.l050.json 이 아님) + l050_mechanization_status / app/tests/test_lockdown_wave_de.py::test_l050_stays_gap_and_generate_blocked_without_rhwp + test_l005_l050_evidence.py::test_hangul_com_saveas_writes_sibling_pdf_without_mechanizing",
+      "gap_desc": "동일 stem PDF 는 rhwp export-pdf 가 우선이다. rhwp 가 없고 Windows 한글 COM 이 있으면 SaveAs PDF 로 같은 이름 PDF 를 만든다. COM 이 없어도 예외 없이 미생성으로 기록한다. COM 성공은 mechanized 가 아니다. Windows rhwp *.l050.json 실측 전 gap.",
       "impact": "med",
       "domain": "business_plan"
     },
@@ -1525,6 +1525,206 @@
       "guard_ref": "hwpx_fill._set_cell_text/_splice_run_text → _invalidate_lineseg + app/tests/test_hwpx_fill.py::test_set_cell_text_strips_own_lineseg_keeps_sibling·test_splice_run_text_strips_paragraph_lineseg·test_invalidate_lineseg_on_t_walks_to_paragraph·test_set_cell_text_skips_form_control_without_stripping_sibling + app/tests/test_hwpx_no_fake_lineseg.py::test_no_production_code_synthesizes_linesegarray",
       "gap_desc": "",
       "impact": "high",
+      "domain": "all"
+    },
+    {
+      "id": "L158 | 개발 | 2026-08-14 | 스킬 미러 drift 0이어도 다른 PC 통용은 끝나지 않는다 — 정책 파일은 git 밖",
+      "summary": "스킬 미러 drift 0이어도 다른 PC 통용은 끝나지 않는다 — 정책 파일은 git 밖",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med",
+      "domain": "all"
+    },
+    {
+      "id": "L163 | 개발 | 2026-08-16 | 정규식 상수를 바꿀 때 이웃 블록을 지우지 마라",
+      "summary": "정규식 상수를 바꿀 때 이웃 블록을 지우지 마라",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med",
+      "domain": "all"
+    },
+    {
+      "id": "L164 | 개발 | 2026-08-16 | 스크립트가 성공이라고 찍어도 VERIFY가 실패면 안 된 것이다",
+      "summary": "스크립트가 성공이라고 찍어도 VERIFY가 실패면 안 된 것이다",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med",
+      "domain": "all"
+    },
+    {
+      "id": "L152 | 문서작성 | 2026-08-07 | 문단 시작 위치(정렬·들여쓰기)는 원본 그대로 — paraPr 교체 금지",
+      "summary": "문단 시작 위치(정렬·들여쓰기)는 원본 그대로 — paraPr 교체 금지",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med",
+      "domain": "all"
+    },
+    {
+      "id": "L153 | 디버깅 | 2026-08-10 | L134 보완 — ReadOnly 해제는 `.git` 최상위만이 아니라 **재귀적으로** 해야 하고, \"고쳤다\"는 실제 명령 실행으로 검증해야 한다",
+      "summary": "L134 보완 — ReadOnly 해제는 `.git` 최상위만이 아니라 **재귀적으로** 해야 하고, \"고쳤다\"는 실제 명령 실행으로 검증해야 한다",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med",
+      "domain": "all"
+    },
+    {
+      "id": "L154 | 문서작성 | 2026-08-10 | 사업계획서·신청서 변경은 최소 1섹션 샘플 먼저 — 전체 일괄 적용 금지",
+      "summary": "사업계획서·신청서 변경은 최소 1섹션 샘플 먼저 — 전체 일괄 적용 금지",
+      "mechanizable": "yes",
+      "category": "mechanized",
+      "guard_ref": "submission_gates.require_sample_ok + app/tests/test_lockdown_wave_bc.py::test_l154_sample_ok_required_before_full_document",
+      "gap_desc": "",
+      "impact": "med",
+      "domain": "all"
+    },
+    {
+      "id": "L155 | 문서작성 | 2026-08-10 | 평가위원 가독성용 강조 파랑은 최종본 허용 — 단 `#0000FF` 금지",
+      "summary": "평가위원 가독성용 강조 파랑은 최종본 허용 — 단 `#0000FF` 금지",
+      "mechanizable": "yes",
+      "category": "mechanized",
+      "guard_ref": "submission_gates.safe_body_accent + app/tests/test_lockdown_wave_bc.py::test_l155_l156_accent_and_reference_frame",
+      "gap_desc": "",
+      "impact": "med",
+      "domain": "all"
+    },
+    {
+      "id": "L156 | 문서작성 | 2026-08-11 | 참고 이미지는 제목칸+이미지칸 표 프레임(170×55mm)으로 삽입",
+      "summary": "참고 이미지는 제목칸+이미지칸 표 프레임(170×55mm)으로 삽입",
+      "mechanizable": "yes",
+      "category": "mechanized",
+      "guard_ref": "submission_gates.REF_IMAGE_FRAME_MM + app/tests/test_lockdown_wave_bc.py::test_l155_l156_accent_and_reference_frame",
+      "gap_desc": "",
+      "impact": "med",
+      "domain": "all"
+    },
+    {
+      "id": "L159 | 문서작성 | 2026-08-16 | HWP 이미지 수십 장을 Read(비전)하면 연결이 끊긴다 — 추출문+파일명으로 보고서",
+      "summary": "HWP 이미지 수십 장을 Read(비전)하면 연결이 끊긴다 — 추출문+파일명으로 보고서",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med",
+      "domain": "all"
+    },
+    {
+      "id": "L160 | 문서작성 | 2026-08-16 | AIMY 사실 ≠ 품질규칙 — facts_aimy.json 을 다음 아이템 기본값으로 쓰지 마라",
+      "summary": "AIMY 사실 ≠ 품질규칙 — facts_aimy.json 을 다음 아이템 기본값으로 쓰지 마라",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med",
+      "domain": "all"
+    },
+    {
+      "id": "L161 | 문서작성 | 2026-08-16 | 교차양식 전사 ≠ 서술 재작성",
+      "summary": "교차양식 전사 ≠ 서술 재작성",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med",
+      "domain": "all"
+    },
+    {
+      "id": "L162 | 문서작성 | 2026-08-16 | 사용자가 대기라면 AIMY급 자동작성 구현을 시작하지 마라",
+      "summary": "사용자가 대기라면 AIMY급 자동작성 구현을 시작하지 마라",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med",
+      "domain": "all"
+    },
+    {
+      "id": "L170 | 공통 | 2026-08-16 | Git Schannel 자격 증명 오류와 GitHub CLI 무효 토큰을 분리 진단하라",
+      "summary": "Git Schannel 자격 증명 오류와 GitHub CLI 무효 토큰을 분리 진단하라",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med",
+      "domain": "all"
+    },
+    {
+      "id": "L157 | 작업방식 | 2026-08-13 | \"백업 만들었다\"는 **1회 복사**가 아니라 **원본과 같아졌는지 확인 + 재실행 수단**까지가 완결이다",
+      "summary": "\"백업 만들었다\"는 **1회 복사**가 아니라 **원본과 같아졌는지 확인 + 재실행 수단**까지가 완결이다",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med",
+      "domain": "all"
+    },
+    {
+      "id": "L171 | 개발 | 2026-08-16 | 원격 기본 브랜치를 먼저 고정하고 로컬 작업트리를 구분하라",
+      "summary": "원격 기본 브랜치를 먼저 고정하고 로컬 작업트리를 구분하라",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med",
+      "domain": "all"
+    },
+    {
+      "id": "L165 | 문서작성 | 2026-08-19 | 사업발표 대상 고객층은 근거자료 확인 전엔 예시로도 지어내지 마라",
+      "summary": "사업발표 대상 고객층은 근거자료 확인 전엔 예시로도 지어내지 마라",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med",
+      "domain": "all"
+    },
+    {
+      "id": "L166 | 개발 | 2026-08-27 | 명시적 오류 해결 요청 뒤 확인만 예고하지 마라",
+      "summary": "명시적 오류 해결 요청 뒤 확인만 예고하지 마라",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med",
+      "domain": "all"
+    },
+    {
+      "id": "L167 | 오케스트레이션 | 2026-08-31 | fork 완료 알림의 `tool_uses` 를 확인하지 않으면 아무 작업도 안 한 fork를 \"완료\"로 오인한다",
+      "summary": "fork 완료 알림의 `tool_uses` 를 확인하지 않으면 아무 작업도 안 한 fork를 \"완료\"로 오인한다",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med",
+      "domain": "all"
+    },
+    {
+      "id": "L168 | 공통 | 2026-09-18 | 분석 결과의 저장 위치를 먼저 명시",
+      "summary": "분석 결과의 저장 위치를 먼저 명시",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med",
+      "domain": "all"
+    },
+    {
+      "id": "L169 | 공통 | 2026-09-22 | Windows 경로를 일반 텍스트에 쓰면 `\\_` 가 마크다운 이스케이프로 먹혀 오탈자처럼 보인다",
+      "summary": "Windows 경로를 일반 텍스트에 쓰면 `\\_` 가 마크다운 이스케이프로 먹혀 오탈자처럼 보인다",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "med",
       "domain": "all"
     }
   ]

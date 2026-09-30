@@ -233,9 +233,17 @@ def test_same_path_refusal_preserves_source_sha_and_writes_nothing(tmp_path):
 
 
 def test_acceptance_fail_leaves_one_valid_draft_and_source_sha(tmp_path, monkeypatch):
+    """양식에 있던 유색은 결함이 아니다. 잔여 더미명(홍길동)만 초안을 남긴다."""
     _force_rhwp_absent(monkeypatch)
     src = tmp_path / "colored.hwpx"
-    _write(src, _section_clean(), colored=True)
+    section = _section_clean().replace(
+        b"</hs:sec>",
+        (
+            '<hp:p><hp:run charPrIDRef="0"><hp:t>참고 홍길동</hp:t></hp:run></hp:p>'
+            "</hs:sec>"
+        ).encode("utf-8"),
+    )
+    _write(src, section, colored=True)
     before = _sha(src)
     out = tmp_path / "out.hwpx"
 

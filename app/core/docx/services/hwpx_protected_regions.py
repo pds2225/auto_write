@@ -7,7 +7,9 @@ auto_write_allowed. Label linking and T02 approval belong to later stages.
 
 from __future__ import annotations
 
+import functools
 import re
+import weakref
 from dataclasses import dataclass
 
 from core.docx.services.hwpx_analysis_adapter import (
@@ -30,7 +32,41 @@ _LABEL_ONLY_RE = re.compile(r"^\s*\S.{0,40}?\s*[:：]\s*$", re.DOTALL)
 
 
 def _compact(text: str) -> str:
-    return re.sub(r"\s+", "", text or "")
+    """공백 제거. ``re.sub(r'\\s+', '', text)`` 와 같고, 반복 호출은 캐시한다.
+
+    Python 3 ``\\s`` 는 유니코드 공백이고 ``str.isspace()`` 와 같다.
+    """
+    return _compact_cached(text or "")
+
+
+@functools.lru_cache(maxsize=8192)
+def _compact_cached(text: str) -> str:
+    if not text or not any(ch.isspace() for ch in text):
+        return text
+    return "".join(ch for ch in text if not ch.isspace())
+
+
+def _memo_by_index(fn):
+    """같은 불변 인덱스에 대한 재스캔을 한 번으로 줄인다. 인자 추가 호출은 캐시하지 않는다."""
+    cache: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
+    @functools.wraps(fn)
+    def wrapped(index, *args, **kwargs):
+        if args or kwargs:
+            return fn(index, *args, **kwargs)
+        try:
+            return cache[index]
+        except KeyError:
+            value = fn(index)
+            try:
+                cache[index] = value
+            except TypeError:
+                return value
+            return value
+        except TypeError:
+            return fn(index)
+
+    return wrapped
 
 
 def _blank(text: str) -> bool:
@@ -486,6 +522,7 @@ def _protected_span(paragraph: HwpxParagraphRecord, *, role: str, reason: str) -
     return results
 
 
+@_memo_by_index
 def classify_protected_regions(index: HwpxStructureIndex) -> ProtectionReport:
     """Mark protected text and refuse write permission.
 
@@ -953,6 +990,7 @@ def labels_with_multiple_empty_values(index: HwpxStructureIndex) -> frozenset[st
     return frozenset(label for label, count in counts.items() if count >= 2)
 
 
+@_memo_by_index
 def find_t02_auto_targets(index: HwpxStructureIndex) -> tuple[T02Target, ...]:
     """Return only label-plus-completely-empty-cell targets. Nothing else is AUTO."""
     if index.analysis_status != "COMPLETE":
@@ -1076,6 +1114,7 @@ def _target_from_value(section, table, value, label: str, run) -> T02Target:
     )
 
 
+@_memo_by_index
 def find_merged_value_targets(index: HwpxStructureIndex) -> tuple[T02Target, ...]:
     """Unique label beside one empty run stretched across columns.
 
@@ -1151,6 +1190,7 @@ def find_merged_value_targets(index: HwpxStructureIndex) -> tuple[T02Target, ...
     return tuple(target for target in pending if label_counts[target.field_label] == 1)
 
 
+@_memo_by_index
 def find_nested_leaf_targets(index: HwpxStructureIndex) -> tuple[T02Target, ...]:
     """A unique label and one empty run inside a nested table.
 
@@ -1271,6 +1311,7 @@ def _plain_grid(table) -> dict[tuple[int, int], object]:
     return grid
 
 
+@_memo_by_index
 def find_repeated_row_targets(index: HwpxStructureIndex) -> tuple[T02Target, ...]:
     """One empty cell in a repeated column, named by its row key and header.
 
@@ -1408,6 +1449,7 @@ def _narrative_label(index: HwpxStructureIndex, section, paragraph) -> str | Non
     return None
 
 
+@_memo_by_index
 def find_guidance_narrative_targets(index: HwpxStructureIndex) -> tuple[T02Target, ...]:
     """A labeled cell whose answer run is empty and whose other runs are guidance.
 
@@ -1475,6 +1517,7 @@ def _protected_text_run(text: str) -> bool:
     return False
 
 
+@_memo_by_index
 def find_inline_field_targets(index: HwpxStructureIndex) -> tuple[T02Target, ...]:
     """Label and blank input in the same run, or in two runs of one cell.
 
@@ -1556,6 +1599,7 @@ def checkbox_replacement(expected: str, value: str) -> str | None:
     return "■" + expected[1:]
 
 
+@_memo_by_index
 def find_checkbox_targets(index: HwpxStructureIndex) -> tuple[T02Target, ...]:
     """One unchecked option line. Date scaffolds and signature lines are not options."""
     if index.analysis_status != "COMPLETE":
@@ -1694,6 +1738,7 @@ def _assessment_from_paragraph(index, section, paragraph, types: tuple[str, ...]
     )
 
 
+@_memo_by_index
 def assess_fields(index: HwpxStructureIndex) -> tuple[FieldAssessment, ...]:
     """Detect T01–T16. P0-2 records T02 candidates and does not authorize writes."""
     records: list[FieldAssessment] = []
@@ -1937,6 +1982,7 @@ def _exact_writer_supports(index: HwpxStructureIndex, target: T02Target) -> bool
     return True
 
 
+@_memo_by_index
 def authorize_t02_writes(index: HwpxStructureIndex) -> tuple[T02WriteAuthorization, ...]:
     """Issue grants from the index. Assessment never sets auto_write_allowed."""
     if index.analysis_status != "COMPLETE" or not index.source_sha256:
@@ -2021,6 +2067,7 @@ def _merged_writer_supports(index: HwpxStructureIndex, target: T02Target) -> boo
     return True
 
 
+@_memo_by_index
 def authorize_merged_value_writes(index: HwpxStructureIndex) -> tuple[T02WriteAuthorization, ...]:
     """Grant a horizontal merged value cell. Assessment stays unauthorized."""
     if index.analysis_status != "COMPLETE" or not index.source_sha256:
@@ -2082,6 +2129,7 @@ def _nested_writer_supports(index: HwpxStructureIndex, target: T02Target) -> boo
     return True
 
 
+@_memo_by_index
 def authorize_nested_leaf_writes(index: HwpxStructureIndex) -> tuple[T02WriteAuthorization, ...]:
     """Grant a leaf cell inside a nested table. The containing cell stays closed."""
     if index.analysis_status != "COMPLETE" or not index.source_sha256:
@@ -2143,6 +2191,7 @@ def _repeated_writer_supports(index: HwpxStructureIndex, target: T02Target) -> b
     return True
 
 
+@_memo_by_index
 def authorize_repeated_row_writes(index: HwpxStructureIndex) -> tuple[T02WriteAuthorization, ...]:
     """Grant one repeated-row cell. The header and the row key are not grants."""
     if index.analysis_status != "COMPLETE" or not index.source_sha256:
@@ -2195,6 +2244,7 @@ def _guidance_writer_supports(index: HwpxStructureIndex, target: T02Target) -> b
     return True
 
 
+@_memo_by_index
 def authorize_guidance_narrative_writes(index: HwpxStructureIndex) -> tuple[T02WriteAuthorization, ...]:
     """Grant the empty answer run. Guidance text stays unauthorized."""
     if index.analysis_status != "COMPLETE" or not index.source_sha256:
@@ -2233,6 +2283,7 @@ def _inline_writer_supports(index: HwpxStructureIndex, target: T02Target) -> boo
     return fresh is not None
 
 
+@_memo_by_index
 def authorize_inline_field_writes(index: HwpxStructureIndex) -> tuple[T02WriteAuthorization, ...]:
     """Grant a same-run or same-cell blank. The label characters stay in place."""
     if index.analysis_status != "COMPLETE" or not index.source_sha256:
@@ -2266,6 +2317,7 @@ def inline_authorization_is_current(index: HwpxStructureIndex, grant: T02WriteAu
     return any(item == grant for item in authorize_inline_field_writes(index))
 
 
+@_memo_by_index
 def authorize_checkbox_writes(index: HwpxStructureIndex) -> tuple[T02WriteAuthorization, ...]:
     """Grant one unchecked option. This does not grant a date or a signature."""
     if index.analysis_status != "COMPLETE" or not index.source_sha256:

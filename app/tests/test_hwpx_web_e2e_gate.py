@@ -406,7 +406,8 @@ def test_web_broken_grid_rhwp_absent_keeps_package_and_drafts(client, tmp_path):
     _page_lists(client, project_id, "output_DRAFT.hwpx", submittable=False)
 
 
-def test_web_colored_template_is_not_normalized_into_a_submit_name(client, tmp_path):
+def test_web_colored_template_keeps_color_and_submit_name(client, tmp_path):
+    """양식 유색(FF0000)은 지우지 않고, 그 색만으로 _DRAFT 가 되지 않는다."""
     src = tmp_path / "colored.hwpx"
     _write(src, _section_clean(), colored=True)
     original = src.read_bytes()
@@ -416,9 +417,10 @@ def test_web_colored_template_is_not_normalized_into_a_submit_name(client, tmp_p
     assert "error=" not in _loc(generated)
     route = _route(client, project_id)
     routing = route["routing"]
-    assert routing["submittable"] is False
-    assert Path(routing["final"]).name == "output_DRAFT.hwpx"
-    assert client.get(f"/downloads/{project_id}/output.hwpx").status_code == 404
+    assert routing["ok"] is True
+    assert routing["submittable"] is True
+    assert Path(routing["final"]).name == "output.hwpx"
+    assert client.get(f"/downloads/{project_id}/output_DRAFT.hwpx").status_code == 404
     final = _download_final(client, project_id, route, tmp_path / "colored-out.hwpx")
     _assert_package(final, _FILL, _EXISTING)
     assert b"FF0000" in zipfile.ZipFile(final).read("Contents/header.xml")

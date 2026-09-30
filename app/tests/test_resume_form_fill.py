@@ -55,7 +55,13 @@ def _section_xml(tables: list[str]) -> bytes:
     return body.encode("utf-8")
 
 
-_HEADER_XML = b'<?xml version="1.0"?><hh:head xmlns:hh="x">FONTS</hh:head>'
+_HEADER_XML = (
+    '<?xml version="1.0" encoding="UTF-8"?>'
+    '<hh:head xmlns:hh="http://www.hancom.co.kr/hwpml/2011/head">'
+    '<hh:refList><hh:charProperties itemCnt="1">'
+    '<hh:charPr id="0" textColor="000000"/>'
+    '</hh:charProperties></hh:refList></hh:head>'
+).encode("utf-8")
 _MIMETYPE = b"application/hwp+zip"
 
 

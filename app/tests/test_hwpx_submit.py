@@ -109,25 +109,22 @@ def test_submit_clean_form_passes_gate(clean_hwpx, tmp_path):
 
 
 # --------------------------------------------------------------------------- #
-# 2) 게이트 fail(유색 charPr) → _DRAFT 강제·원래 이름 잔존 금지
+# 2) 양식에 원래 있던 유색 charPr 는 결함이 아니다
 # --------------------------------------------------------------------------- #
 
 
 def test_submit_gate_fail_forces_draft(colored_hwpx, tmp_path):
+    """양식 charPr 색을 채움이 재사용하면 _DRAFT 로 바꾸지 않는다."""
     out = tmp_path / "out.hwpx"
-    # 검정 정규화 opt-out → 유색 예시체가 잔존 → 게이트 fail → _DRAFT 검증(보존)
     rep = submit_hwpx(colored_hwpx, out, identity={"기업명": "도보네비(주)"},
                       normalize_colors=False)
-    assert rep.ok is False
-    final = Path(rep.final)
-    assert final.name == "out_DRAFT.hwpx"              # _DRAFT 강제 명명
-    assert final.exists()
-    assert not out.exists()                            # 제출 이름 파일 잔존 금지
-    assert rep.draft_marked is True
-    assert rep.acceptance.get("colored", 0) >= 1
-    assert "유색" in rep.draft_reason                  # 결함 요약이 사유에 명시
-    # 채움 자체는 정상 수행(값은 들어감 — 판정만 제출불가)
+    assert rep.ok is True
+    assert Path(rep.final).name == "out.hwpx"
+    assert out.exists()
+    assert rep.draft_marked is False
+    assert rep.acceptance.get("colored", -1) == 0
     assert rep.filled == {"기업명": "도보네비(주)"}
+    assert any("baseline" in note for note in rep.acceptance.get("notes", []))
 
 
 def test_submit_normalizes_colors_by_default(colored_hwpx, tmp_path):
@@ -224,7 +221,7 @@ def test_cli_default_output_is_source_adjacent(clean_hwpx, tmp_path):
 
 
 def test_cli_default_output_fail_closed_draft_is_source_adjacent(colored_hwpx, tmp_path):
-    """기본 경로에서도 게이트 fail이면 같은 원본 폴더의 _DRAFT로만 남는다."""
+    """양식에 있던 유색은 게이트 fail 이 아니다. 제출 이름은 원본 폴더에 남는다."""
     from hwpx_submit import main
 
     src = tmp_path / "GovTech_아이디어기획서_원본.hwpx"
@@ -238,12 +235,12 @@ def test_cli_default_output_fail_closed_draft_is_source_adjacent(colored_hwpx, t
         "--no-normalize-colors",
     ])
 
-    assert rc == 2
+    assert rc == 0
     clean = list(tmp_path.glob("2026GovTech_아이디어기획서_* v1.hwpx"))
     drafts = list(tmp_path.glob("2026GovTech_아이디어기획서_* v1_DRAFT.hwpx"))
-    assert clean == []
-    assert len(drafts) == 1
-    assert drafts[0].parent == src.parent
+    assert len(clean) == 1
+    assert drafts == []
+    assert clean[0].parent == src.parent
 
 
 
@@ -264,10 +261,31 @@ def test_cli_exit_codes(clean_hwpx, colored_hwpx, tmp_path, monkeypatch):
                "--set", "기업명=x"])
     assert rc == 1
 
-    # 2: 게이트 fail(유색) → _DRAFT 강제·제출불가 (검정 정규화 opt-out 으로 유색 잔존)
-    out2 = tmp_path / "fail.hwpx"
-    rc = main([str(colored_hwpx), "-o", str(out2), "--set", "기업명=x(주)",
+    # 양식 유색 + 정규화 opt-out 은 제출 가능(양식 색은 결함 아님)
+    out_color = tmp_path / "color.hwpx"
+    rc = main([str(colored_hwpx), "-o", str(out_color), "--set", "기업명=x(주)",
                "--no-normalize-colors"])
+    assert rc == 0
+    assert out_color.exists()
+
+    # 2: 잔존 예시 이름 → _DRAFT 강제·제출불가
+    dummy = tmp_path / "dummy_cli.hwpx"
+    rows = "".join([_row(0, "상호", ""), _row(1, "대표자", "홍길동")])
+    section = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f'<hs:sec xmlns:hp="{_HP}" xmlns:hs="{_HS}">'
+        '<hp:p><hp:run charPrIDRef="0">'
+        f'<hp:tbl rowCnt="2" colCnt="2">{rows}</hp:tbl>'
+        "</hp:run></hp:p></hs:sec>"
+    ).encode("utf-8")
+    with zipfile.ZipFile(dummy, "w") as z:
+        zi = zipfile.ZipInfo("mimetype")
+        zi.compress_type = zipfile.ZIP_STORED
+        z.writestr(zi, _MIMETYPE)
+        z.writestr("Contents/header.xml", _header_xml(colored=False))
+        z.writestr("Contents/section0.xml", section)
+    out2 = tmp_path / "fail.hwpx"
+    rc = main([str(dummy), "-o", str(out2), "--set", "기업명=x(주)"])
     assert rc == 2
     assert not out2.exists()                           # CLI 경로에서도 이름 세탁 금지
     assert (tmp_path / "fail_DRAFT.hwpx").exists()
@@ -540,6 +558,9 @@ def test_local_lineseg_is_limited_to_edited_region(tmp_path):
         normalize_colors=False, submission_cleanup=False, preserve_template=True,
     )
     assert rep.filled.get("기업명") == "부분수정(주)"
+    assert rep.ok is True
+    assert Path(rep.final).name == "out.hwpx"
+    assert rep.acceptance.get("linesegarray", -1) == 0
     assert not any(note.startswith("제출 cleanup:") for note in rep.notes)
     with zipfile.ZipFile(rep.final) as z:
         sec = z.read("Contents/section0.xml").decode("utf-8")
