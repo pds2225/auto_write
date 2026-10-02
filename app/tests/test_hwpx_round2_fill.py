@@ -15,7 +15,7 @@ from lxml import etree
 from auto_write.services.hwpx_fill import fill_hwpx
 from auto_write.services.hwpx_submit import submit_hwpx
 from core.docx.services.hwpx_analysis_adapter import index_hwpx_structure
-from core.docx.services.hwpx_fill import _is_hwpx_example_scaffold
+from core.docx.services.hwpx_fill import _is_hwpx_example_scaffold, _is_prior_support_table
 from core.docx.services.hwpx_protected_regions import find_inline_field_targets
 
 _HP = "http://www.hancom.co.kr/hwpml/2011/paragraph"
@@ -249,6 +249,52 @@ def test_prior_support_table_does_not_take_applicant_identity(tmp_path: Path) ->
     assert applicant_rows[0] == ["팀명", "테스트팀"]
     assert applicant_rows[1] == ["대표자명", "홍길동"]
     assert "테스트주식회사" not in zipfile.ZipFile(out).read("Contents/section0.xml").decode("utf-8")
+
+
+def test_dips_prior_support_history_does_not_put_current_project_in_support_agency(
+    tmp_path: Path,
+) -> None:
+    history = (
+        "<hp:tr>"
+        + _cell(0, 0, _run("순번"))
+        + _cell(1, 0, _run("사업명"))
+        + _cell(2, 0, _run("지원기관"))
+        + "</hp:tr>"
+        "<hp:tr>"
+        + _cell(0, 1, _run("1"))
+        + _cell(1, 1, _run("사업명"))
+        + _cell(2, 1, _run("OOOOO", "34"))
+        + "</hp:tr>"
+    )
+    section = _sec(
+        f'<hp:p>{_run("2. 타 창업지원사업 신청·수행 여부")}</hp:p>'
+        f'<hp:p>{_run("")}<hp:run charPrIDRef="0"><hp:tbl rowCnt="2" colCnt="3">'
+        f"{history}</hp:tbl></hp:run></hp:p>"
+    )
+    src = tmp_path / "dips_history.hwpx"
+    _write(src, section)
+
+    table = next(_root(src).iter(f"{_P}tbl"))
+    assert _is_prior_support_table(table) is True
+
+    out = tmp_path / "out.hwpx"
+    report = fill_hwpx(
+        src,
+        out,
+        identity={
+            "사업명": "AI 기반 문서 자동작성 플랫폼 고도화",
+            "과제명": "현재 신청 과제",
+        },
+        force_black=False,
+    )
+
+    rows = _tables(out)[0]
+    assert rows[0] == ["순번", "사업명", "지원기관"]
+    assert rows[1] == ["1", "사업명", "OOOOO"]
+    xml = zipfile.ZipFile(out).read("Contents/section0.xml").decode("utf-8")
+    assert "AI 기반 문서 자동작성 플랫폼 고도화" not in xml
+    assert "현재 신청 과제" not in xml
+    assert report.filled == {}
 
 
 def test_inline_colon_keeps_spacing_and_drops_only_edited_lineseg(tmp_path: Path) -> None:
