@@ -1112,8 +1112,41 @@ def _in_protected_cell(t) -> bool:
 
 _PRIOR_SUPPORT_RE = re.compile(
     r"창업지원금|수혜\s*이력|지원\s*이력|기\s*지원|기지혜|과거\s*지원|참여\s*이력|"
-    r"지원금\s*수혜|수혜\s*실적|기수혜"
+    r"지원금\s*수혜|수혜\s*실적|기수혜|타\s*창업지원사업|"
+    r"신청\s*[·ㆍ/]?\s*수행\s*여부|중복\s*지원|수행\s*실적"
 )
+_PRIOR_SUPPORT_PROJECT_KEYS = frozenset(
+    _key(name) for name in ("사업명", "과제명") if _key(name)
+)
+_SUPPORT_AGENCY_HEADER_KEYS = frozenset(
+    _key(name) for name in ("지원기관",) if _key(name)
+)
+
+
+def _table_first_row_text_by_col(tbl, tc) -> str:
+    """표 첫 행에서 tc와 같은 colAddr의 머리글 텍스트를 반환."""
+    col = _cell_addr(tc)
+    rows = _direct(tbl, "tr")
+    if col is None or not rows:
+        return ""
+    for header_tc in _direct(rows[0], "tc"):
+        if _cell_addr(header_tc) == col:
+            return _cell_text(header_tc)
+    return ""
+
+
+def _repeats_prior_support_header(tbl, tc) -> bool:
+    """이력표 데이터 셀이 같은 열 머리글을 그대로 반복하면 라벨로 쓰지 않는다."""
+    text = _cell_text(tc)
+    header = _table_first_row_text_by_col(tbl, tc)
+    return bool(text and header and _key(text) == _key(header))
+
+
+def _prior_support_target_is_agency_column(tbl, target) -> bool:
+    """이력표의 지원기관 열인지 머리글 기준으로 판정."""
+    return _key(_table_first_row_text_by_col(tbl, target)) in _SUPPORT_AGENCY_HEADER_KEYS
+
+
 _APPLICANT_IDENTITY_REPS = frozenset(
     rep for rep in (
         _cluster_rep(_key(name))
@@ -1617,6 +1650,8 @@ def _fill_section_xml(
                         continue
                     if prior_support and _is_applicant_identity(want_key):
                         continue
+                    if prior_support and _repeats_prior_support_header(tbl, tc):
+                        continue
                     if _exact_identity_blocks_synonym(cell_key, want_key, wants, used_keys):
                         continue
                     if _held_for_other_label(exact_held, cell_key, want_key):
@@ -1625,6 +1660,12 @@ def _fill_section_xml(
                         continue
                     target = _value_cell(tc, cells)
                     if target is None or target is tc:
+                        continue
+                    if (
+                        prior_support
+                        and want_key in _PRIOR_SUPPORT_PROJECT_KEYS
+                        and _prior_support_target_is_agency_column(tbl, target)
+                    ):
                         continue
                     if _is_label_like(target):
                         continue  # 값칸 후보가 또 라벨 → 기입 금지
