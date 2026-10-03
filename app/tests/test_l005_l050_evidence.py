@@ -245,6 +245,7 @@ def test_hangul_com_saveas_timeout_is_blocked_and_keeps_other_hwp(
             events.append("quit")
 
     monkeypatch.setattr(hdc, "_dispatch_hwp", lambda: _HangingPdf())
+    monkeypatch.setattr(hdc, "_hwp_object_pid", lambda _hwp: 200)
     monkeypatch.setattr(hdc, "_hangul_image_pids", lambda: next(pid_snapshots, {100, 200}))
 
     def _kill(pids):
