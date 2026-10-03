@@ -449,13 +449,29 @@ def _try_hangul_com_pdf(source: Path, dest: Path) -> PdfPairGenerateResult | Non
     """
     if sys.platform != "win32":
         return None
-    from .hwp_docx_convert import export_pdf_via_com, hancom_com_available
+    from .hwp_docx_convert import (
+        HangulComTimeout,
+        export_pdf_via_com,
+        hancom_com_available,
+    )
 
     if not hancom_com_available():
         return None
     dest.parent.mkdir(parents=True, exist_ok=True)
     try:
         export_pdf_via_com(source, dest)
+    except HangulComTimeout as exc:
+        if dest.is_file():
+            try:
+                dest.unlink()
+            except OSError:
+                pass
+        return PdfPairGenerateResult(
+            False,
+            False,
+            True,
+            f"BLOCKED: {exc}",
+        )
     except Exception:
         if dest.is_file() and dest.stat().st_size == 0:
             try:

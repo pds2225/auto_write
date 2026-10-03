@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -45,6 +46,68 @@ HWP_TO_HWPX_UNAVAILABLE_NOTE = (
     "DOCX로 진행하려면 콘솔에서 'DOCX로 진행'을 선택한 뒤 같은 HWP를 다시 올리세요. "
     "DOCX 경로는 원본 양식 레이아웃을 보존하지 않습니다."
 )
+
+class HangulComTimeout(TimeoutError):
+    """한글 COM 단계가 제한시간 안에 끝나지 않았을 때."""
+
+    def __init__(self, stage: str, timeout_seconds: float) -> None:
+        self.stage = stage
+        self.timeout_seconds = timeout_seconds
+        super().__init__(f"Hangul COM timeout at {stage} ({timeout_seconds:g}s)")
+
+
+# 변경 추적/저장 경고처럼 확인·취소형 메시지는 자동으로 확인/저장을 선택한다.
+# SetMessageBoxMode 문서의 MB_OKCANCEL_IDOK 값.
+_HANGUL_AUTO_CONFIRM_MODE = 0x00000010
+_COM_STAGE_TIMEOUTS: dict[str, float] = {
+    "Dispatch": 30.0,
+    "RegisterModule": 10.0,
+    "SetMessageBoxMode": 10.0,
+    "Open": 60.0,
+    "SaveAs": 120.0,
+    "Clear": 15.0,
+    "Quit": 15.0,
+}
+
+
+def _com_stage_timeout(stage: str) -> float:
+    base = stage.split("[", 1)[0]
+    return float(_COM_STAGE_TIMEOUTS.get(base, 60.0))
+
+
+def _run_com_stage(stage: str, operation, *, timeout_cleanup=None):
+    """COM 호출은 같은 스레드에서 수행하고 watchdog으로 제한시간을 강제한다.
+
+    watchdog은 제한시간을 넘기면 이번 호출의 Hwp PID만 종료하도록
+    timeout_cleanup을 실행한다. 실제 COM 호출이 종료 뒤 예외를 내도 timeout으로 승격한다.
+    """
+    timeout = _com_stage_timeout(stage)
+    timed_out = threading.Event()
+
+    def _expire() -> None:
+        timed_out.set()
+        if timeout_cleanup is not None:
+            try:
+                timeout_cleanup()
+            except Exception:
+                pass
+
+    timer = threading.Timer(timeout, _expire)
+    timer.daemon = True
+    timer.start()
+    try:
+        try:
+            result = operation()
+        except BaseException as exc:
+            if timed_out.is_set():
+                raise HangulComTimeout(stage, timeout) from exc
+            raise
+    finally:
+        timer.cancel()
+    if timed_out.is_set():
+        raise HangulComTimeout(stage, timeout)
+    return result
+
 
 
 @dataclass
@@ -145,53 +208,97 @@ def export_pdf_via_com(src: str | Path, dst: str | Path) -> None:
 def _convert_via_com(src: Path, dst: Path, save_formats: tuple[str, ...]) -> None:
     """한글 COM 으로 src 를 열어 dst 로 저장한다. 실패는 예외로 알린다.
 
-    주의: 백그라운드/서비스 세션에서는 한글 GUI COM 서버가 안 떠서
-    Dispatch/Open 단계에서 실패할 수 있다(호출측이 폴백을 처리한다).
+    문서 Open 전에 확인/취소형 메시지 자동응답을 켠다. Dispatch/Open/SaveAs/Quit
+    각 단계에는 watchdog 제한시간을 적용하고, 초과 시 이번 호출이 새로 띄운
+    Hwp PID만 종료해 블로킹 COM 호출을 깨운다.
     """
     before_pids = _hangul_image_pids()
-    hwp = _dispatch_hwp()
+
+    def _dispatch_timeout_cleanup() -> None:
+        _kill_owned_pids(_hangul_image_pids() - before_pids)
+
+    hwp = _run_com_stage(
+        "Dispatch",
+        _dispatch_hwp,
+        timeout_cleanup=_dispatch_timeout_cleanup,
+    )
     owned_pids = _hangul_image_pids() - before_pids
-    # 자동화 중 화면에 창이 뜨는 것을 방지(버전에 따라 미지원일 수 있어 무시하고 진행)
+
+    def _owned_cleanup() -> None:
+        _kill_owned_pids(set(owned_pids))
+
     try:
         hwp.XHwpWindows.Item(0).Visible = False
     except Exception:
         pass
     try:
-        # 보안 대화상자 억제(모듈이 등록돼 있으면 성공, 없으면 무시)
         try:
-            hwp.RegisterModule("FilePathCheckDLL", "FilePathCheckerModule")
+            _run_com_stage(
+                "RegisterModule",
+                lambda: hwp.RegisterModule("FilePathCheckDLL", "FilePathCheckerModule"),
+                timeout_cleanup=_owned_cleanup,
+            )
+        except HangulComTimeout:
+            raise
         except Exception:
             pass
         try:
-            hwp.SetMessageBoxMode(0x00000020)
+            _run_com_stage(
+                "SetMessageBoxMode",
+                lambda: hwp.SetMessageBoxMode(_HANGUL_AUTO_CONFIRM_MODE),
+                timeout_cleanup=_owned_cleanup,
+            )
+        except HangulComTimeout:
+            raise
         except Exception:
             pass
 
-        if not hwp.Open(str(src), "", ""):
-            # 형식 자동 인식 실패 시 확장자 필터 명시 재시도
-            if not hwp.Open(str(src), src.suffix.lstrip(".").upper(), ""):
+        opened = _run_com_stage(
+            "Open",
+            lambda: hwp.Open(str(src), "", ""),
+            timeout_cleanup=_owned_cleanup,
+        )
+        if not opened:
+            opened = _run_com_stage(
+                "Open[format]",
+                lambda: hwp.Open(str(src), src.suffix.lstrip(".").upper(), ""),
+                timeout_cleanup=_owned_cleanup,
+            )
+            if not opened:
                 raise RuntimeError(f"한글에서 열기 실패: {src}")
         for fmt in save_formats:
             try:
-                if hwp.SaveAs(str(dst), fmt, ""):
+                saved = _run_com_stage(
+                    f"SaveAs[{fmt}]",
+                    lambda fmt=fmt: hwp.SaveAs(str(dst), fmt, ""),
+                    timeout_cleanup=_owned_cleanup,
+                )
+                if saved:
                     return
+            except HangulComTimeout:
+                raise
             except Exception:
                 continue
         raise RuntimeError(f"한글 저장 실패(시도 포맷 {save_formats}): {dst}")
     finally:
-        # 이미 떠 있던 한글에 붙은 경우에는 Clear/Quit 하지 않는다.
-        # 이번 호출이 새로 만든 프로세스만 닫고, 그 PID 만 종료한다.
         if owned_pids:
             try:
-                hwp.Clear(1)
+                _run_com_stage(
+                    "Clear",
+                    lambda: hwp.Clear(1),
+                    timeout_cleanup=_owned_cleanup,
+                )
             except Exception:
                 pass
             try:
-                hwp.Quit()
+                _run_com_stage(
+                    "Quit",
+                    hwp.Quit,
+                    timeout_cleanup=_owned_cleanup,
+                )
             except Exception:
                 pass
             _kill_owned_pids(owned_pids)
-
 
 # --- 경로/검증 도우미 ---------------------------------------------------------
 

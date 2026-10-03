@@ -195,6 +195,80 @@ def test_hangul_refuses_pdf_records_blocked_by_form(tmp_path: Path, monkeypatch)
     assert _lesson("L050")["mechanizable"] != "yes"
 
 
+def test_hangul_com_saveas_timeout_is_blocked_and_keeps_other_hwp(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """변경추적 대화상자 등으로 SaveAs가 멈춰도 다른 Hwp는 종료하지 않는다."""
+    from core.docx.services import hwp_docx_convert as hdc
+
+    _hide_rhwp(monkeypatch)
+    monkeypatch.setattr(gates.sys, "platform", "win32")
+    monkeypatch.setattr(hdc.sys, "platform", "win32")
+    monkeypatch.setattr(hdc, "_COM_STAGE_TIMEOUTS", {
+        "Dispatch": 0.2,
+        "RegisterModule": 0.2,
+        "SetMessageBoxMode": 0.2,
+        "Open": 0.2,
+        "SaveAs": 0.02,
+        "Clear": 0.2,
+        "Quit": 0.2,
+    })
+    monkeypatch.setattr(hdc, "hancom_com_available", lambda: True)
+
+    release = __import__("threading").Event()
+    events: list[object] = []
+    killed: list[set[int]] = []
+    pid_snapshots = iter(({100}, {100, 200}))
+
+    class _HangingPdf:
+        def RegisterModule(self, *_args):
+            events.append("register")
+            return True
+
+        def SetMessageBoxMode(self, mode):
+            events.append(("mode", mode))
+            return 0
+
+        def Open(self, *_args):
+            events.append("open")
+            return True
+
+        def SaveAs(self, *_args):
+            events.append("save")
+            release.wait(0.5)
+            return False
+
+        def Clear(self, *_args):
+            events.append("clear")
+
+        def Quit(self):
+            events.append("quit")
+
+    monkeypatch.setattr(hdc, "_dispatch_hwp", lambda: _HangingPdf())
+    monkeypatch.setattr(hdc, "_hangul_image_pids", lambda: next(pid_snapshots, {100, 200}))
+
+    def _kill(pids):
+        killed.append(set(pids))
+        release.set()
+
+    monkeypatch.setattr(hdc, "_kill_owned_pids", _kill)
+
+    src = tmp_path / "변경추적.hwpx"
+    src.write_bytes(b"PK")
+    gen = try_generate_sibling_pdf(src)
+
+    assert gen.generated is False
+    assert gen.blocked is True
+    assert "timeout" in gen.reason.lower()
+    assert "SaveAs" in gen.reason
+    assert not (tmp_path / "변경추적.pdf").exists()
+    assert ("mode", hdc._HANGUL_AUTO_CONFIRM_MODE) in events
+    assert events.index(("mode", hdc._HANGUL_AUTO_CONFIRM_MODE)) < events.index("open")
+    assert killed and all(100 not in pids for pids in killed)
+    assert any(200 in pids for pids in killed)
+    assert l050_mechanization_status()["mechanized"] is False
+    assert _lesson("L050")["category"] == "gap"
+
 def test_soffice_is_not_a_hangul_pdf_tool(tmp_path: Path, monkeypatch) -> None:
     _enable_rhwp(monkeypatch)
     soffice = tmp_path / "soffice"
