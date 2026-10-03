@@ -675,6 +675,23 @@ def _fill_inline_fields_in_p(
     if ":" not in flat and "：" not in flat:
         return False
     changed = False
+
+    # onlab 서약서처럼 정확히 '팀 명 :'만 있는 문단은 팀명에 한해 콜론 뒤에 쓴다.
+    # 비고/주의 등 일반 콜론 문단은 기존대로 채우지 않는다.
+    colon_only = re.fullmatch(r"\s*(.*?)\s*[:：]\s*", flat, re.DOTALL)
+    if colon_only and _key(colon_only.group(1)) == _key("팀명"):
+        for want_key, lbl, val in wants:
+            if want_key in used_keys or want_key != _key("팀명"):
+                continue
+            last = ts[-1]
+            last.text = (last.text or "") + " " + str(val)
+            _invalidate_lineseg(p)
+            filled[lbl] = str(val)
+            used_keys.add(want_key)
+            changed = True
+            flat = "".join(t.text or "" for t in ts)
+            break
+
     fields = list(_iter_line_fields(flat))
     # 역순 스플라이스: 뒤 구간부터 교체해야 앞 필드 offset 이 유효.
     for label_raw, value_raw, f_start, f_end in reversed(fields):
@@ -979,6 +996,10 @@ def _left_label_text(tc) -> str:
 
 _EXAMPLE_OMASK_RE = re.compile(r"^[O○〇ㅇo]{3,}$")
 _EXAMPLE_ZERO_RE = re.compile(r"^[0.\-\s]{6,}$")
+_EXAMPLE_DATE_RE = re.compile(r"^0{4}\s*년\s*0{1,2}\s*월\s*0{1,2}\s*일$")
+_EXAMPLE_GUIDED_OMASK_RE = re.compile(
+    r"^[O○〇ㅇo]{3,}\s*[\(（].*(?:기입|작성|동일).*[\)）]\s*$"
+)
 _EXAMPLE_CHOICE_RE = re.compile(r"\s*/\s*")
 _REGION_SCAFFOLD_CHARS_RE = re.compile(r"[O○〇ㅇ0\s·・.\-도특별시군구읍면동로길번지]")
 
@@ -997,6 +1018,10 @@ def _is_hwpx_example_scaffold(text: str) -> bool:
         return False
     compact = re.sub(r"\s+", "", raw)
     if _EXAMPLE_OMASK_RE.fullmatch(compact):
+        return True
+    if _EXAMPLE_GUIDED_OMASK_RE.fullmatch(raw):
+        return True
+    if _EXAMPLE_DATE_RE.fullmatch(raw):
         return True
     if _EXAMPLE_ZERO_RE.fullmatch(compact) and "0" in compact and not re.search(r"[1-9]", compact):
         return True
@@ -1036,6 +1061,30 @@ def _cell_is_fillable(tc) -> bool:
     if _has_form_control(tc) or _cell_has_nested_table(tc):
         return False
     return _cell_text_fillable(tc)
+
+
+
+def _cell_has_blue_example_style(tc, black: Optional[_BlackCharPr]) -> bool:
+    """값 칸 전체가 파란 예시체이면 현재 매칭된 프로필 값으로 교체 가능한가.
+
+    텍스트 자체가 실값처럼 보여도 charPr가 양식 예시 파랑(#0000FF)인 경우에만 True.
+    호출 위치가 이미 라벨↔identity 매칭 뒤이므로 해당 프로필 필드가 있을 때만 적용된다.
+    """
+    if black is None or _has_form_control(tc) or _cell_has_nested_table(tc):
+        return False
+    seen = False
+    for t in _cell_texts(tc):
+        if not str(t.text or "").strip():
+            continue
+        run = t.getparent()
+        if run is None or _local(getattr(run, "tag", "")) != "run":
+            return False
+        ref = run.get("charPrIDRef") or ""
+        color = re.sub(r"[^0-9A-Fa-f]", "", black.colors.get(ref, "") or "").upper()
+        if color != "0000FF":
+            return False
+        seen = True
+    return seen
 
 
 _REGION_PROTECTED_LABEL_RE = re.compile(
@@ -1669,7 +1718,8 @@ def _fill_section_xml(
                         and _prior_support_target_is_agency_column(tbl, target)
                     ):
                         continue
-                    if _is_label_like(target):
+                    blue_example = _cell_has_blue_example_style(target, black)
+                    if _is_label_like(target) and not blue_example:
                         continue  # 값칸 후보가 또 라벨 → 기입 금지
                     if _cell_has_nested_table(target):
                         _note_region(span_notes, "nested", lbl, target)
@@ -1683,7 +1733,7 @@ def _fill_section_xml(
                         _note_region(span_notes, "handwritten", lbl, target)
                         _hold_exact_label(exact_held, cell_key, want_key)
                         break
-                    if not _cell_is_fillable(target):
+                    if not _cell_is_fillable(target) and not blue_example:
                         # 실값만 EXISTING_VALUE. ____·더미날짜·□ 는 각자 게이트에 남긴다.
                         if _cell_has_real_value(target):
                             _note_existing_value(span_notes, lbl, target, existing_labels)

@@ -212,6 +212,98 @@ def test_example_cells_are_replaced_in_body_style(tmp_path: Path) -> None:
     assert _style(out, "대표자 성명")[0] == "#000000"
 
 
+def test_mixed_example_guidance_and_korean_date_are_replaced_locally(tmp_path: Path) -> None:
+    rows = "".join([
+        _row(
+            0,
+            "기업명",
+            "OOOOO (법인등기부등본 및 사업자등록증 상의 본사(점) 명칭과 동일하게 기입)",
+        ),
+        _row(1, "개업연월일", "0000년 00월 00일"),
+        _row(2, "안내", "이 안내문은 다른 칸이므로 유지"),
+    ])
+    src = tmp_path / "dips_mixed.hwpx"
+    _write(
+        src,
+        _sec(
+            f'<hp:p>{_run("")}<hp:run charPrIDRef="0"><hp:tbl rowCnt="3" colCnt="2">'
+            f"{rows}</hp:tbl></hp:run></hp:p>"
+        ),
+    )
+    out = tmp_path / "out.hwpx"
+    report = fill_hwpx(
+        src,
+        out,
+        identity={"기업명": "테스트주식회사", "설립일": "2020-01-15"},
+        force_black=False,
+    )
+    rows_out = _tables(out)[0]
+    assert rows_out[0] == ["기업명", "테스트주식회사"]
+    assert rows_out[1] == ["개업연월일", "2020-01-15"]
+    assert rows_out[2] == ["안내", "이 안내문은 다른 칸이므로 유지"]
+    assert report.filled["기업명"] == "테스트주식회사"
+    assert report.filled["설립일"] == "2020-01-15"
+
+
+def test_blue_word_examples_replace_only_for_matching_profile_fields(tmp_path: Path) -> None:
+    rows = "".join([
+        _row(0, "팀명", "앙트프러너십팀"),
+        _row(1, "연락처", "010-0000-0000"),
+        _row(2, "이메일", "startup@koef.or.kr"),
+        _row(3, "주소", "서울시 예시구 예시로 1"),
+        _row(4, "홈페이지", "https://example.invalid"),
+    ])
+    src = tmp_path / "onlab_blue_examples.hwpx"
+    _write(
+        src,
+        _sec(
+            f'<hp:p>{_run("")}<hp:run charPrIDRef="0"><hp:tbl rowCnt="5" colCnt="2">'
+            f"{rows}</hp:tbl></hp:run></hp:p>"
+        ),
+    )
+    out = tmp_path / "out.hwpx"
+    report = fill_hwpx(
+        src,
+        out,
+        identity={
+            "팀명": "테스트팀",
+            "연락처": "010-1234-5678",
+            "이메일": "test@example.com",
+            "주소": "서울특별시 테스트구 테스트로 123",
+        },
+        force_black=False,
+    )
+    rows_out = _tables(out)[0]
+    assert rows_out[0] == ["팀명", "테스트팀"]
+    assert rows_out[1] == ["연락처", "010-1234-5678"]
+    assert rows_out[2] == ["이메일", "test@example.com"]
+    assert rows_out[3] == ["주소", "서울특별시 테스트구 테스트로 123"]
+    # 프로필에 홈페이지가 없으면 파란 예시라도 그대로 둔다.
+    assert rows_out[4] == ["홈페이지", "https://example.invalid"]
+    assert set(report.filled) >= {"팀명", "연락처", "이메일", "주소"}
+
+
+def test_team_colon_only_is_narrowly_supported_but_note_is_not(tmp_path: Path) -> None:
+    section = _sec(
+        f'<hp:p>{_run("팀 명 :")}</hp:p>'
+        f'<hp:p>{_run("비고 :")}</hp:p>'
+    )
+    src = tmp_path / "onlab_pledge.hwpx"
+    _write(src, section)
+    out = tmp_path / "out.hwpx"
+    report = fill_hwpx(
+        src,
+        out,
+        identity={"팀명": "테스트팀", "비고": "채우면안됨"},
+        force_black=False,
+    )
+    xml = zipfile.ZipFile(out).read("Contents/section0.xml").decode("utf-8")
+    assert "팀 명 : 테스트팀" in xml
+    assert "비고 :" in xml
+    assert "채우면안됨" not in xml
+    assert report.filled["팀명"] == "테스트팀"
+
+
 def test_prior_support_table_does_not_take_applicant_identity(tmp_path: Path) -> None:
     prior = (
         "<hp:tr>" + _cell(0, 0, _run("단체명")) + _cell(1, 0, _run("", "0")) + "</hp:tr>"
