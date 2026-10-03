@@ -22,7 +22,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r app/requirements.txt pytest pytest-subtests
+          python -m pip install -r app/requirements.txt pytest pytest-subtests PyYAML
 
       - name: Focused Round-3 regression
         id: focused
