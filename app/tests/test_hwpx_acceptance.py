@@ -369,3 +369,63 @@ def test_dummy_name_detected_unless_allowed(tmp_path):
     ok = run_hwpx_acceptance(p, allowed_names=["홍길동"])
     assert ok.dummy_names == 0
     assert ok.ok is True
+
+
+def test_baseline_ignores_template_color_lineseg_and_guides(tmp_path):
+    """양식에 있던 유색·안내·미편집 lineseg 는 결함이 아니다."""
+    header = _header_xml(_charpr(0, "#FF0000"))
+    section = _section_xml(_p("안내 아닌 본문", lineseg=True) + _p(_GUIDE_PARA))
+    src = tmp_path / "form.hwpx"
+    out = tmp_path / "out.hwpx"
+    _make_hwpx(src, header=header, section=section)
+    _make_hwpx(out, header=header, section=section)
+    absolute = run_hwpx_acceptance(out)
+    assert absolute.ok is False
+    relative = run_hwpx_acceptance(out, baseline=src)
+    assert relative.colored == 0
+    assert relative.linesegarray == 0
+    assert relative.guides == 0
+    assert relative.ok is True
+
+
+def test_baseline_counts_edited_lineseg_and_new_color(tmp_path):
+    """편집 문단에 남은 lineseg 와 양식에 없던 유색은 실패다."""
+    src = tmp_path / "form.hwpx"
+    out = tmp_path / "out.hwpx"
+    _make_hwpx(
+        src,
+        header=_header_xml(_charpr(0, "#000000")),
+        section=_section_xml(_p("옛값", lineseg=True) + _p("그대로", lineseg=True)),
+    )
+    _make_hwpx(
+        out,
+        header=_header_xml(_charpr(0, "#000000") + _charpr(1, "#FF0000")),
+        section=_section_xml(
+            '<hp:p><hp:linesegarray><hp:lineseg textpos="0"/></hp:linesegarray>'
+            '<hp:run charPrIDRef="1"><hp:t>새값</hp:t></hp:run></hp:p>'
+            + _p("그대로", lineseg=True)
+        ),
+    )
+    rep = run_hwpx_acceptance(out, baseline=src)
+    assert rep.linesegarray >= 1
+    assert rep.colored >= 1
+    assert rep.ok is False
+
+
+def test_baseline_still_fails_residual_dummy_name(tmp_path):
+    src = tmp_path / "form.hwpx"
+    out = tmp_path / "out.hwpx"
+    section = _section_xml(_p("대표자 홍길동"))
+    header = _header_xml(_charpr(0, "#000000"))
+    _make_hwpx(src, header=header, section=section)
+    _make_hwpx(out, header=header, section=section)
+    rep = run_hwpx_acceptance(out, baseline=src)
+    assert rep.dummy_names >= 1
+    assert rep.ok is False
+
+
+def test_baseline_missing_raises(tmp_path):
+    p = tmp_path / "out.hwpx"
+    _make_hwpx(p, header=_header_xml(_charpr(0, "#000000")), section=_section_xml(_p("본문")))
+    with pytest.raises(FileNotFoundError):
+        run_hwpx_acceptance(p, baseline=tmp_path / "missing.hwpx")

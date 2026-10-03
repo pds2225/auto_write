@@ -42,6 +42,10 @@ def _hide_rhwp(monkeypatch) -> None:
     monkeypatch.setattr(native_hwp.shutil, "which", lambda _name: None)
 
 
+def _enable_rhwp(monkeypatch) -> None:
+    monkeypatch.setenv("AUTO_WRITE_ENABLE_RHWP", "1")
+
+
 def _fake_run(dest_bytes: bytes):
     def run(cmd, **_kwargs):
         out = Path(cmd[cmd.index("-o") + 1])
@@ -59,6 +63,7 @@ def _fake_run(dest_bytes: bytes):
 
 
 def test_rhwp_exe_beats_path_and_export_args(tmp_path: Path, monkeypatch) -> None:
+    _enable_rhwp(monkeypatch)
     exe = tmp_path / "rhwp.exe"
     exe.write_bytes(b"MZ")
     decoy = tmp_path / "rhwp"
@@ -109,6 +114,7 @@ def test_rhwp_exe_beats_path_and_export_args(tmp_path: Path, monkeypatch) -> Non
 
 
 def test_path_rhwp_used_when_env_unset(tmp_path: Path, monkeypatch) -> None:
+    _enable_rhwp(monkeypatch)
     exe = tmp_path / "rhwp"
     exe.write_bytes(b"#!/bin/sh\n")
     monkeypatch.delenv("RHWP_EXE", raising=False)
@@ -117,6 +123,7 @@ def test_path_rhwp_used_when_env_unset(tmp_path: Path, monkeypatch) -> None:
 
 
 def test_broken_rhwp_exe_does_not_fall_through_to_path(tmp_path: Path, monkeypatch) -> None:
+    _enable_rhwp(monkeypatch)
     decoy = tmp_path / "rhwp"
     decoy.write_bytes(b"decoy")
     monkeypatch.setenv("RHWP_EXE", str(tmp_path / "missing" / "rhwp.exe"))
@@ -126,6 +133,10 @@ def test_broken_rhwp_exe_does_not_fall_through_to_path(tmp_path: Path, monkeypat
     src.write_bytes(b"PK")
     called: list = []
     monkeypatch.setattr(gates.subprocess, "run", lambda *args, **kwargs: called.append(args))
+    monkeypatch.setattr(
+        "core.docx.services.hwp_docx_convert.hancom_com_available",
+        lambda: False,
+    )
     gen = try_generate_sibling_pdf(src)
     assert called == []
     assert gen.generated is False
@@ -134,7 +145,133 @@ def test_broken_rhwp_exe_does_not_fall_through_to_path(tmp_path: Path, monkeypat
     assert not (tmp_path / "신청서.pdf").exists()
 
 
+def test_default_skips_rhwp_export_pdf_even_if_exe_is_set(tmp_path: Path, monkeypatch) -> None:
+    exe = tmp_path / "rhwp.exe"
+    exe.write_bytes(b"MZ")
+    monkeypatch.delenv("AUTO_WRITE_ENABLE_RHWP", raising=False)
+    monkeypatch.setenv("RHWP_EXE", str(exe))
+    called: list = []
+    monkeypatch.setattr(gates.subprocess, "run", lambda *args, **kwargs: called.append(args))
+    monkeypatch.setattr(
+        "core.docx.services.hwp_docx_convert.hancom_com_available",
+        lambda: False,
+    )
+    assert hangul_pdf_tool() is None
+    src = tmp_path / "신청서.hwpx"
+    src.write_bytes(b"PK")
+    gen = try_generate_sibling_pdf(src)
+    assert called == []
+    assert gen.generated is False
+    assert gen.blocked is True
+    assert not (tmp_path / "신청서.pdf").exists()
+    assert _lesson("L050")["category"] == "gap"
+
+
+def test_hangul_refuses_pdf_records_blocked_by_form(tmp_path: Path, monkeypatch) -> None:
+    """양식 자체가 PDF 저장을 거부하면 BLOCKED-by-form 이고 크래시·mechanized 가 아니다."""
+    _hide_rhwp(monkeypatch)
+    monkeypatch.setattr(gates.sys, "platform", "win32")
+    monkeypatch.setattr(
+        "core.docx.services.hwp_docx_convert.hancom_com_available",
+        lambda: True,
+    )
+
+    def export_pdf(_src, _dest) -> None:
+        raise OSError("Hangul refused SaveAs PDF")
+
+    monkeypatch.setattr(
+        "core.docx.services.hwp_docx_convert.export_pdf_via_com",
+        export_pdf,
+    )
+    src = tmp_path / "신청서.hwpx"
+    src.write_bytes(b"PK")
+    gen = try_generate_sibling_pdf(src)
+    assert gen.generated is False
+    assert gen.blocked is True
+    assert "BLOCKED-by-form" in gen.reason
+    assert not (tmp_path / "신청서.pdf").exists()
+    assert l050_mechanization_status()["mechanized"] is False
+    assert _lesson("L050")["category"] == "gap"
+    assert _lesson("L050")["mechanizable"] != "yes"
+
+
+def test_hangul_com_saveas_timeout_is_blocked_and_keeps_other_hwp(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """변경추적 대화상자 등으로 SaveAs가 멈춰도 다른 Hwp는 종료하지 않는다."""
+    from core.docx.services import hwp_docx_convert as hdc
+
+    _hide_rhwp(monkeypatch)
+    monkeypatch.setattr(gates.sys, "platform", "win32")
+    monkeypatch.setattr(hdc.sys, "platform", "win32")
+    monkeypatch.setattr(hdc, "_COM_STAGE_TIMEOUTS", {
+        "Dispatch": 0.2,
+        "RegisterModule": 0.2,
+        "SetMessageBoxMode": 0.2,
+        "Open": 0.2,
+        "SaveAs": 0.02,
+        "Clear": 0.2,
+        "Quit": 0.2,
+    })
+    monkeypatch.setattr(hdc, "hancom_com_available", lambda: True)
+
+    release = __import__("threading").Event()
+    events: list[object] = []
+    killed: list[set[int]] = []
+    pid_snapshots = iter(({100}, {100, 200}))
+
+    class _HangingPdf:
+        def RegisterModule(self, *_args):
+            events.append("register")
+            return True
+
+        def SetMessageBoxMode(self, mode):
+            events.append(("mode", mode))
+            return 0
+
+        def Open(self, *_args):
+            events.append("open")
+            return True
+
+        def SaveAs(self, *_args):
+            events.append("save")
+            release.wait(0.5)
+            return False
+
+        def Clear(self, *_args):
+            events.append("clear")
+
+        def Quit(self):
+            events.append("quit")
+
+    monkeypatch.setattr(hdc, "_dispatch_hwp", lambda: _HangingPdf())
+    monkeypatch.setattr(hdc, "_hwp_object_pid", lambda _hwp: 200)
+    monkeypatch.setattr(hdc, "_hangul_image_pids", lambda: next(pid_snapshots, {100, 200}))
+
+    def _kill(pids):
+        killed.append(set(pids))
+        release.set()
+
+    monkeypatch.setattr(hdc, "_kill_owned_pids", _kill)
+
+    src = tmp_path / "변경추적.hwpx"
+    src.write_bytes(b"PK")
+    gen = try_generate_sibling_pdf(src)
+
+    assert gen.generated is False
+    assert gen.blocked is True
+    assert "timeout" in gen.reason.lower()
+    assert "SaveAs" in gen.reason
+    assert not (tmp_path / "변경추적.pdf").exists()
+    assert ("mode", hdc._HANGUL_AUTO_CONFIRM_MODE) in events
+    assert events.index(("mode", hdc._HANGUL_AUTO_CONFIRM_MODE)) < events.index("open")
+    assert killed and all(100 not in pids for pids in killed)
+    assert any(200 in pids for pids in killed)
+    assert l050_mechanization_status()["mechanized"] is False
+    assert _lesson("L050")["category"] == "gap"
+
 def test_soffice_is_not_a_hangul_pdf_tool(tmp_path: Path, monkeypatch) -> None:
+    _enable_rhwp(monkeypatch)
     soffice = tmp_path / "soffice"
     soffice.write_bytes(b"lo")
     monkeypatch.delenv("RHWP_EXE", raising=False)
@@ -148,6 +285,7 @@ def test_soffice_is_not_a_hangul_pdf_tool(tmp_path: Path, monkeypatch) -> None:
 
 
 def test_export_failure_stays_blocked(tmp_path: Path, monkeypatch) -> None:
+    _enable_rhwp(monkeypatch)
     exe = tmp_path / "rhwp.exe"
     exe.write_bytes(b"MZ")
     monkeypatch.setenv("RHWP_EXE", str(exe))
@@ -198,6 +336,7 @@ def test_linux_ignores_windows_l050_evidence(tmp_path: Path, monkeypatch) -> Non
 
 
 def test_win32_export_writes_evidence_but_not_mechanized(tmp_path: Path, monkeypatch) -> None:
+    _enable_rhwp(monkeypatch)
     exe = tmp_path / "rhwp.exe"
     exe.write_bytes(b"MZ")
     monkeypatch.setenv("RHWP_EXE", str(exe))
@@ -357,6 +496,7 @@ def test_submit_hwpx_attempts_sibling_pdf_only_when_submittable(tmp_path: Path, 
 def test_document_pdf_uses_rhwp_exe(tmp_path: Path, monkeypatch) -> None:
     from auto_write.image_automation import document_pdf as dp
 
+    _enable_rhwp(monkeypatch)
     exe = tmp_path / "rhwp.exe"
     exe.write_bytes(b"MZ")
     monkeypatch.setenv("RHWP_EXE", str(exe))
@@ -384,8 +524,13 @@ def test_document_pdf_uses_rhwp_exe(tmp_path: Path, monkeypatch) -> None:
 
 
 def test_com_pdf_not_used_when_rhwp_missing_on_windows(tmp_path: Path, monkeypatch) -> None:
+    """rhwp 도 한글 COM 도 없으면 PDF 를 만들지 않고 예외 없이 BLOCKED."""
     _hide_rhwp(monkeypatch)
     monkeypatch.setattr(gates.sys, "platform", "win32")
+    monkeypatch.setattr(
+        "core.docx.services.hwp_docx_convert.hancom_com_available",
+        lambda: False,
+    )
     src = tmp_path / "신청서.docx"
     src.write_bytes(b"PK")
     called: list = []
@@ -394,5 +539,39 @@ def test_com_pdf_not_used_when_rhwp_missing_on_windows(tmp_path: Path, monkeypat
     assert called == []
     assert gen.generated is False
     assert gen.blocked is True
-    assert "미배선" in gen.reason
-    assert "RHWP_EXE" in gen.reason
+    assert "BLOCKED" in gen.reason
+    assert not (tmp_path / "신청서.pdf").exists()
+    assert _lesson("L050")["category"] == "gap"
+    assert _lesson("L050")["mechanizable"] != "yes"
+
+
+def test_hangul_com_saveas_writes_sibling_pdf_without_mechanizing(tmp_path: Path, monkeypatch) -> None:
+    """Windows 에서 rhwp 가 없고 한글 COM 이 있으면 같은 이름 PDF 를 만든다."""
+    _hide_rhwp(monkeypatch)
+    monkeypatch.setattr(gates.sys, "platform", "win32")
+    monkeypatch.setattr(
+        "core.docx.services.hwp_docx_convert.hancom_com_available",
+        lambda: True,
+    )
+
+    def export_pdf(src, dest) -> None:
+        Path(dest).write_bytes(b"%PDF-1.4 com")
+
+    monkeypatch.setattr(
+        "core.docx.services.hwp_docx_convert.export_pdf_via_com",
+        export_pdf,
+    )
+    src = tmp_path / "신청서.hwpx"
+    src.write_bytes(b"PK")
+    gen = try_generate_sibling_pdf(src)
+    pdf = tmp_path / "신청서.pdf"
+    assert gen.generated is True
+    assert gen.blocked is False
+    assert pdf.is_file() and pdf.stat().st_size > 0
+    assert pdf.stem == src.stem
+    assert gen.evidence == ""
+    assert not (tmp_path / "신청서.l050.json").exists()
+    claim = l050_mechanization_status(gen.evidence or None)
+    assert claim["mechanized"] is False
+    assert claim["status"] == "BLOCKED"
+    assert _lesson("L050")["category"] == "gap"

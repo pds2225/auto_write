@@ -8,6 +8,7 @@ B②(게이트 배선)+B③(제출 파이프라인): fill_hwpx 로 채운 산출
 from __future__ import annotations
 
 import hashlib
+import json
 import zipfile
 from pathlib import Path
 
@@ -108,25 +109,22 @@ def test_submit_clean_form_passes_gate(clean_hwpx, tmp_path):
 
 
 # --------------------------------------------------------------------------- #
-# 2) 게이트 fail(유색 charPr) → _DRAFT 강제·원래 이름 잔존 금지
+# 2) 양식에 원래 있던 유색 charPr 는 결함이 아니다
 # --------------------------------------------------------------------------- #
 
 
 def test_submit_gate_fail_forces_draft(colored_hwpx, tmp_path):
+    """양식 charPr 색을 채움이 재사용하면 _DRAFT 로 바꾸지 않는다."""
     out = tmp_path / "out.hwpx"
-    # 검정 정규화 opt-out → 유색 예시체가 잔존 → 게이트 fail → _DRAFT 검증(보존)
     rep = submit_hwpx(colored_hwpx, out, identity={"기업명": "도보네비(주)"},
                       normalize_colors=False)
-    assert rep.ok is False
-    final = Path(rep.final)
-    assert final.name == "out_DRAFT.hwpx"              # _DRAFT 강제 명명
-    assert final.exists()
-    assert not out.exists()                            # 제출 이름 파일 잔존 금지
-    assert rep.draft_marked is True
-    assert rep.acceptance.get("colored", 0) >= 1
-    assert "유색" in rep.draft_reason                  # 결함 요약이 사유에 명시
-    # 채움 자체는 정상 수행(값은 들어감 — 판정만 제출불가)
+    assert rep.ok is True
+    assert Path(rep.final).name == "out.hwpx"
+    assert out.exists()
+    assert rep.draft_marked is False
+    assert rep.acceptance.get("colored", -1) == 0
     assert rep.filled == {"기업명": "도보네비(주)"}
+    assert any("baseline" in note for note in rep.acceptance.get("notes", []))
 
 
 def test_submit_normalizes_colors_by_default(colored_hwpx, tmp_path):
@@ -223,7 +221,7 @@ def test_cli_default_output_is_source_adjacent(clean_hwpx, tmp_path):
 
 
 def test_cli_default_output_fail_closed_draft_is_source_adjacent(colored_hwpx, tmp_path):
-    """기본 경로에서도 게이트 fail이면 같은 원본 폴더의 _DRAFT로만 남는다."""
+    """양식에 있던 유색은 게이트 fail 이 아니다. 제출 이름은 원본 폴더에 남는다."""
     from hwpx_submit import main
 
     src = tmp_path / "GovTech_아이디어기획서_원본.hwpx"
@@ -237,12 +235,12 @@ def test_cli_default_output_fail_closed_draft_is_source_adjacent(colored_hwpx, t
         "--no-normalize-colors",
     ])
 
-    assert rc == 2
+    assert rc == 0
     clean = list(tmp_path.glob("2026GovTech_아이디어기획서_* v1.hwpx"))
     drafts = list(tmp_path.glob("2026GovTech_아이디어기획서_* v1_DRAFT.hwpx"))
-    assert clean == []
-    assert len(drafts) == 1
-    assert drafts[0].parent == src.parent
+    assert len(clean) == 1
+    assert drafts == []
+    assert clean[0].parent == src.parent
 
 
 
@@ -263,10 +261,31 @@ def test_cli_exit_codes(clean_hwpx, colored_hwpx, tmp_path, monkeypatch):
                "--set", "기업명=x"])
     assert rc == 1
 
-    # 2: 게이트 fail(유색) → _DRAFT 강제·제출불가 (검정 정규화 opt-out 으로 유색 잔존)
-    out2 = tmp_path / "fail.hwpx"
-    rc = main([str(colored_hwpx), "-o", str(out2), "--set", "기업명=x(주)",
+    # 양식 유색 + 정규화 opt-out 은 제출 가능(양식 색은 결함 아님)
+    out_color = tmp_path / "color.hwpx"
+    rc = main([str(colored_hwpx), "-o", str(out_color), "--set", "기업명=x(주)",
                "--no-normalize-colors"])
+    assert rc == 0
+    assert out_color.exists()
+
+    # 2: 잔존 예시 이름 → _DRAFT 강제·제출불가
+    dummy = tmp_path / "dummy_cli.hwpx"
+    rows = "".join([_row(0, "상호", ""), _row(1, "대표자", "홍길동")])
+    section = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f'<hs:sec xmlns:hp="{_HP}" xmlns:hs="{_HS}">'
+        '<hp:p><hp:run charPrIDRef="0">'
+        f'<hp:tbl rowCnt="2" colCnt="2">{rows}</hp:tbl>'
+        "</hp:run></hp:p></hs:sec>"
+    ).encode("utf-8")
+    with zipfile.ZipFile(dummy, "w") as z:
+        zi = zipfile.ZipInfo("mimetype")
+        zi.compress_type = zipfile.ZIP_STORED
+        z.writestr(zi, _MIMETYPE)
+        z.writestr("Contents/header.xml", _header_xml(colored=False))
+        z.writestr("Contents/section0.xml", section)
+    out2 = tmp_path / "fail.hwpx"
+    rc = main([str(dummy), "-o", str(out2), "--set", "기업명=x(주)"])
     assert rc == 2
     assert not out2.exists()                           # CLI 경로에서도 이름 세탁 금지
     assert (tmp_path / "fail_DRAFT.hwpx").exists()
@@ -464,7 +483,17 @@ def _sized_section_xml() -> bytes:
     ).encode("utf-8")
 
 
-def test_local_layout_risk_records_overflow_without_font_shrink(tmp_path):
+def _force_rhwp_absent(monkeypatch) -> None:
+    """PATH 의 rhwp 버전과 무관하게 L006 가드가 리눅스와 같은 분기를 타게 한다."""
+    monkeypatch.delenv("AUTO_WRITE_ENABLE_RHWP", raising=False)
+    from core.docx.services import native_hwp
+
+    monkeypatch.setattr(native_hwp, "resolve_rhwp_executable", lambda: None)
+    monkeypatch.setattr(native_hwp, "rhwp_available", lambda: False)
+
+
+def test_local_layout_risk_records_overflow_without_font_shrink(tmp_path, monkeypatch):
+    _force_rhwp_absent(monkeypatch)
     src = tmp_path / "sized_form.hwpx"
     with zipfile.ZipFile(src, "w") as z:
         zi = zipfile.ZipInfo("mimetype")
@@ -530,6 +559,9 @@ def test_local_lineseg_is_limited_to_edited_region(tmp_path):
         normalize_colors=False, submission_cleanup=False, preserve_template=True,
     )
     assert rep.filled.get("기업명") == "부분수정(주)"
+    assert rep.ok is True
+    assert Path(rep.final).name == "out.hwpx"
+    assert rep.acceptance.get("linesegarray", -1) == 0
     assert not any(note.startswith("제출 cleanup:") for note in rep.notes)
     with zipfile.ZipFile(rep.final) as z:
         sec = z.read("Contents/section0.xml").decode("utf-8")
@@ -540,6 +572,7 @@ def test_local_lineseg_is_limited_to_edited_region(tmp_path):
 
 def test_normal_direct_fill_preserves_unrelated_package_parts(tmp_path, monkeypatch):
     """허용 변경은 목표 텍스트뿐이다. BinData·관계·무관 표 기하·repair는 불변."""
+    _force_rhwp_absent(monkeypatch)
     unrelated = (
         '<hp:tbl rowCnt="1" colCnt="1" id="keep"><hp:tr>'
         '<hp:tc><hp:cellAddr colAddr="0" rowAddr="0"/>'
@@ -702,3 +735,186 @@ def test_structural_unsafe_never_repairs_dangling_reference(tmp_path, monkeypatc
     assert rep.ok is False
     assert Path(rep.final).name == "out_DRAFT.hwpx"
     assert "자동 교정 근거 없음" in rep.draft_reason
+
+
+class _RhwpProc:
+    def __init__(self, stdout: str, stderr: str, returncode: int = 0) -> None:
+        self.stdout = stdout
+        self.stderr = stderr
+        self.returncode = returncode
+
+
+def _fake_rhwp(tmp_path, monkeypatch, *, stdout: str, stderr: str, returncode: int = 0):
+    """RHWP_EXE 만 가리키고 subprocess 응답을 고정한다. PATH 폴백은 쓰지 않는다."""
+    from core.docx.services import native_hwp
+
+    exe = tmp_path / "rhwp.exe"
+    exe.write_bytes(b"MZ")
+    native_hwp.clear_rhwp_capability_cache()
+    monkeypatch.setenv("AUTO_WRITE_ENABLE_RHWP", "1")
+    monkeypatch.setenv("RHWP_EXE", str(exe))
+    calls: list[list[str]] = []
+
+    def _run(cmd, **_kwargs):
+        calls.append(list(cmd))
+        return _RhwpProc(stdout, stderr, returncode)
+
+    monkeypatch.setattr(native_hwp.subprocess, "run", _run)
+    return native_hwp, calls
+
+
+def test_rhwp_empty_stdout_stderr_exit_0_is_unsupported(tmp_path, monkeypatch):
+    stderr = "오류: 문서 파싱 실패 - 유효하지 않은 파일: HWPX 오류: 필수 파일 누락: Contents/content.hpf"
+    native_hwp, calls = _fake_rhwp(tmp_path, monkeypatch, stdout="", stderr=stderr)
+    with pytest.raises(native_hwp.UnsupportedRhwpError, match="unsupported rhwp version") as caught:
+        native_hwp._rhwp_json("info", "broken.hwpx")
+    assert stderr in str(caught.value)
+    probed = len(calls)
+    assert probed >= 1
+    assert native_hwp.rhwp_available() is False
+    assert len(calls) == probed
+
+    candidate = tmp_path / "candidate.hwpx"
+    candidate.write_bytes(b"PK")
+    evidence = native_hwp.verify_hwpx_native(candidate)
+    assert evidence["render_status"] == "UNAVAILABLE"
+    assert evidence["reopen_status"] == "NOT_RUN"
+    assert evidence["ok"] is False
+    assert "unsupported rhwp version" in evidence["message"]
+    assert len(calls) == probed
+
+
+def test_rhwp_korean_plaintext_stdout_is_unsupported(tmp_path, monkeypatch):
+    stdout = "파일: sample.hwpx\n크기: 55991 bytes\n버전: 5.1.0.0\n페이지 수: 10\n"
+    native_hwp, _calls = _fake_rhwp(tmp_path, monkeypatch, stdout=stdout, stderr="")
+    with pytest.raises(native_hwp.UnsupportedRhwpError, match="unsupported rhwp version") as caught:
+        native_hwp._rhwp_json("info", "sample.hwpx")
+    text = str(caught.value)
+    assert "5.1.0.0" in text
+    assert "파일:" in text or "페이지 수" in text
+    assert native_hwp.rhwp_available() is False
+
+
+def test_rhwp_stderr_with_exit_0_rejects_json_stdout(tmp_path, monkeypatch):
+    native_hwp, _calls = _fake_rhwp(
+        tmp_path,
+        monkeypatch,
+        stdout='{"format":"hwpx","pageCount":1}',
+        stderr="warning: ignored flag",
+    )
+    with pytest.raises(native_hwp.UnsupportedRhwpError, match="unsupported rhwp version") as caught:
+        native_hwp._rhwp_json("info", "sample.hwpx")
+    assert "warning: ignored flag" in str(caught.value)
+    assert native_hwp.rhwp_available() is False
+
+
+def test_compatible_json_rhwp_returns_object(tmp_path, monkeypatch):
+    payload = {"format": "hwpx", "pageCount": 2, "schemaVersion": 1, "version": "0.8.6"}
+    native_hwp, calls = _fake_rhwp(
+        tmp_path,
+        monkeypatch,
+        stdout=json.dumps(payload),
+        stderr="",
+    )
+    assert native_hwp.rhwp_available() is True
+    got = native_hwp._rhwp_json("info", "sample.hwpx")
+    assert got["format"] == "hwpx"
+    assert got["pageCount"] == 2
+    assert any("--json" in cmd for cmd in calls)
+
+
+def test_incompatible_rhwp_hwp_conversion_uses_hangul_com(tmp_path, monkeypatch):
+    from core.docx.services import hwp_docx_convert as conv
+    from core.docx.services.hwp_docx_convert import hwp_to_hwpx
+
+    native_hwp, _calls = _fake_rhwp(
+        tmp_path,
+        monkeypatch,
+        stdout="파일: 양식.hwp\n버전: 5.0.0.0\n",
+        stderr="",
+    )
+    assert native_hwp.rhwp_available() is False
+    src = tmp_path / "양식.hwp"
+    src.write_bytes(b"OLE-HWP-BYTES")
+    out = tmp_path / "양식.hwpx"
+
+    class _FakeHwpCom:
+        def __init__(self) -> None:
+            self.saved: list[tuple[str, str]] = []
+
+        def Open(self, *_args):
+            return True
+
+        def SaveAs(self, path, fmt, _opts):
+            Path(path).write_bytes(b"FAKE-HWP-BINARY")
+            self.saved.append((path, fmt))
+            return True
+
+        def Clear(self, *_args):
+            return None
+
+        def Quit(self):
+            return None
+
+    fake = _FakeHwpCom()
+    monkeypatch.setattr(conv, "hancom_com_available", lambda: True)
+    monkeypatch.setattr(conv, "_dispatch_hwp", lambda: fake)
+
+    report = hwp_to_hwpx(src, out)
+
+    assert report.ok is True
+    assert report.method == "hancom_com"
+    assert out.read_bytes() == b"FAKE-HWP-BINARY"
+    assert fake.saved[0][1] == "HWPX"
+    assert src.read_bytes() == b"OLE-HWP-BYTES"
+
+
+def test_invalid_rhwp_exe_does_not_fall_back_to_path(tmp_path, monkeypatch):
+    from core.docx.services import native_hwp
+
+    decoy = tmp_path / "rhwp"
+    decoy.write_bytes(b"decoy")
+    monkeypatch.setenv("AUTO_WRITE_ENABLE_RHWP", "1")
+    monkeypatch.setenv("RHWP_EXE", str(tmp_path / "missing" / "rhwp.exe"))
+    seen: list[str] = []
+    monkeypatch.setattr(native_hwp.shutil, "which", lambda name: seen.append(name) or str(decoy))
+    monkeypatch.setattr(
+        native_hwp.subprocess,
+        "run",
+        lambda *_a, **_k: seen.append("run"),
+    )
+    native_hwp.clear_rhwp_capability_cache()
+    assert native_hwp.resolve_rhwp_executable() is None
+    assert native_hwp.rhwp_available() is False
+    assert seen == []
+
+
+def test_incompatible_rhwp_render_does_not_force_draft(tmp_path, monkeypatch):
+    native_hwp, _calls = _fake_rhwp(
+        tmp_path,
+        monkeypatch,
+        stdout="",
+        stderr="오류: 문서 파싱 실패 - 유효하지 않은 파일",
+    )
+    src = tmp_path / "form.hwpx"
+    _make_hwpx(src, colored=False)
+    out = tmp_path / "out.hwpx"
+    rep = submit_hwpx(
+        src,
+        out,
+        identity={"기업명": "정상값"},
+        normalize_colors=False,
+        submission_cleanup=False,
+        preserve_template=True,
+    )
+    assert rep.ok is True
+    assert Path(rep.final) == out
+    assert out.is_file()
+    assert not (tmp_path / "out_DRAFT.hwpx").exists()
+    assert rep.native_render.get("render_status") == "UNAVAILABLE"
+    assert rep.native_render.get("reopen_status") == "NOT_RUN"
+    assert "unsupported rhwp version" in str(rep.native_render.get("message") or "")
+    render = next(v for v in rep.integrity["validators"] if v["source_validator"] == "rendering_validator")
+    assert render["validator_status"] == "UNAVAILABLE"
+    assert render["severity"] == "PASS"
+    assert render["defect_code"] == "RHWP_ABSENT"

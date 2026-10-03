@@ -1,0 +1,73 @@
+name: pr-pytest-temp
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: app/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r app/requirements.txt pytest pytest-subtests PyYAML
+
+      - name: Focused Round-3 regression
+        id: focused
+        shell: bash
+        run: |
+          set +e
+          python -m pytest             app/tests/test_hwp_docx_convert.py             app/tests/test_l005_l050_evidence.py             app/tests/test_hwpx_round2_fill.py             app/tests/test_company_identity.py             -q --tb=line 2>&1 | tee focused.log
+          rc=${PIPESTATUS[0]}
+          echo "rc=${rc}" >> "${GITHUB_OUTPUT}"
+          exit 0
+
+      - name: Full test suite
+        id: full
+        shell: bash
+        run: |
+          set +e
+          python -m pytest app/tests -q --tb=line 2>&1 | tee full.log
+          rc=${PIPESTATUS[0]}
+          failed=$(grep -Eo '[0-9]+ failed' full.log | tail -1 | awk '{print $1}')
+          failed=${failed:-0}
+          echo "rc=${rc}" >> "${GITHUB_OUTPUT}"
+          echo "failed=${failed}" >> "${GITHUB_OUTPUT}"
+          echo "FULL_PYTEST_RC=${rc}"
+          echo "FULL_FAILED=${failed}"
+          exit 0
+
+      - name: Enforce Round-3 baseline
+        shell: bash
+        env:
+          FOCUSED_RC: ${{ steps.focused.outputs.rc }}
+          FULL_RC: ${{ steps.full.outputs.rc }}
+          FULL_FAILED: ${{ steps.full.outputs.failed }}
+        run: |
+          echo "FOCUSED_RC=${FOCUSED_RC}"
+          echo "FULL_RC=${FULL_RC}"
+          echo "FULL_FAILED=${FULL_FAILED}"
+          if [ "${FOCUSED_RC}" != "0" ]; then
+            echo "Focused Round-3 regression failed."
+            exit 1
+          fi
+          if grep -qE 'ERROR collecting|=+ ERRORS =+' full.log; then
+            echo "Unexpected pytest collection/runtime errors."
+            exit 1
+          fi
+          if [ "${FULL_FAILED:-0}" -gt 13 ]; then
+            echo "Full suite failures increased above baseline 13."
+            exit 1
+          fi

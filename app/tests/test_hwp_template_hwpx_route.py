@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import zipfile
 from dataclasses import replace
 from io import BytesIO
 from pathlib import Path
@@ -24,6 +25,15 @@ from auto_write.services.qa_service import QAService
 from auto_write.services.render_service import RenderService
 from auto_write.storage import Storage
 from test_project_service_safety import _minimal_hwpx_bytes, build_settings
+
+
+def _zip_entries(data: bytes) -> list[tuple[str, int, bytes]]:
+    """ZIP 시각(로컬 헤더 시각)을 빼고 엔트리 이름·압축방식·내용만 비교한다."""
+    with zipfile.ZipFile(BytesIO(data)) as archive:
+        return [
+            (info.filename, info.compress_type, archive.read(info.filename))
+            for info in archive.infolist()
+        ]
 
 
 def _service(tmp_path: Path) -> tuple[ProjectService, Storage]:
@@ -101,7 +111,7 @@ def test_hwp_upload_with_converter_pins_source_hwpx_and_generates_hwpx(tmp_path,
     assert profile.template_name == "form.hwp"
     assert profile.source_docx == ""
     assert profile.source_hwpx.endswith("form.hwpx")
-    assert Path(profile.source_hwpx).read_bytes() == _minimal_hwpx_bytes()
+    assert _zip_entries(Path(profile.source_hwpx).read_bytes()) == _zip_entries(_minimal_hwpx_bytes())
     assert profile.native_source["conversion"] == "hancom_com"
     assert artifacts.output_docx == ""
     assert Path(artifacts.output_hwpx).is_file()
@@ -114,7 +124,7 @@ def test_hwp_upload_with_converter_pins_source_hwpx_and_generates_hwpx(tmp_path,
     route = (output_dir / "hwpx_route.json").read_text(encoding="utf-8")
     assert "existing hwpx_fill direct-fill" in route
     pinned = storage.project_dir(project_id) / "template_source.hwpx"
-    assert pinned.read_bytes() == _minimal_hwpx_bytes()
+    assert _zip_entries(pinned.read_bytes()) == _zip_entries(_minimal_hwpx_bytes())
     assert uploaded.read_bytes() == original
 
 

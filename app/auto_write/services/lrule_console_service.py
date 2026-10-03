@@ -5,6 +5,7 @@ import re
 import shutil
 import subprocess
 import threading
+import time
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
@@ -420,6 +421,29 @@ class LRuleConsoleService:
         with self._job_lock:
             return dict(self._job)
 
+    def verify_status(self) -> dict[str, Any]:
+        """폴링용 상태. job_snapshot 과 summary 의 head·건수를 합친다."""
+        job = self.job_snapshot()
+        summary = self.summary()
+        return {
+            "running": bool(job.get("running")),
+            "scope": str(job.get("scope") or ""),
+            "error": str(job.get("error") or ""),
+            "message": str(job.get("message") or ""),
+            "head": str(summary.get("head") or ""),
+            "counts": {
+                "verified": int(summary.get("verified") or 0),
+                "failing": int(summary.get("failing") or 0),
+                "not_run": int(summary.get("not_run") or 0),
+                "unverified": int(summary.get("unverified") or 0),
+                "missing_guard": int(summary.get("missing_guard") or 0),
+                "env_skipped": int(summary.get("env_skipped") or 0),
+                "human": int(summary.get("human") or 0),
+                "gaps": int(summary.get("gaps") or 0),
+                "dead": int(summary.get("dead") or 0),
+            },
+        }
+
     def start_verify(self, codes: list[str] | None = None) -> str:
         """Start guard pytest in the background. The list page does not run tests itself."""
         normalized = [code.upper().strip() for code in codes] if codes else None
@@ -441,6 +465,7 @@ class LRuleConsoleService:
                 "scope": ",".join(normalized) if normalized else "all",
                 "error": "",
                 "message": "가드 테스트 검증 실행 중",
+                "started_at": time.time(),
             }
 
         def _run() -> None:

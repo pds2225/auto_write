@@ -14,8 +14,13 @@ HH = "http://www.hancom.co.kr/hwpml/2011/head"
 
 
 def _make_hwpx(path: Path, *, r9_invalid: bool = False) -> Path:
-    """COM 없이 R9 유색 charPr 결함을 재현하는 최소 HWPX fixture."""
+    """최소 HWPX. r9_invalid 는 양식 색이 아니라 잔존 예시 이름(홍길동)으로 실패한다."""
     color = "#FF0000" if r9_invalid else "#000000"
+    leftover = (
+        '<hp:p><hp:run charPrIDRef="0"><hp:t>대표자 홍길동</hp:t></hp:run></hp:p>'
+        if r9_invalid
+        else ""
+    )
     header = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         f'<hh:head xmlns:hh="{HH}"><hh:charPr id="0" textColor="{color}"/>'
@@ -29,7 +34,8 @@ def _make_hwpx(path: Path, *, r9_invalid: bool = False) -> Path:
         '<hp:cellSpan colSpan="1" rowSpan="1"/><hp:subList><hp:p>'
         '<hp:run charPrIDRef="0"><hp:t>상호</hp:t></hp:run>'
         "</hp:p></hp:subList></hp:tc></hp:tr></hp:tbl>"
-        "</hp:run></hp:p></hs:sec>"
+        "</hp:run></hp:p>"
+        f"{leftover}</hs:sec>"
     ).encode("utf-8")
     with zipfile.ZipFile(path, "w") as archive:
         info = zipfile.ZipInfo("mimetype")

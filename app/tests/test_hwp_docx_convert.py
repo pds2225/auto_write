@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
 
@@ -337,7 +338,47 @@ def test_hwp_to_hwpx_uses_hangul_com_saveas(tmp_path: Path, monkeypatch) -> None
     assert list(tmp_path.glob("*.docx")) == []
 
 
+def test_hangul_image_pids_helper_failure_returns_empty(monkeypatch) -> None:
+    monkeypatch.setattr(mod.sys, "platform", "win32")
+
+    def _boom():
+        raise RuntimeError("tasklist unavailable")
+
+    monkeypatch.setattr(mod, "_query_hangul_tasklist", _boom)
+    assert mod._hangul_image_pids() == set()
+
+def test_hwp_to_hwpx_default_uses_com_even_if_rhwp_exe_is_set(tmp_path: Path, monkeypatch) -> None:
+    src = tmp_path / "양식.hwp"
+    src.write_bytes(b"OLE-HWP-BYTES")
+    out = tmp_path / "양식.hwpx"
+    exe = tmp_path / "rhwp.exe"
+    exe.write_bytes(b"MZ")
+    monkeypatch.delenv("AUTO_WRITE_ENABLE_RHWP", raising=False)
+    monkeypatch.setenv("RHWP_EXE", str(exe))
+    calls: list = []
+
+    def _forbid(*_args, **_kwargs):
+        calls.append("rhwp")
+        raise AssertionError("기본 경로에서 rhwp 를 호출하면 안 됩니다.")
+
+    fake = _FakeHwpCom()
+    monkeypatch.setattr(native_hwp.subprocess, "run", _forbid)
+    monkeypatch.setattr(native_hwp, "prepare_native_source", _forbid)
+    monkeypatch.setattr(mod, "hancom_com_available", lambda: True)
+    monkeypatch.setattr(mod, "_dispatch_hwp", lambda: fake)
+
+    report = hwp_to_hwpx(src, out)
+
+    assert report.ok is True
+    assert report.method == "hancom_com"
+    assert calls == []
+    assert fake.saved[0][1] == "HWPX"
+    assert out.read_bytes() == b"FAKE-HWP-BINARY"
+    assert src.read_bytes() == b"OLE-HWP-BYTES"
+
+
 def test_hwp_to_hwpx_prefers_rhwp_when_available(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("AUTO_WRITE_ENABLE_RHWP", "1")
     src = tmp_path / "양식.hwp"
     src.write_bytes(b"OLE-HWP-BYTES")
     out = tmp_path / "양식.hwpx"
@@ -363,6 +404,7 @@ def test_hwp_to_hwpx_prefers_rhwp_when_available(tmp_path: Path, monkeypatch) ->
 
 
 def test_hwp_to_hwpx_uses_com_after_rhwp_failure(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("AUTO_WRITE_ENABLE_RHWP", "1")
     src = tmp_path / "양식.hwp"
     src.write_bytes(b"OLE-HWP-BYTES")
     out = tmp_path / "양식.hwpx"
@@ -383,6 +425,108 @@ def test_hwp_to_hwpx_uses_com_after_rhwp_failure(tmp_path: Path, monkeypatch) ->
     assert any("rhwp" in note for note in report.notes)
     assert fake.saved[0][1] == "HWPX"
 
+
+def test_hwp_object_pid_uses_window_handle(monkeypatch) -> None:
+    monkeypatch.setattr(mod.sys, "platform", "win32")
+
+    class _Window:
+        WindowHandle = 1234
+
+    class _Windows:
+        def Item(self, _index):
+            return _Window()
+
+    class _Hwp:
+        XHwpWindows = _Windows()
+
+    class _User32:
+        @staticmethod
+        def GetWindowThreadProcessId(_hwnd, out_pid):
+            out_pid._obj.value = 4321
+            return 1
+
+    class _Windll:
+        user32 = _User32()
+
+    monkeypatch.setattr(mod.ctypes, "windll", _Windll(), raising=False)
+    assert mod._hwp_object_pid(_Hwp()) == 4321
+
+def test_com_conversions_are_serialized_and_only_kill_their_owned_pid(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """동시 변환 두 건이 서로의 Hwp PID를 종료하지 않는다."""
+    monkeypatch.setattr(mod.sys, "platform", "win32")
+    monkeypatch.setattr(mod, "_hangul_image_pids", lambda: {900})
+    pids = iter((101, 202))
+    killed: list[set[int]] = []
+    active = 0
+    max_active = 0
+    state_lock = __import__('threading').Lock()
+
+    class _Window:
+        Handle = 1
+
+    class _Windows:
+        def Item(self, _index):
+            return _Window()
+
+    class _Fake:
+        XHwpWindows = _Windows()
+
+        def __init__(self, pid):
+            self.pid = pid
+
+        def RegisterModule(self, *_args):
+            return True
+
+        def SetMessageBoxMode(self, *_args):
+            return 0
+
+        def Open(self, *_args):
+            return True
+
+        def SaveAs(self, path, _fmt, _opts):
+            nonlocal active, max_active
+            with state_lock:
+                active += 1
+                max_active = max(max_active, active)
+            __import__('time').sleep(0.03)
+            Path(path).write_bytes(b"OK")
+            with state_lock:
+                active -= 1
+            return True
+
+        def Clear(self, *_args):
+            return None
+
+        def Quit(self):
+            return None
+
+    def _dispatch():
+        return _Fake(next(pids))
+
+    monkeypatch.setattr(mod, "_dispatch_hwp", _dispatch)
+    monkeypatch.setattr(mod, "_hwp_object_pid", lambda hwp: hwp.pid)
+    monkeypatch.setattr(mod, "_kill_owned_pids", lambda owned: killed.append(set(owned)))
+
+    src1 = tmp_path / 'a.hwp'
+    src2 = tmp_path / 'b.hwp'
+    src1.write_bytes(b'A')
+    src2.write_bytes(b'B')
+
+    def _one(pair):
+        src_path, dst_path = pair
+        mod._convert_via_com(src_path, dst_path, ("HWPX",))
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        list(pool.map(_one, [
+            (src1, tmp_path / 'a.hwpx'),
+            (src2, tmp_path / 'b.hwpx'),
+        ]))
+
+    assert max_active == 1
+    assert {frozenset(p) for p in killed} == {frozenset({101}), frozenset({202})}
+    assert all(900 not in p for p in killed)
 
 def test_cli_main(tmp_path: Path) -> None:
     import hwp_docx
