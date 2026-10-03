@@ -1615,10 +1615,12 @@ def _fill_section_xml(
     변경이 없으면 입력 바이트를 그대로 반환한다(불필요한 재직렬화·선언 변형 회피).
     """
     root = etree.fromstring(xml_bytes)
-    before_text = {
-        id(paragraph): _owned_paragraph_text(paragraph)
+    # lxml element proxy의 id()는 순회 중 재사용될 수 있으므로 위치 순서로 기준선을 잡는다.
+    # 텍스트 편집은 문단을 추가/삭제하지 않으므로 paragraph_index가 이 경로의 안정 키다.
+    before_text = [
+        _owned_paragraph_text(paragraph)
         for paragraph in root.iter(_q("p"))
-    }
+    ]
     if span_notes is None:
         span_notes = []
     if existing_labels is None:
@@ -1889,15 +1891,15 @@ def _fill_section_xml(
     if not changed:
         return xml_bytes, filled, replaced, used_keys
 
-    # L074: 편집한 문단/셀의 lineseg 만 제거(안내박스 등 미편집 영역 전역 strip 금지).
-    # HWPX→한글 직접 납품 시 겹침 방지는 '텍스트를 바꾼 곳'에만 필요(L002∩L074).
-    for paragraph in root.iter(_q("p")):
-        old = before_text.get(id(paragraph))
-        if old is None or _owned_paragraph_text(paragraph) == old:
+    # L074: 실제 텍스트가 바뀐 문단만 줄좌표 캐시를 제거한다.
+    # id(element)는 lxml proxy 재사용으로 미편집 제목을 다른 문단으로 오인할 수 있으므로
+    # 위에서 잡은 paragraph_index 기준선과 비교한다. edited tc 전체를 재귀 strip 하지 않는다.
+    for paragraph_index, paragraph in enumerate(root.iter(_q("p"))):
+        if paragraph_index >= len(before_text):
             continue
-        if _drop_owned_lineseg(paragraph):
-            edited.append(paragraph)
-    _strip_linesegarray(root, only_under=edited or None)
+        if _owned_paragraph_text(paragraph) == before_text[paragraph_index]:
+            continue
+        _drop_owned_lineseg(paragraph)
 
     standalone = _detect_standalone(xml_bytes)
     out = etree.tostring(

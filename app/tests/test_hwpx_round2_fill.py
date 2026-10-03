@@ -328,6 +328,30 @@ def test_inline_colon_keeps_spacing_and_drops_only_edited_lineseg(tmp_path: Path
     assert "_DRAFT" not in final.name
 
 
+def test_l074_keeps_untouched_title_lineseg_byte_identical(tmp_path: Path) -> None:
+    section = _sec(
+        '<hp:p><hp:run charPrIDRef="0"><hp:t>2. 수정하지 않는 제목</hp:t></hp:run>'
+        '<hp:linesegarray><hp:lineseg textpos="0" vertpos="77"/></hp:linesegarray></hp:p>'
+        '<hp:p><hp:run charPrIDRef="0"><hp:t>BODY_TOKEN</hp:t></hp:run>'
+        '<hp:linesegarray><hp:lineseg textpos="0" vertpos="88"/></hp:linesegarray></hp:p>'
+    )
+    src = tmp_path / "l074.hwpx"
+    _write(src, section)
+    before = _root(src)
+    before_title = next(p for p in before.iter(f"{_P}p") if "수정하지 않는 제목" in "".join(t.text or "" for t in p.iter(f"{_P}t")))
+    before_lineseg = etree.tostring(next(before_title.iter(f"{_P}linesegarray")))
+
+    out = tmp_path / "out.hwpx"
+    fill_hwpx(src, out, replacements={"BODY_TOKEN": "수정된 본문"}, force_black=False)
+
+    after = _root(out)
+    after_title = next(p for p in after.iter(f"{_P}p") if "수정하지 않는 제목" in "".join(t.text or "" for t in p.iter(f"{_P}t")))
+    after_lineseg = etree.tostring(next(after_title.iter(f"{_P}linesegarray")))
+    body = next(p for p in after.iter(f"{_P}p") if "수정된 본문" in "".join(t.text or "" for t in p.iter(f"{_P}t")))
+
+    assert after_lineseg == before_lineseg
+    assert list(body.iter(f"{_P}linesegarray")) == []
+
 def test_email_stays_out_of_the_label_cell(tmp_path: Path) -> None:
     label = (
         '<hp:run charPrIDRef="34"><hp:t>이 메 일</hp:t></hp:run>'
