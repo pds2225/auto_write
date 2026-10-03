@@ -1000,6 +1000,22 @@ _EXAMPLE_DATE_RE = re.compile(r"^0{4}\s*년\s*0{1,2}\s*월\s*0{1,2}\s*일$")
 _EXAMPLE_GUIDED_OMASK_RE = re.compile(
     r"^[O○〇ㅇo]{3,}\s*[\(（].*(?:기입|작성|동일).*[\)）]\s*$"
 )
+_GUIDANCE_VALUE_RE = re.compile(
+    r"^(?:예비창업|해당|예시|참고|입력|기재)[^\n]{0,70}(?:기재|작성)[^\n]{0,12}$"
+)
+_GUIDANCE_CONTACT_RE = re.compile(
+    r"^[\(（]\s*(?:휴대폰|휴대전화|연락처)\s*[\)）]$",
+    re.IGNORECASE,
+)
+
+
+def _is_hwpx_guidance_placeholder(text: str) -> bool:
+    """값 칸 자체가 무엇을 쓰라는 짧은 안내뿐이면 빈칸으로 본다."""
+    raw = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not raw or len(raw) > 90:
+        return False
+    return bool(_GUIDANCE_CONTACT_RE.fullmatch(raw) or _GUIDANCE_VALUE_RE.fullmatch(raw))
+
 _EXAMPLE_CHOICE_RE = re.compile(r"\s*/\s*")
 _REGION_SCAFFOLD_CHARS_RE = re.compile(r"[O○〇ㅇ0\s·・.\-도특별시군구읍면동로길번지]")
 
@@ -1049,7 +1065,11 @@ def _cell_text_fillable(tc) -> bool:
     txt = _cell_text(tc)
     if not txt:
         return True
-    return _is_obvious_placeholder(txt) or _is_hwpx_example_scaffold(txt)
+    return (
+        _is_obvious_placeholder(txt)
+        or _is_hwpx_example_scaffold(txt)
+        or _is_hwpx_guidance_placeholder(txt)
+    )
 
 
 def _cell_is_fillable(tc) -> bool:
@@ -1130,7 +1150,11 @@ def _is_label_like(tc) -> bool:
     txt = _cell_text(tc)
     if not txt:
         return False
-    if _is_obvious_placeholder(txt) or _is_hwpx_example_scaffold(txt):
+    if (
+        _is_obvious_placeholder(txt)
+        or _is_hwpx_example_scaffold(txt)
+        or _is_hwpx_guidance_placeholder(txt)
+    ):
         return False
     norm = _key(txt)
     return _cluster_rep(norm) is not None or _is_noise_label(txt, norm)

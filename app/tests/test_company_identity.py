@@ -62,6 +62,21 @@ def test_explicit_hwpx_identity_wins_over_profile() -> None:
     assert identity["팀명"] == "기획팀"
 
 
+def test_direct_fill_maps_user_authored_overview_without_fabrication() -> None:
+    project = ProjectInput(
+        template_id="t1",
+        answers={"user_notes": "사용자가 직접 입력한 창업아이템 개요"},
+    )
+    identity = build_direct_fill_identity(project)
+    assert identity["창업아이템 개요"] == "사용자가 직접 입력한 창업아이템 개요"
+
+    preferred = ProjectInput(
+        template_id="t1",
+        answers={"user_brief": "사용자 사업 개요", "user_notes": "추가 메모"},
+    )
+    identity2 = build_direct_fill_identity(preferred)
+    assert identity2["창업아이템 개요"] == "사용자 사업 개요"
+
 def test_docx_reference_keeps_registration_number_and_team(tmp_path: Path) -> None:
     doc = Document()
     table = doc.add_table(rows=4, cols=2)

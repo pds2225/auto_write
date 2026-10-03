@@ -55,8 +55,15 @@ def strip_label_decoration(key: str) -> str:
 
 
 def key(text: str) -> str:
-    """라벨 비교용 핵심 키: 괄호·공백 제거 + 선행 글머리표/순번 장식 제거."""
-    return strip_label_decoration(SubmittableFiller._key(text))
+    """라벨 비교용 핵심 키: 중첩 괄호·공백 제거 + 장식 제거 + 영문 대소문자 접기."""
+    value = str(text or "")
+    # 사업장 소재지 (본사(점)) 같은 중첩 괄호도 안쪽부터 반복 제거한다.
+    while True:
+        stripped = re.sub(r"[\(（][^()（）]*[\)）]", "", value)
+        if stripped == value:
+            break
+        value = stripped
+    return strip_label_decoration(SubmittableFiller._key(value).casefold())
 
 
 # --- 동의어 클러스터 ---
@@ -95,10 +102,11 @@ SYNONYMS: list[list[str]] = [
      "사업장", "본점주소", "주사무소", "주사무소소재지", "사무실주소",
      "공장주소", "공장소재지", "지점주소", "지사주소", "영업장주소",
      "실제사업장주소", "거소지"],
-    ["업종", "산업분류", "업태", "주업종", "업종업태",
+    ["업종", "산업분류", "업태", "주업종", "업종업태", "사업의 종류",
      "업종명", "업태명", "표준산업분류", "산업분류코드", "영위업종",
      "영업종목", "업종코드", "종목"],
-    ["이메일", "전자우편", "email", "e-mail", "메일", "이메일주소", "전자메일",
+    ["이메일", "전자우편", "email", "e-mail", "E-mail", "e-mail 주소", "E-mail 주소", "email 주소",
+     "메일", "이메일주소", "전자메일",
      "e메일", "메일주소", "담당자이메일", "대표이메일", "이메일(email)",
      "이메일계정", "전자우편주소", "회사메일", "수신이메일", "연락이메일"],
     ["설립일", "설립연월일", "창업일", "설립일자", "개업연월일",

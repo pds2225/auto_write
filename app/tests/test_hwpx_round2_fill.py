@@ -304,6 +304,46 @@ def test_team_colon_only_is_narrowly_supported_but_note_is_not(tmp_path: Path) -
     assert report.filled["팀명"] == "테스트팀"
 
 
+def test_label_variants_and_guidance_only_value_cells_are_filled(tmp_path: Path) -> None:
+    cases = [
+        ("설립일자 (창업 예정일)", "설립일", "2020-01-15", "예비창업의 경우 창업 예정일 작성"),
+        ("개업연월일", "설립일", "2020-01-15", "0000년 00월 00일"),
+        ("사업의 종류(업태)", "업종", "정보서비스업", ""),
+        ("E-mail", "이메일", "test@example.com", ""),
+        ("e-mail 주소", "이메일", "test@example.com", ""),
+        ("연 락 처", "연락처", "010-1234-5678", "(휴대폰)"),
+        ("사업자등록번호", "사업자등록번호", "123-45-67890", "예비창업의 경우 “예비창업자“ 기재"),
+        ("사업장 소재지 (본사(점))", "주소", "서울특별시 테스트구 테스트로 123", ""),
+    ]
+    for index, (label, identity_key, value, scaffold) in enumerate(cases):
+        src = tmp_path / f"variant_{index}.hwpx"
+        body = (
+            '<hp:p><hp:run charPrIDRef="0"><hp:tbl rowCnt="1" colCnt="2"><hp:tr>'
+            + _cell(0, 0, _run(label))
+            + _cell(1, 0, _run(scaffold, "34"))
+            + "</hp:tr></hp:tbl></hp:run></hp:p>"
+        )
+        _write(src, _sec(body))
+        out = tmp_path / f"variant_{index}_out.hwpx"
+        report = fill_hwpx(src, out, identity={identity_key: value}, force_black=False)
+        assert _tables(out)[0][0] == [label, value]
+        assert report.filled[identity_key] == value
+
+
+def test_guidance_only_value_is_preserved_without_matching_identity(tmp_path: Path) -> None:
+    guidance = "예비창업의 경우 창업 예정일 작성"
+    src = tmp_path / "guidance_preserve.hwpx"
+    body = (
+        '<hp:p><hp:run charPrIDRef="0"><hp:tbl rowCnt="1" colCnt="2"><hp:tr>'
+        + _cell(0, 0, _run("설립일자"))
+        + _cell(1, 0, _run(guidance, "34"))
+        + "</hp:tr></hp:tbl></hp:run></hp:p>"
+    )
+    _write(src, _sec(body))
+    out = tmp_path / "guidance_preserve_out.hwpx"
+    fill_hwpx(src, out, identity={"기업명": "테스트주식회사"}, force_black=False)
+    assert _tables(out)[0][0] == ["설립일자", guidance]
+
 def test_prior_support_table_does_not_take_applicant_identity(tmp_path: Path) -> None:
     prior = (
         "<hp:tr>" + _cell(0, 0, _run("단체명")) + _cell(1, 0, _run("", "0")) + "</hp:tr>"

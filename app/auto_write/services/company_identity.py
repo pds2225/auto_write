@@ -120,4 +120,11 @@ def build_direct_fill_identity(project_input: Any) -> dict[str, str]:
         organization_name = str(profile.get("name") or "").strip()
     if organization_name:
         identity.setdefault("기업명", organization_name)
+
+    # 사용자 원문만 exact label 창업아이템 개요 후보로 넘긴다. 생성하거나 추론하지 않는다.
+    answers = getattr(project_input, "answers", None) or {}
+    if isinstance(answers, dict):
+        overview = str(answers.get("user_brief") or answers.get("user_notes") or "").strip()
+        if overview:
+            identity.setdefault("창업아이템 개요", overview)
     return identity
