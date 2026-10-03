@@ -426,6 +426,31 @@ def test_hwp_to_hwpx_uses_com_after_rhwp_failure(tmp_path: Path, monkeypatch) ->
     assert fake.saved[0][1] == "HWPX"
 
 
+def test_hwp_object_pid_uses_window_handle(monkeypatch) -> None:
+    monkeypatch.setattr(mod.sys, "platform", "win32")
+
+    class _Window:
+        WindowHandle = 1234
+
+    class _Windows:
+        def Item(self, _index):
+            return _Window()
+
+    class _Hwp:
+        XHwpWindows = _Windows()
+
+    class _User32:
+        @staticmethod
+        def GetWindowThreadProcessId(_hwnd, out_pid):
+            out_pid._obj.value = 4321
+            return 1
+
+    class _Windll:
+        user32 = _User32()
+
+    monkeypatch.setattr(mod.ctypes, "windll", _Windll(), raising=False)
+    assert mod._hwp_object_pid(_Hwp()) == 4321
+
 def test_com_conversions_are_serialized_and_only_kill_their_owned_pid(
     tmp_path: Path, monkeypatch
 ) -> None:

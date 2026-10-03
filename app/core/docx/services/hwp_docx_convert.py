@@ -193,11 +193,19 @@ def _kill_owned_pids(pids: set[int]) -> None:
 
 
 def _hwp_object_pid(hwp) -> int | None:
-    """Dispatch가 반환한 Hwp 객체의 첫 창 HWND에서 실제 프로세스 PID를 구한다."""
+    """Dispatch가 반환한 Hwp 창의 WindowHandle에서 실제 프로세스 PID를 구한다."""
     if sys.platform != "win32":
         return None
     try:
-        hwnd = int(hwp.XHwpWindows.Item(0).Handle)
+        window = hwp.XHwpWindows.Item(0)
+        raw_handle = getattr(window, "WindowHandle", None)
+        if raw_handle is None:
+            raw_handle = getattr(window, "get_WindowHandle", None)
+        if raw_handle is None:
+            return None
+        hwnd = int(raw_handle() if callable(raw_handle) else raw_handle)
+        if hwnd <= 0:
+            return None
         pid = ctypes.c_ulong(0)
         ctypes.windll.user32.GetWindowThreadProcessId(
             ctypes.c_void_p(hwnd), ctypes.byref(pid)
