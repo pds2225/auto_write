@@ -147,26 +147,32 @@ def kill_hangul_processes() -> list[str]:
     return []
 
 
+def _query_hangul_tasklist() -> str:
+    """Windows tasklist 원문 조회. 테스트에서 PID 조회 자체를 독립 patch하는 seam."""
+    if sys.platform != "win32":
+        return ""
+    return subprocess.check_output(
+        ["tasklist", "/FI", "IMAGENAME eq Hwp.exe", "/FO", "CSV", "/NH"],
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+
+
 def _hangul_image_pids() -> set[int]:
     """지금 떠 있는 Hwp.exe PID. 비-Windows 이거나 조회 실패면 빈 집합."""
     if sys.platform != "win32":
         return set()
     try:
-        proc = subprocess.run(
-            ["tasklist", "/FI", "IMAGENAME eq Hwp.exe", "/FO", "CSV", "/NH"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except OSError:
+        output = _query_hangul_tasklist()
+    except Exception:
         return set()
     found: set[int] = set()
-    for line in (proc.stdout or "").splitlines():
+    for line in (output or "").splitlines():
         parts = [piece.strip().strip('"') for piece in line.split(",")]
         if len(parts) >= 2 and parts[0].lower() == "hwp.exe" and parts[1].isdigit():
             found.add(int(parts[1]))
     return found
-
 
 def _kill_owned_pids(pids: set[int]) -> None:
     """이 호출이 새로 띄운 Hwp.exe PID 만 종료한다."""

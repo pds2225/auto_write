@@ -337,6 +337,15 @@ def test_hwp_to_hwpx_uses_hangul_com_saveas(tmp_path: Path, monkeypatch) -> None
     assert list(tmp_path.glob("*.docx")) == []
 
 
+def test_hangul_image_pids_helper_failure_returns_empty(monkeypatch) -> None:
+    monkeypatch.setattr(mod.sys, "platform", "win32")
+
+    def _boom():
+        raise RuntimeError("tasklist unavailable")
+
+    monkeypatch.setattr(mod, "_query_hangul_tasklist", _boom)
+    assert mod._hangul_image_pids() == set()
+
 def test_hwp_to_hwpx_default_uses_com_even_if_rhwp_exe_is_set(tmp_path: Path, monkeypatch) -> None:
     src = tmp_path / "양식.hwp"
     src.write_bytes(b"OLE-HWP-BYTES")
