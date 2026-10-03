@@ -21,6 +21,7 @@
 
 from __future__ import annotations
 
+import ctypes
 import subprocess
 import sys
 import threading
@@ -68,6 +69,8 @@ _COM_STAGE_TIMEOUTS: dict[str, float] = {
     "Clear": 15.0,
     "Quit": 15.0,
 }
+
+_COM_CONVERT_LOCK = threading.RLock()
 
 
 def _com_stage_timeout(stage: str) -> float:
@@ -189,6 +192,20 @@ def _kill_owned_pids(pids: set[int]) -> None:
         )
 
 
+def _hwp_object_pid(hwp) -> int | None:
+    """Dispatch가 반환한 Hwp 객체의 첫 창 HWND에서 실제 프로세스 PID를 구한다."""
+    if sys.platform != "win32":
+        return None
+    try:
+        hwnd = int(hwp.XHwpWindows.Item(0).Handle)
+        pid = ctypes.c_ulong(0)
+        ctypes.windll.user32.GetWindowThreadProcessId(
+            ctypes.c_void_p(hwnd), ctypes.byref(pid)
+        )
+        return int(pid.value) or None
+    except Exception:
+        return None
+
 def _dispatch_hwp(*, skip_com_guard: bool = False):
     """한글 COM 객체를 띄운다(테스트에서 monkeypatch 하는 분리점).
 
@@ -218,93 +235,99 @@ def _convert_via_com(src: Path, dst: Path, save_formats: tuple[str, ...]) -> Non
     각 단계에는 watchdog 제한시간을 적용하고, 초과 시 이번 호출이 새로 띄운
     Hwp PID만 종료해 블로킹 COM 호출을 깨운다.
     """
-    before_pids = _hangul_image_pids()
-
-    def _dispatch_timeout_cleanup() -> None:
-        _kill_owned_pids(_hangul_image_pids() - before_pids)
-
-    hwp = _run_com_stage(
-        "Dispatch",
-        _dispatch_hwp,
-        timeout_cleanup=_dispatch_timeout_cleanup,
-    )
-    owned_pids = _hangul_image_pids() - before_pids
-
-    def _owned_cleanup() -> None:
-        _kill_owned_pids(set(owned_pids))
-
-    try:
-        hwp.XHwpWindows.Item(0).Visible = False
-    except Exception:
-        pass
-    try:
-        try:
-            _run_com_stage(
-                "RegisterModule",
-                lambda: hwp.RegisterModule("FilePathCheckDLL", "FilePathCheckerModule"),
-                timeout_cleanup=_owned_cleanup,
-            )
-        except HangulComTimeout:
-            raise
-        except Exception:
-            pass
-        try:
-            _run_com_stage(
-                "SetMessageBoxMode",
-                lambda: hwp.SetMessageBoxMode(_HANGUL_AUTO_CONFIRM_MODE),
-                timeout_cleanup=_owned_cleanup,
-            )
-        except HangulComTimeout:
-            raise
-        except Exception:
-            pass
-
-        opened = _run_com_stage(
-            "Open",
-            lambda: hwp.Open(str(src), "", ""),
-            timeout_cleanup=_owned_cleanup,
+    with _COM_CONVERT_LOCK:
+        before_pids = _hangul_image_pids()
+    
+        def _dispatch_timeout_cleanup() -> None:
+            _kill_owned_pids(_hangul_image_pids() - before_pids)
+    
+        hwp = _run_com_stage(
+            "Dispatch",
+            _dispatch_hwp,
+            timeout_cleanup=_dispatch_timeout_cleanup,
         )
-        if not opened:
-            opened = _run_com_stage(
-                "Open[format]",
-                lambda: hwp.Open(str(src), src.suffix.lstrip(".").upper(), ""),
-                timeout_cleanup=_owned_cleanup,
-            )
-            if not opened:
-                raise RuntimeError(f"한글에서 열기 실패: {src}")
-        for fmt in save_formats:
+        dispatch_pid = _hwp_object_pid(hwp)
+        owned_pids = (
+            {dispatch_pid}
+            if dispatch_pid is not None and dispatch_pid not in before_pids
+            else set()
+        )
+    
+        def _owned_cleanup() -> None:
+            _kill_owned_pids(set(owned_pids))
+    
+        try:
+            hwp.XHwpWindows.Item(0).Visible = False
+        except Exception:
+            pass
+        try:
             try:
-                saved = _run_com_stage(
-                    f"SaveAs[{fmt}]",
-                    lambda fmt=fmt: hwp.SaveAs(str(dst), fmt, ""),
+                _run_com_stage(
+                    "RegisterModule",
+                    lambda: hwp.RegisterModule("FilePathCheckDLL", "FilePathCheckerModule"),
                     timeout_cleanup=_owned_cleanup,
                 )
-                if saved:
-                    return
             except HangulComTimeout:
                 raise
             except Exception:
-                continue
-        raise RuntimeError(f"한글 저장 실패(시도 포맷 {save_formats}): {dst}")
-    finally:
-        if owned_pids:
-            try:
-                _run_com_stage(
-                    "Clear",
-                    lambda: hwp.Clear(1),
-                    timeout_cleanup=_owned_cleanup,
-                )
-            except Exception:
                 pass
             try:
                 _run_com_stage(
-                    "Quit",
-                    hwp.Quit,
+                    "SetMessageBoxMode",
+                    lambda: hwp.SetMessageBoxMode(_HANGUL_AUTO_CONFIRM_MODE),
                     timeout_cleanup=_owned_cleanup,
                 )
+            except HangulComTimeout:
+                raise
             except Exception:
                 pass
-            _kill_owned_pids(owned_pids)
+    
+            opened = _run_com_stage(
+                "Open",
+                lambda: hwp.Open(str(src), "", ""),
+                timeout_cleanup=_owned_cleanup,
+            )
+            if not opened:
+                opened = _run_com_stage(
+                    "Open[format]",
+                    lambda: hwp.Open(str(src), src.suffix.lstrip(".").upper(), ""),
+                    timeout_cleanup=_owned_cleanup,
+                )
+                if not opened:
+                    raise RuntimeError(f"한글에서 열기 실패: {src}")
+            for fmt in save_formats:
+                try:
+                    saved = _run_com_stage(
+                        f"SaveAs[{fmt}]",
+                        lambda fmt=fmt: hwp.SaveAs(str(dst), fmt, ""),
+                        timeout_cleanup=_owned_cleanup,
+                    )
+                    if saved:
+                        return
+                except HangulComTimeout:
+                    raise
+                except Exception:
+                    continue
+            raise RuntimeError(f"한글 저장 실패(시도 포맷 {save_formats}): {dst}")
+        finally:
+            if owned_pids:
+                try:
+                    _run_com_stage(
+                        "Clear",
+                        lambda: hwp.Clear(1),
+                        timeout_cleanup=_owned_cleanup,
+                    )
+                except Exception:
+                    pass
+                try:
+                    _run_com_stage(
+                        "Quit",
+                        hwp.Quit,
+                        timeout_cleanup=_owned_cleanup,
+                    )
+                except Exception:
+                    pass
+                _kill_owned_pids(owned_pids)
 
 # --- 경로/검증 도우미 ---------------------------------------------------------
 
