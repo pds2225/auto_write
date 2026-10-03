@@ -63,7 +63,7 @@ def key(text: str) -> str:
         if stripped == value:
             break
         value = stripped
-    return strip_label_decoration(SubmittableFiller._key(value).casefold())
+    return strip_label_decoration(SubmittableFiller._key(value)).casefold()
 
 
 # --- 동의어 클러스터 ---

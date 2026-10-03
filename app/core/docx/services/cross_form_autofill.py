@@ -102,7 +102,7 @@ def _key(text: str) -> str:
         if stripped == value:
             break
         value = stripped
-    return _strip_label_decoration(SubmittableFiller._key(value).casefold())
+    return _strip_label_decoration(SubmittableFiller._key(value)).casefold()
 
 
 def _logical_cells(row) -> list:
