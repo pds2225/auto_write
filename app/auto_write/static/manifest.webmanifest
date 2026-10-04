@@ -1,0 +1,10 @@
+{
+  "name": "Auto Write",
+  "short_name": "Auto Write",
+  "start_url": "/console",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f7fb",
+  "theme_color": "#0f1e35",
+  "lang": "ko"
+}

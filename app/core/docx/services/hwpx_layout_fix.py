@@ -534,12 +534,16 @@ def check_hwpx_semantics(path) -> dict:
     for hn in [n for n in names if _HEADER_RE.search(n)]:
         hroot = etree.fromstring(z.read(hn))
         for el in hroot.iter():
+            # charPr/paraPr처럼 itemCnt가 없는 정의 컨테이너도 참조 대상이다.
+            # 이전에는 itemCnt가 있는 부모만 ID를 수집해 정상 charPrIDRef를
+            # dangling reference로 오판했다.
+            for child in el:
+                if child.get("id") is not None:
+                    defined.add(child.get("id"))
             cnt = el.get("itemCnt")
             if cnt is None:
                 continue
             idk = [c for c in el if c.get("id") is not None]
-            for c in idk:
-                defined.add(c.get("id"))
             try:
                 if idk and int(cnt) != len(idk):
                     itemcnt_issues.append(f"{_ln(el)}: itemCnt={cnt} 실제={len(idk)}")

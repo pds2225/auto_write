@@ -16,6 +16,15 @@ function readStdin() {
   });
 }
 
+// Windows 부모 프로세스가 기본 cp949로 stdout을 읽어도 JSON이 깨지지 않게
+// 비ASCII 문자를 \uXXXX escape로 직렬화한다. JSON을 파싱하면 원문이 복원된다.
+function stringifyAscii(value) {
+  return JSON.stringify(value).replace(/[^\x00-\x7F]/g, (char) => {
+    const code = char.charCodeAt(0);
+    return `\\u${code.toString(16).padStart(4, "0")}`;
+  });
+}
+
 async function main() {
   try {
     const payload = JSON.parse((await readStdin()) || "{}");
@@ -24,7 +33,7 @@ async function main() {
     const prompt = String(payload.prompt || payload.user_prompt || "");
     if (!RE.test(prompt)) return;
     process.stdout.write(
-      JSON.stringify({
+      stringifyAscii({
         continue: true,
         hookSpecificOutput: {
           hookEventName: "UserPromptSubmit",

@@ -105,9 +105,35 @@ class ProjectService:
         self._library_snippets: list[dict[str, str]] | None = None
         logging.getLogger("pypdf").setLevel(logging.ERROR)
 
-    def analyze_uploaded_template(self, file_name: str, content: bytes) -> TemplateProfile:
+    def analyze_uploaded_template(
+        self,
+        file_name: str,
+        content: bytes,
+        *,
+        allow_docx_for_hwp: bool = False,
+    ) -> TemplateProfile:
         template_id, output_path = self.storage.create_template_space(file_name)
         output_path.write_bytes(content)
+        if output_path.suffix.lower() == ".hwp" and not allow_docx_for_hwp:
+            return self._analyze_hwp_as_hwpx(template_id, output_path)
+        if output_path.suffix.lower() == ".hwpx":
+            # HWPX is an immutable source package.  Do not convert it to DOCX
+            # for the production fill path; the existing HWPX engine is used
+            # when the project is generated.
+            from .submission_gates import assert_not_announcement_form
+
+            assert_not_announcement_form(output_path)
+            profile = TemplateProfile(
+                template_id=template_id,
+                template_name=output_path.name,
+                source_docx="",
+                source_hwpx=str(output_path),
+                analysis_notes=[
+                    "HWPX 원본 보존 모드: DOCX 변환 없이 기존 direct-fill 경로를 사용합니다."
+                ],
+            )
+            self.storage.save_template_profile(profile)
+            return profile
         analysis_path, conversion_notes = ensure_template_docx(output_path)
         profile = analyze_template(analysis_path)
         profile.template_id = template_id
@@ -129,6 +155,66 @@ class ProjectService:
                 except Exception:
                     pass
         profile = sanitize_template_profile(profile)
+        if output_path.suffix.lower() == ".hwp" and allow_docx_for_hwp:
+            native_source = dict(profile.native_source or {})
+            native_source["hwp_docx_opt_in"] = True
+            note = (
+                "HWP 양식을 DOCX로 진행하도록 명시했습니다. "
+                "원본 한글 양식 레이아웃은 이 경로에서 보존되지 않습니다."
+            )
+            notes = list(profile.analysis_notes)
+            if note not in notes:
+                notes.append(note)
+            profile = profile.model_copy(
+                update={"native_source": native_source, "analysis_notes": notes}
+            )
+        self.storage.save_template_profile(profile)
+        return profile
+
+    def _analyze_hwp_as_hwpx(self, template_id: str, output_path: Path) -> TemplateProfile:
+        """Convert an uploaded HWP to HWPX and pin that package. Never fall back to DOCX."""
+        from .hwp_docx_convert import HWP_TO_HWPX_UNAVAILABLE_NOTE, hwp_to_hwpx
+        from .submission_gates import assert_not_announcement_form
+
+        assert_not_announcement_form(output_path)
+        original = output_path.read_bytes()
+        hwpx_path = output_path.with_suffix(".hwpx")
+        try:
+            report = hwp_to_hwpx(output_path, hwpx_path)
+        except Exception:
+            if output_path.is_file() and output_path.read_bytes() != original:
+                output_path.write_bytes(original)
+            if hwpx_path.exists():
+                hwpx_path.unlink()
+            raise
+        if output_path.read_bytes() != original:
+            output_path.write_bytes(original)
+            raise ValueError(
+                "변환 중 HWP 원본이 바뀌어 업로드 바이트로 되돌렸습니다. "
+                + HWP_TO_HWPX_UNAVAILABLE_NOTE
+            )
+        if not report.ok or not hwpx_path.is_file() or hwpx_path.stat().st_size <= 0:
+            if hwpx_path.exists():
+                hwpx_path.unlink()
+            message = next(
+                (note for note in report.notes if "DOCX로 진행" in note),
+                HWP_TO_HWPX_UNAVAILABLE_NOTE,
+            )
+            extras = [note for note in report.notes if note and note != message]
+            if extras:
+                message = f"{message} ({' / '.join(extras)})"
+            raise ValueError(message)
+        profile = TemplateProfile(
+            template_id=template_id,
+            template_name=output_path.name,
+            source_docx="",
+            source_hwpx=str(hwpx_path),
+            native_source={
+                "conversion": report.method,
+                "source_hwp": str(output_path),
+            },
+            analysis_notes=list(report.notes),
+        )
         self.storage.save_template_profile(profile)
         return profile
 
@@ -141,10 +227,15 @@ class ProjectService:
         profile.template_id = template_id
         folder = self.storage.template_dir(template_id)
         docx_files = sorted(folder.glob("*.docx"))
-        if not docx_files:
+        hwpx_files = sorted(folder.glob("*.hwpx"))
+        if not docx_files and not hwpx_files:
             raise ValueError("원본 DOCX 파일을 찾지 못했습니다. 템플릿을 다시 업로드해 주세요.")
-        source_docx = docx_files[0]
-        profile.source_docx = str(source_docx)
+        if profile.template_name.lower().endswith(".hwpx") or not docx_files:
+            profile.source_docx = ""
+            profile.source_hwpx = str(hwpx_files[0])
+        else:
+            profile.source_docx = str(docx_files[0])
+            profile.source_hwpx = ""
         profile = sanitize_template_profile(profile)
         self.storage.save_template_profile(profile)
         return profile
@@ -165,6 +256,19 @@ class ProjectService:
 
     def _pin_template_source_to_project(self, profile: TemplateProfile, project_id: str) -> TemplateProfile:
         """Copy template DOCX into the project folder so generation survives missing template files."""
+        if profile.source_hwpx or profile.template_name.lower().endswith(".hwpx"):
+            try:
+                source_hwpx = self._resolve_source_hwpx(profile, project_id)
+            except ValueError:
+                return profile
+            project_dir = self.storage.project_dir(project_id)
+            pinned = project_dir / "template_source.hwpx"
+            if source_hwpx.resolve() != pinned.resolve():
+                pinned.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source_hwpx, pinned)
+            profile.source_docx = ""
+            profile.source_hwpx = str(pinned)
+            return profile
         try:
             source_docx = self._resolve_source_docx(profile, project_id)
         except ValueError:
@@ -178,6 +282,8 @@ class ProjectService:
         return profile
 
     def template_docx_ready(self, profile: TemplateProfile) -> bool:
+        if profile.source_hwpx or profile.template_name.lower().endswith(".hwpx"):
+            return bool(profile.source_hwpx and Path(profile.source_hwpx).is_file())
         candidates: list[Path] = []
         if profile.source_docx:
             candidates.append(Path(profile.source_docx))
@@ -197,6 +303,12 @@ class ProjectService:
         return False
 
     def template_source_status(self, profile: TemplateProfile, project_id: str) -> dict[str, Any]:
+        if profile.source_hwpx or profile.template_name.lower().endswith(".hwpx"):
+            try:
+                path = self._resolve_source_hwpx(profile, project_id)
+                return {"ready": True, "path": str(path), "message": ""}
+            except ValueError as exc:
+                return {"ready": False, "path": "", "message": str(exc)}
         try:
             path = self._resolve_source_docx(profile, project_id)
             return {"ready": True, "path": str(path), "message": ""}
@@ -227,6 +339,27 @@ class ProjectService:
             "홈 화면에서 동일한 양식 DOCX를 다시 업로드한 뒤, 이 프로젝트를 새로 만드세요."
         )
 
+    def _resolve_source_hwpx(self, profile: TemplateProfile, project_id: str) -> Path:
+        candidates: list[Path] = []
+        if profile.source_hwpx:
+            candidates.append(Path(profile.source_hwpx))
+        project_dir = self.storage.project_dir(project_id)
+        candidates.append(project_dir / "template_source.hwpx")
+        candidates.extend(sorted(project_dir.glob("*.hwpx")))
+        template_folder = self.storage.template_dir(profile.template_id)
+        candidates.extend(sorted(template_folder.glob("*.hwpx")))
+        seen: set[str] = set()
+        for path in candidates:
+            key = str(path).lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            if path.is_file():
+                return path.resolve()
+        raise ValueError(
+            "HWPX 원본 파일이 없습니다. 템플릿을 다시 업로드해 주세요."
+        )
+
     def save_project_form(
         self,
         project_id: str,
@@ -240,6 +373,7 @@ class ProjectService:
         improve_partial: bool = True,
         psst_only: bool = True,
         disable_images: bool = True,
+        hwpx_identity: dict[str, str] | None = None,
     ) -> ProjectInput:
         profile = self.load_profile_for_project(project_id)
         existing_input: ProjectInput | None
@@ -316,6 +450,15 @@ class ProjectService:
             "psst_only": bool(psst_only),
             "disable_images": bool(disable_images),
         }
+        existing_identity = (existing_input.project_meta or {}).get("hwpx_identity") if existing_input else None
+        if isinstance(existing_identity, dict):
+            project_meta["hwpx_identity"] = {
+                str(k): str(v) for k, v in existing_identity.items() if str(v).strip()
+            }
+        if hwpx_identity:
+            project_meta["hwpx_identity"] = {
+                str(k): str(v) for k, v in hwpx_identity.items() if str(v).strip()
+            }
         if resolved_writing_provider:
             project_meta["writing_provider"] = resolved_writing_provider
         if resolved_writing_model:
@@ -573,6 +716,44 @@ class ProjectService:
         lines.append("📋 섹션별 복사: 화면의 「복사」 버튼 또는 copy_blocks.json")
         return "\n".join(lines) + "\n"
 
+    @staticmethod
+    def _run_project_final_gate(output_path: Path) -> dict[str, Any]:
+        """ProjectService 산출물을 공통 LRule/Hash/Finalizer 경로에 통과시킨다.
+
+        이 서비스의 결과는 작업 초안으로 발행되지만, 검증 없이 FINAL처럼
+        취급되는 우회 경로는 허용하지 않는다. 게이트 오류도 정상 통과로
+        바꾸지 않고 DRAFT + ERROR 상태로 남긴다.
+        """
+        try:
+            from ..domains.pipeline_gate import run_to_final
+
+            gate = run_to_final(
+                output_path,
+                explicit_domain="business_plan",
+                document_type="business_plan",
+                filename=output_path.name,
+                apply_draft_name=False,
+            )
+            report = gate.as_dict()
+            report["validator_status"] = "EXECUTED"
+            report["artifact_path"] = str(output_path)
+            finalizer = report.get("finalizer") or {}
+            allowed = bool(report.get("submittable") and finalizer.get("submittable"))
+            report["final_output_allowed"] = allowed
+            report["status"] = "FINAL" if allowed else "DRAFT"
+            if not finalizer:
+                report["blocked_reason"] = report.get("blocked_reason") or "finalizer missing"
+            return report
+        except Exception as exc:  # noqa: BLE001 — 검사불능은 silent PASS 금지
+            return {
+                "status": "DRAFT",
+                "validator_status": "ERROR",
+                "final_output_allowed": False,
+                "submittable": False,
+                "artifact_path": str(output_path),
+                "blocked_reason": f"final_gate_error:{type(exc).__name__}: {exc}",
+            }
+
     def _publish_results_bundle(
         self,
         project_id: str,
@@ -584,16 +765,18 @@ class ProjectService:
         *,
         psst_field_ids: set[str],
         core_table_ids: set[str],
+        final_gate_report: dict[str, Any],
     ) -> dict[str, str]:
         results_dir = self.storage.results_dir(project_id)
         results_dir.mkdir(parents=True, exist_ok=True)
         dated_name = self._results_docx_name(project_input)
         results_docx = results_dir / dated_name
-        shutil.copy2(output_path, results_docx)
-        shutil.copy2(output_path, results_dir / "output.docx")
 
+        # 사용자 기본 산출물은 HWPX다. DOCX는 내부 중간본으로 유지하되,
+        # HWPX 변환에 실패한 결과를 FINAL처럼 발행하지 않는다.
         results_hwpx = ""
         output_hwpx = ""
+        hangul_output_error = ""
         try:
             from .hangul_default import emit_hangul_file
 
@@ -603,10 +786,44 @@ class ProjectService:
             emit_res = emit_hangul_file(output_path, res_hwpx)
             if emit_out.ok:
                 output_hwpx = emit_out.output
+            else:
+                hangul_output_error = "output.hwpx emission failed"
             if emit_res.ok:
                 results_hwpx = emit_res.output
-        except Exception as exc:  # noqa: BLE001 — 한글 산출 실패가 생성 전체를 막지 않음
-            log_line(f"[WARN] 한글 산출 실패(DOCX 작업본은 유지): {exc}")
+            else:
+                hangul_output_error = hangul_output_error or "results HWPX emission failed"
+        except Exception as exc:  # noqa: BLE001 — HWPX 실패는 FINAL로 승격하지 않음
+            hangul_output_error = f"{type(exc).__name__}: {exc}"
+
+        if hangul_output_error:
+            final_gate_report = dict(final_gate_report)
+            final_gate_report.update(
+                {
+                    "status": "DRAFT",
+                    "final_output_allowed": False,
+                    "submittable": False,
+                    "hangul_output_allowed": False,
+                    "blocked_reason": (
+                        final_gate_report.get("blocked_reason")
+                        or f"hangul_output_error:{hangul_output_error}"
+                    ),
+                }
+            )
+        else:
+            final_gate_report = dict(final_gate_report)
+            final_gate_report["hangul_output_allowed"] = True
+
+        output_gate_path = output_path.parent / "final_gate_report.json"
+        write_json(output_gate_path, final_gate_report)
+        results_gate_report = dict(final_gate_report)
+        results_gate_report["published_artifact"] = str(results_docx)
+        results_gate_path = results_dir / "final_gate_report.json"
+        write_json(results_gate_path, results_gate_report)
+
+        # 두 gate report가 모두 기록된 뒤에만 결과 DOCX를 공개 폴더로 복사한다.
+        # report 기록 실패 시 부분 FINAL 산출물이 남아 gate를 우회하지 않게 한다.
+        shutil.copy2(output_path, results_docx)
+        shutil.copy2(output_path, results_dir / "output.docx")
 
         hwp_text = self._build_hwp_paste_text(
             profile,
@@ -651,6 +868,7 @@ class ProjectService:
             "copy_blocks": str(copy_blocks_path),
             "fill_map": str(fill_map_path),
             "generation_summary": str(summary_path),
+            "final_gate_report": str(results_gate_path),
         }
 
     # --- SFT 데이터 레이어 P0: 생성 계측(스냅샷·provenance) -------------------
@@ -831,9 +1049,29 @@ class ProjectService:
         except Exception as exc:  # noqa: BLE001 — provenance 실패는 생성에 영향 없음
             log_line(f"[WARN] SFT provenance 저장 실패(무시): {exc}")
 
+    def _hangul_direct_or_refuse(
+        self,
+        project_id: str,
+        profile: TemplateProfile,
+        project_input: ProjectInput,
+    ) -> ArtifactBundle | None:
+        """Route HWP/HWPX to direct-fill. HWP without a pinned HWPX does not become DOCX."""
+        name = profile.template_name.lower()
+        opt_in = bool((profile.native_source or {}).get("hwp_docx_opt_in"))
+        if profile.source_hwpx or name.endswith(".hwpx"):
+            return self._generate_hwpx_direct(project_id, profile, project_input)
+        if name.endswith(".hwp") and not opt_in:
+            from .hwp_docx_convert import HWP_TO_HWPX_UNAVAILABLE_NOTE
+
+            raise ValueError(HWP_TO_HWPX_UNAVAILABLE_NOTE)
+        return None
+
     def generate(self, project_id: str) -> ArtifactBundle:
         profile = self.load_profile_for_project(project_id)
         project_input = self.storage.load_project_input(project_id)
+        hangul = self._hangul_direct_or_refuse(project_id, profile, project_input)
+        if hangul is not None:
+            return hangul
         # P0(SFT): AI 변형 전 입력 스냅샷 — 부수효과, 실패해도 생성 계속.
         pre_answer_keys = set(project_input.answers)
         self._save_sft_input_snapshot(project_id, project_input)
@@ -941,6 +1179,157 @@ class ProjectService:
             transfer_mode=transfer_mode,
         )
 
+    def _generate_hwpx_direct(
+        self,
+        project_id: str,
+        profile: TemplateProfile,
+        project_input: ProjectInput,
+    ) -> ArtifactBundle:
+        """Fill the uploaded HWPX package directly and gate it before publish."""
+        import hashlib
+
+        from core.docx.services.hwpx_protected_regions import (
+            authorization_is_current,
+            authorize_t02_writes,
+        )
+        from .hwpx_fill import commit_t02_label_writes
+        from .hwpx_submit import apply_t02_analyzer_writes, submit_hwpx
+
+        source = self._resolve_source_hwpx(profile, project_id)
+        output_dir = self.storage.project_dir(project_id) / "output"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_path = output_dir / "output.hwpx"
+        identity: dict[str, str] = {}
+        raw_identity = (project_input.project_meta or {}).get("hwpx_identity")
+        if isinstance(raw_identity, dict):
+            identity.update({str(k): str(v) for k, v in raw_identity.items() if str(v).strip()})
+        organization_name = str((project_input.organization_profile or {}).get("name", "")).strip()
+        if organization_name:
+            identity.setdefault("기업명", organization_name)
+        from .hwpx_fill import F01_CANONICAL_SHA256, F01_FIELD_KEYS
+
+        field_writes: dict[str, str] = {}
+        for key, value in (project_input.answers or {}).items():
+            if key in {"user_brief", "user_notes"} or not isinstance(value, (str, int, float)):
+                continue
+            if not str(value).strip():
+                continue
+            if key in F01_FIELD_KEYS:
+                field_writes[str(key)] = str(value)
+                continue
+            identity.setdefault(str(key), str(value))
+
+        staging = output_dir / f".t02-auth-{os.getpid()}.hwpx"
+        wire = apply_t02_analyzer_writes(
+            source,
+            staging,
+            identity,
+            authorize_t02_writes=authorize_t02_writes,
+            authorization_is_current=authorization_is_current,
+            commit_t02_label_writes=commit_t02_label_writes,
+        )
+        expected_sha = F01_CANONICAL_SHA256 if field_writes else None
+        if wire.written and expected_sha:
+            original_sha = hashlib.sha256(source.read_bytes()).hexdigest()
+            if original_sha.lower() == expected_sha.lower():
+                expected_sha = hashlib.sha256(wire.fill_source.read_bytes()).hexdigest()
+        try:
+            report = submit_hwpx(
+                wire.fill_source,
+                output_path,
+                identity=identity,
+                replacements=(project_input.project_meta or {}).get("hwpx_replacements") or {},
+                acceptance_gate=True,
+                normalize_colors=False,
+                submission_cleanup=False,
+                preserve_template=True,
+                field_writes=field_writes or None,
+                expected_sha256=expected_sha,
+            )
+            report.filled.update(wire.written)
+            if wire.written:
+                from core.docx.services.hwpx_analysis_adapter import index_hwpx_structure
+                from core.docx.services.hwpx_protected_regions import (
+                    document_duplicate_unfilled_cells,
+                    repeated_row_unfilled_labels,
+                )
+
+                scan_path = Path(report.final) if report.final else output_path
+                repeated_unfilled: set[str] = set()
+                if scan_path.is_file():
+                    scanned = index_hwpx_structure(scan_path)
+                    repeated_unfilled = set(repeated_row_unfilled_labels(scanned))
+                    repeated_unfilled.update(
+                        label for label, *_rest in document_duplicate_unfilled_cells(scanned)
+                    )
+                report.residual = [
+                    label for label in report.residual
+                    if label in repeated_unfilled
+                    or re.sub(r"\s+", "", str(label)).rstrip(":：") not in wire.written
+                ]
+            for label in wire.pending:
+                if label not in report.residual:
+                    report.residual.append(label)
+                note = f"[t02] {label} AUTHORIZATION_PENDING"
+                if note not in report.notes:
+                    report.notes.append(note)
+            for label in wire.written:
+                note = f"[t02] {label} GRANT_WRITTEN"
+                if note not in report.notes:
+                    report.notes.append(note)
+        finally:
+            if staging.exists():
+                staging.unlink()
+        results_dir = self.storage.results_dir(project_id)
+        results_dir.mkdir(parents=True, exist_ok=True)
+        final_path = Path(report.final)
+        result_copy = results_dir / final_path.name
+        if final_path.is_file() and final_path.resolve() != result_copy.resolve():
+            shutil.copy2(final_path, result_copy)
+        try:
+            from .hwp_docx_convert import hancom_com_available
+            visual_render = (
+                "ENVIRONMENT_BLOCKED" if not hancom_com_available() else "REVIEW_REQUIRED"
+            )
+        except Exception:
+            visual_render = "ENVIRONMENT_BLOCKED"
+        report_path = output_dir / "hwpx_route.json"
+        write_json(
+            report_path,
+            {
+                "engine": "existing hwpx_fill direct-fill",
+                "source": str(source),
+                "output": str(final_path),
+                "visual_render": visual_render,
+                "t02_analyzer": {
+                    "written": sorted(wire.written),
+                    "pending": list(wire.pending),
+                },
+                "routing": report.as_dict(),
+            },
+        )
+        (results_dir / "generation_summary.txt").write_text(
+            "HWPX 직접 채움 경로\n"
+            f"상태: {report.routing_status}\n"
+            f"제출가능: {'예' if report.ok else '아니오(_DRAFT 또는 REVIEW_REQUIRED)'}\n"
+            f"시각 렌더: {visual_render}\n",
+            encoding="utf-8",
+        )
+        project_input.project_meta = dict(project_input.project_meta or {})
+        project_input.project_meta["hwpx_routing_status"] = report.routing_status
+        self.storage.save_project_input(project_id, project_input)
+        return ArtifactBundle(
+            output_docx="",
+            qa_report=str(report_path),
+            sources="",
+            results_dir=str(results_dir),
+            results_hwpx=str(result_copy) if result_copy.is_file() else "",
+            output_hwpx=str(final_path) if final_path.is_file() else "",
+            hwp_paste="",
+            copy_blocks="",
+            fill_map="",
+        )
+
     def _render_and_publish(
         self,
         project_id: str,
@@ -1005,6 +1394,7 @@ class ProjectService:
                 transfer_mode=transfer_mode,
             ),
         )
+        final_gate_report = self._run_project_final_gate(output_path)
         published = self._publish_results_bundle(
             project_id,
             profile,
@@ -1014,15 +1404,18 @@ class ProjectService:
             render_result,
             psst_field_ids=psst_field_ids,
             core_table_ids=core_table_ids,
+            final_gate_report=final_gate_report,
         )
         log_line(
             f"[DONE] project={project_id} docx={output_path.name} "
-            f"errors={qa_report['error_count']} results={published.get('results_dir', '')}"
+            f"errors={qa_report['error_count']} gate={final_gate_report.get('status', 'DRAFT')} "
+            f"results={published.get('results_dir', '')}"
         )
         return ArtifactBundle(
             output_docx=str(output_path),
             qa_report=str(qa_path),
             sources=str(sources_path),
+            final_gate_report=published.get("final_gate_report", ""),
             benchmark_compare=str(benchmark_path),
             transfer_report=str(transfer_path),
             preview_manifest=str(preview_manifest_path),

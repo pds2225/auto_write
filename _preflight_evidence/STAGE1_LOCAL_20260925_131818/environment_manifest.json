@@ -1,0 +1,76 @@
+﻿{
+    "collected_at":  "2026-09-25T13:18:18.7328750+09:00",
+    "computer_name":  null,
+    "user_name":  "ekth3",
+    "autowrite_path":  "D:\\auto_write",
+    "evidence_root":  "D:\\auto_write\\_preflight_evidence",
+    "run_dir":  "D:\\auto_write\\_preflight_evidence\\STAGE1_LOCAL_20260925_131818",
+    "source_code_modified":  false,
+    "originals_modified":  false,
+    "com_probe":  "NOT_RUN",
+    "m01":  {
+                "status":  "DOWNLOAD_FAILED",
+                "error":  "\u0027Get-FileHash\u0027 용어가 cmdlet, 함수, 스크립트 파일 또는 실행할 수 있는 프로그램 이름으로 인식되지 않습니다. 이름이 정확한지 확인하고 경로가 포함된 경우 경로가 올바른지 검증한 다음 다시 시도하십시오.",
+                "url":  "https://www.bizinfo.go.kr/cmm/fms/fileDown.do?atchFileId=FILE_000000000745765\u0026fileSn=0"
+            },
+    "m08":  {
+                "status":  "DOWNLOAD_FAILED",
+                "error":  "\u0027Get-FileHash\u0027 용어가 cmdlet, 함수, 스크립트 파일 또는 실행할 수 있는 프로그램 이름으로 인식되지 않습니다. 이름이 정확한지 확인하고 경로가 포함된 경우 경로가 올바른지 검증한 다음 다시 시도하십시오.",
+                "url":  "https://seoulaihub.startup-plus.kr/api/common/download?attachFilePath=%2Fproject%2Fattachment%2F260629141601%5B%EC%88%98%EC%A0%95%EA%B3%B5%EA%B3%A0%EB%AC%B8%2C+%EB%B6%99%EC%9E%841-4%5D2026+%ED%95%98%EB%B0%98%EA%B8%B0+%EC%84%9C%EC%9A%B8+AI+%ED%97%88%EB%B8%8C+%EA%B3%A0%EC%84%B1%EB%8A%A5+%EC%BB%B4%ED%93%A8%ED%8C%85+%EC%9D%B8%ED%94%84%EB%9D%BC+%EC%A7%80%EC%9B%90%EC%82%AC%EC%97%85+%EC%B0%B8%EC%97%AC%EA%B8%B0%EC%97%85+%EB%AA%A8%EC%A7%91%EA%B3%B5%EA%B3%A0.hwp"
+            },
+    "windows":  {
+                    "WindowsProductName":  "Windows 10 Home",
+                    "WindowsVersion":  "2009",
+                    "OsBuildNumber":  "26200",
+                    "OsArchitecture":  "64비트"
+                },
+    "culture":  "ko-KR",
+    "time_zone":  "Korea Standard Time",
+    "disk":  [
+                 {
+                     "Name":  "C",
+                     "Root":  "C:\\",
+                     "Used":  950386786304,
+                     "Free":  27869605888
+                 },
+                 {
+                     "Name":  "D",
+                     "Root":  "D:\\",
+                     "Used":  14261772288,
+                     "Free":  7212011520
+                 },
+                 {
+                     "Name":  "G",
+                     "Root":  "G:\\",
+                     "Used":  951780331520,
+                     "Free":  26476060672
+                 }
+             ],
+    "repo":  {
+                 "path":  "D:\\auto_write",
+                 "sha":  "f0631415745f75c48ee5441e11e23081fb2b6c96",
+                 "branch":  "port/pr187-mobile-console",
+                 "status":  "## port/pr187-mobile-console\r\n?? _preflight_evidence/"
+             },
+    "python":  {
+                   "py_launcher":  "-V:3.14 *        C:\\Python314\\python.exe\r\n -V:3.13          C:\\Users\\ekth3\\AppData\\Local\\Microsoft\\WindowsApps\\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\\python.exe\r\n -V:3.11          C:\\Users\\ekth3\\AppData\\Local\\Programs\\Python\\Python311\\python.exe\r\n -V:Astral/CPython3.11.15 C:\\Users\\ekth3\\AppData\\Roaming\\uv\\python\\cpython-3.11.15-windows-x86_64-none\\python.exe",
+                   "version":  "Python 3.14.7",
+                   "where":  "C:\\Python314\\python.exe\r\nC:\\Users\\ekth3\\AppData\\Local\\Programs\\Python\\Python311\\python.exe\r\nC:\\Users\\ekth3\\AppData\\Local\\Microsoft\\WindowsApps\\python.exe"
+               },
+    "hancom_startapps_error":  "\"?쒓?|Hancom|HWP\" 구문 분석 - 수량자 {x,y} 앞에 아무 것도 없습니다.",
+    "hwp_executables":  [
+                            {
+                                "FullName":  "C:\\Program Files (x86)\\Hnc\\Office 2022\\HOffice120\\Bin\\Hwp.exe",
+                                "ProductVersion":  "12.0.0.893",
+                                "FileVersion":  "12.0.0.893"
+                            },
+                            {
+                                "FullName":  "C:\\Program Files (x86)\\Hnc\\Office 2024\\HOffice130\\Bin\\Hwp.exe",
+                                "ProductVersion":  "13.0.0.3380",
+                                "FileVersion":  "13.0.0.3380"
+                            }
+                        ],
+    "hwp_process_before":  null,
+    "font_count":  402,
+    "f01_error":  "F-01 not found. Rerun with -F01Path."
+}

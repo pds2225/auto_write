@@ -1,0 +1,13 @@
+﻿py -0p:
+-V:3.14 *        C:\Python314\python.exe
+ -V:3.13          C:\Users\ekth3\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe
+ -V:3.11          C:\Users\ekth3\AppData\Local\Programs\Python\Python311\python.exe
+ -V:Astral/CPython3.11.15 C:\Users\ekth3\AppData\Roaming\uv\python\cpython-3.11.15-windows-x86_64-none\python.exe
+
+python --version:
+Python 3.14.7
+
+where python:
+C:\Python314\python.exe
+C:\Users\ekth3\AppData\Local\Programs\Python\Python311\python.exe
+C:\Users\ekth3\AppData\Local\Microsoft\WindowsApps\python.exe

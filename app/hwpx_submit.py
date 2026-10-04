@@ -1,6 +1,6 @@
-"""hwpx_submit.py — HWPX 양식 채움→수용검사 게이트→제출본 완성 원-커맨드 CLI.
+"""hwpx_submit.py — HWPX 양식 채움→공통 무결성 게이트→제출본 완성 원-커맨드 CLI.
 
-fill_hwpx(채움) 뒤 run_hwpx_acceptance(게이트)로 판정하고, fail/검사불능이면
+fill_hwpx(채움) 뒤 공통 integrity gate로 판정하고, fail/검사불능이면
 force_draft_name 으로 ``_DRAFT`` 를 강제한다(fail-closed — 제출 이름 세탁 금지).
 
 사용 예 (PowerShell):
@@ -41,7 +41,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--replace", dest="replaces", action="append", default=[],
                     metavar="예시=실제", help="직접 텍스트 치환(반복 가능)")
     ap.add_argument("--no-acceptance", action="store_true",
-                    help="수용검사 게이트 생략(이름 유지 — 제출 전 별도 점검 필요)")
+                    help="진단용 gate 우회 요청(_DRAFT 강제, 최종 제출본 아님)")
     ap.add_argument("--no-normalize-colors", action="store_true",
                     help="잔존 예시 유색체 자동 검정화 생략(기본은 검정 정규화 ON)")
     ap.add_argument("--no-submission-cleanup", action="store_true",
@@ -100,13 +100,17 @@ def main(argv: list[str] | None = None) -> int:
 
     acc = rep.acceptance
     if args.no_acceptance:
-        print("게이트: 생략(--no-acceptance) — 제출 전 별도 점검 필요")
+        print("게이트: 우회 요청이 거부됨 — 공통 gate 결과 기록 후 _DRAFT 강제")
     elif acc.get("exception"):
         print(f"게이트: 검사불능 → fail-closed(_DRAFT 강제): {acc['exception']}")
     else:
         print(f"게이트 판정: {acc.get('verdict', '?')} "
               f"(유색 {acc.get('colored', 0)}·안내문구 {acc.get('guides', 0)}"
               f"·linesegarray {acc.get('linesegarray', 0)})")
+    integrity = rep.integrity
+    if integrity:
+        print(f"공통 integrity gate: {integrity.get('final_status', '?')} "
+              f"(ok={integrity.get('ok', False)})")
     if rep.draft_reason:
         print(f"  사유: {rep.draft_reason}")
     if rep.error:

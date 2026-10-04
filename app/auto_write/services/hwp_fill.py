@@ -1,3 +1,8 @@
-# hwp_fill.py -- backward-compatible re-export from core.docx.services
-# Canonical source: core.docx.services.hwp_fill
-from core.docx.services.hwp_fill import *  # noqa: F401,F403
+"""Backward-compatible module alias for the canonical HWP fill service."""
+
+import sys as _sys
+
+from core.docx.services import hwp_fill as _canonical
+
+# Keep function globals and monkeypatch seams shared with the canonical module.
+_sys.modules[__name__] = _canonical

@@ -431,11 +431,11 @@ class DocumentIngestTests(unittest.TestCase):
             profile = service.analyze_uploaded_template(hwpx_path.name, hwpx_path.read_bytes())
 
             self.assertEqual(profile.template_name, hwpx_path.name)
-            self.assertTrue(profile.source_docx.endswith("_converted.docx"))
-            self.assertTrue(Path(profile.source_docx).exists())
+            self.assertEqual(profile.source_docx, "")
+            self.assertTrue(profile.source_hwpx.endswith(hwpx_path.name))
+            self.assertTrue(Path(profile.source_hwpx).exists())
             self.assertTrue(any("HWPX" in note for note in profile.analysis_notes))
-            loaded_doc = Document(profile.source_docx)
-            self.assertTrue(any("1. 사업 개요" in paragraph.text for paragraph in loaded_doc.paragraphs))
+            self.assertEqual(Path(profile.source_hwpx).read_bytes(), hwpx_path.read_bytes())
 
 
 if __name__ == "__main__":

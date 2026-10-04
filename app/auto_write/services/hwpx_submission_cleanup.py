@@ -129,10 +129,14 @@ def finalize_submission_hwpx(in_path, out_path, *, force_black=True,
         store = {i.filename: zin.read(i.filename) for i in infos}
 
     stats = {"linesegarray_removed": 0, "guides_removed": 0, "charpr_blacked": 0,
-             "spacing_clamped": 0}
+             "spacing_clamped": 0, "grid_cells_fixed": 0}
     for name, data in list(store.items()):
         if _SECTION_RE.search(name):
             root = etree.fromstring(data)
+            # 기존 rowAddr/colAddr 교정기를 공통 제출 cleanup에 연결한다.
+            # 병합표는 repair_table_grid가 안전하게 건너뛰고, 뒤의 gate가 차단한다.
+            from .hwpx_layout_fix import repair_all_table_grids
+            stats["grid_cells_fixed"] += repair_all_table_grids(root)
             if remove_guides:
                 stats["guides_removed"] += remove_form_guides(root)
             if strip_lineseg:

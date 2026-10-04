@@ -1,0 +1,13 @@
+﻿
+FullName                                                      ProductVersion Fi
+                                                                             le
+                                                                             Ve
+                                                                             rs
+                                                                             io
+                                                                             n 
+--------                                                      -------------- --
+C:\Program Files (x86)\Hnc\Office 2022\HOffice120\Bin\Hwp.exe 12.0.0.893     12
+C:\Program Files (x86)\Hnc\Office 2024\HOffice130\Bin\Hwp.exe 13.0.0.3380    13
+
+
+

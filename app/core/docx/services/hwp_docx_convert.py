@@ -39,6 +39,14 @@ _SAVE_FORMATS = {
     ".hwpx": ("HWPX", "HWPML2X"),
 }
 
+# HWP 양식 업로드가 변환 불가일 때 DOCX로 내려가지 않고 이 안내를 그대로 보여 준다.
+HWP_TO_HWPX_UNAVAILABLE_NOTE = (
+    "HWP 양식을 HWPX로 바꾸지 못해 DOCX로 진행하지 않았습니다. "
+    "한글에서 이 파일을 연 다음 [다른 이름으로 저장]을 HWPX로 선택해 다시 업로드하세요. "
+    "DOCX로 진행하려면 콘솔에서 'DOCX로 진행'을 선택한 뒤 같은 HWP를 다시 올리세요. "
+    "DOCX 경로는 원본 양식 레이아웃을 보존하지 않습니다."
+)
+
 
 @dataclass
 class ConvertReport:
@@ -111,6 +119,11 @@ def _convert_via_com(src: Path, dst: Path, save_formats: tuple[str, ...]) -> Non
     Dispatch/Open 단계에서 실패할 수 있다(호출측이 폴백을 처리한다).
     """
     hwp = _dispatch_hwp()
+    # 자동화 중 화면에 창이 뜨는 것을 방지(버전에 따라 미지원일 수 있어 무시하고 진행)
+    try:
+        hwp.XHwpWindows.Item(0).Visible = False
+    except Exception:
+        pass
     try:
         # 보안 대화상자 억제(모듈이 등록돼 있으면 성공, 없으면 무시)
         try:
@@ -194,13 +207,17 @@ def hwp_to_docx(in_path: str | Path, out_path: Optional[str | Path] = None,
 
     # 2) 구조 변환(unhwp / HWPX XML) — document_ingest 재사용
     try:
-        from ..document_ingest import _convert_hwp_to_docx, _convert_hwpx_to_docx
+        # The legacy ingest module remains the shared compatibility seam while
+        # the core/domain split is in progress. Existing callers and fixtures
+        # patch that module, so resolving it here keeps both import paths in
+        # the same runtime contract.
+        from auto_write import document_ingest as _document_ingest
 
         if ext == ".hwp":
-            _convert_hwp_to_docx(src, dst)
+            _document_ingest._convert_hwp_to_docx(src, dst)
             report.method = "unhwp"
         else:
-            _convert_hwpx_to_docx(src, dst)
+            _document_ingest._convert_hwpx_to_docx(src, dst)
             report.method = "hwpx_xml"
         if _nonempty_file(dst):
             report.ok = True
@@ -212,11 +229,11 @@ def hwp_to_docx(in_path: str | Path, out_path: Optional[str | Path] = None,
     # 3) PrvText 폴백(HWP 전용) — 텍스트만
     if ext == ".hwp":
         try:
-            from ..document_ingest import _write_text_docx, extract_hwp_preview_text
+            from auto_write import document_ingest as _document_ingest
 
-            preview = extract_hwp_preview_text(src)
+            preview = _document_ingest.extract_hwp_preview_text(src)
             if preview.strip():
-                _write_text_docx(preview, dst, title=src.stem)
+                _document_ingest._write_text_docx(preview, dst, title=src.stem)
                 report.method, report.ok = "prvtext", True
                 report.notes.append("미리보기 텍스트(PrvText)만 추출 — 본문 일부가 누락될 수 있습니다.")
                 return report
@@ -260,6 +277,68 @@ def docx_to_hwp(in_path: str | Path, out_path: Optional[str | Path] = None) -> C
         report.notes.append(
             f"한글 COM 변환 실패({type(exc).__name__}: {exc}) — 대화형 PowerShell 에서 "
             "다시 실행하고, 한글 '보안 승인' 대화상자가 뜨면 '허용'을 누르세요.")
+    return report
+
+
+def hwp_to_hwpx(in_path: str | Path, out_path: Optional[str | Path] = None) -> ConvertReport:
+    """HWP를 HWPX로 변환한다. DOCX로 폴백하지 않는다.
+
+    1. rhwp ``export-hwpx`` (``native_hwp.prepare_native_source``) 가 있으면 검증 변환.
+    2. 없거나 실패하면 한글 COM ``_convert_via_com`` (XHwpWindows + HWPX SaveAs).
+    둘 다 없으면 ``ok=False`` 와 한글 재저장/DOCX 명시 선택 안내만 반환한다.
+    """
+    from core.docx.services import native_hwp as _native_hwp
+
+    src = Path(in_path)
+    dst = Path(out_path) if out_path else src.with_suffix(".hwpx")
+    if src.suffix.lower() != ".hwp":
+        raise ValueError(f"HWP 입력만 HWPX로 변환합니다: {src.name}")
+    if dst.suffix.lower() != ".hwpx":
+        raise ValueError(f"출력은 .hwpx 만 지원합니다: {dst.name}")
+    src, dst, prev_bak = _resolve_paths(src, dst, ".hwpx")
+    report = ConvertReport(direction="hwp->hwpx", output=str(dst))
+    if prev_bak:
+        report.notes.append(f"기존 출력 파일을 백업했습니다: {prev_bak}")
+
+    if _native_hwp.rhwp_available():
+        try:
+            prepared, _meta = _native_hwp.prepare_native_source(src, dst)
+            if _nonempty_file(prepared):
+                report.method, report.ok = "rhwp", True
+                report.notes.append("rhwp로 HWP를 HWPX로 변환했습니다. 원본 HWP는 수정하지 않았습니다.")
+                return report
+            report.notes.append("rhwp 변환 결과가 비어 있습니다.")
+        except Exception as exc:
+            report.notes.append(f"rhwp HWP→HWPX 실패({type(exc).__name__}: {exc})")
+        if dst.exists() and not report.ok:
+            try:
+                dst.unlink()
+            except OSError:
+                report.notes.append(HWP_TO_HWPX_UNAVAILABLE_NOTE)
+                return report
+
+    if hancom_com_available():
+        try:
+            _convert_via_com(src, dst, _SAVE_FORMATS[".hwpx"])
+            if _nonempty_file(dst):
+                report.method, report.ok = "hancom_com", True
+                report.notes.append(
+                    "한글 COM으로 HWPX를 저장했습니다. 원본 HWP는 수정하지 않았습니다."
+                )
+                return report
+            report.notes.append("한글 COM 저장 결과가 비어 있습니다.")
+        except Exception as exc:
+            report.notes.append(
+                f"한글 COM HWP→HWPX 실패({type(exc).__name__}: {exc}) — "
+                "대화형 Windows에서 한글을 연 뒤 다시 시도하거나, HWPX로 직접 저장하세요."
+            )
+        if dst.exists() and dst.stat().st_size <= 0:
+            try:
+                dst.unlink()
+            except OSError:
+                pass
+
+    report.notes.append(HWP_TO_HWPX_UNAVAILABLE_NOTE)
     return report
 
 

@@ -273,11 +273,14 @@ def test_autopilot_rename_lock_is_fail_closed(tmp_path: Path, monkeypatch) -> No
       manual_todo 경고이며, 자동 체인 차단은 아래 CLI --strict(exit 3) 가 담당한다.
     """
     from auto_write.services import autopilot_pipeline
+    from core.docx.services import autopilot_pipeline as core_autopilot_pipeline
 
     def _locked(path, avoid=None):  # 실제 시그니처(path, *, avoid) 모사 — 잠금 실패
         return path, "PermissionError: locked"
 
-    monkeypatch.setattr(autopilot_pipeline, "force_draft_name", _locked)
+    # auto_write.services.autopilot_pipeline is a compatibility re-export;
+    # run_autopilot resolves globals in the core implementation module.
+    monkeypatch.setattr(core_autopilot_pipeline, "force_draft_name", _locked)
 
     src = tmp_path / "lock_in.docx"
     out = tmp_path / "lock_out.docx"
@@ -296,7 +299,7 @@ def test_autopilot_cli_strict_exit3_on_rename_lock(tmp_path: Path, monkeypatch) 
     """자동 체인 차단: rename 잠금 실패 시 --strict 종료코드가 3(검사불능/판정불가)
     으로, 절대 0(성공)으로 새지 않는다 — fail-open 자동화 유출 차단."""
     import auto_write_autopilot as cli
-    from auto_write.services import autopilot_pipeline
+    from core.docx.services import autopilot_pipeline
 
     def _locked(path, avoid=None):
         return path, "PermissionError: locked"

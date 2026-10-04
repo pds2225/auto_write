@@ -5,12 +5,12 @@
     "judgment": 84,
     "total": 151
   },
-  "coverage_note": "2026-08-31 Wave D·E 규약 잠금. mechanized 66(43%)·갭 1(0%)·사람판단 84(55%). L050 생성은 한글/rhwp 없음 BLOCKED/gap(검사+시도만). L005 픽셀 judgment. L008 위계 judgment. 닫힘≠머지. L154–L156 JSON 미수록.",
+  "coverage_note": "2026-08-31 Wave D·E 규약 잠금. mechanized 66(43%)·갭 1(0%)·사람판단 84(55%). L050 은 RHWP_EXE export-pdf 배선이 있어도 gap. Linux 목과 pytest 는 mechanized 가 아님. Windows *.l050.json 실측은 Mimo. L005 픽셀은 judgment. PASS 는 한글 GUI 스크린샷+체크리스트가 있을 때만이고 이 클라우드 BLOCKED. L008 위계 judgment. 닫힘≠머지. L154–L156 JSON 미수록.",
   "top_gaps": [
     {
       "id": "L050",
       "rule": "최종 제출본·증빙 확정 시 동일 파일명 .pdf를 병행 생성(초안은 불필요).",
-      "proposed_guard": "missing_pdf_pair + try_generate_sibling_pdf. rhwp 없으면 BLOCKED. soffice 미인정. 한글에서 같은 stem PDF 저장은 Windows 규약.",
+      "proposed_guard": "missing_pdf_pair + try_generate_sibling_pdf (RHWP_EXE 다음 PATH, export-pdf). rhwp 없으면 BLOCKED. soffice·한글 COM PDF 미인정. l050_mechanization_status 는 Windows *.l050.json 없이 BLOCKED. Mimo 실측 전 gap.",
       "target_files": "app/core/docx/services/submission_gates.py / app/cross_form_hwp_pipeline.py",
       "impact": "med",
       "effort": "M"
@@ -62,8 +62,8 @@
       "summary": "사람이 볼 산출물(PDF·문서·이미지)은 렌더링해 실제 픽셀을 읽어 검증한다 — 로직 리뷰는 검증이 아니다",
       "mechanizable": "partial",
       "category": "judgment",
-      "guard_ref": "docs/LESSONS_LOCKDOWN_WAVES.md Wave D L005 규약 + submission_gates.l005_pixel_review_status / app/tests/test_lockdown_wave_de.py::test_l005_stays_judgment_and_pixel_review_blocked_here (judgment — pytest PASS is not pixel verification)",
-      "gap_desc": "한글 GUI 픽셀 눈검증. 이 클라우드 BLOCKED. 로직 리뷰·XML 추정(L095/L097)은 대체 불가.",
+      "guard_ref": "docs/LESSONS_LOCKDOWN_WAVES.md Wave D L005 규약 + submission_gates.l005_pixel_review_status / app/tests/test_lockdown_wave_de.py::test_l005_stays_judgment_and_pixel_review_blocked_here + app/tests/test_l005_l050_evidence.py (judgment — pytest PASS is not pixel verification; PASS only with Hangul GUI screenshot and checklist)",
+      "gap_desc": "한글 GUI 픽셀 눈검증. 이 클라우드 BLOCKED. 증거 파일이 있어도 Linux 는 PASS 가 아님. 로직 리뷰·XML 추정(L095/L097)·rhwp PDF 는 대체 불가.",
       "impact": "high",
       "domain": "all"
     },
@@ -82,7 +82,7 @@
       "summary": "블라인드 공고는 성명·대학명·직장명을 ○ 마스킹하고 실명 잔존을 fail로 검출(마스킹 ○○○는 자리표시 오탐 제외)",
       "mechanizable": "yes",
       "category": "mechanized",
-      "guard_ref": "app/auto_write/services/usage_acceptance.py:check_masking_violation(456, blind_review 시 활성)·_is_masked_value(400) / app/tests/test_usage_acceptance.py::test_blind_review_allows_masking·test_blind_review_detects_real_names + blind_review CLI 전파(test_auto_write_apply.py:703~·test_submission_pipeline.py:608~)·test_pure_force_draft_and_mask.py",
+      "guard_ref": "app/auto_write/services/usage_acceptance.py:check_masking_violation(456, blind_review 시 활성)·_is_masked_value(400) / app/tests/test_usage_acceptance.py::test_blind_review_allows_masking·test_blind_review_detects_real_names + blind_review CLI 전파(test_auto_write_apply.py::test_autopilot_forwards_blind_review_to_config·test_autopilot_cli_forwards_blind_review·test_bizplan_forwards_blind_review_to_autopilot·test_bizplan_cli_forwards_blind_review·test_self_diagnose_cli_forwards_blind_review·test_submission_pipeline.py:608~)·test_pure_force_draft_and_mask.py",
       "gap_desc": "",
       "impact": "high",
       "domain": "business_plan"
@@ -102,7 +102,7 @@
       "summary": "없는 실적·수치는 지어내지 말고 [확인필요]/공란 — [확인필요] 잔존 문서는 게이트가 fail→_DRAFT로 제출차단",
       "mechanizable": "partial",
       "category": "mechanized",
-      "guard_ref": "app/auto_write/services/usage_acceptance.py unresolved_markers(_MARKER_RE) 검출→DRAFT + bizplan_ai_writer.py:40·186([확인필요] 강제) / app/tests/test_gate_faildraft_invariant.py(marker→_DRAFT)·test_document_quality_harness.py:328·test_auto_write_apply.py:828(_RESIDUAL_RE)",
+      "guard_ref": "app/auto_write/services/usage_acceptance.py unresolved_markers(_MARKER_RE) 검출→DRAFT + bizplan_ai_writer.py:40·186([확인필요] 강제) / app/tests/test_gate_faildraft_invariant.py(marker→_DRAFT)·test_document_quality_harness.py:328·test_auto_write_apply.py::test_residual_re_matches_confirmation_needed (_RESIDUAL_RE)",
       "gap_desc": "",
       "impact": "high",
       "domain": "business_plan"
@@ -512,8 +512,8 @@
       "summary": "최종 제출본·증빙 확정 시 동일 파일명 .pdf를 병행 생성(초안은 불필요).",
       "mechanizable": "partial",
       "category": "gap",
-      "guard_ref": "submission_gates.missing_pdf_pair + try_generate_sibling_pdf (rhwp만, soffice 미인정) / app/tests/test_lockdown_wave_gaps.py::test_l050_pair_check_skips_draft_and_flags_final + test_lockdown_wave_de.py::test_l050_stays_gap_and_generate_blocked_without_rhwp",
-      "gap_desc": "동일 stem HWP+PDF 병행 생성은 이 클라우드에 rhwp/한글 없음. 쌍 검사와 BLOCKED 생성 시도는 코드. 생성 성공 전 gap 유지. soffice 레이아웃은 제출 품질로 인정하지 않음.",
+      "guard_ref": "submission_gates.missing_pdf_pair + try_generate_sibling_pdf (RHWP_EXE then PATH, export-pdf, soffice/COM PDF 미인정) + l050_mechanization_status / app/tests/test_lockdown_wave_gaps.py::test_l050_pair_check_skips_draft_and_flags_final + test_lockdown_wave_de.py::test_l050_stays_gap_and_generate_blocked_without_rhwp + test_l005_l050_evidence.py",
+      "gap_desc": "동일 stem PDF 생성 코드는 RHWP_EXE export-pdf 까지 배선됐다. 이 클라우드에서는 BLOCKED. Windows *.l050.json 실측 전 gap. Linux 목 성공으로 mechanized 금지. soffice·한글 COM PDF 는 제출 품질로 인정하지 않음.",
       "impact": "med",
       "domain": "business_plan"
     },
@@ -532,7 +532,7 @@
       "summary": "부문(체크박스)과 분야(텍스트)는 별도 행 유지, 원문 구분자(재무·자금)를 '/'로 변조 금지.",
       "mechanizable": "partial",
       "category": "mechanized",
-      "guard_ref": "cross_form_autofill.py:find_checkbox_targets/match_checkbox_groups + tests/test_cross_form_autofill.py::test_checkbox_other_options_preserved (체크박스 별도 그룹·비매칭옵션 보존, 값 verbatim 채움→구분자 미변조)",
+      "guard_ref": "cross_form_autofill.py:find_checkbox_targets/match_checkbox_groups + app/tests/test_hwpx_fill.py::test_checkbox_other_options_preserved (체크박스 별도 그룹·비매칭옵션 보존, 값 verbatim 채움→구분자 미변조)",
       "gap_desc": "",
       "impact": "med",
       "domain": "consultant_application"

@@ -64,6 +64,12 @@ class TemplateProfile(BaseModel):
     template_id: str
     template_name: str
     source_docx: str
+    # HWPX uploads, and HWP uploads converted to HWPX, stay the immutable source
+    # of truth. ``source_docx`` is the legacy DOCX flow and an explicit HWP
+    # opt-in (``native_source["hwp_docx_opt_in"]``).
+    source_hwpx: str = ""
+    native_analysis: dict[str, Any] = Field(default_factory=dict)
+    native_source: dict[str, Any] = Field(default_factory=dict)
     created_at: str = Field(default_factory=utc_now)
     sections: list[SectionProfile] = Field(default_factory=list)
     tables: list[TableProfile] = Field(default_factory=list)
@@ -125,6 +131,7 @@ class ArtifactBundle(BaseModel):
     output_docx: str
     qa_report: str
     sources: str
+    final_gate_report: str = ""
     benchmark_compare: str = ""
     transfer_report: str = ""
     preview_manifest: str = ""

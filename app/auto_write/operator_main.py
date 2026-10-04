@@ -8,9 +8,10 @@ from urllib.parse import quote
 from fastapi import File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
-from core.docx.services.cross_form_autofill import autofill_from_source
+from core.docx.services.cross_form_autofill import autofill_from_source, extract_source_fields
 from core.docx.services.hwp_docx_convert import docx_to_hwp, hwp_to_docx
 
+from .access_gate import git_writes_allowed
 from .document_ingest import is_supported_template_file, template_upload_detail
 from .domains.domain_router import DomainRouter
 from .main import app, openai_service, project_service, settings, storage, templates
@@ -37,6 +38,13 @@ for _route in list(app.router.routes):
         app.router.routes.remove(_route)
 
 
+def _git_write_blocked(target: str):
+    if git_writes_allowed():
+        return None
+    message = quote("Render에서는 L규칙과 Git 변경이 꺼져 있습니다.", safe="")
+    return RedirectResponse(url=f"{target}?error={message}", status_code=303)
+
+
 def _ctx(request: Request, **extra) -> dict:
     git = git_sync.snapshot(fetch=False).as_dict()
     return {
@@ -51,6 +59,36 @@ def _ctx(request: Request, **extra) -> dict:
 
 def _project_output_dir(project_id: str) -> Path:
     return storage.project_dir(project_id) / "output"
+
+
+def _form_checked(value: str) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "on", "yes"}
+
+
+def _hangul_origin(project_id: str) -> bool:
+    """HWP/HWPX 프로젝트는 다운로드도 한글 산출을 먼저 보여 준다."""
+    snapshot = storage.project_dir(project_id) / "template_snapshot.json"
+    if not snapshot.is_file():
+        return False
+    try:
+        data = json.loads(snapshot.read_text(encoding="utf-8"))
+    except Exception:
+        return False
+    if not isinstance(data, dict):
+        return False
+    native = data.get("native_source") if isinstance(data.get("native_source"), dict) else {}
+    name = str(data.get("template_name") or "").lower()
+    if data.get("source_hwpx") or name.endswith(".hwpx"):
+        return True
+    if name.endswith(".hwp") and not native.get("hwp_docx_opt_in"):
+        return True
+    return False
+
+
+def _preferred_result(project_id: str) -> Path | None:
+    if _hangul_origin(project_id):
+        return _result_hangul(project_id) or _result_docx(project_id)
+    return _result_docx(project_id) or _result_hangul(project_id)
 
 
 def _result_hangul(project_id: str) -> Path | None:
@@ -223,6 +261,34 @@ def _prefill_template_from_references(
     return template_name, template_bytes, stats
 
 
+def _hwpx_identity_from_references(
+    refs: list[tuple[str, bytes]], organization_name: str = ""
+) -> dict[str, str]:
+    """Build direct-fill labels from supplied DOCX facts only.
+
+    The target HWPX is never converted.  Existing source-field extraction is
+    reused for DOCX references; HWP/HWPX references remain available as
+    references for provenance/text extraction but are not guessed into fields.
+    """
+    identity: dict[str, str] = {}
+    if organization_name.strip():
+        identity["기업명"] = organization_name.strip()
+    for name, content in refs:
+        if Path(name).suffix.lower() != ".docx" or not content:
+            continue
+        with tempfile.TemporaryDirectory(prefix="auto_write_hwpx_source_") as work_dir:
+            source = Path(work_dir) / Path(name).name
+            try:
+                source.write_bytes(content)
+                fields = extract_source_fields(str(source))
+            except Exception:
+                continue
+        for label, value in fields.items():
+            if str(value).strip():
+                identity.setdefault(str(label), str(value))
+    return identity
+
+
 async def _read_upload(upload: UploadFile) -> tuple[str, bytes]:
     name = sanitize_user_filename(upload.filename or "upload.bin")
     return name, await upload.read()
@@ -236,6 +302,7 @@ async def _run_document_generation(
     organization_name: str,
     instruction: str,
     run_kind: str,
+    allow_docx_for_hwp: bool = False,
 ) -> tuple[str, str]:
     run_id = workflow_monitor.start_run(run_kind, "문서 작성" if run_kind == "write" else "문서 수정·보완")
     try:
@@ -259,7 +326,15 @@ async def _run_document_generation(
             "errors": [],
             "reason": "수정·보완 경로는 기존 문서를 직접 재작성 입력으로 사용",
         }
-        if run_kind == "write":
+        template_suffix = Path(template_name).suffix.lower()
+        is_hangul_upload = template_suffix in {".hwp", ".hwpx"}
+        if is_hangul_upload and not allow_docx_for_hwp:
+            cross_form_stats["mode"] = "hwpx_direct_fill"
+            cross_form_stats["reason"] = (
+                "HWP/HWPX 원본을 source of truth로 유지하고 기존 direct-fill을 사용"
+            )
+        skip_cross_form = is_hangul_upload and not allow_docx_for_hwp
+        if run_kind == "write" and not skip_cross_form:
             workflow_monitor.start_step(
                 run_id,
                 "cross_form",
@@ -279,7 +354,20 @@ async def _run_document_generation(
                 workflow_monitor.finish_step(run_id, "cross_form", cross_form_stats)
 
         with workflow_monitor.step(run_id, "analyze", "양식 분석", "ProjectService"):
-            profile = project_service.analyze_uploaded_template(template_name, template_bytes)
+            profile = project_service.analyze_uploaded_template(
+                template_name,
+                template_bytes,
+                allow_docx_for_hwp=allow_docx_for_hwp,
+            )
+        hangul_direct = bool(profile.source_hwpx)
+        if hangul_direct:
+            cross_form_stats["mode"] = "hwpx_direct_fill"
+            cross_form_stats["reason"] = (
+                "HWP/HWPX 원본을 HWPX로 고정하고 기존 direct-fill을 사용"
+            )
+        elif allow_docx_for_hwp and template_suffix == ".hwp":
+            cross_form_stats["mode"] = "hwp_docx_opt_in"
+            cross_form_stats["reason"] = "사용자가 HWP 양식의 DOCX 진행을 선택"
 
         with workflow_monitor.step(run_id, "route", "업무 분류", "DomainRouter"):
             route_text = " ".join([instruction, project_title, organization_name] + [name for name, _ in refs])
@@ -316,6 +404,11 @@ async def _run_document_generation(
                 organization_name=organization_name,
                 evidence_topics="",
                 reference_files=refs,
+                hwpx_identity=(
+                    _hwpx_identity_from_references(refs, organization_name)
+                    if hangul_direct
+                    else None
+                ),
                 improve_partial=True,
                 psst_only=True,
                 disable_images=True,
@@ -335,10 +428,13 @@ async def _run_document_generation(
         ):
             project_service.generate(project_id)
 
-        result = _result_docx(project_id)
-        if not result or not result.is_file() or result.stat().st_size <= 0:
-            raise RuntimeError("생성 엔진이 비어 있지 않은 DOCX 작업본을 만들지 못했습니다.")
+        result = _preferred_result(project_id)
         hangul = _result_hangul(project_id)
+        if (
+            (not result or not result.is_file() or result.stat().st_size <= 0)
+            and (not hangul or not hangul.is_file() or hangul.stat().st_size <= 0)
+        ):
+            raise RuntimeError("생성 엔진이 비어 있지 않은 DOCX/HWPX 산출물을 만들지 못했습니다.")
         user_facing = hangul if hangul is not None else result
 
         workflow_monitor.finish_run(
@@ -384,6 +480,7 @@ async def operator_write_document(
     project_title: str = Form(default=""),
     organization_name: str = Form(default=""),
     instruction: str = Form(default=""),
+    allow_docx_for_hwp: str = Form(default=""),
 ):
     try:
         project_id, run_id = await _run_document_generation(
@@ -393,6 +490,7 @@ async def operator_write_document(
             organization_name=organization_name,
             instruction=instruction,
             run_kind="write",
+            allow_docx_for_hwp=_form_checked(allow_docx_for_hwp),
         )
     except Exception as exc:
         return RedirectResponse(url=f"/console?error={quote(str(exc)[:500], safe='')}", status_code=303)
@@ -404,6 +502,7 @@ async def operator_revise_document(
     document_file: UploadFile = File(...),
     instruction: str = Form(...),
     project_title: str = Form(default=""),
+    allow_docx_for_hwp: str = Form(default=""),
 ):
     name, content = await _read_upload(document_file)
     from starlette.datastructures import UploadFile as StarletteUploadFile
@@ -419,6 +518,7 @@ async def operator_revise_document(
             organization_name="",
             instruction=instruction,
             run_kind="revise",
+            allow_docx_for_hwp=_form_checked(allow_docx_for_hwp),
         )
     except Exception as exc:
         return RedirectResponse(url=f"/console?error={quote(str(exc)[:500], safe='')}", status_code=303)
@@ -463,11 +563,11 @@ async def operator_convert_document(
 
 @app.get("/console/results/{project_id}", response_class=HTMLResponse)
 async def operator_result(request: Request, project_id: str):
-    result = _result_docx(project_id)
+    result = _preferred_result(project_id)
     if not result:
-        raise HTTPException(status_code=404, detail="결과 DOCX를 찾을 수 없습니다.")
+        raise HTTPException(status_code=404, detail="결과 HWPX/HWP/DOCX를 찾을 수 없습니다.")
     lock_path = _project_output_dir(project_id) / "user_locks.json"
-    blocks = docx_editor.load_blocks(result)
+    blocks = docx_editor.load_blocks(result) if result.suffix.lower() == ".docx" else []
     locks = docx_editor.load_locks(lock_path)
     for block in blocks:
         block["locked"] = block["id"] in locks
@@ -562,8 +662,22 @@ async def operator_lrules(
             rules=rules,
             summary=summary,
             filters={"q": q, "domain": domain, "category": category, "impact": impact},
+            message=request.query_params.get("message", ""),
+            error=request.query_params.get("error", ""),
         ),
     )
+
+
+@app.post("/console/lrules/verify")
+async def operator_lrules_verify():
+    message = quote(lrule_console.start_verify(None), safe="")
+    return RedirectResponse(url=f"/console/lrules?message={message}", status_code=303)
+
+
+@app.post("/console/lrules/{code}/verify")
+async def operator_lrule_verify(code: str):
+    message = quote(lrule_console.start_verify([code]), safe="")
+    return RedirectResponse(url=f"/console/lrules/{code.upper()}?message={message}", status_code=303)
 
 
 @app.get("/console/lrules/{code}", response_class=HTMLResponse)
@@ -600,6 +714,9 @@ async def operator_lrule_preview(
     impact: str = Form(default=""),
     domain: str = Form(default=""),
 ):
+    blocked = _git_write_blocked(f"/console/lrules/{code}")
+    if blocked:
+        return blocked
     before_text = ""
     updates = {
         "summary": summary,
@@ -668,6 +785,9 @@ async def operator_lrule_update(
     impact: str = Form(default=""),
     domain: str = Form(default=""),
 ):
+    blocked = _git_write_blocked(f"/console/lrules/{code}")
+    if blocked:
+        return blocked
     before_text = ""
     try:
         git_sync.assert_write_base(base_remote_sha)
@@ -720,6 +840,9 @@ async def operator_lrule_rollback(
     commit_sha: str = Form(...),
     base_remote_sha: str = Form(...),
 ):
+    blocked = _git_write_blocked(f"/console/lrules/{code}")
+    if blocked:
+        return blocked
     before_text = ""
     try:
         git_sync.assert_write_base(base_remote_sha)
@@ -803,6 +926,9 @@ async def operator_settings(request: Request):
 
 @app.post("/console/git/sync")
 async def operator_git_sync():
+    blocked = _git_write_blocked("/console/settings")
+    if blocked:
+        return blocked
     try:
         snapshot = git_sync.sync_from_remote()
         message = f"GitHub 동기화 완료: {snapshot.status} / {snapshot.local_sha[:8]}"

@@ -1,0 +1,6 @@
+﻿Path=D:\auto_write
+SHA=f0631415745f75c48ee5441e11e23081fb2b6c96
+Branch=port/pr187-mobile-console
+Status:
+## port/pr187-mobile-console
+?? _preflight_evidence/

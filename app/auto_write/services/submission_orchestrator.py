@@ -393,6 +393,14 @@ class SubmissionPipeline:
                 report["final_hangul"] = emit.output
                 if emit.ok:
                     report["final"] = emit.output
+                    from .submission_gates import sibling_pdf_attempt
+
+                    attempt = sibling_pdf_attempt(emit.output)
+                    report["l050_pdf"] = attempt
+                    if attempt.get("missing"):
+                        report["needs_input"].append(
+                            f"L050: 제출 한글 동일명 PDF 없음 ({attempt.get('reason')})"
+                        )
                 else:
                     report["needs_input"].append(
                         "한글 산출 실패: " + "; ".join(emit.notes or ["원인 미상"])

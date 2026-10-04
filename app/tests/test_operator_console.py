@@ -32,6 +32,74 @@ def test_operator_console_smoke():
     assert "GitHub" in response.text
 
 
+def test_operator_console_mobile_shell():
+    client = TestClient(app)
+    response = client.get("/console")
+    assert response.status_code == 200
+    assert 'name="viewport"' in response.text
+    assert 'viewport-fit=cover' in response.text
+    assert 'class="mobile-tabbar"' in response.text
+    assert 'aria-label="모바일 메뉴"' in response.text
+    assert 'href="/static/manifest.webmanifest"' in response.text
+    css = (REPO_ROOT / "app/auto_write/static/operator.css").read_text(encoding="utf-8")
+    assert ".mobile-tabbar" in css
+    assert "safe-area-inset-bottom" in css
+    assert "font-size: 16px" in css
+    manifest = client.get("/static/manifest.webmanifest")
+    assert manifest.status_code == 200
+    assert '"start_url": "/console"' in manifest.text
+
+
+def test_registry_test_timeout_is_machine_readable(monkeypatch):
+    service = LRuleConsoleService(REPO_ROOT)
+
+    def timeout(*_args, **_kwargs):
+        raise subprocess.TimeoutExpired(cmd="pytest", timeout=180)
+
+    monkeypatch.setattr(subprocess, "run", timeout)
+
+    result = service.run_registry_tests()
+
+    assert result.ok is False
+    assert result.returncode == 124
+    assert "timed out" in result.output
+    assert "pytest" in result.command
+
+
+def test_registry_test_timeout_decodes_partial_bytes(monkeypatch):
+    service = LRuleConsoleService(REPO_ROOT)
+
+    def timeout(*_args, **_kwargs):
+        error = subprocess.TimeoutExpired(cmd="pytest", timeout=180)
+        error.stdout = b"partial stdout"
+        error.stderr = b"partial stderr"
+        raise error
+
+    monkeypatch.setattr(subprocess, "run", timeout)
+
+    result = service.run_registry_tests()
+
+    assert result.ok is False
+    assert "partial stdout" in result.output
+    assert "partial stderr" in result.output
+
+
+def test_registry_test_start_failure_is_machine_readable(monkeypatch):
+    service = LRuleConsoleService(REPO_ROOT)
+
+    def unavailable(*_args, **_kwargs):
+        raise OSError("python launcher unavailable")
+
+    monkeypatch.setattr(subprocess, "run", unavailable)
+
+    result = service.run_registry_tests()
+
+    assert result.ok is False
+    assert result.returncode == 127
+    assert "could not start" in result.output
+    assert "OSError" in result.output
+
+
 def test_lrule_preview_route_renders_failed_validation_without_confirm(monkeypatch):
     class FakeSnapshot:
         def as_dict(self):
@@ -645,6 +713,30 @@ def test_git_sync_prefers_detected_main_over_leftover_master(tmp_path, monkeypat
     _git(peer, "push", "origin", "master")
     _git(web, "fetch", "origin")
     service = GitSyncService(web)
+    assert service.base_branch == "main"
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
+def test_git_sync_prefers_live_remote_head_over_stale_origin_head(tmp_path, monkeypatch):
+    monkeypatch.delenv("AUTO_WRITE_GIT_BASE_BRANCH", raising=False)
+    _, web, peer = _setup_git_remote(tmp_path, base_branch="main")
+    _git(peer, "branch", "master")
+    _git(peer, "push", "origin", "master")
+    _git(web, "fetch", "origin")
+    subprocess.run(
+        [
+            "git",
+            "symbolic-ref",
+            "refs/remotes/origin/HEAD",
+            "refs/remotes/origin/master",
+        ],
+        cwd=web,
+        check=True,
+        capture_output=True,
+    )
+    service = GitSyncService(web)
+    assert service._detect_from_symbolic_ref() == "master"
+    assert service._detect_from_ls_remote() == "main"
     assert service.base_branch == "main"
 
 
