@@ -44,3 +44,9 @@
 - 자동화 메모와 `D:\v_up\worklog\dashboard.md`를 확인했으며, 제품 코드·PR #211 작업·메일/캘린더 상태는 변경하지 않는다.
 - 다음: 2026-10-05 KST 일정과 2026-10-02 이후 중요한 미확인 메일을 확인하고, 실행 결과를 자동화 메모에 남긴다.
 - PR #211 재개점과 Round-4 미커밋 변경은 위 상태 그대로 보존한다.
+
+## PR #211 재개 — 2026-10-05 16:54 KST
+- 사용자 'ㅇㅇ 근데 211은 왜 미병합??'에 따라 직전 추천의 Round-4 실패 확인·검증·같은 브랜치 commit/push 및 PR 본문 갱신을 재개한다. 기존 새 PR/merge 금지는 유지하며 미병합 이유를 설명했다.
+- 작업 위치: .worktrees\pr211-round4 독립 복제본, head 360cbf9. 원격 fetch 정상, Round-4 미커밋 변경을 그대로 이어받는다. 다른 root/워크트리/자동화 기록 보존.
+- 전체 기록의 실패 12개는 실양식 fixture 부재 11개와 날짜 placeholder 보존 회귀 1개로 확인. 다음: 실제 fixture 확보 및 날짜 회귀 최소 수정 → 영향 회귀·Windows 한글 소유 PID/잠금 smoke → 전체 suite → 의미 단위 commit/push → PR #211 Round-4 결과 갱신.
+- .round4-evidence 커밋 금지, 테스트 삭제/약화/skip 금지, rhwp 기본 OFF, L050 gap 유지. 사용자 Hwp/Hword 종료 금지.
