@@ -38,3 +38,9 @@
 - 미커밋: 임시 pytest workflow 삭제, company_identity/hwpx_submit/hwp_docx_convert/hwpx_fill 및 기존 COM 테스트 수정. 새 Round-4 테스트 2개와 docs/PR211_ROUND4.md 있음. 다른 창·수정본은 보존.
 - 저장된 증거 직접 파싱: .round4-evidence/full-user.xml에서 2186 passed, 12 failed, 7 skipped (10/4 실행 기록). round4-final.xml은 69 passed. 이번 턴 테스트 재실행 없음. 체크포인트의 '전체 pytest 진행 중'은 현재 결과보다 오래된 기록.
 - PR #211은 OPEN·draft·미병합. 원격 main=6ed289f. 최신 작업 코드는 Round-4 로컬 수정본, 원격 공유본은 360cbf9로 구분한다. 다음 실행 시 12개 실패와 실제 한글 smoke 결과를 확인한 뒤 기존 승인 범위의 commit/push를 수행하며 .round4-evidence는 커밋하지 않는다.
+
+## 자동화 실행 중 — 2026-10-05 16:38 KST
+- 현재 요청: 일일 브리핑. 캘린더·중요 미확인 Gmail·오늘 할 일을 읽기 전용으로 수집 중이다.
+- 자동화 메모와 `D:\v_up\worklog\dashboard.md`를 확인했으며, 제품 코드·PR #211 작업·메일/캘린더 상태는 변경하지 않는다.
+- 다음: 2026-10-05 KST 일정과 2026-10-02 이후 중요한 미확인 메일을 확인하고, 실행 결과를 자동화 메모에 남긴다.
+- PR #211 재개점과 Round-4 미커밋 변경은 위 상태 그대로 보존한다.
