@@ -347,7 +347,8 @@ def test_hangul_image_pids_helper_failure_returns_empty(monkeypatch) -> None:
     monkeypatch.setattr(mod, "_query_hangul_tasklist", _boom)
     assert mod._hangul_image_pids() == set()
 
-def test_hwp_to_hwpx_default_uses_com_even_if_rhwp_exe_is_set(tmp_path: Path, monkeypatch) -> None:
+@pytest.mark.parametrize("platform", ["linux", "win32"])
+def test_hwp_to_hwpx_default_uses_com_even_if_rhwp_exe_is_set(tmp_path: Path, monkeypatch, platform) -> None:
     src = tmp_path / "양식.hwp"
     src.write_bytes(b"OLE-HWP-BYTES")
     out = tmp_path / "양식.hwpx"
@@ -362,6 +363,8 @@ def test_hwp_to_hwpx_default_uses_com_even_if_rhwp_exe_is_set(tmp_path: Path, mo
         raise AssertionError("기본 경로에서 rhwp 를 호출하면 안 됩니다.")
 
     fake = _FakeHwpCom()
+    monkeypatch.setattr(mod.sys, "platform", platform)
+    monkeypatch.setattr(mod, "_query_hangul_tasklist", lambda image="Hwp.exe": "INFO: No tasks match the specified criteria.")
     monkeypatch.setattr(native_hwp.subprocess, "run", _forbid)
     monkeypatch.setattr(native_hwp, "prepare_native_source", _forbid)
     monkeypatch.setattr(mod, "hancom_com_available", lambda: True)

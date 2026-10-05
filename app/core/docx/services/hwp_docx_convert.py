@@ -22,6 +22,7 @@
 from __future__ import annotations
 
 import ctypes
+import os
 import subprocess
 import sys
 import threading
@@ -150,16 +151,34 @@ def kill_hangul_processes() -> list[str]:
     return []
 
 
-def _query_hangul_tasklist() -> str:
+class _PidSnapshot(set[int]):
+    """빈 PID 목록과 조회 실패를 구분하면서 기존 set 호출 계약을 유지한다."""
+
+    def __init__(self, values=(), *, query_ok: bool = True):
+        super().__init__(values)
+        self.query_ok = query_ok
+
+
+def _query_hangul_tasklist(image: str = "Hwp.exe") -> str:
     """Windows tasklist 원문 조회. 테스트에서 PID 조회 자체를 독립 patch하는 seam."""
     if sys.platform != "win32":
         return ""
-    return subprocess.check_output(
-        ["tasklist", "/FI", "IMAGENAME eq Hwp.exe", "/FO", "CSV", "/NH"],
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
+    try:
+        # check_output은 내부에서 run을 호출하므로 rhwp의 run seam과 분리한다.
+        with subprocess.Popen(
+            ["tasklist", "/FI", f"IMAGENAME eq {image}", "/FO", "CSV", "/NH"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, encoding="utf-8", errors="replace",
+        ) as process:
+            try:
+                output, _ = process.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.communicate()
+                return ""
+            return output if process.returncode == 0 else ""
+    except Exception:
+        return ""
 
 
 def _hangul_image_pids() -> set[int]:
@@ -169,19 +188,138 @@ def _hangul_image_pids() -> set[int]:
     try:
         output = _query_hangul_tasklist()
     except Exception:
-        return set()
+        return _PidSnapshot(query_ok=False)
     found: set[int] = set()
     for line in (output or "").splitlines():
         parts = [piece.strip().strip('"') for piece in line.split(",")]
         if len(parts) >= 2 and parts[0].lower() == "hwp.exe" and parts[1].isdigit():
             found.add(int(parts[1]))
-    return found
+    return _PidSnapshot(found, query_ok=bool(output and output.strip()))
+
+
+def _hword_image_pids() -> set[int]:
+    """DOCX Open이 띄울 수 있는 Hword PID. 조회 실패도 빈 목록으로 처리한다."""
+    if sys.platform != "win32":
+        return set()
+    try:
+        output = _query_hangul_tasklist("Hword.exe")
+        found = set()
+        for line in (output or "").splitlines():
+            parts = [piece.strip().strip('"') for piece in line.split(",")]
+            if len(parts) >= 2 and parts[0].lower() == "hword.exe" and parts[1].isdigit():
+                found.add(int(parts[1]))
+        return _PidSnapshot(found, query_ok=bool(output and output.strip()))
+    except Exception:
+        return _PidSnapshot(query_ok=False)
+
+
+def _process_parent_pid(pid: int) -> int | None:
+    """Windows Toolhelp로 부모 PID를 읽는다. 조회 불가 시 소유권을 추측하지 않는다."""
+    if sys.platform != "win32":
+        return None
+    class Entry(ctypes.Structure):
+        _fields_ = [
+            ("dwSize", ctypes.c_uint32), ("cntUsage", ctypes.c_uint32),
+            ("th32ProcessID", ctypes.c_uint32), ("th32DefaultHeapID", ctypes.c_size_t),
+            ("th32ModuleID", ctypes.c_uint32), ("cntThreads", ctypes.c_uint32),
+            ("th32ParentProcessID", ctypes.c_uint32), ("pcPriClassBase", ctypes.c_int32),
+            ("dwFlags", ctypes.c_uint32), ("szExeFile", ctypes.c_wchar * 260),
+        ]
+    snapshot = None
+    try:
+        kernel = ctypes.windll.kernel32
+        kernel.CreateToolhelp32Snapshot.restype = ctypes.c_void_p
+        kernel.Process32FirstW.argtypes = [ctypes.c_void_p, ctypes.POINTER(Entry)]
+        kernel.Process32NextW.argtypes = [ctypes.c_void_p, ctypes.POINTER(Entry)]
+        kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+        snapshot = kernel.CreateToolhelp32Snapshot(2, 0)
+        if snapshot in (None, ctypes.c_void_p(-1).value):
+            return None
+        entry = Entry()
+        entry.dwSize = ctypes.sizeof(entry)
+        more = kernel.Process32FirstW(snapshot, ctypes.byref(entry))
+        while more:
+            if entry.th32ProcessID == pid:
+                return int(entry.th32ParentProcessID)
+            more = kernel.Process32NextW(snapshot, ctypes.byref(entry))
+    except Exception:
+        return None
+    finally:
+        if snapshot not in (None, ctypes.c_void_p(-1).value):
+            try:
+                kernel.CloseHandle(snapshot)
+            except Exception:
+                pass
+    return None
+
+
+def _process_has_owner_ancestor(pid: int, owners: set[int]) -> bool:
+    parent = _process_parent_pid(pid)
+    seen = {pid}
+    for _ in range(8):
+        if parent in owners:
+            return True
+        if parent is None or parent <= 0 or parent in seen:
+            break
+        seen.add(parent)
+        parent = _process_parent_pid(parent)
+    return False
+
+
+def _new_owned_hword_pids(before: set[int], owner_pids: set[int]) -> set[int]:
+    """새 Hword 중 이번 Python/소유 Hwp의 자식만 추적한다."""
+    if not getattr(before, "query_ok", True):
+        return set()
+    owners = owner_pids | {os.getpid()}
+    return {
+        pid for pid in _hword_image_pids() - before
+        if _process_has_owner_ancestor(pid, owners)
+    }
+
+
+def _is_automation_hwp(pid: int) -> bool:
+    """창 핸들 대체 후보가 COM 자동화로 실행된 Hwp인지 확인한다."""
+    if sys.platform != "win32":
+        return False
+    try:
+        command = (
+            f"$p=Get-CimInstance Win32_Process -Filter 'ProcessId = {int(pid)}'; "
+            "if ($p.Name -ieq 'Hwp.exe' -and $p.CommandLine -match '-Automation|-Embedding') { 'owned-candidate' }"
+        )
+        with subprocess.Popen(
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        ) as process:
+            try:
+                output, _ = process.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.communicate()
+                return False
+            return process.returncode == 0 and output.strip() == "owned-candidate"
+    except Exception:
+        return False
+
+
+def _fallback_owned_hwp_pids(before: set[int]) -> set[int]:
+    if not getattr(before, "query_ok", True):
+        return set()
+    candidates = _hangul_image_pids() - before
+    # 동시에 두 COM 서버가 나타나면 이 호출의 창을 특정하지 못하므로 종료하지 않는다.
+    if len(candidates) != 1:
+        return set()
+    pid = next(iter(candidates))
+    return (
+        {pid}
+        if _is_automation_hwp(pid) and _process_has_owner_ancestor(pid, {os.getpid()})
+        else set()
+    )
 
 def _kill_owned_pids(pids: set[int]) -> None:
-    """이 호출이 새로 띄운 Hwp.exe PID 만 종료한다."""
+    """이 호출이 새로 띄운 Hwp/Hword PID만 종료한다."""
     if sys.platform != "win32" or not pids:
         return
-    still = _hangul_image_pids()
+    still = _hangul_image_pids() | _hword_image_pids()
     for pid in pids:
         if pid not in still:
             continue
@@ -245,9 +383,13 @@ def _convert_via_com(src: Path, dst: Path, save_formats: tuple[str, ...]) -> Non
     """
     with _COM_CONVERT_LOCK:
         before_pids = _hangul_image_pids()
+        before_hword = _hword_image_pids() if src.suffix.lower() == ".docx" else set()
+        if not getattr(before_pids, "query_ok", True) or not getattr(before_hword, "query_ok", True):
+            raise RuntimeError("한글 프로세스 조회에 실패해 사용자 창 소유권을 확인할 수 없습니다.")
+        owned_hword: set[int] = set()
     
         def _dispatch_timeout_cleanup() -> None:
-            _kill_owned_pids(_hangul_image_pids() - before_pids)
+            _kill_owned_pids(_fallback_owned_hwp_pids(before_pids))
     
         hwp = _run_com_stage(
             "Dispatch",
@@ -255,14 +397,28 @@ def _convert_via_com(src: Path, dst: Path, save_formats: tuple[str, ...]) -> Non
             timeout_cleanup=_dispatch_timeout_cleanup,
         )
         dispatch_pid = _hwp_object_pid(hwp)
+        if dispatch_pid is not None and dispatch_pid in before_pids:
+            raise RuntimeError("기존 사용자 한글 창이 반환되어 문서를 열거나 종료하지 않았습니다.")
         owned_pids = (
             {dispatch_pid}
             if dispatch_pid is not None and dispatch_pid not in before_pids
             else set()
         )
+        if dispatch_pid is None:
+            owned_pids.update(_fallback_owned_hwp_pids(before_pids))
+            current_pids = _hangul_image_pids()
+            if (
+                not getattr(current_pids, "query_ok", True)
+                or before_pids
+                or current_pids - owned_pids
+            ):
+                _kill_owned_pids(owned_pids)
+                raise RuntimeError("한글 창 소유권을 확인하지 못해 문서를 열거나 종료하지 않았습니다.")
     
         def _owned_cleanup() -> None:
-            _kill_owned_pids(set(owned_pids))
+            if src.suffix.lower() == ".docx":
+                owned_hword.update(_new_owned_hword_pids(before_hword, owned_pids))
+            _kill_owned_pids(set(owned_pids) | owned_hword)
     
         try:
             hwp.XHwpWindows.Item(0).Visible = False
@@ -303,6 +459,8 @@ def _convert_via_com(src: Path, dst: Path, save_formats: tuple[str, ...]) -> Non
                 )
                 if not opened:
                     raise RuntimeError(f"한글에서 열기 실패: {src}")
+            if src.suffix.lower() == ".docx":
+                owned_hword.update(_new_owned_hword_pids(before_hword, owned_pids))
             for fmt in save_formats:
                 try:
                     saved = _run_com_stage(
@@ -318,7 +476,9 @@ def _convert_via_com(src: Path, dst: Path, save_formats: tuple[str, ...]) -> Non
                     continue
             raise RuntimeError(f"한글 저장 실패(시도 포맷 {save_formats}): {dst}")
         finally:
-            if owned_pids:
+            # 핸들을 못 읽은 fallback은 PID만 정리한다. 반환 객체가 기존 사용자
+            # 창일 수 있으므로 Clear/Quit의 소유권을 차집합으로 추측하지 않는다.
+            if dispatch_pid is not None and dispatch_pid in owned_pids:
                 try:
                     _run_com_stage(
                         "Clear",
@@ -335,7 +495,7 @@ def _convert_via_com(src: Path, dst: Path, save_formats: tuple[str, ...]) -> Non
                     )
                 except Exception:
                     pass
-                _kill_owned_pids(owned_pids)
+            _owned_cleanup()
 
 # --- 경로/검증 도우미 ---------------------------------------------------------
 
