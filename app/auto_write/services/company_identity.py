@@ -27,6 +27,10 @@ _ALIASES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("직원수", ("직원수", "employees", "employee_count")),
     ("자본금", ("자본금", "capital")),
     ("팩스", ("팩스", "fax")),
+    ("창업아이템 개요", (
+        "창업아이템 개요", "사업 개요", "사업개요", "아이템 설명", "아이템설명",
+        "business_overview", "item_description", "사업 개요/아이템 설명",
+    )),
 )
 
 _ALIAS_TO_CANON: dict[str, str] = {}

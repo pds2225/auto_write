@@ -451,6 +451,24 @@ def test_date_inline_split_is_not_corrupted(tmp_path: Path) -> None:
     assert report.filled == {}
 
 
+def test_date_placeholder_split_with_guidance_keeps_date_spans(tmp_path: Path) -> None:
+    body = """<hp:p><hp:run><hp:tbl><hp:tr>
+<hp:tc><hp:subList><hp:p><hp:run charPrIDRef="2"><hp:t>개업연월일</hp:t></hp:run></hp:p></hp:subList>
+<hp:cellAddr rowAddr="0" colAddr="0"/><hp:cellSpan rowSpan="1" colSpan="1"/></hp:tc>
+<hp:tc><hp:subList><hp:p>
+<hp:run charPrIDRef="0"><hp:t>0000년 00월 </hp:t></hp:run>
+<hp:run charPrIDRef="5"><hp:t>00일</hp:t></hp:run>
+<hp:run charPrIDRef="0"><hp:t> 사업자등록증 기준으로 작성</hp:t></hp:run>
+</hp:p></hp:subList>
+<hp:cellAddr rowAddr="0" colAddr="1"/><hp:cellSpan rowSpan="1" colSpan="1"/></hp:tc>
+</hp:tr></hp:tbl></hp:run></hp:p>"""
+    src, out, report = _fill(tmp_path, "date-ph-guidance", body, {"설립일": "2020-01-15"})
+    assert _runs(out) == _runs(src)
+    assert report.filled == {}
+    assert "설립일" in report.residual
+    assert "[span] 설립일 row=0 col=1 UNFILLED" in report.notes
+
+
 def test_duplicate_date_across_tables_stays_pending(tmp_path: Path) -> None:
     def table(row_text: str) -> str:
         return f"""<hp:p><hp:run><hp:tbl><hp:tr>

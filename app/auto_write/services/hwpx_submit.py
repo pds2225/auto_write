@@ -381,6 +381,35 @@ def apply_t02_analyzer_writes(
         for key, value in dict(identity or {}).items()
     }
     index = index_hwpx_structure(source)
+    # 기간표는 한 칸만 쓰는 T02 대신 현재 열을 고르는 기존 채움 경로로 보낸다.
+    from core.docx.services.hwpx_fill import _PERIOD_HEADER_RE, _label_matches, _key
+    period_labels: set[str] = set()
+    label_tables: dict[str, set[int]] = {}
+    period_tables: set[int] = set()
+    for section in index.sections:
+        for table_index in section.table_indexes:
+            table = index.tables[table_index]
+            labels = {
+                _t02_label_key("".join(section.paragraphs[p].raw_text for p in cell.paragraph_indexes))
+                for cell in table.cells
+                if _label_matches(_key("".join(section.paragraphs[p].raw_text for p in cell.paragraph_indexes)), _key("직원수"))
+            }
+            for label in labels:
+                label_tables.setdefault(label, set()).add(table_index)
+            headers = [
+                cell for cell in table.cells
+                if cell.physical_tr_index < 3 and
+                _PERIOD_HEADER_RE.fullmatch(_t02_label_key("".join(
+                    section.paragraphs[p].raw_text for p in cell.paragraph_indexes
+                )))
+            ]
+            if len(headers) < 2:
+                continue
+            period_tables.add(table_index)
+            period_labels.update(labels)
+    # 다른 표에 같은 라벨이 있으면 기존 중복/보호 판정을 유지한다.
+    all_period_labels = set(period_labels)
+    period_labels = {label for label in period_labels if label_tables[label] <= period_tables}
     current = tuple(
         grant for grant in authorize_t02_writes(index)
         if authorization_is_current(index, grant)
@@ -418,6 +447,10 @@ def apply_t02_analyzer_writes(
         grant for grant in authorize_checkbox_writes(index)
         if checkbox_authorization_is_current(index, grant)
     )
+    written_grants = [g for g in written_grants if not (
+        g.table_index in period_tables and g.field_label in all_period_labels
+    )]
+    granted_labels = {g.field_label for g in written_grants}
     pending_labels = {
         field.field_label
         for field in assess_fields(index)
@@ -426,6 +459,7 @@ def apply_t02_analyzer_writes(
         and field.field_label
         and field.auto_write_allowed is False
         and field.field_label not in granted_labels
+        and field.field_label not in period_labels
     }
     legacy: dict[str, str] = {}
     analyzer: dict[str, str] = {}
@@ -434,6 +468,8 @@ def apply_t02_analyzer_writes(
         label = _t02_label_key(key)
         if str(value).strip() and label in granted_labels:
             analyzer[label] = str(value)
+            if label == _t02_label_key("팀명"):
+                legacy[key] = value  # 서약서 재사용. 이미 쓴 표 값은 fill_hwpx가 보존한다.
             continue
         if str(value).strip() and label in pending_labels:
             held.append(label)

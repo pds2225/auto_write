@@ -540,7 +540,7 @@ def _inherit_charpr(tc, black: Optional[_BlackCharPr] = None) -> str:
     return "0" if black is None else black.black_ref("0")
 
 
-def _set_cell_text(tc, value: str, black: Optional[_BlackCharPr] = None) -> bool:
+def _set_cell_text(tc, value: str, black: Optional[_BlackCharPr] = None, *, replace_scaffold: bool = False) -> bool:
     """셀의 텍스트를 value 로 설정한다(첫 hp:t 에 기입, 나머지 hp:t 는 비움).
 
     빈/플레이스홀더 칸에만 호출되므로 잔여 hp:t 를 비워도 실데이터 손실은 없다.
@@ -559,7 +559,9 @@ def _set_cell_text(tc, value: str, black: Optional[_BlackCharPr] = None) -> bool
     """
     if _has_form_control(tc) or _has_handwritten_object(tc) or _cell_has_nested_table(tc):
         return False
-    if _split_value_spans(tc):
+    if _split_value_spans(tc) and (
+        not replace_scaffold or _date_placeholder_crosses_spans(tc)
+    ):
         return False
     paras = list(tc.iter(_q("p")))
     if not paras:
@@ -1000,6 +1002,27 @@ _EXAMPLE_DATE_RE = re.compile(r"^0{4}\s*년\s*0{1,2}\s*월\s*0{1,2}\s*일$")
 _EXAMPLE_GUIDED_OMASK_RE = re.compile(
     r"^[O○〇ㅇo]{3,}\s*[\(（].*(?:기입|작성|동일).*[\)）]\s*$"
 )
+_EXAMPLE_GUIDED_DATE_RE = re.compile(
+    r"^0{4}\s*년\s*0{1,2}\s*월\s*0{1,2}\s*일\s*(.+)$"
+)
+
+
+def _date_placeholder_crosses_spans(tc) -> bool:
+    """날짜 자체가 여러 span 에 나뉜 경우만 보존한다.
+
+    완전한 날짜 예시 뒤의 별도 안내 run 은 교체할 수 있지만, 년/월/일이
+    서로 다른 run 에 있으면 기존 날짜 서식과 span 경계를 합치지 않는다.
+    """
+    raw = _cell_text(tc)
+    if not (_EXAMPLE_DATE_RE.fullmatch(raw) or _EXAMPLE_GUIDED_DATE_RE.fullmatch(raw)):
+        return False
+    texts = _cell_texts(tc)
+    first = re.sub(r"\s+", " ", str(texts[0].text or "")).strip() if texts else ""
+    return not (
+        _EXAMPLE_DATE_RE.fullmatch(first) or _EXAMPLE_GUIDED_DATE_RE.fullmatch(first)
+    )
+
+
 _GUIDANCE_VALUE_RE = re.compile(
     r"^(?:예비창업|해당|예시|참고|입력|기재)[^\n]{0,70}(?:기재|작성)[^\n]{0,12}$"
 )
@@ -1012,9 +1035,14 @@ _GUIDANCE_CONTACT_RE = re.compile(
 def _is_hwpx_guidance_placeholder(text: str) -> bool:
     """값 칸 자체가 무엇을 쓰라는 짧은 안내뿐이면 빈칸으로 본다."""
     raw = re.sub(r"\s+", " ", str(text or "")).strip()
+    if re.fullmatch(r"ex\s*\)\s*\S.{0,230}", raw, re.IGNORECASE):
+        return True
     if not raw or len(raw) > 90:
         return False
-    return bool(_GUIDANCE_CONTACT_RE.fullmatch(raw) or _GUIDANCE_VALUE_RE.fullmatch(raw))
+    return bool(
+        _GUIDANCE_CONTACT_RE.fullmatch(raw)
+        or _GUIDANCE_VALUE_RE.fullmatch(raw)
+    )
 
 _EXAMPLE_CHOICE_RE = re.compile(r"\s*/\s*")
 _REGION_SCAFFOLD_CHARS_RE = re.compile(r"[O○〇ㅇ0\s·・.\-도특별시군구읍면동로길번지]")
@@ -1028,7 +1056,7 @@ def _is_hwpx_example_scaffold(text: str) -> bool:
     다른 글자가 없을 때만 예시로 본다.
     """
     raw = re.sub(r"\s+", " ", str(text or "")).strip()
-    if not raw or len(raw) > 80:
+    if not raw or len(raw) > 240:
         return False
     if any(mark in raw for mark in ("□", "☐", "■", "☑")):
         return False
@@ -1038,6 +1066,9 @@ def _is_hwpx_example_scaffold(text: str) -> bool:
     if _EXAMPLE_GUIDED_OMASK_RE.fullmatch(raw):
         return True
     if _EXAMPLE_DATE_RE.fullmatch(raw):
+        return True
+    guided_date = _EXAMPLE_GUIDED_DATE_RE.fullmatch(raw)
+    if guided_date and re.search(r"기입|작성|기재|기준|사업자등록|법인등기", guided_date.group(1)):
         return True
     if _EXAMPLE_ZERO_RE.fullmatch(compact) and "0" in compact and not re.search(r"[1-9]", compact):
         return True
@@ -1346,6 +1377,29 @@ def _value_cell(label_tc, cells: list):
     except ValueError:
         return None
     return cells[idx + 1] if idx + 1 < len(cells) else None
+
+
+_PERIOD_HEADER_RE = re.compile(r"^\(?(?:\d+년전|전년(?:도)?|당년(?:도)?|금년|현재|최근|20\d{2}년?)\)?$")
+
+
+def _current_period_value_cell(tbl, label_tc, cells: list):
+    """기간별 수치표는 현재 열만 선택한다. 열 주소가 모호하면 쓰지 않는다."""
+    periods = []
+    for row in _direct(tbl, "tr")[:3]:
+        for cell in _direct(row, "tc"):
+            text = re.sub(r"\s+", "", _cell_text(cell))
+            if _PERIOD_HEADER_RE.fullmatch(text):
+                periods.append((text.strip("()"), _cell_addr(cell)))
+        if periods:
+            break
+    if not periods:
+        return _value_cell(label_tc, cells)
+    current = [col for text, col in periods if text in {"현재", "당년", "당년도", "금년", "최근"}]
+    if len(current) > 1 or any(col is None for _, col in periods):
+        return None
+    col = current[0] if current else max(col for _, col in periods)
+    candidates = [cell for cell in cells if _cell_addr(cell) == col and _cell_colspan(cell) == 1]
+    return candidates[0] if len(candidates) == 1 and candidates[0] is not label_tc else None
 
 
 def _cell_rowspan(tc) -> int:
@@ -1704,6 +1758,7 @@ def _fill_section_xml(
     replaced = 0
     changed = False
     edited: list = []  # L074: lineseg strip 대상(편집된 tc/p)
+    table_used: dict[Any, set[str]] = {}
 
     wants = [
         (_key(lbl), lbl, val)
@@ -1713,6 +1768,7 @@ def _fill_section_xml(
 
     # 1) 표 라벨→값 칸 채움 (cellAddr 기반 값칸 선택 + 라벨칸 보호)
     for tbl in root.iter(_q("tbl")):
+        table_used[tbl] = set()
         prior_support = _is_prior_support_table(tbl)
         for tr in _direct(tbl, "tr"):
             cells = _direct(tr, "tc")
@@ -1733,7 +1789,7 @@ def _fill_section_xml(
                         continue
                     if not _label_matches(cell_key, want_key):
                         continue
-                    target = _value_cell(tc, cells)
+                    target = _current_period_value_cell(tbl, tc, cells)
                     if target is None or target is tc:
                         continue
                     if (
@@ -1760,16 +1816,25 @@ def _fill_section_xml(
                     if not _cell_is_fillable(target) and not blue_example:
                         # 실값만 EXISTING_VALUE. ____·더미날짜·□ 는 각자 게이트에 남긴다.
                         if _cell_has_real_value(target):
+                            table_used[tbl].add(want_key)
                             _note_existing_value(span_notes, lbl, target, existing_labels)
                             _hold_exact_label(exact_held, cell_key, want_key)
                         break
-                    if _split_value_spans(target):
+                    scaffold = (
+                        _is_hwpx_example_scaffold(_cell_text(target))
+                        or _is_hwpx_guidance_placeholder(_cell_text(target))
+                        or blue_example
+                    )
+                    if _split_value_spans(target) and (
+                        not scaffold or _date_placeholder_crosses_spans(target)
+                    ):
                         _note_unfilled_span(span_notes, lbl, target)
                         _hold_exact_label(exact_held, cell_key, want_key)
                         break
-                    if _set_cell_text(target, str(val), black):
+                    if _set_cell_text(target, str(val), black, replace_scaffold=scaffold):
                         filled[lbl] = str(val)
                         used_keys.add(want_key)
+                        table_used[tbl].add(want_key)
                         changed = True
                         edited.append(target)
                         _note_overflow(overflow_cells, lbl, target, str(val))
@@ -1782,14 +1847,17 @@ def _fill_section_xml(
     #      옆 값칸을 가리키는 경우와 구별이 안 되므로 제외(_is_visible_blank).
     if wants:
         for tc in root.iter(_q("tc")):
+            owner_table = next((a for a in tc.iterancestors() if a.tag == _q("tbl")), None)
+            inline_used = table_used.get(owner_table, used_keys)
             for sub in _direct(tc, "subList"):
                 for p in _direct(sub, "p"):
                     if _fill_inline_fields_in_p(
-                        p, wants, used_keys, filled, span_notes, existing_labels,
+                        p, wants, inline_used, filled, span_notes, existing_labels,
                         exact_held,
                     ):
                         changed = True
                         edited.append(p)
+                        used_keys.update(inline_used)
 
     # 1.7) 체크박스(□→■) 자동 체크 — 인라인/왼쪽셀 라벨 그룹을 보수적으로 마킹.
     #      표(1)·인라인(1.5)과 동일한 used_keys 를 공유한다(이중처리 금지).
@@ -1893,13 +1961,18 @@ def _fill_section_xml(
     #      공유: 가시 빈칸만(산문 `주의 : ...`·콜론+공백만 `비고 : ` 는 절대 안 채움)·
     #      used_keys 공유(표/인라인/체크박스와 이중 기입 금지)·형제 run 보존.
     if wants:
+        body_used = used_keys
         for p in _direct(root, "p"):
+            text = "".join(t.text or "" for t in _inline_texts(p)).strip()
+            if re.search(r"서약서|확약서", text) and ":" not in text and "：" not in text:
+                body_used = set()
             if _fill_inline_fields_in_p(
-                p, wants, used_keys, filled, span_notes, existing_labels,
+                p, wants, body_used, filled, span_notes, existing_labels,
                 exact_held,
             ):
                 changed = True
                 edited.append(p)
+                used_keys.update(body_used)
 
     # 2) 직접 텍스트 치환 — 라벨/실값 칸은 보호(채울 수 있는 칸·본문에만 적용).
     #    lxml proxy id 재사용을 피하려 id() 집합 대신 조상(tc) 순회로 판별한다.
