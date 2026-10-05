@@ -46,8 +46,12 @@
 - 로컬 HTML은 정적 파싱과 JavaScript 검증을 통과했으나 file URL 브라우저 정책 때문에 픽셀 렌더 확인은 못 했다.
 - 다음: 브리핑 TOP3를 사용자가 직접 확인. PR #211 재개점과 Round-4 미커밋 변경은 위 상태 그대로 보존한다.
 
-## PR #211 재개 — 2026-10-05 16:54 KST
-- 사용자 'ㅇㅇ 근데 211은 왜 미병합??'에 따라 직전 추천의 Round-4 실패 확인·검증·같은 브랜치 commit/push 및 PR 본문 갱신을 재개한다. 기존 새 PR/merge 금지는 유지하며 미병합 이유를 설명했다.
-- 작업 위치: .worktrees\pr211-round4 독립 복제본, head 360cbf9. 원격 fetch 정상, Round-4 미커밋 변경을 그대로 이어받는다. 다른 root/워크트리/자동화 기록 보존.
-- 전체 기록의 실패 12개는 실양식 fixture 부재 11개와 날짜 placeholder 보존 회귀 1개로 확인. 다음: 실제 fixture 확보 및 날짜 회귀 최소 수정 → 영향 회귀·Windows 한글 소유 PID/잠금 smoke → 전체 suite → 의미 단위 commit/push → PR #211 Round-4 결과 갱신.
-- .round4-evidence 커밋 금지, 테스트 삭제/약화/skip 금지, rhwp 기본 OFF, L050 gap 유지. 사용자 Hwp/Hword 종료 금지.
+## PR #211 Round-4 최종 재개점 — 2026-10-05 17:32 KST
+- 이번 요청: 'ㅇㅇ 근데 211은 왜 미병합??'. 직전 추천대로 검증·commit·push·Round-4 PR 본문 갱신 수행. 미병합은 기존 사용자 merge 금지와 draft 유지 지시 때문이며 실제 한글 변환 제한도 남아 있다.
+- 최신 원격/PR head: 7adabc2d0204d6c8bc72d3ce39791234c47e89b4. 의미별 커밋 fefb950(채움/날짜), 79a5e03(COM 소유권), 38a0048(임시 CI 삭제), 7adabc2(문서/TASK). 같은 origin 브랜치 push 완료, PR #211 OPEN/draft/미병합.
+- 실행 위치: D:\auto_write\.worktrees\pr211-round4 독립 복제본. 코드 working tree clean, data/와 .round4-evidence/는 미추적·ignored로 커밋 제외. root/Round-3/stash/다른 자동화 기록 보존.
+- 전체 pytest 최신: 2206 passed, 0 failed, 5 skipped, 23 subtests passed, 958.21초, exit 0. 이전 실패 12개 해소. 최종 COM 영향 두 파일 43 passed. 코드 해시 일치 확인 후 push.
+- 실제 한글 2022 DOCX→HWP smoke: Open 실패(ok=False). 입력 잠금 해제/원본 해시 보존/새 Hwp·Hword 잔존 없음 확인. 원본 양식 9건 E2E·픽셀·실제 변환 완료를 주장하지 않음.
+- 소유 PID 미확인 시 watchdog hard timeout 미보장은 잔존. rhwp 기본 OFF, L050 gap/mechanized=false 유지. 조회 실패/기존 사용자 객체/외부 Automation을 소유로 오인하지 않는 회귀 추가.
+- PR 본문 Round-4 A~K·전체 결과·제한 갱신 완료. GitHub 새 head docs-gate SUCCESS, mergeable=MERGEABLE/mergeStateStatus=CLEAN 확인. 항목별 보고: .worktrees/pr211-round4/docs/PR211_ROUND4.md. 로그/JUnit/smoke: 해당 .round4-evidence/ 로컬 전용.
+- 다음: 새 head 기준 5차 실제 한글/원본 양식 테스트. DOCX Open 실패와 소유 미확인 hard timeout을 확인한다. 별도 merge 요청 전 병합하지 않는다. AW-001 진행 중/REQUEST_SOLVED=NO.
