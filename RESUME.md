@@ -32,3 +32,9 @@
 - git fetch origin --prune는 exit 0. 오래된 worktree 메타데이터 삭제 권한 경고 있음; 별도 정리/복구 미실행. GitHub API와 git ls-remote로 PR/head/main 교차 확인. .session/closeout_due.json due=false.
 - 다음 1: 원격 최신 코드와 기존 미커밋 변경을 항목별 대조해 이미 반영된 수정과 잔여 수정을 구분한다. 기존 변경 삭제·덮어쓰기 금지.
 - 다음 2: 최신 head의 영향 회귀 및 Windows 한글 실제 사용자 경로를 검증하고, 남은 blocker만 같은 PR 브랜치에서 수정한다. 새 PR·merge 금지 유지. 이번 턴 테스트·실사용 검증 미실행.
+## 최신 상태 조회 — 2026-10-05 15:43 KST
+- 요청: '지금뭐가최신?' 상태 조회만 수행. 제품 코드·커밋·push·PR 본문 수정 없음.
+- 최신 수정본: D:\auto_write\.worktrees\pr211-round4 (독립 복제본). 로컬 HEAD와 GitHub PR #211 head 모두 360cbf99f6fda4008d790eb67976da0028b9438d. Round-4 수정은 미커밋이며 staged 파일도 없음.
+- 미커밋: 임시 pytest workflow 삭제, company_identity/hwpx_submit/hwp_docx_convert/hwpx_fill 및 기존 COM 테스트 수정. 새 Round-4 테스트 2개와 docs/PR211_ROUND4.md 있음. 다른 창·수정본은 보존.
+- 저장된 증거 직접 파싱: .round4-evidence/full-user.xml에서 2186 passed, 12 failed, 7 skipped (10/4 실행 기록). round4-final.xml은 69 passed. 이번 턴 테스트 재실행 없음. 체크포인트의 '전체 pytest 진행 중'은 현재 결과보다 오래된 기록.
+- PR #211은 OPEN·draft·미병합. 원격 main=6ed289f. 최신 작업 코드는 Round-4 로컬 수정본, 원격 공유본은 360cbf9로 구분한다. 다음 실행 시 12개 실패와 실제 한글 smoke 결과를 확인한 뒤 기존 승인 범위의 commit/push를 수행하며 .round4-evidence는 커밋하지 않는다.
