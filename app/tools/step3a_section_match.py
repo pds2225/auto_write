@@ -30,6 +30,9 @@ def _load_json(path: Path) -> dict:
 
 
 def main(argv: list[str] | None = None) -> int:
+    from auto_write.utils import force_utf8_console
+
+    force_utf8_console()
     parser = argparse.ArgumentParser(
         description="합성 STEP 2 JSON과 양식 섹션을 매칭해 비개발자용 한글 리포트를 출력합니다."
     )

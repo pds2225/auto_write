@@ -69,15 +69,25 @@ def test_run_to_final_auto_guards_zero_unverifiable(tmp_path):
     assert not gate.finalizer.submittable  # judgment/gap still REVIEW_REQUIRED
 
 
-def test_submit_hwpx_stays_r9_only():
-    """HWPX 제출 경로는 LRule/run_to_final 을 타지 않는다 (R9 수용검사 KEEP)."""
-    src = (
-        Path(__file__).resolve().parents[1] / "auto_write" / "services" / "hwpx_submit.py"
-    ).read_text(encoding="utf-8")
-    lowered = src.lower()
-    assert "lrule" not in lowered
-    assert "run_to_final" not in src
-    assert "build_lrule_guards" not in src
+def test_submit_hwpx_library_keeps_r9_default_and_cli_enables_lrule(tmp_path, monkeypatch):
+    """라이브러리 R9 호환성은 유지하고 실제 제출 CLI는 전수 검사를 요청한다."""
+    import inspect
+    import hwpx_submit as cli
+    from auto_write.services.hwpx_submit import SubmitReport, submit_hwpx
+
+    assert inspect.signature(submit_hwpx).parameters["lrule_gate"].default is False
+    calls = []
+
+    def submit(source, output, **options):
+        calls.append(options)
+        return SubmitReport(input=str(source), final=str(output), ok=True)
+
+    source = tmp_path / "application.hwpx"
+    source.write_bytes(b"synthetic CLI input")
+    monkeypatch.setattr(cli, "submit_hwpx", submit)
+    assert cli.main([str(source), "-o", str(tmp_path / "out.hwpx"), "--set", "기업명=검증회사"]) == 0
+    assert calls[0]["lrule_gate"] is True
+    assert calls[0]["acceptance_gate"] is True
 
 
 def test_lookup_guard_by_short_code():

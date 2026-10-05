@@ -653,7 +653,7 @@ TASK_ID: AW-001
 TASK_START_SHA: d6b96b86a0015f53141054c27517607923a596a8
 TASK_BLOB_SHA: f6f8023b0dd47d301acedc75a5d4957edd147d4e
 WORK_BRANCH: cursor/overnight-aw-001-2cb9
-STATUS_THIS_TURN: PR #211 Round-4 재개 검증. CODE_SHA=38a0048277f707a967cdf3da4082d8148ec7e5e0. A~K 코드 반영, python -m pytest app/tests -q: 2206 passed, 0 failed, 5 skipped, 23 subtests passed, exit 0. 이전 실패 12건 해소. 실제 한글 2022 DOCX→HWP는 Open 실패이며 입력 잠금/소유 PID 정리는 확인. 소유 미확인 COM hard timeout 한계 잔존. draft 유지, main 미병합, AW-001 REQUEST_SOLVED=NO. 로컬 evidence/data 커밋 금지.
+STATUS_THIS_TURN: 사용자 전체 main 반영·동기화 요청으로 PR #211은 2697bef5aa5e0e30d5defa129a70afa7026cf20d로 병합. 야간 호환 경로와 닫힌 #186의 검사 증거·registry 안전 조각을 회수(CODE_SHA=a7c369c). 전체 pytest 2217 passed/8 failed/5 skipped/23 subtests passed 뒤 fake COM 조회만 격리하여 실패 8건 포함 영향 회귀 54 passed/0 failed, 소유권 회귀 21 passed/0 failed. 전체+재검증 합산 2225 passed/남은 실패 0(두 번째 전체 실행은 아님). 14개 접근 가능한 작업 위치를 병합 후 최종 main으로 동기화. 실제 한글 2022 Open 실패·소유 미확인 COM hard timeout 한계는 잔존, AW-001 REQUEST_SOLVED=NO. 상세 docs/MAIN_SYNC_20261006.md. 로컬 evidence/data/개인 기록/백업 archive 커밋 금지.
 
 ### 8-1. 사용자 원문 요청
 

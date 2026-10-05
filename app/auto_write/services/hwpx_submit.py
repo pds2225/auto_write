@@ -110,6 +110,9 @@ class SubmitReport:
     native_render: dict[str, Any] = field(default_factory=dict)
     pdf_pair: dict[str, Any] = field(default_factory=dict)
     l005_review: dict[str, Any] = field(default_factory=dict)
+    lrule_report: str = ""
+    finalizer: dict[str, Any] = field(default_factory=dict)
+    domain_pipeline: dict[str, Any] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
@@ -135,11 +138,14 @@ class SubmitReport:
             "native_render": dict(self.native_render),
             "pdf_pair": dict(self.pdf_pair),
             "l005_review": dict(self.l005_review),
+            "lrule_report": self.lrule_report,
+            "finalizer": dict(self.finalizer),
+            "domain_pipeline": dict(self.domain_pipeline),
             "notes": list(self.notes),
         }
 
 
-def _seal_submit_report(report: SubmitReport) -> SubmitReport:
+def _seal_submit_report(report: SubmitReport, *, lrule_gate: bool = False) -> SubmitReport:
     """제출 가능 최종본에만 L050 동일명 PDF 를 시도한다. L005 는 상태만 붙인다.
 
     PDF 생성 실패는 패키지 제출 플래그를 바꾸지 않는다. L005 PASS 는
@@ -147,6 +153,8 @@ def _seal_submit_report(report: SubmitReport) -> SubmitReport:
     """
     from .submission_gates import l005_pixel_review_status, sibling_pdf_attempt
 
+    if lrule_gate:
+        _apply_lrule_gate(report)
     report.l005_review = l005_pixel_review_status()
     final = Path(report.final) if report.final else None
     if not (
@@ -177,6 +185,45 @@ def _seal_submit_report(report: SubmitReport) -> SubmitReport:
         if note not in report.notes:
             report.notes.append(note)
     return report
+
+
+def _apply_lrule_gate(report: SubmitReport) -> None:
+    """기존 단일 최종화 경로와 저장된 증거를 HWPX 제출에도 적용한다."""
+    artifact = Path(report.final) if report.final else None
+    try:
+        from ..domains.pipeline_gate import run_to_final
+
+        if artifact is None or not artifact.is_file():
+            raise ValueError("LRule 검사 대상 산출물이 없습니다")
+        gate = run_to_final(
+            artifact, document_type="application_form", filename=artifact.name,
+            apply_draft_name=False, force_draft=not (report.ok and report.submittable),
+        )
+        if gate.lrule_report is None or gate.finalizer is None:
+            raise ValueError(gate.blocked_reason or "LRule/Finalizer 결과가 없습니다")
+        allowed = bool(report.ok and report.submittable and gate.finalizer.submittable)
+        if not allowed:
+            report.draft_reason = f"{report.draft_reason} / LRule/Finalizer 차단: {gate.blocked_reason}".strip(" /")
+            report.final = str(_mark_draft(report, artifact, Path(report.input)))
+        report.ok = report.final_output_allowed = report.submittable = allowed
+        gate.finalizer.final_path = report.final
+        gate.renamed_path = report.final
+        gate.lrule_report.artifact_path = report.final
+        evidence_path = Path(report.final).with_name(f"{Path(report.final).stem}_lrule_report.json")
+        gate.lrule_report.save(evidence_path)
+        report.lrule_report = str(evidence_path)
+        report.finalizer = gate.finalizer.as_dict()
+        report.domain_pipeline = gate.as_dict()
+    except Exception as exc:
+        report.ok = report.final_output_allowed = report.submittable = False
+        report.error = f"{report.error} / LRule/Finalizer 실행 실패: {type(exc).__name__}: {exc}".strip(" /")
+        report.draft_reason = f"{report.draft_reason} / LRule 검사·증거 저장 불능".strip(" /")
+        if artifact is not None and artifact.is_file():
+            report.final = str(_mark_draft(report, artifact, Path(report.input)))
+        report.finalizer = {"success": False, "submittable": False, "is_draft": True,
+                            "final_path": report.final, "blocked_reason": report.error}
+        report.domain_pipeline = {"submittable": False, "finalizer": dict(report.finalizer),
+                                  "blocked_reason": report.error}
 
 
 def _mark_draft(report: SubmitReport, out: Path, src: Path) -> Path:
@@ -516,6 +563,7 @@ def submit_hwpx(
     region_edits: Optional[list[dict[str, Any]]] = None,
     field_writes: Optional[dict[str, str]] = None,
     expected_sha256: str | None = None,
+    lrule_gate: bool = False,
 ) -> SubmitReport:
     """HWPX 양식을 채우고 수용검사 게이트로 판정해 제출 가능 여부를 확정한다.
 
@@ -526,6 +574,8 @@ def submit_hwpx(
         replacements: 직접 치환(선택, 라벨/실값 칸 보호).
         acceptance_gate: False 면 진단용 우회 요청으로 기록하되 공통 게이트는 실행하고
             최종 제출본은 허용하지 않는다(``_DRAFT`` + ``APPROVAL_REQUIRED``).
+        lrule_gate: True면 전수 LRule/Finalizer와 증거 저장까지 확인한다.
+            라이브러리 기본값은 기존 R9 경로를 유지하며 제출 CLI에서는 항상 켠다.
         normalize_colors: True(기본)면 채움 직후 잔존 예시 유색체를 검정으로 정규화해
             수용검사 colored 결함을 자동 해소한다(채운 값 검정은 fill_hwpx 가 이미 처리).
             ``submission_cleanup=True`` 이면 cleanup 의 force_black 이 동일 역할을 하므로
@@ -646,7 +696,7 @@ def submit_hwpx(
             "TEMPLATE_MISMATCH — F01 canonical SHA256과 다른 양식에는 field_writes를 적용하지 않음"
         )
         report.final = str(_mark_draft(report, out, src))
-        return _seal_submit_report(report)
+        return _seal_submit_report(report, lrule_gate=lrule_gate)
 
     semantic_ok = _check_and_repair_semantics(report, out, preserve_template=preserve_template)
     if semantic_ok and report.routing_status == NORMAL and fill_rep.overflow_cells:
@@ -731,13 +781,13 @@ def submit_hwpx(
         report.ok = False
         report.final_output_allowed = False
         report.submittable = False
-        return _seal_submit_report(report)
+        return _seal_submit_report(report, lrule_gate=lrule_gate)
 
     if semantic_ok and not _package_blocked(gate):
         report.ok = True
         report.final_output_allowed = True
         report.submittable = True
-        return _seal_submit_report(report)
+        return _seal_submit_report(report, lrule_gate=lrule_gate)
 
     failed = [v for v in gate.validators if v.severity != "PASS"]
     messages = "; ".join(v.message for v in failed[:3])
@@ -758,4 +808,4 @@ def submit_hwpx(
     report.ok = False
     report.final_output_allowed = False
     report.submittable = False
-    return _seal_submit_report(report)
+    return _seal_submit_report(report, lrule_gate=lrule_gate)
