@@ -653,7 +653,7 @@ TASK_ID: AW-001
 TASK_START_SHA: d6b96b86a0015f53141054c27517607923a596a8
 TASK_BLOB_SHA: f6f8023b0dd47d301acedc75a5d4957edd147d4e
 WORK_BRANCH: cursor/overnight-aw-001-2cb9
-STATUS_THIS_TURN: 그룹3 통합 PR #191 재검증 완료. HEAD `8b5281b11c25a93c1902f97ee825d801606c7788`. pytest collect 1831 collected, collection errors 0, exit 0. 수정 영향 테스트 96 passed. docs-gate success. 그룹3 통합 판정 READY_FOR_REVIEW. PR은 draft 유지, main 미병합. LIST `[~]`. REQUEST_SOLVED=NO(HWPX `submit_hwpx`는 이미 구현된 R9 수용검사 KEEP — LRule 미연결. R9 재구현 아님).
+STATUS_THIS_TURN: PR #211 Round-4 재개 검증. CODE_SHA=38a0048277f707a967cdf3da4082d8148ec7e5e0. A~K 코드 반영, python -m pytest app/tests -q: 2206 passed, 0 failed, 5 skipped, 23 subtests passed, exit 0. 이전 실패 12건 해소. 실제 한글 2022 DOCX→HWP는 Open 실패이며 입력 잠금/소유 PID 정리는 확인. 소유 미확인 COM hard timeout 한계 잔존. draft 유지, main 미병합, AW-001 REQUEST_SOLVED=NO. 로컬 evidence/data 커밋 금지.
 
 ### 8-1. 사용자 원문 요청
 

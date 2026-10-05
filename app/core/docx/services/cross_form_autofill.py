@@ -90,13 +90,19 @@ def _strip_label_decoration(key: str) -> str:
 
 
 def _key(text: str) -> str:
-    """라벨 비교용 핵심 키: 괄호·공백 제거 + 선행 글머리표/순번 장식 제거.
+    """라벨 비교용 핵심 키: 중첩 괄호·공백·장식 제거 + 영문 대소문자 접기.
 
-    SubmittableFiller._key(괄호·공백 제거)에 더해, 실제 양식 라벨에 흔한
-    글머리표(○ ▶ ·)·순번(1. ① 가. Ⅰ.) 접두를 벗겨 라벨 변형 recall 을 높인다.
-    의미를 바꾸지 않는 장식만 제거하므로 보수성(오매칭 차단)은 그대로다.
+    ``사업장 소재지 (본사(점))``처럼 중첩 괄호가 있는 실제 양식도
+    안쪽부터 반복 제거한다. Latin 라벨은 casefold 하여 E-mail/e-mail 변형을
+    같은 키로 취급하되, 기존 동의어 단일후보 원칙은 유지한다.
     """
-    return _strip_label_decoration(SubmittableFiller._key(text))
+    value = str(text or "")
+    while True:
+        stripped = re.sub(r"[\(（][^()（）]*[\)）]", "", value)
+        if stripped == value:
+            break
+        value = stripped
+    return _strip_label_decoration(SubmittableFiller._key(value)).casefold()
 
 
 def _logical_cells(row) -> list:
@@ -174,11 +180,12 @@ SYNONYMS: list[list[str]] = [
      "사업장", "본점주소", "주사무소", "주사무소소재지", "사무실주소",
      "공장주소", "공장소재지", "지점주소", "지사주소", "영업장주소",
      "실제사업장주소", "거소지"],
-    ["업종", "산업분류", "업태", "주업종", "업종업태",
+    ["업종", "산업분류", "업태", "주업종", "업종업태", "사업의 종류",
      # 2026-07-01 2차 확장 ('사업분야'는 지원분야 신설과 혼동 → 제외)
      "업종명", "업태명", "표준산업분류", "산업분류코드", "영위업종",
      "영업종목", "업종코드", "종목"],
-    ["이메일", "전자우편", "email", "e-mail", "메일", "이메일주소", "전자메일",
+    ["이메일", "전자우편", "email", "e-mail", "E-mail", "e-mail 주소", "E-mail 주소", "email 주소",
+     "메일", "이메일주소", "전자메일",
      "e메일", "메일주소", "담당자이메일", "대표이메일", "이메일(email)",
      # 2026-07-01 2차 확장
      "이메일계정", "전자우편주소", "회사메일", "수신이메일", "연락이메일"],

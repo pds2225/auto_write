@@ -223,16 +223,250 @@ def _extend_capped(dst: list, src: list, limit: int = _SAMPLE_LIMIT) -> None:
         dst.append(s)
 
 
+def _is_colored_hex(tc: str) -> bool:
+    return bool(_HEX6_RE.match(tc) and tc not in ("FFFFFF", "000000"))
+
+
+def _charpr_colors(header_root) -> dict[str, str]:
+    """charPr id → textColor(대문자, # 없음). id 없는 정의는 빈 키로 모은다."""
+    colors: dict[str, str] = {}
+    anon = 0
+    for cp in header_root.iter():
+        if _ln(cp) != "charPr":
+            continue
+        tc = (cp.get("textColor") or "").upper().lstrip("#")
+        cid = cp.get("id")
+        if cid is None:
+            colors[f"__anon_{anon}"] = tc
+            anon += 1
+        else:
+            colors[cid] = tc
+    return colors
+
+
+def _paragraphs(root) -> list:
+    return [el for el in root.iter() if _ln(el) == "p"]
+
+
+def _direct_run_text(run) -> str:
+    return "".join((node.text or "") for node in run if _ln(node) == "t")
+
+
+def _owned_text(paragraph) -> str:
+    """이 문단 직계 run 의 글자. 중첩 표 안 문단 글자는 그 문단 것이다."""
+    parts: list[str] = []
+    for child in paragraph:
+        if _ln(child) != "run":
+            continue
+        parts.append(_direct_run_text(child))
+    return "".join(parts)
+
+
+def _owned_lineseg(paragraph) -> int:
+    """이 문단 소속 linesegarray. 중첩 문단 것은 세지 않는다."""
+    count = 0
+
+    def walk(el) -> None:
+        nonlocal count
+        for child in el:
+            if _ln(child) == "p":
+                continue
+            if _ln(child) == "linesegarray":
+                count += 1
+            walk(child)
+
+    walk(paragraph)
+    return count
+
+
+def _run_colors(paragraph, colors: dict[str, str]) -> list[str]:
+    out: list[str] = []
+    for child in paragraph:
+        if _ln(child) != "run":
+            continue
+        cid = child.get("charPrIDRef") or ""
+        out.append(colors.get(cid, ""))
+    return out
+
+
+def _guide_texts(section_root) -> list[str]:
+    texts: list[str] = []
+    guide_tables: list = []
+    for tbl in section_root.iter():
+        if _ln(tbl) == "tbl" and _is_guide_text(_text_of(tbl)):
+            guide_tables.append(tbl)
+            texts.append(_text_of(tbl))
+    for paragraph in section_root.iter():
+        if _ln(paragraph) != "p" or not _is_guide_text(_text_of(paragraph)):
+            continue
+        if _within_any(paragraph, guide_tables):
+            continue
+        texts.append(_text_of(paragraph))
+    return texts
+
+
+def _zip_members(names: list[str]) -> tuple[list[str], list[str]]:
+    headers = [name for name in names if _HEADER_RE.search(name)]
+    sections = [name for name in names if _SECTION_RE.search(name)]
+    return headers, sections
+
+
+def _parse_member(z: zipfile.ZipFile, name: str, report: HwpxAcceptanceReport):
+    try:
+        return etree.fromstring(z.read(name))
+    except etree.XMLSyntaxError as exc:
+        report.notes.append(f"{name} 파싱 실패(건너뜀): {exc}")
+        return None
+
+
+def _section_key(name: str) -> str:
+    match = _SECTION_RE.search(name.replace("\\", "/"))
+    return match.group(0).lower() if match else name.lower()
+
+
+def _accumulate_absolute(report: HwpxAcceptanceReport, z: zipfile.ZipFile, names: list[str], allowed_names) -> None:
+    for name in names:
+        is_header = _HEADER_RE.search(name)
+        is_section = _SECTION_RE.search(name)
+        if not (is_header or is_section):
+            continue
+        root = _parse_member(z, name, report)
+        if root is None:
+            continue
+        if is_header:
+            colored, samples = count_colored_charpr(root)
+            report.colored += colored
+            _extend_capped(report.colored_samples, samples)
+        else:
+            guides, samples = count_form_guides(root)
+            report.guides += guides
+            _extend_capped(report.guides_samples, samples)
+            report.linesegarray += count_linesegarray(root)
+            dummy, dummy_samples = count_template_dummy_names(root, allowed=allowed_names)
+            report.dummy_names += dummy
+            _extend_capped(report.dummy_name_samples, dummy_samples)
+
+
+def _new_charpr_colors(out_colors: dict[str, str], base_colors: dict[str, str]) -> list[str]:
+    """양식에 같은 id·같은 색으로 있던 charPr 는 제외한다."""
+    fresh: list[str] = []
+    for cid, color in out_colors.items():
+        if not _is_colored_hex(color):
+            continue
+        if base_colors.get(cid) == color:
+            continue
+        fresh.append("#" + color)
+    return fresh
+
+
+def _new_colored_runs(out_p, base_p, out_colors: dict[str, str], base_colors: dict[str, str]) -> list[str]:
+    """채운 문단에서 양식 run 과 다른 유색만 센다.
+
+    같은 위치 run 의 색이 양식과 같으면 글자가 바뀌어도 양식 색이다.
+    새 run 이거나 검정/미지정이 유색으로 바뀐 경우만 결함이다.
+    """
+    out_colors_seq = _run_colors(out_p, out_colors)
+    base_colors_seq = _run_colors(base_p, base_colors) if base_p is not None else []
+    fresh: list[str] = []
+    for index, color in enumerate(out_colors_seq):
+        if not _is_colored_hex(color):
+            continue
+        if index < len(base_colors_seq) and base_colors_seq[index] == color:
+            continue
+        fresh.append("#" + color)
+    return fresh
+
+
+def _accumulate_against_baseline(
+    report: HwpxAcceptanceReport,
+    out_zip: zipfile.ZipFile,
+    base_zip: zipfile.ZipFile,
+    allowed_names,
+) -> None:
+    """양식에 있던 유색·안내·lineseg 는 결함이 아니다. 채운 문단의 잔존만 센다."""
+    out_names = out_zip.namelist()
+    base_names = base_zip.namelist()
+    out_headers, out_sections = _zip_members(out_names)
+    _base_headers, base_sections = _zip_members(base_names)
+    base_sections_by_key = {_section_key(name): name for name in base_sections}
+
+    out_colors: dict[str, str] = {}
+    base_colors: dict[str, str] = {}
+    for name in out_headers:
+        root = _parse_member(out_zip, name, report)
+        if root is not None:
+            out_colors.update(_charpr_colors(root))
+    for name in _base_headers:
+        try:
+            root = etree.fromstring(base_zip.read(name))
+        except etree.XMLSyntaxError:
+            continue
+        base_colors.update(_charpr_colors(root))
+
+    fresh_defs = _new_charpr_colors(out_colors, base_colors)
+    report.colored += len(fresh_defs)
+    _extend_capped(report.colored_samples, fresh_defs)
+
+    for name in out_sections:
+        out_root = _parse_member(out_zip, name, report)
+        if out_root is None:
+            continue
+        base_name = base_sections_by_key.get(_section_key(name))
+        base_root = None
+        if base_name is not None:
+            try:
+                base_root = etree.fromstring(base_zip.read(base_name))
+            except etree.XMLSyntaxError as exc:
+                report.notes.append(f"baseline {base_name} 파싱 실패: {exc}")
+        out_ps = _paragraphs(out_root)
+        base_ps = _paragraphs(base_root) if base_root is not None else []
+        for index, paragraph in enumerate(out_ps):
+            base_p = base_ps[index] if index < len(base_ps) else None
+            edited = base_p is None or _owned_text(paragraph) != _owned_text(base_p)
+            if edited:
+                leftover = _owned_lineseg(paragraph)
+                report.linesegarray += leftover
+                run_colors = _new_colored_runs(paragraph, base_p, out_colors, base_colors)
+                report.colored += len(run_colors)
+                _extend_capped(report.colored_samples, run_colors)
+        if base_root is None:
+            guides, samples = count_form_guides(out_root)
+            report.guides += guides
+            _extend_capped(report.guides_samples, samples)
+        else:
+            base_guides = _guide_texts(base_root)
+            out_guides = _guide_texts(out_root)
+            used = {text: base_guides.count(text) for text in set(base_guides)}
+            for text in out_guides:
+                if used.get(text, 0) > 0:
+                    used[text] -= 1
+                    continue
+                report.guides += 1
+                _extend_capped(report.guides_samples, [_cap(text)])
+        dummy, dummy_samples = count_template_dummy_names(out_root, allowed=allowed_names)
+        report.dummy_names += dummy
+        _extend_capped(report.dummy_name_samples, dummy_samples)
+
+    report.notes.append(
+        "baseline: 양식에 있던 유색·안내문구·linesegarray 는 제외하고 편집 문단만 집계"
+    )
+
+
 def run_hwpx_acceptance(
     path: str | Path,
     *,
     allowed_names: Sequence[str] = (),
+    baseline: str | Path | None = None,
 ) -> HwpxAcceptanceReport:
     """HWPX 산출물을 변환 없이 직접 열어 유색·안내문구·linesegarray·예시이름을 센다.
 
     Args:
         path: 점검할 .hwpx(ZIP/OWPML). 읽기만 하고 절대 수정하지 않는다.
         allowed_names: 채운 신원값. 이 안에 있는 더미 이름(홍길동 등)은 세지 않는다.
+        baseline: 원본 양식. 주면 양식에 있던 유색 charPr·안내문구·미편집 문단의
+            linesegarray 는 결함으로 세지 않는다. 편집 문단에 남은 linesegarray,
+            양식에 없던 유색 run/charPr, 잔존 예시 이름은 그대로 실패다.
+            생략하면 산출물 절대 개수(기존 계약).
 
     Returns:
         HwpxAcceptanceReport — colored/guides/linesegarray/dummy_names 개수 + ok(모두 0).
@@ -249,30 +483,20 @@ def run_hwpx_acceptance(
     if not zipfile.is_zipfile(src):
         raise ValueError(f"올바른 HWPX(ZIP)가 아닙니다: {src.name}")
 
+    base_path = Path(baseline) if baseline else None
+    if base_path is not None:
+        if not base_path.exists():
+            raise FileNotFoundError(f"기준 양식이 없습니다: {base_path}")
+        if not zipfile.is_zipfile(base_path):
+            raise ValueError(f"기준 양식이 올바른 HWPX(ZIP)가 아닙니다: {base_path.name}")
+
     with zipfile.ZipFile(src) as z:
         names = z.namelist()
-        for name in names:
-            is_header = _HEADER_RE.search(name)
-            is_section = _SECTION_RE.search(name)
-            if not (is_header or is_section):
-                continue
-            try:
-                root = etree.fromstring(z.read(name))
-            except etree.XMLSyntaxError as exc:
-                report.notes.append(f"{name} 파싱 실패(건너뜀): {exc}")
-                continue
-            if is_header:
-                c, cs = count_colored_charpr(root)
-                report.colored += c
-                _extend_capped(report.colored_samples, cs)
-            else:  # section
-                g, gs = count_form_guides(root)
-                report.guides += g
-                _extend_capped(report.guides_samples, gs)
-                report.linesegarray += count_linesegarray(root)
-                d, ds = count_template_dummy_names(root, allowed=allowed_names)
-                report.dummy_names += d
-                _extend_capped(report.dummy_name_samples, ds)
+        if base_path is None:
+            _accumulate_absolute(report, z, names, allowed_names)
+        else:
+            with zipfile.ZipFile(base_path) as base_zip:
+                _accumulate_against_baseline(report, z, base_zip, allowed_names)
 
     if not any(_HEADER_RE.search(n) for n in names):
         report.notes.append("Contents/header.xml 을 찾지 못했습니다(유색 텍스트 점검 생략).")

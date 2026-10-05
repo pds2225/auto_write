@@ -6,6 +6,7 @@ Writer / UI / HWP / STEP 2 추출기를 호출하지 않는다.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -182,11 +183,17 @@ def test_human_report_matches_nondev_example() -> None:
 
 def test_cli_prints_same_human_report() -> None:
     expected = (FIXTURE_DIR / "writable_problem_report.txt").read_text(encoding="utf-8")
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
     completed = subprocess.run(
         [sys.executable, str(CLI), "--bundle", str(FIXTURE_DIR / "writable_problem_bundle.json")],
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=env,
     )
     assert completed.returncode == 0, completed.stderr
     assert completed.stdout == expected

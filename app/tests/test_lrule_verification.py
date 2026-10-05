@@ -25,7 +25,9 @@ from auto_write.services.lrule_verification import (
     collect_pytest_nodes,
     execute_pytest,
     file_stats,
+    fold_reports,
     git_head,
+    is_environment_blocker,
     resolve_guard,
     status_from_outcomes,
     verify_lessons,
@@ -396,3 +398,112 @@ def test_verify_route_does_not_run_pytest_inline(monkeypatch):
     assert response.status_code == 303
     assert calls == [None]
     assert "message=" in response.headers["location"]
+
+
+def test_call_phase_assertion_with_env_keyword_is_failed_not_env_error():
+    message = (
+        "E       AssertionError: assert False is True\n"
+        "E        +  where False = SubmitReport(ok=False, notes=['rhwp JSONDecodeError', '한글']).ok"
+    )
+    nodeid = "app/tests/test_hwpx_submit.py::test_local_layout_risk_records_overflow_without_font_shrink"
+    folded = fold_reports([
+        {"nodeid": nodeid, "when": "call", "outcome": "failed", "message": message},
+    ])
+    assert folded[nodeid]["outcome"] == "failed"
+    assert is_environment_blocker(message, when="call") is False
+    assert is_environment_blocker(message) is True
+    assert status_from_outcomes(missing=[], nodes=[folded[nodeid]]) == FAILING
+
+
+def test_call_phase_plain_assert_with_keyword_is_failed():
+    message = "E       assert False is True\nE        +  where False = rep.ok\nrhwp unavailable"
+    nodeid = "app/tests/test_hwpx_submit.py::test_normal_direct_fill_preserves_unrelated_package_parts"
+    folded = fold_reports([
+        {"nodeid": nodeid, "when": "call", "outcome": "failed", "message": message},
+    ])
+    assert folded[nodeid]["outcome"] == "failed"
+    assert status_from_outcomes(missing=[], nodes=[folded[nodeid]]) == FAILING
+
+
+def test_import_and_collection_environment_stay_env_error():
+    setup = fold_reports([
+        {
+            "nodeid": "app/tests/test_env.py::test_env",
+            "when": "setup",
+            "outcome": "error",
+            "message": "E       ModuleNotFoundError: No module named 'win32com'",
+        }
+    ])
+    assert setup["app/tests/test_env.py::test_env"]["outcome"] == "env_error"
+    assert status_from_outcomes(missing=[], nodes=list(setup.values())) == ENV_SKIPPED
+    call_import = fold_reports([
+        {
+            "nodeid": "app/tests/test_env.py::test_import",
+            "when": "call",
+            "outcome": "failed",
+            "message": "E       ImportError: No module named 'win32com'",
+        }
+    ])
+    assert call_import["app/tests/test_env.py::test_import"]["outcome"] == "env_error"
+    collect = "pytest collect could not start: ModuleNotFoundError: No module named 'win32com'"
+    assert is_environment_blocker(collect) is True
+
+
+def test_verify_status_json_and_running_poll(tmp_path, monkeypatch):
+    monkeypatch.delenv("AUTO_WRITE_ACCESS_PASSWORD", raising=False)
+    monkeypatch.delenv("RENDER", raising=False)
+    monkeypatch.setenv("AUTO_WRITE_HOST", "127.0.0.1")
+    service = LRuleConsoleService(REPO_ROOT, cache_path=tmp_path / "cache.json")
+    with service._job_lock:
+        service._job = {
+            "running": True,
+            "scope": "all",
+            "error": "",
+            "message": "가드 테스트 검증 실행 중",
+            "started_at": 1_700_000_000.0,
+        }
+    monkeypatch.setattr(operator_main, "lrule_console", service)
+    client = TestClient(app)
+    page = client.get("/console/lrules")
+    assert page.status_code == 200
+    assert "/console/lrules/verify/status" in page.text
+    assert "verify-elapsed" in page.text
+    assert "location.reload" in page.text
+    assert "4000" in page.text
+    status = client.get("/console/lrules/verify/status")
+    assert status.status_code == 200
+    assert "application/json" in status.headers["content-type"]
+    body = status.json()
+    assert set(body) == {"running", "scope", "error", "message", "head", "counts"}
+    assert body["running"] is True
+    assert body["scope"] == "all"
+    assert body["error"] == ""
+    assert body["message"] == "가드 테스트 검증 실행 중"
+    assert isinstance(body["head"], str) and body["head"]
+    counts = body["counts"]
+    for key in (
+        "verified", "failing", "not_run", "unverified", "missing_guard",
+        "env_skipped", "human", "gaps", "dead",
+    ):
+        assert isinstance(counts[key], int)
+    with service._job_lock:
+        service._job = {
+            "running": False,
+            "scope": "all",
+            "error": "pytest timeout",
+            "message": "",
+        }
+    failed = client.get("/console/lrules/verify/status")
+    assert failed.json()["running"] is False
+    assert failed.json()["error"] == "pytest timeout"
+    shown = client.get("/console/lrules")
+    assert "pytest timeout" in shown.text
+    assert "location.reload" not in shown.text
+
+
+def test_verify_status_stays_local_only(monkeypatch):
+    monkeypatch.delenv("AUTO_WRITE_ACCESS_PASSWORD", raising=False)
+    monkeypatch.setenv("RENDER", "true")
+    locked = TestClient(app).get("/console/lrules/verify/status")
+    assert locked.status_code == 503
+    assert "AUTO_WRITE_ACCESS_PASSWORD" in locked.text

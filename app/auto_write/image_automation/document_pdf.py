@@ -81,13 +81,17 @@ def convert_hwp_family_to_pdf(src: Path, pdf_path: Path) -> Path:
 
     soffice 와 한글 COM PDF 는 쓰지 않는다.
     """
-    from core.docx.services.native_hwp import resolve_rhwp_executable
+    from core.docx.services.native_hwp import resolve_rhwp_executable, rhwp_enabled
 
     src = Path(src).resolve()
     pdf_path = Path(pdf_path).resolve()
     pdf_path.parent.mkdir(parents=True, exist_ok=True)
     exe = resolve_rhwp_executable()
     if not exe:
+        if not rhwp_enabled():
+            raise RuntimeError(
+                "rhwp disabled: AUTO_WRITE_ENABLE_RHWP=1 이 없으면 export-pdf 를 실행하지 않습니다."
+            )
         raise RuntimeError(
             "rhwp 가 없습니다. RHWP_EXE 또는 PATH 의 rhwp 가 필요합니다. "
             "LibreOffice/soffice 와 한글 COM PDF 는 이 경로에서 쓰지 않습니다."

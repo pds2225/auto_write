@@ -110,6 +110,10 @@ def test_l050_stays_gap_and_generate_blocked_without_rhwp(tmp_path: Path, monkey
     )
     row = _lesson("L050")
     assert row["category"] == "gap"
+    monkeypatch.setattr(
+        "core.docx.services.hwp_docx_convert.hancom_com_available",
+        lambda: False,
+    )
     final = tmp_path / "신청서.hwpx"
     final.write_bytes(b"PK")
     assert missing_pdf_pair(final) is True
@@ -182,8 +186,8 @@ def test_agents_section7_skill_hook_still_present():
 
 def test_coverage_counts_unchanged_by_de_convention():
     counts = _coverage()["counts"]
-    assert counts["mechanized"] == 66
+    assert counts["mechanized"] == 69
     assert counts["gap"] == 1
-    assert counts["judgment"] == 84
-    assert counts["total"] == 151
+    assert counts["judgment"] == 101
+    assert counts["total"] == 171
     assert _lesson("L050")["id"].startswith("L050")

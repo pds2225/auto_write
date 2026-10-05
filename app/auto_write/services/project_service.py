@@ -1199,13 +1199,9 @@ class ProjectService:
         output_dir = self.storage.project_dir(project_id) / "output"
         output_dir.mkdir(parents=True, exist_ok=True)
         output_path = output_dir / "output.hwpx"
-        identity: dict[str, str] = {}
-        raw_identity = (project_input.project_meta or {}).get("hwpx_identity")
-        if isinstance(raw_identity, dict):
-            identity.update({str(k): str(v) for k, v in raw_identity.items() if str(v).strip()})
-        organization_name = str((project_input.organization_profile or {}).get("name", "")).strip()
-        if organization_name:
-            identity.setdefault("기업명", organization_name)
+        from .company_identity import build_direct_fill_identity
+
+        identity = build_direct_fill_identity(project_input)
         from .hwpx_fill import F01_CANONICAL_SHA256, F01_FIELD_KEYS
 
         field_writes: dict[str, str] = {}
@@ -1247,6 +1243,17 @@ class ProjectService:
                 expected_sha256=expected_sha,
             )
             report.filled.update(wire.written)
+            if (
+                "창업아이템 개요" in identity
+                and "창업아이템 개요" not in report.filled
+                and "창업아이템 개요" not in wire.written
+            ):
+                note = (
+                    "[narrative] 창업아이템 개요: 사용자 입력은 있으나 현재 HWPX의 "
+                    "직접 채움 target/authorization에 매칭되지 않아 미작성"
+                )
+                if note not in report.notes:
+                    report.notes.append(note)
             if wire.written:
                 from core.docx.services.hwpx_analysis_adapter import index_hwpx_structure
                 from core.docx.services.hwpx_protected_regions import (

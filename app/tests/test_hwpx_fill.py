@@ -1106,7 +1106,7 @@ def test_empty_cell_in_blue_row_gets_black(tmp_path):
 
 
 def test_force_black_off_keeps_example_style(tmp_path):
-    """force_black=False 옵트아웃 → 종전 동작(예시체 그대로 승계)."""
+    """force_black=False 여도 예시 칸에 넣은 값은 검정 본문이다. 원본 charPr 는 유지."""
     rows = "<hp:tr>" + _tc_runs(
         0, 0, '<hp:run charPrIDRef="0"><hp:t>사업자등록번호</hp:t></hp:run>'
     ) + _tc_runs(
@@ -1117,7 +1117,16 @@ def test_force_black_off_keeps_example_style(tmp_path):
     out = tmp_path / "out.hwpx"
     fill_hwpx(src, out, identity={"사업자등록번호": "123-45-67890"},
               force_black=False)
-    assert _text_color_of(out, "123-45-67890") == "#0000FF"
+    assert _text_color_of(out, "123-45-67890") == "#000000"
+    from lxml import etree
+    with zipfile.ZipFile(out) as z:
+        hroot = etree.fromstring(z.read("Contents/header.xml"))
+    charprs = {
+        el.get("id"): el.get("textColor")
+        for el in hroot.iter()
+        if str(el.tag).rsplit("}", 1)[-1] == "charPr"
+    }
+    assert charprs["34"] == "#0000FF"
 
 
 def test_form_control_cell_not_text_filled(tmp_path):

@@ -95,24 +95,40 @@ def _cmd_fill(args: argparse.Namespace) -> int:
     if filled_rows == 0 and not report.identity_filled:
         return 2  # 반복행·신상정보 모두 못 채움 = 매핑 실패
 
-    # AW-001: 채움 성공 뒤 DomainRouter → LRule → Finalizer. 제출 불가 시 _DRAFT.
+    # AW-001: 채움 성공 뒤 DomainRouter → LRule → Finalizer.
+    # 사람 판단(REVIEW)만이면 out.hwpx 를 유지하고 사유를 출력한다.
+    # FAIL·검사불능·도메인 모호·게이트 예외만 _DRAFT 로 바꾼다.
     try:
         from auto_write.domains.pipeline_gate import run_to_final
+        from auto_write.services.usage_acceptance import force_draft_name
 
         gate = run_to_final(
             out,
             explicit_domain="consultant_application",
             document_type="resume",
-            apply_draft_name=True,
+            apply_draft_name=False,
             avoid_path=form,
         )
-        if gate.blocked_reason or (gate.finalizer and not gate.finalizer.submittable):
-            reason = gate.blocked_reason or (
-                gate.finalizer.blocked_reason if gate.finalizer else "LRule/Finalizer"
-            )
-            print(f"\nLRule/Finalizer: 제출명 불가 — {reason}")
-            if gate.renamed_path and gate.renamed_path != str(out):
-                print(f"저장: {gate.renamed_path}")
+        summary = gate.lrule_report.summary if gate.lrule_report else {}
+        reason = gate.blocked_reason or (
+            gate.finalizer.blocked_reason if gate.finalizer else ""
+        )
+        hard = (
+            gate.ambiguous
+            or "lrule_error" in (gate.blocked_reason or "")
+            or int(summary.get("fail") or 0) > 0
+            or int(summary.get("unverifiable") or 0) > 0
+        )
+        if hard:
+            print(f"\nLRule/Finalizer: 제출명 불가 — {reason or 'FAIL'}")
+            new_path, err = force_draft_name(out, avoid=form)
+            if err:
+                print(f"_DRAFT 마킹 실패: {err}", file=sys.stderr)
+            elif new_path != out:
+                print(f"저장: {new_path}")
+        elif reason:
+            print(f"\nLRule/Finalizer: 사람 확인 필요 — {reason}")
+            print(f"저장: {out}")
     except Exception as exc:  # noqa: BLE001 — 게이트 실패를 채움 성공으로 위장하지 않음
         from auto_write.services.usage_acceptance import force_draft_name
 
