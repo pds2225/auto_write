@@ -154,6 +154,15 @@ def _all_text(path: Path) -> str:
     return "\n".join(parts)
 
 
+@pytest.fixture
+def fake_com_process_list(monkeypatch):
+    """가짜 COM 성공 테스트는 실제 사용자 한글 프로세스를 조회하지 않는다."""
+    monkeypatch.setattr(
+        mod, "_query_hangul_tasklist",
+        lambda image="Hwp.exe": "INFO: No tasks match the specified criteria.",
+    )
+
+
 # --- 안전장치 -----------------------------------------------------------------
 
 def test_out_equals_in_blocked(tmp_path: Path) -> None:
@@ -228,7 +237,7 @@ def test_hwp_to_docx_com_failure_falls_back(tmp_path: Path, monkeypatch) -> None
     assert any("COM 변환 실패" in n for n in r.notes)
 
 
-def test_hwp_to_docx_com_success(tmp_path: Path, monkeypatch) -> None:
+def test_hwp_to_docx_com_success(tmp_path: Path, monkeypatch, fake_com_process_list) -> None:
     src = tmp_path / "form.hwp"
     out = tmp_path / "form.docx"
     src.write_bytes(b"HWP-DUMMY")
@@ -251,7 +260,7 @@ def test_docx_to_hwp_com_unavailable_reports_failure(tmp_path: Path, monkeypatch
     assert any("한글" in n for n in r.notes)   # 사람이 할 일 안내
 
 
-def test_docx_to_hwp_with_fake_com(tmp_path: Path, monkeypatch) -> None:
+def test_docx_to_hwp_with_fake_com(tmp_path: Path, monkeypatch, fake_com_process_list) -> None:
     src = tmp_path / "plan.docx"
     out = tmp_path / "plan.hwp"
     _make_docx(src)
@@ -264,7 +273,7 @@ def test_docx_to_hwp_with_fake_com(tmp_path: Path, monkeypatch) -> None:
     assert fake.saved[0][1] == "HWP"
 
 
-def test_docx_to_hwpx_uses_hwpx_format(tmp_path: Path, monkeypatch) -> None:
+def test_docx_to_hwpx_uses_hwpx_format(tmp_path: Path, monkeypatch, fake_com_process_list) -> None:
     src = tmp_path / "plan.docx"
     out = tmp_path / "plan.hwpx"
     _make_docx(src)
@@ -318,7 +327,7 @@ def test_hwp_to_hwpx_without_converter_does_not_write_docx(tmp_path: Path, monke
     assert not (tmp_path / "양식.hwpx").exists()
 
 
-def test_hwp_to_hwpx_uses_hangul_com_saveas(tmp_path: Path, monkeypatch) -> None:
+def test_hwp_to_hwpx_uses_hangul_com_saveas(tmp_path: Path, monkeypatch, fake_com_process_list) -> None:
     src = tmp_path / "양식.hwp"
     original = b"OLE-HWP-BYTES"
     src.write_bytes(original)
@@ -406,7 +415,7 @@ def test_hwp_to_hwpx_prefers_rhwp_when_available(tmp_path: Path, monkeypatch) ->
     assert src.read_bytes() == b"OLE-HWP-BYTES"
 
 
-def test_hwp_to_hwpx_uses_com_after_rhwp_failure(tmp_path: Path, monkeypatch) -> None:
+def test_hwp_to_hwpx_uses_com_after_rhwp_failure(tmp_path: Path, monkeypatch, fake_com_process_list) -> None:
     monkeypatch.setenv("AUTO_WRITE_ENABLE_RHWP", "1")
     src = tmp_path / "양식.hwp"
     src.write_bytes(b"OLE-HWP-BYTES")

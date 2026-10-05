@@ -94,6 +94,11 @@ def _patch_com(monkeypatch) -> None:
     (FakeCom 으로는 HWPX 구조를 복원할 수 없으므로)."""
     monkeypatch.setattr(conv_mod, "hancom_com_available", lambda: True)
     monkeypatch.setattr(conv_mod, "_dispatch_hwp", lambda: _FakeHwpCom())
+    # 가짜 객체의 성공 여부가 실제 PC에 열린 한글 창에 의존하지 않도록 한다.
+    monkeypatch.setattr(
+        conv_mod, "_query_hangul_tasklist",
+        lambda image="Hwp.exe": "INFO: No tasks match the specified criteria.",
+    )
 
     real_hwp_to_docx = conv_mod.hwp_to_docx
 
