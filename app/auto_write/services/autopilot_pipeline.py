@@ -1,10 +1,7 @@
-# autopilot_pipeline.py -- re-export from core.docx.services
-from core.docx.services.autopilot_pipeline import *  # noqa: F401,F403
-# Keep legacy imports of these helpers working.  Star imports intentionally
-# omit underscore-prefixed names, but the compatibility package historically
-# exposed them to the existing test/report tooling.
-from core.docx.services.autopilot_pipeline import (  # noqa: F401
-    _RESIDUAL_RE,
-    _build_todo,
-    _write_report,
-)
+"""기존 import와 monkeypatch가 정본 파이프라인에 함께 적용되도록 한다."""
+
+import sys as _sys
+
+from core.docx.services import autopilot_pipeline as _canonical
+
+_sys.modules[__name__] = _canonical

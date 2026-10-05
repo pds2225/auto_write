@@ -212,8 +212,10 @@ def test_cli_default_output_is_source_adjacent(clean_hwpx, tmp_path):
         "--set", "기업명=x(주)",
     ])
 
-    assert rc == 0
-    outputs = list(tmp_path.glob("2026GovTech_아이디어기획서_* v1.hwpx"))
+    # R9 통과만으로 전수 LRule의 판단 증거가 채워지지는 않는다.
+    assert rc == 2
+    assert list(tmp_path.glob("2026GovTech_아이디어기획서_* v1.hwpx")) == []
+    outputs = list(tmp_path.glob("2026GovTech_아이디어기획서_* v1_DRAFT.hwpx"))
     assert len(outputs) == 1
     assert outputs[0].parent == src.parent
     assert src.exists()
@@ -221,7 +223,7 @@ def test_cli_default_output_is_source_adjacent(clean_hwpx, tmp_path):
 
 
 def test_cli_default_output_fail_closed_draft_is_source_adjacent(colored_hwpx, tmp_path):
-    """양식에 있던 유색은 게이트 fail 이 아니다. 제출 이름은 원본 폴더에 남는다."""
+    """양식 유색은 R9 결함이 아니어도 판단 증거가 없으면 원본 옆 DRAFT다."""
     from hwpx_submit import main
 
     src = tmp_path / "GovTech_아이디어기획서_원본.hwpx"
@@ -235,22 +237,24 @@ def test_cli_default_output_fail_closed_draft_is_source_adjacent(colored_hwpx, t
         "--no-normalize-colors",
     ])
 
-    assert rc == 0
+    assert rc == 2
     clean = list(tmp_path.glob("2026GovTech_아이디어기획서_* v1.hwpx"))
     drafts = list(tmp_path.glob("2026GovTech_아이디어기획서_* v1_DRAFT.hwpx"))
-    assert len(clean) == 1
-    assert drafts == []
-    assert clean[0].parent == src.parent
+    assert clean == []
+    assert len(drafts) == 1
+    assert drafts[0].parent == src.parent
 
 
 
 def test_cli_exit_codes(clean_hwpx, colored_hwpx, tmp_path, monkeypatch):
     from hwpx_submit import main
 
-    # 0: 깨끗한 양식 + 값 지정 → 제출가능
+    # 2: 깨끗한 양식도 전수 LRule 판단 증거가 없으면 제출불가다.
     rc = main([str(clean_hwpx), "-o", str(tmp_path / "ok.hwpx"),
                "--set", "기업명=x(주)"])
-    assert rc == 0
+    assert rc == 2
+    assert not (tmp_path / "ok.hwpx").exists()
+    assert (tmp_path / "ok_DRAFT.hwpx").exists()
 
     # 1: identity 도 --set 도 없음 → 빈 제출 방지
     rc = main([str(clean_hwpx), "-o", str(tmp_path / "empty.hwpx")])
@@ -261,12 +265,13 @@ def test_cli_exit_codes(clean_hwpx, colored_hwpx, tmp_path, monkeypatch):
                "--set", "기업명=x"])
     assert rc == 1
 
-    # 양식 유색 + 정규화 opt-out 은 제출 가능(양식 색은 결함 아님)
+    # 양식 유색은 결함이 아니지만 LRule 판단 증거 부재는 차단한다.
     out_color = tmp_path / "color.hwpx"
     rc = main([str(colored_hwpx), "-o", str(out_color), "--set", "기업명=x(주)",
                "--no-normalize-colors"])
-    assert rc == 0
-    assert out_color.exists()
+    assert rc == 2
+    assert not out_color.exists()
+    assert (tmp_path / "color_DRAFT.hwpx").exists()
 
     # 2: 잔존 예시 이름 → _DRAFT 강제·제출불가
     dummy = tmp_path / "dummy_cli.hwpx"
@@ -859,6 +864,10 @@ def test_incompatible_rhwp_hwp_conversion_uses_hangul_com(tmp_path, monkeypatch)
     fake = _FakeHwpCom()
     monkeypatch.setattr(conv, "hancom_com_available", lambda: True)
     monkeypatch.setattr(conv, "_dispatch_hwp", lambda: fake)
+    monkeypatch.setattr(
+        conv, "_query_hangul_tasklist",
+        lambda image="Hwp.exe": "INFO: No tasks match the specified criteria.",
+    )
 
     report = hwp_to_hwpx(src, out)
 

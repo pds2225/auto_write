@@ -13,7 +13,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
-from .lrule_enforcer import LRuleReport, STATUS_FAIL, STATUS_REVIEW, STATUS_UNVERIFIABLE
+from .lrule_enforcer import (ALLOWED_STATUSES, FINAL_BLOCKERS, LRuleReport,
+                            STATUS_NA, STATUS_USER_OVERRIDE)
 
 __all__ = [
     "FinalizerResult",
@@ -21,7 +22,7 @@ __all__ = [
     "finalize_artifact",
 ]
 
-_DRAFT_TOKENS = ("_DRAFT",)
+_DRAFT_TOKENS = ("_DRAFT2", "_DRAFT")
 
 
 @dataclass
@@ -100,6 +101,25 @@ class Finalizer:
             reasons.append("LRule report missing")
         else:
             summary = lrule_report.summary
+            if lrule_report.domain == "other":
+                can_finalize = False
+                reasons.append("ambiguous or unsupported domain")
+            for entry in lrule_report.rules:
+                status = entry.get("status")
+                evidence = str(entry.get("evidence", "") or "").strip()
+                reason = str(entry.get("reason", "") or "").strip()
+                if status not in ALLOWED_STATUSES or status in FINAL_BLOCKERS:
+                    can_finalize = False
+                    reasons.append(f"{entry.get('id', '?')} blocking rule status: {status}")
+                elif status == "PASS" and not evidence:
+                    can_finalize = False
+                    reasons.append(f"{entry.get('id', '?')} PASS has no evidence")
+                elif status == STATUS_NA and not reason:
+                    can_finalize = False
+                    reasons.append(f"{entry.get('id', '?')} N/A has no reason")
+                elif status == STATUS_USER_OVERRIDE and (not evidence or entry.get("reviewer") != "user"):
+                    can_finalize = False
+                    reasons.append(f"{entry.get('id', '?')} USER_OVERRIDE lacks user evidence")
             ids = [r.get("id", "") for r in lrule_report.rules]
             if len(ids) != len(set(ids)):
                 can_finalize = False
@@ -127,7 +147,10 @@ class Finalizer:
                 can_finalize = False
                 reasons.append("artifact SHA256 mismatch")
 
-            if lrule_report.registry_sha256:
+            if not lrule_report.registry_sha256 or not lrule_report.registry_path:
+                can_finalize = False
+                reasons.append("registry path or SHA256 missing")
+            else:
                 registry_path = (
                     Path(lrule_report.registry_path)
                     if lrule_report.registry_path
