@@ -761,6 +761,9 @@ def submit_hwpx(
         fixed_cell_overflow=report.overflow_cells,
         render_validator=render_validator,
         acceptance_baseline=str(src),
+        template_survival_baseline=str(src) if preserve_template else None,
+        require_protected_anchors=preserve_template,
+        require_render_evidence=preserve_template,
     )
     report.integrity = gate.as_dict()
     report.acceptance = gate.acceptance_report
