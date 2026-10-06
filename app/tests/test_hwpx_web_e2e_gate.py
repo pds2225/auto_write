@@ -352,8 +352,10 @@ def test_web_stacked_protections_match_direct_submit(client, tmp_path):
     assert _member(final, "Contents/header.xml") == header
     assert _member(final, "Contents/content.hpf") == package
     assert _foreign_t(final) == 0
-    assert RHWP_DISABLED_RENDER_NOTE in notes
-    assert routing["native_render"]["render_status"] == "NOT_RUN"
+    assert RHWP_DISABLED_RENDER_NOTE not in notes
+    assert routing["native_render"]["render_status"] == "PASS"
+    assert routing["native_render"]["reopen_status"] == "PASS"
+    assert routing["native_render"]["visual_review"] == "PASS"
     assert routing["native_render"]["l005_pixel"] != "PASS"
     assert routing["native_render"]["l050_pdf"] != "PASS"
     _source_unchanged(template_id, project_id, "combined.hwpx", original)
