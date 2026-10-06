@@ -46,6 +46,7 @@ import copy
 import hashlib
 import io
 import os
+from datetime import date
 import re
 import zipfile
 from dataclasses import dataclass, field
@@ -153,7 +154,8 @@ def _real_existing_text(text: str) -> bool:
     raw = str(text or "")
     if not raw.strip():
         return False
-    if _is_obvious_placeholder(raw) or _is_fill_blank(raw) or _is_hwpx_example_scaffold(raw):
+    if (_is_obvious_placeholder(raw) or _is_fill_blank(raw)
+            or _is_hwpx_example_scaffold(raw) or _is_hwpx_guidance_placeholder(raw)):
         return False
     from core.docx.services.hwpx_protected_regions import (
         _CHOICE_MARK_RE,
@@ -1030,6 +1032,14 @@ _GUIDANCE_CONTACT_RE = re.compile(
     r"^[\(（]\s*(?:휴대폰|휴대전화|연락처)\s*[\)）]$",
     re.IGNORECASE,
 )
+_GUIDANCE_PAREN_RE = re.compile(
+    r"^[\(（]\s*(?:"
+    r"(?:본인이|신청자가)\s*희망하는\s*[^()（）\n:：;；]{1,55}\s*(?:에\s*대하여|을|를)\s*(?:간략히|간단히)\s*"
+    r"|해당\s*(?:사항|내용|항목)(?:을|를)\s*(?:(?:간략히|간단히)\s*)?"
+    r"|(?:사업\s*내용|창업\s*아이템)(?:을|를|에\s*대하여)\s*(?:간략히|간단히)\s*"
+    r")"
+    r"(?:소개|기재|작성)(?:\s*(?:하세요|해\s*주세요|하십시오|바랍니다))?\s*[\)）]$"
+)
 
 
 def _is_hwpx_guidance_placeholder(text: str) -> bool:
@@ -1042,6 +1052,7 @@ def _is_hwpx_guidance_placeholder(text: str) -> bool:
     return bool(
         _GUIDANCE_CONTACT_RE.fullmatch(raw)
         or _GUIDANCE_VALUE_RE.fullmatch(raw)
+        or _GUIDANCE_PAREN_RE.fullmatch(raw)
     )
 
 _EXAMPLE_CHOICE_RE = re.compile(r"\s*/\s*")
@@ -1379,27 +1390,97 @@ def _value_cell(label_tc, cells: list):
     return cells[idx + 1] if idx + 1 < len(cells) else None
 
 
-_PERIOD_HEADER_RE = re.compile(r"^\(?(?:\d+년전|전년(?:도)?|당년(?:도)?|금년|현재|최근|20\d{2}년?)\)?$")
+_PERIOD_HEADER_RE = re.compile(
+    r"^[\(（]?(?:\d+년전|전년(?:도)?|작년|당년(?:도)?|금년|현재|최근|"
+    r"올해(?:[\(（]예상[\)）])?|20\d{2}년?)[\)）]?$"
+)
 
 
-def _current_period_value_cell(tbl, label_tc, cells: list):
-    """기간별 수치표는 현재 열만 선택한다. 열 주소가 모호하면 쓰지 않는다."""
+def _current_period_value_cell(tbl, label_tc, cells: list, *, notes=None, label=""):
+    """라벨 앞의 가장 가까운 기간 헤더를 논리 열 범위로 대응한다.
+
+    올해(예상) → 현재 표현 → 실제 올해의 숫자 연도 순으로 선택한다.
+    과거 기간만 있거나 병합 범위가 여러 값 칸에 걸치면 이유를 남기고 쓰지 않는다.
+    """
+    def reject(reason):
+        if notes is not None:
+            _note_region(notes, "period", f"{label or _cell_text(label_tc)} {reason}", label_tc)
+        return None
+
     periods = []
-    for row in _direct(tbl, "tr")[:3]:
+    ambiguous_header = False
+    label_row = _row_of(label_tc)
+    for row in _direct(tbl, "tr"):
+        if row is label_row:
+            break
+        row_periods = []
+        header_row = True
         for cell in _direct(row, "tc"):
             text = re.sub(r"\s+", "", _cell_text(cell))
             if _PERIOD_HEADER_RE.fullmatch(text):
-                periods.append((text.strip("()"), _cell_addr(cell)))
-        if periods:
-            break
+                if text.startswith(("(", "（")) and text.endswith((")", "）")):
+                    text = text[1:-1]
+                row_periods.append((text, _cell_addr(cell), _cell_colspan(cell)))
+            elif text and not re.match(r"^(?:구분|연도|년도|기간|항목)(?:$|별|[\(（])", text):
+                # 설립연도/2026년 같은 정보 행의 실값을 기간 헤더로 오인하지 않는다.
+                header_row = False
+        if row_periods and (header_row or len(row_periods) > 1 or any(
+            not re.fullmatch(r"20\d{2}년?", period[0]) for period in row_periods
+        )):
+            periods = row_periods
+            ambiguous_header = not header_row
     if not periods:
         return _value_cell(label_tc, cells)
-    current = [col for text, col in periods if text in {"현재", "당년", "당년도", "금년", "최근"}]
-    if len(current) > 1 or any(col is None for _, col in periods):
-        return None
-    col = current[0] if current else max(col for _, col in periods)
-    candidates = [cell for cell in cells if _cell_addr(cell) == col and _cell_colspan(cell) == 1]
-    return candidates[0] if len(candidates) == 1 and candidates[0] is not label_tc else None
+    if ambiguous_header:
+        return reject("AMBIGUOUS_PERIOD_HEADER")
+    if any(col is None or col < 0 or span < 1 for _, col, span in periods):
+        return reject("AMBIGUOUS_PERIOD_HEADER")
+    label_col = _cell_addr(label_tc)
+    if label_col is not None:
+        label_end = label_col + _cell_colspan(label_tc)
+        following_labels = [_cell_addr(cell) for cell in cells if cell is not label_tc
+                            and _cell_addr(cell) is not None
+                            and _cell_addr(cell) >= label_end and _is_label_like(cell)]
+        label_stop = min(following_labels) if following_labels else None
+        periods = [period for period in periods if period[1] + period[2] > label_end
+                   and (label_stop is None or period[1] < label_stop)]
+        if not periods:
+            return _value_cell(label_tc, cells)
+        if any(col < label_end or (label_stop is not None and col + span > label_stop)
+               for _, col, span in periods):
+            return reject("AMBIGUOUS_PERIOD_HEADER")
+    for i, (_, col, span) in enumerate(periods):
+        if any(max(col, other_col) < min(col + span, other_col + other_span)
+               for _, other_col, other_span in periods[i + 1:]):
+            return reject("AMBIGUOUS_PERIOD_HEADER")
+    current = [period for period in periods if period[0] == "올해(예상)" or period[0] == "올해（예상）"]
+    if not current:
+        current = [period for period in periods if period[0] in {"올해", "현재", "당년", "당년도", "금년", "최근"}]
+    if not current:
+        absolute = [period for period in periods if re.fullmatch(r"20\d{2}년?", period[0])]
+        year = date.today().year
+        current = [period for period in absolute if int(period[0][:4]) == year]
+        if not current:
+            if not absolute or all(int(period[0][:4]) < year for period in absolute):
+                return reject("PAST_PERIOD_ONLY")
+            return reject("CURRENT_PERIOD_MISSING")
+    if len(current) != 1:
+        return reject("AMBIGUOUS_PERIOD_HEADER")
+    _, col, span = current[0]
+    candidates = []
+    for cell in cells:
+        if cell is label_tc:
+            continue
+        addr, width = _cell_addr(cell), _cell_colspan(cell)
+        if addr is None or addr < 0 or width < 1:
+            return reject("AMBIGUOUS_PERIOD_CELL")
+        if max(addr, col) < min(addr + width, col + span):
+            if addr < col or addr + width > col + span:
+                return reject("AMBIGUOUS_PERIOD_CELL")
+            candidates.append(cell)
+    if len(candidates) != 1:
+        return reject("AMBIGUOUS_PERIOD_CELL")
+    return candidates[0]
 
 
 def _cell_rowspan(tc) -> int:
@@ -1789,8 +1870,16 @@ def _fill_section_xml(
                         continue
                     if not _label_matches(cell_key, want_key):
                         continue
-                    target = _current_period_value_cell(tbl, tc, cells)
+                    note_count = len(span_notes)
+                    target = _current_period_value_cell(tbl, tc, cells, notes=span_notes, label=lbl)
                     if target is None or target is tc:
+                        if len(span_notes) > note_count:
+                            # 이 표의 인라인 빈칸 경로도 동일한 기간 보류를 따라야 한다.
+                            table_used[tbl].update(
+                                key for key, _, _ in wants if _label_matches(cell_key, key)
+                            )
+                            _hold_exact_label(exact_held, cell_key, want_key)
+                            break
                         continue
                     if (
                         prior_support
