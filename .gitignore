@@ -75,6 +75,7 @@ _workspace/
 
 # 세션 기록 (로컬 전용 — 개인 경로·이름 포함)
 SESSION_RECAP.md
+!/docs/SESSION_RECAP.md
 
 # 임시·백업 파일
 _tmp_*
