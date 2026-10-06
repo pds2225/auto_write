@@ -3,6 +3,8 @@
 > 이 파일과 docs/SESSION_RECAP.md는 GitHub main의 공유 기록이다. TASK 우선순위·상태의 정본은 origin/main:TASK.md다.
 
 ## 0. 현재 상태 — 2026-10-06
+- 이번 작업 시작 기준 main은 PR #213 병합 후 7f13ed03a237cc249e6eb1c4ff708a026c612555다. 제품 코드는 b0e8eed와 같고 회고·재개 문서는 공유되어 있다.
+- 사용자 실행 지시: 원격 TASK→RESUME 필수 확인 규칙과 최신 체크포인트를 문서 PR로 main에 먼저 반영하고, 그 최신 main에서 codex/round5-fill-fixes를 만들어 세 건 수정 후 draft PR까지만 진행한다. 현재 문서 반영 단계이며 Round-5 구현·테스트는 아직 시작하지 않았다.
 - 개발 main 통합 요청은 완료됐다. PR #211·#212 병합, 제품 코드 검증 기준 b0e8eedebc16c6d878d76809b8eeafba0d43a50b. 당시 접근 가능한 14개 작업 위치의 HEAD·제품 코드 해시 일치를 확인했다.
 - 세션 마무리의 최신 개발 회고·재개 정보를 이제 원격 공유판으로 관리한다. 회고: [docs/SESSION_RECAP.md](docs/SESSION_RECAP.md). root SESSION_RECAP.md는 로컬 전체 회고이며 Git에서 제외되어 있다.
 - 아직 실제 한글 2022 DOCX Open 실패·소유 PID 미확인 시 COM hard timeout 한계가 남아 있다. AW-001 REQUEST_SOLVED=NO. Git 통합 성공을 실제 변환 성공으로 보고하지 않는다.
@@ -24,11 +26,12 @@ git show origin/main:docs/SESSION_RECAP.md
 - 호환 경로·UTF-8·제출 검사 복구: 735531f, fake COM 테스트 조회 격리: a7c369c, 관련 기록: c015e34.
 - 전체 pytest는 2217 passed/8 failed/5 skipped/23 subtests passed. 가짜 COM의 실제 프로세스 목록 의존을 격리한 뒤 실패 8건 포함 영향 회귀 54 passed/0 failed, 소유권 회귀 21 passed/0 failed. 합산 대상 2225 passed/남은 실패 0이며 두 번째 전체 실행은 아니다. 제품 보호 코드는 유지했다.
 - 합성 HWPX 제출 CLI: 원본 해시 보존·값 채움·DRAFT만 생성·171규칙 증거 저장. cp949 STEP 3A CLI: exit 0·UTF-8 Golden 보고서 일치.
-- 기존 stash 9개와 보존용 stash 3개, 브랜치 ref·원본 데이터·깨진 worktree 원문을 보존했다. 개발 감사·항목별 결과는 docs/MAIN_SYNC_20261006.md와 docs/PR211_ROUND4.md를 따른다.
+- 기존 stash 9개와 보존용 stash 4개, 브랜치 ref·원본 데이터·깨진 worktree 원문을 보존했다. 개발 감사·항목별 결과는 docs/MAIN_SYNC_20261006.md와 docs/PR211_ROUND4.md를 따른다.
 
 ## 3. 다음 액션
-1. 실제 한글 2022가 설치된 환경에서 DOCX Open 실패 원인을 재현·진단한다. 소유 객체·사용자 원본과 창을 보존한다.
-2. 소유 PID 미확인 때도 COM operation을 제한 시간 안에 끝낼 수 있는 방식을 별도 검토·구현한다. 필요한 영향 범위만 테스트하고 이유 없이 전체 suite를 반복하지 않는다.
+1. AGENTS.md·CLAUDE.md의 모든 위치 작업 시작 순서를 원격 TASK→RESUME 필수 확인으로 고정하고 이 체크포인트와 함께 문서 PR을 자동병합한다. 원격 공유판을 실제 조회해 확인한다.
+2. 최신 main에서 Round-5: 종업원수 현재 연도/병합 열 선택·괄호 안내문 오탐 방지·한글 2022 PDF SaveAs 타임아웃을 수정한다. 과거 칸만 있거나 대응이 모호하면 기록 후 미기입. 실제 입력값·소유 PID 보호 유지. mock과 실제 PDF 결과를 구분한다.
+3. 영향 회귀와 요청한 전체 pytest 1회 후 새 헤드 SHA·통과/실패/기존 skip 수·항목별 한국어 결과를 draft PR 본문에도 기록한다. Round-5는 병합하지 않는다. 실제 한글 2022 Open 실패·소유 미확인 hard timeout 한계는 별도로 보존한다.
 
 ## 4. 유지할 제약
 - 추가 테스트는 꼭 필요할 때만 한다. 기존 성공 assertion·skip·소유권 보호를 약화하지 않는다. rhwp 기본 OFF, L050 gap 유지.
