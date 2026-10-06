@@ -41,6 +41,7 @@ from auto_write.services.hwpx_submit import (
     RHWP_DISABLED_REPAIR_NOTE,
 )
 from core.docx.services.hwpx_analysis_adapter import index_hwpx_structure
+from core.docx.services import native_hwp
 from core.docx.services.hwpx_protected_regions import assess_fields
 from test_hwpx_cross_feature_integration import (
     _all_texts,
@@ -84,6 +85,27 @@ _HWPX_WEB_ROUTES = (
 @pytest.fixture
 def web(monkeypatch, tmp_path):
     _force_rhwp_absent(monkeypatch)
+
+    def _complete_native_review(path: str) -> dict:
+        candidate = Path(path)
+        digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
+        return {
+            "ok": True,
+            "severity": "PASS",
+            "renderer": "test-evidence",
+            "render_status": "PASS",
+            "reopen_status": "PASS",
+            "visual_review": "PASS",
+            "candidate_sha256": digest,
+            "render_source_sha256": digest,
+            "page_count": 1,
+            "pixel_reopen_claimed": False,
+            "l005_pixel": "JUDGMENT",
+            "l050_pdf": "NOT_SIBLING",
+            "message": "synthetic web E2E complete render evidence",
+        }
+
+    monkeypatch.setattr(native_hwp, "verify_hwpx_native", _complete_native_review)
     root = tmp_path / "workspace"
     settings = replace(
         main.storage.settings,
@@ -224,11 +246,10 @@ def test_web_happy_path_returns_intact_filled_package(client, tmp_path):
     assert routing["submittable"] is True
     assert routing["final_output_allowed"] is True
     assert Path(routing["final"]).name == "output.hwpx"
-    assert RHWP_DISABLED_RENDER_NOTE in routing["notes"]
-    assert routing["native_render"]["render_status"] == "NOT_RUN"
-    assert routing["native_render"]["disabled"] is True
-    assert routing["native_render"]["l005_pixel"] == "NOT_RUN"
-    assert routing["native_render"]["l050_pdf"] == "NOT_RUN"
+    assert RHWP_DISABLED_RENDER_NOTE not in routing["notes"]
+    assert routing["native_render"]["render_status"] == "PASS"
+    assert routing["native_render"]["reopen_status"] == "PASS"
+    assert routing["native_render"]["visual_review"] == "PASS"
     assert routing["native_render"]["severity"] == "PASS"
     assert routing["native_render"]["pixel_reopen_claimed"] is False
     # COM 설치 여부와 rhwp 부재는 별개다. L005 픽셀 PASS는 여기 기대값이 아니다.
@@ -385,7 +406,28 @@ def test_web_duplicate_empty_label_writes_nothing(client, tmp_path):
     _no_auto(final)
 
 
-def test_web_broken_grid_rhwp_absent_keeps_package_and_drafts(client, tmp_path):
+def test_web_clean_form_without_render_evidence_is_draft(client, tmp_path, monkeypatch):
+    monkeypatch.setattr(native_hwp, "verify_hwpx_native", lambda _path: native_hwp._disabled_render_evidence())
+    src = tmp_path / "no-render.hwpx"
+    _write(src, _section_clean())
+    _template_id, project_id = _start(client, "no-render.hwpx", src.read_bytes())
+    generated = _generate(client, project_id, organization_name=_FILL)
+    assert generated.status_code == 303, generated.text
+    route = _route(client, project_id)
+    routing = route["routing"]
+    assert routing["ok"] is False
+    assert routing["submittable"] is False
+    assert Path(routing["final"]).name == "output_DRAFT.hwpx"
+    render = next(
+        item for item in routing["integrity"]["validators"]
+        if item["source_validator"] == "rendering_validator"
+    )
+    assert render["severity"] == "REVIEW_REQUIRED"
+    assert render["defect_code"] == "RENDER_NOT_RUN_REQUIRED"
+
+
+def test_web_broken_grid_rhwp_absent_keeps_package_and_drafts(client, tmp_path, monkeypatch):
+    monkeypatch.setattr(native_hwp, "verify_hwpx_native", lambda _path: native_hwp._disabled_render_evidence())
     src = tmp_path / "broken.hwpx"
     _write(src, _section_protected_broken())
     original = src.read_bytes()
