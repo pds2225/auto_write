@@ -3,7 +3,7 @@
 This module compares a generated HWPX against the original template without
 attempting repair.  It is deliberately conservative: structural content may be
 added inside writable regions, but baseline sections/tables/rows/cells/merged
-cells/form controls and protected text anchors must not disappear.
+cells/form controls and stable heading/label anchors must not disappear.\n\nGuidance text is intentionally not an anchor because authorized narrative writers\nmay replace a guidance/answer area while preserving its surrounding structure.
 
 The check is generic and contains no project/form-specific strings.
 """
@@ -19,7 +19,7 @@ from typing import Any
 from lxml import etree
 
 _SECTION_RE = re.compile(r"Contents/section\d+\.xml$", re.IGNORECASE)
-_ANCHOR_ROLES = frozenset({"HEADING", "LABEL", "GUIDANCE", "CHOICE_HEADER"})
+_ANCHOR_ROLES = frozenset({"HEADING", "LABEL", "CHOICE_HEADER"})
 _FORM_CONTROL_NAMES = frozenset({"checkBtn", "radioBtn", "comboBox", "edit", "listBox", "btn"})
 
 
