@@ -64,3 +64,5 @@ git show origin/main:docs/SESSION_RECAP.md
 
 - 2026-10-07 확인: 선행 `codex/engine-coverage-fixes`는 커밋 `89dada627414ffb625df6cfe349b291c559da55a`로 원격 push되었고, main 대상 draft PR #217(https://github.com/pds2225/auto_write/pull/217)이 열려 있다. 기존 “원격 선행 브랜치 없음” 차단은 해소됐다. 후속 `codex/engine-full-pipeline` 작업은 #217 미병합 상태이므로 원격 선행 브랜치를 base로 생성할 수 있다. #217은 full suite 미완료·실양식 렌더 미검증을 기록했고 병합되지 않았다.
 
+
+- 2026-10-07 재개 확인: 선행 blocker 해소. PR #217은 OPEN/DRAFT, base=main, head=codex/engine-coverage-fixes, 현재 GitHub head SHA=f567336c221476e3ab81d9caf46af70ca3355ed3. 후속 codex/engine-full-pipeline 워크트리는 해당 선행 브랜치에서 시작했고, evaluation_service.py 및 회귀 테스트, hwpx_pipeline_finalize.py 신규 구현이 미커밋 상태다. 선행 PR 미병합이라 보호 파일 수정은 계속 금지. 다음: 신규 HWPX finalize 테스트와 공고 점수 회귀를 실행하고, 나머지 파이프라인 구현을 이어간다.
