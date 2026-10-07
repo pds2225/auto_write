@@ -217,7 +217,9 @@ def _analyze_table(table: list[list[_Cell]], t_no: int, tag: str, out: list[Fill
             elif cell.filled and value_position and not cell.has_object and _is_instruction(cell.text):
                 out.append(FillFinding("instruction", where, _cell_label(left) if left_label and left is not None else "",
                                        cell.text.strip(_EMPTY_CHARS)[:40]))
-            if cell.text.count("□") and "■" not in cell.text:
+            # 선택 그룹이 옆 칸으로 나뉜 경우(예: '■ 예비창업자' | '□ 초기창업자')는 같은 행에 ■ 가 있으면 선택된 것으로 본다.
+            sibling_checked = any("■" in o.text for o in ordered if o is not cell)
+            if cell.text.count("□") and "■" not in cell.text and not sibling_checked:
                 out.append(FillFinding("unchecked", where, _cell_label(left) if left_label and left is not None else "",
                                        cell.text.strip(_EMPTY_CHARS)[:40]))
 

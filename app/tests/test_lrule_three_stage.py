@@ -123,6 +123,14 @@ def test_unselected_choice_fails_checkbox_rules(tmp_path):
         assert _rule(report, code)["status"] == "FAIL", code
 
 
+def test_choice_group_split_across_cells_is_not_unchecked(tmp_path):
+    """'■ 예비창업자' | '□ 초기창업자' 처럼 선택 그룹이 칸으로 나뉘면 같은 행의 ■ 로 선택된 것이다(마포 실측 오탐)."""
+    split = [["구분", "■ 예비창업자", "□초기창업자"]]
+    assert inspect_fill(_hwpx(tmp_path / "split.hwpx", split)).findings == []
+    none_selected = [["구분", "□ 예비창업자", "□초기창업자"]]
+    assert [f.kind for f in inspect_fill(_hwpx(tmp_path / "none.hwpx", none_selected)).findings] == ["unchecked", "unchecked"]
+
+
 # ── 해당 단계 (N/A 근거) ─────────────────────────────────────────────────────
 
 def test_domain_na_carries_reason_and_evidence(tmp_path):
