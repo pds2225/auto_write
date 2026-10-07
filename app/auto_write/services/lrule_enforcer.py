@@ -18,7 +18,7 @@ from typing import Any, Optional
 
 from auto_write.domains.domain_classifier import Domain
 from auto_write.services.lrule_fill_check import (
-    FillReport, format_locations, inspect_fill, is_fill_rule,
+    FillReport, REVIEW_KINDS, format_locations, inspect_fill, is_fill_rule,
 )
 
 _RULE_CODE_RE = re.compile(r"\bL\d{3}\b", re.IGNORECASE)
@@ -362,10 +362,14 @@ class LRuleEnforcer:
                     found = fill.for_rule(code)
                     filled = not found
                     if found:
-                        status = STATUS_FAIL
-                        location = format_locations(found)
+                        hard = [f for f in found if f.kind not in REVIEW_KINDS]
+                        status = STATUS_FAIL if hard else STATUS_REVIEW
+                        location = format_locations(hard or found)
                         evidence = location
-                        reason = f"미채움 {len(found)}건 — 빈칸·안내문·반복칸·미선택 중 하나 이상 남음"
+                        reason = (
+                            f"미채움 {len(hard)}건 — 빈칸·안내문·반복칸·미선택 중 하나 이상 남음" if hard
+                            else f"본인 판단·서명 항목(동의 체크) {len(found)}건 미체크 — 사람 확인 필요"
+                        )
                     else:
                         location = location or f"표 {fill.tables}개·칸 {fill.cells}개 검사"
 

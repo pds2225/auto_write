@@ -131,6 +131,23 @@ def test_choice_group_split_across_cells_is_not_unchecked(tmp_path):
     assert [f.kind for f in inspect_fill(_hwpx(tmp_path / "none.hwpx", none_selected)).findings] == ["unchecked", "unchecked"]
 
 
+def test_unchecked_consent_is_review_not_fail(tmp_path):
+    """개인정보 동의 □ 는 본인 판단 사항 — FAIL 이 아니라 사람 확인(REVIEW_REQUIRED)."""
+    consent = [["동의 여부", "□ 동의함   □ 동의하지 않음"]]
+    path = _hwpx(tmp_path / "consent.hwpx", _PROFILE, _STAFF_FILLED, consent)
+    assert [f.kind for f in inspect_fill(path).findings] == ["consent"]
+    entry = _rule(_judge(path), "L025")
+    assert entry["status"] == "REVIEW_REQUIRED" and entry["filled"] is False and entry["passed"] is None
+    assert "동의" in entry["reason"]
+
+
+def test_consent_review_does_not_hide_real_unchecked_fail(tmp_path):
+    tables = [[["분야", "□ AI □ 기술혁신"]], [["동의 여부", "□ 동의함   □ 동의하지 않음"]]]
+    path = _hwpx(tmp_path / "mixed.hwpx", _PROFILE, *tables)
+    entry = _rule(_judge(path), "L025")
+    assert entry["status"] == "FAIL" and "unchecked" in entry["evidence"] and "consent" not in entry["evidence"]
+
+
 # ── 해당 단계 (N/A 근거) ─────────────────────────────────────────────────────
 
 def test_domain_na_carries_reason_and_evidence(tmp_path):

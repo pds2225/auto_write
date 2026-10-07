@@ -9,6 +9,7 @@ HWPX(section*.xml)와 DOCX(word/document.xml)의 표를 같은 모양으로 바�
 - ``instruction``     : 값칸에 "~시에만 기재" 같은 안내문만 남아 있다.
 - ``repeat_partial``  : 반복 칸(표 2행 이후)이 첫 회만 채워지고 나머지가 비었다.
 - ``unchecked``       : □ 선택칸에 ■ 가 하나도 없다(선택 안 함).
+- ``consent``         : 동의/미동의 □ 가 모두 비었다 — 본인 판단 사항이라 FAIL 이 아니라 REVIEW.
 
 어떤 L규칙이 어떤 결함을 "미채움"으로 보는지는 ``FILL_RULES`` 가 정한다.
 L009·L010 처럼 공란을 허용하는 규칙은 일부러 넣지 않았다.
@@ -23,18 +24,22 @@ from typing import Any
 
 from lxml import etree
 
-__all__ = ["FillFinding", "FillReport", "FILL_RULES", "inspect_fill", "is_fill_rule"]
+__all__ = ["FillFinding", "FillReport", "FILL_RULES", "REVIEW_KINDS", "inspect_fill", "is_fill_rule"]
 
 # 규칙 코드 → 그 규칙이 '미채움'으로 취급하는 결함 종류.
 FILL_RULES: dict[str, frozenset[str]] = {
     "L012": frozenset({"instruction"}),  # 안내문구는 값칸을 채운 뒤 남으면 안 된다
     "L053": frozenset({"blank", "instruction", "repeat_partial"}),  # 고정 양식 채움(없으면 '해당사항 없음')
     "L070": frozenset({"blank", "instruction", "repeat_partial"}),  # 값칸 채움
-    "L025": frozenset({"unchecked"}),  # □→■ 체크
-    "L034": frozenset({"unchecked"}),
-    "L052": frozenset({"unchecked"}),
-    "L086": frozenset({"unchecked"}),
+    "L025": frozenset({"unchecked", "consent"}),  # □→■ 체크
+    "L034": frozenset({"unchecked", "consent"}),
+    "L052": frozenset({"unchecked", "consent"}),
+    "L086": frozenset({"unchecked", "consent"}),
 }
+
+# 본인 판단·서명이 필요한 항목(개인정보 동의 등)은 자동 채움 불가 → FAIL 이 아니라 사람 확인(REVIEW_REQUIRED).
+REVIEW_KINDS: frozenset[str] = frozenset({"consent"})
+_CONSENT_RE = re.compile(r"동의\s*함|동의하지\s*않음|동의\s*여부|동의\s*안\s*함")
 
 _HP = "http://www.hancom.co.kr/hwpml/2011/paragraph"
 _W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
@@ -220,7 +225,8 @@ def _analyze_table(table: list[list[_Cell]], t_no: int, tag: str, out: list[Fill
             # 선택 그룹이 옆 칸으로 나뉜 경우(예: '■ 예비창업자' | '□ 초기창업자')는 같은 행에 ■ 가 있으면 선택된 것으로 본다.
             sibling_checked = any("■" in o.text for o in ordered if o is not cell)
             if cell.text.count("□") and "■" not in cell.text and not sibling_checked:
-                out.append(FillFinding("unchecked", where, _cell_label(left) if left_label and left is not None else "",
+                kind = "consent" if _CONSENT_RE.search(cell.text) else "unchecked"
+                out.append(FillFinding(kind, where, _cell_label(left) if left_label and left is not None else "",
                                        cell.text.strip(_EMPTY_CHARS)[:40]))
 
 
