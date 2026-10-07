@@ -3,6 +3,7 @@
 > 이 파일과 docs/SESSION_RECAP.md는 GitHub main의 공유 기록이다. TASK 우선순위·상태의 정본은 origin/main:TASK.md다.
 
 ## 0. 현재 상태 — 2026-10-06
+- 2026-10-07 별도 #217 COM 표적 검증: engine-coverage-fixes(f567336)에서 중단 케이스 3 passed/18.77초/exit 0, mock 보호 회귀 6 passed. RPC 0x800706ba 재발로 실제 변환 성공은 미확인. 제품/원본/#218 수정 및 병합 없음. 상세는 해당 워크트리 docs/ENGINE_COVERAGE_FIXES.md §7. 다음은 실제 COM 장애 별도 해결; 전체 suite 반복 금지.
 - 문서 PR #215는 main에 병합됐다. main 기준 SHA는 12b5095f9fbeacb02257b3f169d5924f7fc947a2다. AGENTS.md·CLAUDE.md에 모든 위치에서 fetch 후 원격 TASK→RESUME 필수 확인을 명시했고, GitHub 공유판을 실제 조회했다.
 - 현재 codex/round5-fill-fixes는 위 main에서 생성했다. 현재 기간·병합 범위·양옆 라벨 경계와 괄호 실값 보호를 수정했다. 기간 보류는 인라인 동의어 경로에도 적용한다. 커밋: 8284b26(값 채움), 2cb684e8d3310411019656f015b3054451990a9f(PDF mock). 영향 회귀 89 passed/0 failed. 이 코드에서 전체 Windows pytest 1회: 2275 passed/0 failed/5 기존 skipped/23 subtests passed, exit 0. Draft PR #216(https://github.com/pds2225/auto_write/pull/216), main 미병합. 이후 변경은 검증 문서뿐이다.
 - 사용자가 이어가기를 확인했다. 검증용 한글 인스턴스는 모두 종료했고 원본 해시·기존 사용자 프로세스 보존 및 소유 프로세스 잔존 없음이 확인됐다.
