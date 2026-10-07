@@ -53,7 +53,7 @@ git show origin/main:docs/SESSION_RECAP.md
 - Round-5 로컬 증거: D:\auto_write\_preflight_evidence\round5-20261006\ (문서 공유 조회 증거·영향 회귀 로그·실제 PDF 저장 기록). 이 폴더는 커밋하지 않는다.
 
 - 새 요청(2026-10-07): 범용 정부지원사업 신청 엔진 full pipeline을 구현해 draft PR까지 준비. 사용자가 재개를 확인했다. 선행 `codex/engine-coverage-fixes`가 main에 머지되었으면 최신 main에서, 아니면 그 원격 브랜치에서 `codex/engine-full-pipeline`을 분기해야 한다.
-- 직전 확인에서 선행 브랜치는 원격에 없고, 로컬 `C:\Users\ekth3\.codex\worktrees\engine-coverage-fixes\auto_write`에만 미커밋 변경이 있었다. 그 작업 트리와 root의 기존 변경은 보존한다. 재개 시 fetch 후 원격 PR/ref를 다시 확인한다.
-- 설계 방향: 공고 분석 버그는 analyzer 계층에서 고치고, HWPX submit·acceptance·picture insert·layout/integrity 등 기존 모듈을 조합하는 pipeline을 둔다. 설정 파일로 출처 우선순위·문체·접미사를 제공하고, AI 검토요청서/승인 게이트/항목별 병합·반영 로그·근거 없는 주장 거절을 구현한다. 실제 양식과 개인정보는 로컬 `data/`에서만 다룬다.
+- 2026-10-07 재확인: `git ls-remote` 결과 선행 원격 브랜치가 없고 GitHub branch API도 404, 열린 PR 목록에도 없음. 다음 선행 조치: 이전 Codex 세션에서 `codex/engine-coverage-fixes` 변경을 검토·검증하고, fake-only/public-safe 변경만 커밋해 원격 push 및 draft PR 생성(병합 금지). 완료 후 새 작업 세션은 원격 ref와 PR을 재확인해 지정 기준 브랜치에서 `codex/engine-full-pipeline`을 생성한다. `git fetch origin --prune`는 오래된 worktree 메타데이터 삭제 권한 오류로 실패(일반 fetch도 같은 오류). 로컬 `C:\Users\ekth3\.codex\worktrees\engine-coverage-fixes\auto_write`에만 미커밋 변경이 있었다. 그 작업 트리와 root의 기존 변경은 보존한다. 재개 시 fetch 후 원격 PR/ref를 다시 확인한다.
+- 구조를 읽음: `app/analyze_docs.py`는 announcement analyzer로 위임하고, `hwpx_submit.py`는 채움·무결성·수용·레이아웃 기능 조합, 기존 그림 삽입/기업 프로필 출처 충돌 처리기가 존재. `samples/` 디렉터리는 현재 없음. 설계 방향: 공고 분석 버그는 analyzer 계층에서 고치고, HWPX submit·acceptance·picture insert·layout/integrity 등 기존 모듈을 조합하는 pipeline을 둔다. 설정 파일로 출처 우선순위·문체·접미사를 제공하고, AI 검토요청서/승인 게이트/항목별 병합·반영 로그·근거 없는 주장 거절을 구현한다. 실제 양식과 개인정보는 로컬 `data/`에서만 다룬다.
 - 선행 PR 미병합 중에는 `hwpx_fill.py`, `hwpx_protected_regions.py`, `hwpx_form_diff.py`, `project_service.py::_generate_hwpx_direct` 수정 금지. 추가 테스트는 필수 회귀만 하고 전체 pytest 반복 실행을 피한다.
-
+- 2026-10-07 선행 작업 마무리: 기존 engine-coverage-fixes 작업 트리의 미커밋 변경 보존·diff 검토·필수 회귀 진행 중. 원격 main 12b5095, #214/#216 draft. 자동 maintenance를 끈 fetch 성공. 이번 승인 범위는 공개 가능한 의도 파일만 commit/push하고 main 대상 draft PR 생성까지이며 병합 금지.
