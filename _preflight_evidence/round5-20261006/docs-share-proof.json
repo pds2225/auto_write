@@ -1,0 +1,17 @@
+{
+  "main_sha": "12b5095f9fbeacb02257b3f169d5924f7fc947a2",
+  "files": {
+    "AGENTS.md": {
+      "sha": "e5244a1e24891097d4018a146c7bf018b810470f",
+      "html_url": "https://github.com/pds2225/auto_write/blob/main/AGENTS.md"
+    },
+    "CLAUDE.md": {
+      "sha": "45137a7e3fba2cd7d45139063f5b0fce98afacb0",
+      "html_url": "https://github.com/pds2225/auto_write/blob/main/CLAUDE.md"
+    },
+    "RESUME.md": {
+      "sha": "5220c7cfdb278d3b1ddfc87db15982898aa7283a",
+      "html_url": "https://github.com/pds2225/auto_write/blob/main/RESUME.md"
+    }
+  }
+}

@@ -315,7 +315,30 @@ def file_stats(repo: Path, files: list[str]) -> dict[str, dict[str, int]]:
     return stats
 
 
-def is_environment_blocker(message: str) -> bool:
+_IMPORT_ENV_MARKERS = (
+    "modulenotfounderror",
+    "importerror",
+    "no module named",
+)
+
+
+def _call_phase_normal_failure(when: str, message: str) -> bool:
+    """호출 단계의 AssertionError·일반 실패는 환경 문제가 아니다.
+
+    longrepr 에 rhwp·한글 같은 키워드가 있어도 call 단계 실패를 env_error 로
+    올리지 않는다. import/수집 오류는 여기서 제외해 기존 env 판정을 유지한다.
+    """
+    if (when or "").strip().lower() != "call":
+        return False
+    lowered = (message or "").lower()
+    if any(token in lowered for token in _IMPORT_ENV_MARKERS):
+        return False
+    return True
+
+
+def is_environment_blocker(message: str, *, when: str = "") -> bool:
+    if _call_phase_normal_failure(when, message):
+        return False
     text = message or ""
     lowered = text.lower()
     if any(marker.lower() in lowered for marker in _ENV_MARKERS):
@@ -647,13 +670,13 @@ def collect_pytest_nodes(repo: Path, files: list[str], *, timeout: int = 300) ->
         shutil.rmtree(report_dir, ignore_errors=True)
 
 
-def _map_outcome(raw: str, message: str) -> str:
+def _map_outcome(raw: str, message: str, *, when: str = "") -> str:
     if raw in {"passed", "xpassed"}:
         return "passed"
     if raw == "skipped":
         return "skipped"
     if raw in {"failed", "error", "xfailed"}:
-        return "env_error" if is_environment_blocker(message) else "failed"
+        return "env_error" if is_environment_blocker(message, when=when) else "failed"
     return "failed"
 
 
@@ -666,7 +689,7 @@ def fold_reports(rows: list[dict[str, Any]]) -> dict[str, dict[str, str]]:
             continue
         raw = str(row.get("outcome") or "")
         message = str(row.get("message") or "")
-        mapped = _map_outcome(raw, message)
+        mapped = _map_outcome(raw, message, when=str(row.get("when") or ""))
         previous = best.get(nodeid)
         if previous is not None and rank.get(raw, 0) < rank.get(str(previous.get("_raw")), 0):
             continue

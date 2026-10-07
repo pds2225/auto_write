@@ -1,0 +1,52 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Auto Write: 서버 실행 (launch.bat)",
+      "type": "shell",
+      "command": "${workspaceFolder}\\launch.bat",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "Auto Write: 환경 점검 (check_env.bat)",
+      "type": "shell",
+      "command": "${workspaceFolder}\\check_env.bat",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Auto Write: pytest (app)",
+      "type": "shell",
+      "command": "${env:LocalAppData}\\Programs\\Python\\Python311\\python.exe",
+      "args": ["-m", "pytest", "tests", "-q", "--tb=short"],
+      "options": {
+        "cwd": "${workspaceFolder}\\app",
+        "env": {
+          "PYTHONPATH": "${workspaceFolder}\\app"
+        }
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    }
+  ]
+}

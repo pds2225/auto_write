@@ -1,0 +1,8 @@
+{% extends "operator_base.html" %}
+{% block title %}실행 모니터링 · Auto Write{% endblock %}
+{% block eyebrow %}RUNTIME EVENTS{% endblock %}
+{% block page_title %}실행 모니터링{% endblock %}
+{% block content %}
+<div class="notice-box"><strong>가짜 progress가 아닙니다.</strong><span>아래 상태는 운영 콘솔이 실제 서비스 호출 전후에 기록한 runtime event입니다. 5초마다 현재 목록을 다시 불러옵니다.</span></div>
+<div id="run-container" class="monitor-stack">{% for run in runs %}<article class="monitor-run"><div class="monitor-head"><div><span class="badge badge-{{ run.status|lower }}">{{ run.status }}</span><h2>{{ run.label }}</h2><small>{{ run.run_id }} · {{ run.started_at }}</small></div>{% if run.error %}<span class="error-text">{{ run.error }}</span>{% endif %}</div><div class="step-timeline">{% for step in run.steps %}<div class="timeline-step step-{{ step.status|lower }}"><div class="timeline-dot"></div><div><div class="timeline-title"><strong>{{ step.label }}</strong><span>{{ step.status }}</span></div><small>{{ step.service }} · {{ step.started_at }}</small>{% if step.details %}<pre>{{ step.details | tojson(indent=2) }}</pre>{% endif %}{% if step.error %}<p class="error-text">{{ step.error }}</p>{% endif %}</div></div>{% endfor %}</div></article>{% else %}<div class="empty-state">아직 runtime 실행 기록이 없습니다.</div>{% endfor %}</div><script>setTimeout(() => location.reload(), 5000);</script>
+{% endblock %}

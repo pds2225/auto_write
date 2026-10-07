@@ -1,0 +1,32 @@
+[
+  {
+    "file": "RESUME.md",
+    "sha256": "4CD4C4D8C5B6C3C9551AFFCA604CE41D331FF9B7A08E850F212B4C7F2EE6D061",
+    "backup": "D:\\auto_write\\_preflight_evidence\\main-sync-20261005\\round3\\RESUME.md"
+  },
+  {
+    "file": "TASK.md",
+    "sha256": "AECFB90179E4C0E6CDC1D370D6B86EEDB180573AC1291E1292BC9B8982250CD6",
+    "backup": "D:\\auto_write\\_preflight_evidence\\main-sync-20261005\\round3\\TASK.md"
+  },
+  {
+    "file": "app/auto_write/services/hwpx_submit.py",
+    "sha256": "E6BB47F476E05D5D77343D7CAED13C5A7F759F632599B55B629CBC4B7AE92C5A",
+    "backup": "D:\\auto_write\\_preflight_evidence\\main-sync-20261005\\round3\\app\\auto_write\\services\\hwpx_submit.py"
+  },
+  {
+    "file": "app/core/docx/services/hwpx_fill.py",
+    "sha256": "70D19624524E823CD2D599737050B97FEFEF9A4620D61E0AED47741A5EBBD230",
+    "backup": "D:\\auto_write\\_preflight_evidence\\main-sync-20261005\\round3\\app\\core\\docx\\services\\hwpx_fill.py"
+  },
+  {
+    "file": "app/tests/test_hwpx_round3_fill.py",
+    "sha256": "F3523D57A6B95D92A287E9BC88F4B23917841CD9C9176626191A31391AFFE312",
+    "backup": "D:\\auto_write\\_preflight_evidence\\main-sync-20261005\\round3\\app\\tests\\test_hwpx_round3_fill.py"
+  },
+  {
+    "file": "docs/PR211_ROUND3.md",
+    "sha256": "C780B263476AF7EA40566CCA651BD70852B5D56E54C9E94AB7B71141F6B0E955",
+    "backup": "D:\\auto_write\\_preflight_evidence\\main-sync-20261005\\round3\\docs\\PR211_ROUND3.md"
+  }
+]

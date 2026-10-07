@@ -36,7 +36,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from .hwpx_fill import commit_t02_label_writes, fill_hwpx
+from .hwpx_fill import commit_t02_label_writes, fill_hwpx, relax_t02_written_layout
 from .hwpx_acceptance import run_hwpx_acceptance
 from .hwpx_integrity_gate import run_hwpx_integrity_gate
 from .hwpx_layout_fix import (
@@ -61,6 +61,15 @@ RHWP_ABSENT_REPAIR_NOTE = (
 RHWP_ABSENT_RENDER_NOTE = (
     "RHWP_ABSENT: 네이티브 재열기/렌더 생략 — "
     "L005 픽셀·L050 동일명 PDF는 ENV_BLOCKED (재열기 PASS로 기록하지 않음)"
+)
+RHWP_DISABLED_REPAIR_NOTE = (
+    "rhwp 기본 끔(AUTO_WRITE_ENABLE_RHWP 없음) — 표 격자 자동 repair 생략. "
+    "레이아웃을 추정 수정하지 않고 패키지를 유지한다."
+)
+RHWP_DISABLED_RENDER_NOTE = (
+    "RHWP_DISABLED: 네이티브 재열기/렌더 기본 끔(NOT_RUN). "
+    "AUTO_WRITE_ENABLE_RHWP=1 일 때만 rhwp 를 실행한다. "
+    "L005 픽셀·L050 동일명 PDF는 PASS로 기록하지 않음"
 )
 XML_OVERFLOW_NOT_L005_NOTE = (
     "고정 셀 높이는 XML 추정 — L005 한글 픽셀 재열기 PASS가 아님"
@@ -101,6 +110,9 @@ class SubmitReport:
     native_render: dict[str, Any] = field(default_factory=dict)
     pdf_pair: dict[str, Any] = field(default_factory=dict)
     l005_review: dict[str, Any] = field(default_factory=dict)
+    lrule_report: str = ""
+    finalizer: dict[str, Any] = field(default_factory=dict)
+    domain_pipeline: dict[str, Any] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
@@ -126,11 +138,14 @@ class SubmitReport:
             "native_render": dict(self.native_render),
             "pdf_pair": dict(self.pdf_pair),
             "l005_review": dict(self.l005_review),
+            "lrule_report": self.lrule_report,
+            "finalizer": dict(self.finalizer),
+            "domain_pipeline": dict(self.domain_pipeline),
             "notes": list(self.notes),
         }
 
 
-def _seal_submit_report(report: SubmitReport) -> SubmitReport:
+def _seal_submit_report(report: SubmitReport, *, lrule_gate: bool = False) -> SubmitReport:
     """제출 가능 최종본에만 L050 동일명 PDF 를 시도한다. L005 는 상태만 붙인다.
 
     PDF 생성 실패는 패키지 제출 플래그를 바꾸지 않는다. L005 PASS 는
@@ -138,6 +153,8 @@ def _seal_submit_report(report: SubmitReport) -> SubmitReport:
     """
     from .submission_gates import l005_pixel_review_status, sibling_pdf_attempt
 
+    if lrule_gate:
+        _apply_lrule_gate(report)
     report.l005_review = l005_pixel_review_status()
     final = Path(report.final) if report.final else None
     if not (
@@ -154,13 +171,59 @@ def _seal_submit_report(report: SubmitReport) -> SubmitReport:
         if note not in report.notes:
             report.notes.append(note)
     elif attempt.get("generated"):
-        note = (
-            "L050: rhwp export-pdf 로 동일명 PDF 를 만들었다. "
-            "mechanized 아님 — Windows 실측 전까지 gap"
-        )
+        how = str(attempt.get("reason") or "")
+        if how.startswith("rhwp:"):
+            note = (
+                "L050: rhwp export-pdf 로 동일명 PDF 를 만들었다. "
+                "mechanized 아님 — Windows 실측 전까지 gap"
+            )
+        else:
+            note = (
+                "L050: 한글 COM SaveAs 로 동일명 PDF 를 만들었다. "
+                "mechanized 아님 — rhwp *.l050.json 증거는 없음"
+            )
         if note not in report.notes:
             report.notes.append(note)
     return report
+
+
+def _apply_lrule_gate(report: SubmitReport) -> None:
+    """기존 단일 최종화 경로와 저장된 증거를 HWPX 제출에도 적용한다."""
+    artifact = Path(report.final) if report.final else None
+    try:
+        from ..domains.pipeline_gate import run_to_final
+
+        if artifact is None or not artifact.is_file():
+            raise ValueError("LRule 검사 대상 산출물이 없습니다")
+        gate = run_to_final(
+            artifact, document_type="application_form", filename=artifact.name,
+            apply_draft_name=False, force_draft=not (report.ok and report.submittable),
+        )
+        if gate.lrule_report is None or gate.finalizer is None:
+            raise ValueError(gate.blocked_reason or "LRule/Finalizer 결과가 없습니다")
+        allowed = bool(report.ok and report.submittable and gate.finalizer.submittable)
+        if not allowed:
+            report.draft_reason = f"{report.draft_reason} / LRule/Finalizer 차단: {gate.blocked_reason}".strip(" /")
+            report.final = str(_mark_draft(report, artifact, Path(report.input)))
+        report.ok = report.final_output_allowed = report.submittable = allowed
+        gate.finalizer.final_path = report.final
+        gate.renamed_path = report.final
+        gate.lrule_report.artifact_path = report.final
+        evidence_path = Path(report.final).with_name(f"{Path(report.final).stem}_lrule_report.json")
+        gate.lrule_report.save(evidence_path)
+        report.lrule_report = str(evidence_path)
+        report.finalizer = gate.finalizer.as_dict()
+        report.domain_pipeline = gate.as_dict()
+    except Exception as exc:
+        report.ok = report.final_output_allowed = report.submittable = False
+        report.error = f"{report.error} / LRule/Finalizer 실행 실패: {type(exc).__name__}: {exc}".strip(" /")
+        report.draft_reason = f"{report.draft_reason} / LRule 검사·증거 저장 불능".strip(" /")
+        if artifact is not None and artifact.is_file():
+            report.final = str(_mark_draft(report, artifact, Path(report.input)))
+        report.finalizer = {"success": False, "submittable": False, "is_draft": True,
+                            "final_path": report.final, "blocked_reason": report.error}
+        report.domain_pipeline = {"submittable": False, "finalizer": dict(report.finalizer),
+                                  "blocked_reason": report.error}
 
 
 def _mark_draft(report: SubmitReport, out: Path, src: Path) -> Path:
@@ -215,9 +278,15 @@ def _check_and_repair_semantics(report: SubmitReport, out: Path, *, preserve_tem
 
     if preserve_template and not _rhwp_present():
         # rhwp로 다시 열 수 없으면 주소 재지정을 만들지 않는다.
+        from core.docx.services.native_hwp import rhwp_enabled
+
         report.semantic_after = before
-        report.draft_reason = "rhwp 미설치 — 보호 양식의 표 격자 결함은 자동 교정하지 않음"
-        report.notes.append(RHWP_ABSENT_REPAIR_NOTE)
+        if rhwp_enabled():
+            report.draft_reason = "rhwp 미설치 — 보호 양식의 표 격자 결함은 자동 교정하지 않음"
+            report.notes.append(RHWP_ABSENT_REPAIR_NOTE)
+        else:
+            report.draft_reason = "rhwp 기본 끔 — 보호 양식의 표 격자 결함은 자동 교정하지 않음"
+            report.notes.append(RHWP_DISABLED_REPAIR_NOTE)
         return False
 
     repaired = out.with_name(f"{out.stem}.__grid_repair__.{os.getpid()}{out.suffix}")
@@ -298,7 +367,10 @@ def _note_native_render(report: SubmitReport) -> None:
     native = report.native_render or {}
     if not native:
         return
-    if native.get("render_status") == "UNAVAILABLE":
+    if native.get("render_status") == "NOT_RUN" and native.get("disabled") is True:
+        if RHWP_DISABLED_RENDER_NOTE not in report.notes:
+            report.notes.append(RHWP_DISABLED_RENDER_NOTE)
+    elif native.get("render_status") == "UNAVAILABLE":
         if RHWP_ABSENT_RENDER_NOTE not in report.notes:
             report.notes.append(RHWP_ABSENT_RENDER_NOTE)
     if native.get("l005_pixel") == "PASS" or native.get("pixel_reopen_claimed") is True:
@@ -356,41 +428,76 @@ def apply_t02_analyzer_writes(
         for key, value in dict(identity or {}).items()
     }
     index = index_hwpx_structure(source)
+    # 기간표는 한 칸만 쓰는 T02 대신 현재 열을 고르는 기존 채움 경로로 보낸다.
+    from core.docx.services.hwpx_fill import _PERIOD_HEADER_RE, _label_matches, _key
+    period_labels: set[str] = set()
+    label_tables: dict[str, set[int]] = {}
+    period_tables: set[int] = set()
+    for section in index.sections:
+        for table_index in section.table_indexes:
+            table = index.tables[table_index]
+            labels = {
+                _t02_label_key("".join(section.paragraphs[p].raw_text for p in cell.paragraph_indexes))
+                for cell in table.cells
+                if _label_matches(_key("".join(section.paragraphs[p].raw_text for p in cell.paragraph_indexes)), _key("직원수"))
+            }
+            for label in labels:
+                label_tables.setdefault(label, set()).add(table_index)
+            headers = [
+                cell for cell in table.cells
+                if cell.physical_tr_index < 3 and
+                _PERIOD_HEADER_RE.fullmatch(_t02_label_key("".join(
+                    section.paragraphs[p].raw_text for p in cell.paragraph_indexes
+                )))
+            ]
+            if len(headers) < 2:
+                continue
+            period_tables.add(table_index)
+            period_labels.update(labels)
+    # 다른 표에 같은 라벨이 있으면 기존 중복/보호 판정을 유지한다.
+    all_period_labels = set(period_labels)
+    period_labels = {label for label in period_labels if label_tables[label] <= period_tables}
     current = tuple(
         grant for grant in authorize_t02_writes(index)
         if authorization_is_current(index, grant)
     )
-    granted_labels = {grant.field_label for grant in current if grant.field_label}
-    granted_labels.update(
-        grant.field_label
-        for grant in authorize_merged_value_writes(index)
-        if merged_authorization_is_current(index, grant) and grant.field_label
+    written_grants = [grant for grant in current if grant.field_label]
+    granted_labels = {grant.field_label for grant in written_grants}
+    def _take(grants) -> None:
+        for grant in grants:
+            if not grant.field_label:
+                continue
+            granted_labels.add(grant.field_label)
+            written_grants.append(grant)
+
+    _take(
+        grant for grant in authorize_merged_value_writes(index)
+        if merged_authorization_is_current(index, grant)
     )
-    granted_labels.update(
-        grant.field_label
-        for grant in authorize_nested_leaf_writes(index)
-        if nested_authorization_is_current(index, grant) and grant.field_label
+    _take(
+        grant for grant in authorize_nested_leaf_writes(index)
+        if nested_authorization_is_current(index, grant)
     )
-    granted_labels.update(
-        grant.field_label
-        for grant in authorize_repeated_row_writes(index)
-        if repeated_authorization_is_current(index, grant) and grant.field_label
+    _take(
+        grant for grant in authorize_repeated_row_writes(index)
+        if repeated_authorization_is_current(index, grant)
     )
-    granted_labels.update(
-        grant.field_label
-        for grant in authorize_guidance_narrative_writes(index)
-        if guidance_authorization_is_current(index, grant) and grant.field_label
+    _take(
+        grant for grant in authorize_guidance_narrative_writes(index)
+        if guidance_authorization_is_current(index, grant)
     )
-    granted_labels.update(
-        grant.field_label
-        for grant in authorize_inline_field_writes(index)
-        if inline_authorization_is_current(index, grant) and grant.field_label
+    _take(
+        grant for grant in authorize_inline_field_writes(index)
+        if inline_authorization_is_current(index, grant)
     )
-    granted_labels.update(
-        grant.field_label
-        for grant in authorize_checkbox_writes(index)
-        if checkbox_authorization_is_current(index, grant) and grant.field_label
+    _take(
+        grant for grant in authorize_checkbox_writes(index)
+        if checkbox_authorization_is_current(index, grant)
     )
+    written_grants = [g for g in written_grants if not (
+        g.table_index in period_tables and g.field_label in all_period_labels
+    )]
+    granted_labels = {g.field_label for g in written_grants}
     pending_labels = {
         field.field_label
         for field in assess_fields(index)
@@ -399,6 +506,7 @@ def apply_t02_analyzer_writes(
         and field.field_label
         and field.auto_write_allowed is False
         and field.field_label not in granted_labels
+        and field.field_label not in period_labels
     }
     legacy: dict[str, str] = {}
     analyzer: dict[str, str] = {}
@@ -407,6 +515,8 @@ def apply_t02_analyzer_writes(
         label = _t02_label_key(key)
         if str(value).strip() and label in granted_labels:
             analyzer[label] = str(value)
+            if label == _t02_label_key("팀명"):
+                legacy[key] = value  # 서약서 재사용. 이미 쓴 표 값은 fill_hwpx가 보존한다.
             continue
         if str(value).strip() and label in pending_labels:
             held.append(label)
@@ -418,6 +528,21 @@ def apply_t02_analyzer_writes(
         raise ValueError("T02 analyzer staging path must differ from the source")
     commit_report = commit_t02_label_writes(source, staging, analyzer)
     if getattr(commit_report, "ok", False) and staging.is_file():
+        chosen = {}
+        for grant in written_grants:
+            if grant.field_label and grant.field_label not in chosen:
+                chosen[grant.field_label] = grant
+        specs = [
+            {
+                "section_member": grant.section_member,
+                "paragraph_index": grant.paragraph_index,
+                "run_index": grant.run_index,
+                "expected_raw_text": grant.expected_raw_text,
+            }
+            for label, grant in chosen.items()
+            if label in analyzer
+        ]
+        relax_t02_written_layout(staging, specs)
         return T02AnalyzerWire(staging, legacy, dict(analyzer), tuple(dict.fromkeys(held)))
     if staging.exists():
         staging.unlink()
@@ -438,6 +563,7 @@ def submit_hwpx(
     region_edits: Optional[list[dict[str, Any]]] = None,
     field_writes: Optional[dict[str, str]] = None,
     expected_sha256: str | None = None,
+    lrule_gate: bool = False,
 ) -> SubmitReport:
     """HWPX 양식을 채우고 수용검사 게이트로 판정해 제출 가능 여부를 확정한다.
 
@@ -448,6 +574,8 @@ def submit_hwpx(
         replacements: 직접 치환(선택, 라벨/실값 칸 보호).
         acceptance_gate: False 면 진단용 우회 요청으로 기록하되 공통 게이트는 실행하고
             최종 제출본은 허용하지 않는다(``_DRAFT`` + ``APPROVAL_REQUIRED``).
+        lrule_gate: True면 전수 LRule/Finalizer와 증거 저장까지 확인한다.
+            라이브러리 기본값은 기존 R9 경로를 유지하며 제출 CLI에서는 항상 켠다.
         normalize_colors: True(기본)면 채움 직후 잔존 예시 유색체를 검정으로 정규화해
             수용검사 colored 결함을 자동 해소한다(채운 값 검정은 fill_hwpx 가 이미 처리).
             ``submission_cleanup=True`` 이면 cleanup 의 force_black 이 동일 역할을 하므로
@@ -568,7 +696,7 @@ def submit_hwpx(
             "TEMPLATE_MISMATCH — F01 canonical SHA256과 다른 양식에는 field_writes를 적용하지 않음"
         )
         report.final = str(_mark_draft(report, out, src))
-        return _seal_submit_report(report)
+        return _seal_submit_report(report, lrule_gate=lrule_gate)
 
     semantic_ok = _check_and_repair_semantics(report, out, preserve_template=preserve_template)
     if semantic_ok and report.routing_status == NORMAL and fill_rep.overflow_cells:
@@ -632,6 +760,7 @@ def submit_hwpx(
         acceptance_validator=run_hwpx_acceptance,
         fixed_cell_overflow=report.overflow_cells,
         render_validator=render_validator,
+        acceptance_baseline=str(src),
     )
     report.integrity = gate.as_dict()
     report.acceptance = gate.acceptance_report
@@ -652,13 +781,13 @@ def submit_hwpx(
         report.ok = False
         report.final_output_allowed = False
         report.submittable = False
-        return _seal_submit_report(report)
+        return _seal_submit_report(report, lrule_gate=lrule_gate)
 
     if semantic_ok and not _package_blocked(gate):
         report.ok = True
         report.final_output_allowed = True
         report.submittable = True
-        return _seal_submit_report(report)
+        return _seal_submit_report(report, lrule_gate=lrule_gate)
 
     failed = [v for v in gate.validators if v.severity != "PASS"]
     messages = "; ".join(v.message for v in failed[:3])
@@ -679,4 +808,4 @@ def submit_hwpx(
     report.ok = False
     report.final_output_allowed = False
     report.submittable = False
-    return _seal_submit_report(report)
+    return _seal_submit_report(report, lrule_gate=lrule_gate)

@@ -46,6 +46,7 @@ import copy
 import hashlib
 import io
 import os
+from datetime import date
 import re
 import zipfile
 from dataclasses import dataclass, field
@@ -148,11 +149,13 @@ def _real_existing_text(text: str) -> bool:
 
     Obvious placeholders (``0000년 00월 00일``, ``000-00-00000``, ``000억원``),
     underscore blanks, date scaffolds, and choice marks stay on their own gates.
+    HWPX example masks (``OOO``, ``000-0000-0000``, ``OO도 OO시·군``) are not real.
     """
     raw = str(text or "")
     if not raw.strip():
         return False
-    if _is_obvious_placeholder(raw) or _is_fill_blank(raw):
+    if (_is_obvious_placeholder(raw) or _is_fill_blank(raw)
+            or _is_hwpx_example_scaffold(raw) or _is_hwpx_guidance_placeholder(raw)):
         return False
     from core.docx.services.hwpx_protected_regions import (
         _CHOICE_MARK_RE,
@@ -398,6 +401,29 @@ def _is_black_color(color: Optional[str]) -> bool:
     return c in ("", "000000", "AUTO", "NONE")
 
 
+def _charpr_is_italic(el) -> bool:
+    """charPr 가 기울임이면 True. 속성 italic 과 hh:italic 자식을 함께 본다."""
+    flag = (el.get("italic") or "").strip().lower()
+    if flag in ("1", "true", "yes"):
+        return True
+    for sub in el:
+        if _local(getattr(sub, "tag", "")) != "italic":
+            continue
+        val = (sub.get("val") or sub.get("value") or "1").strip().lower()
+        if val not in ("0", "false", "no"):
+            return True
+    return False
+
+
+def _clear_italic(el) -> None:
+    """클론에서 기울임을 끈다. 원본 charPr 는 호출 전에 복사돼 있어야 한다."""
+    if el.get("italic") not in (None, "", "0", "false", "FALSE"):
+        el.set("italic", "0")
+    for sub in list(el):
+        if _local(getattr(sub, "tag", "")) == "italic":
+            el.remove(sub)
+
+
 class _BlackCharPr:
     """헤더 charPr 색 지도 + '검정 클론' 관리 — 유색 예시체 상속 차단.
 
@@ -427,9 +453,19 @@ class _BlackCharPr:
             return True  # 색 정보 없음(헤더 부재/무색 헤더) → 관여하지 않음
         return _is_black_color(self.colors.get(ref or ""))
 
+    def is_italic(self, ref: Optional[str]) -> bool:
+        el = self._byid.get(ref or "")
+        return el is not None and _charpr_is_italic(el)
+
+    def needs_body(self, ref: Optional[str]) -> bool:
+        """유색이거나 기울임이면 본문 스타일(검정·정자체)로 바꿔야 한다."""
+        if not self._byid:
+            return False
+        return (not self.is_black(ref)) or self.is_italic(ref)
+
     def black_ref(self, ref: str) -> str:
-        """ref 가 유색이면 검정 클론의 id, 아니면 ref 그대로."""
-        if self.is_black(ref):
+        """ref 가 안내 스타일(유색·기울임)이면 본문 클론 id, 아니면 ref 그대로."""
+        if not self.needs_body(ref):
             return ref
         if ref in self._clones:
             return self._clones[ref]
@@ -443,6 +479,7 @@ class _BlackCharPr:
         clone = copy.deepcopy(orig)
         clone.set("id", new_id)
         clone.set("textColor", "#000000")
+        _clear_italic(clone)
         # 하위 색 속성도 정규화(적대검증 D6): 유색 예시체는 밑줄·취소선·그림자
         # 색이 글자색과 동색(#0000FF 밑줄 실측 106건)이거나 형광 배경(shadeColor)을
         # 갖는 경우가 있어 textColor 만 바꾸면 '검정 글자+파란 밑줄/노란 배경'이 남는다.
@@ -469,9 +506,9 @@ class _BlackCharPr:
         return new_id
 
     def fix_run(self, run) -> bool:
-        """run 의 charPr 가 유색이면 검정 클론으로 교체. 바꿨으면 True."""
+        """run 의 charPr 가 유색·기울임이면 본문 클론으로 교체. 바꿨으면 True."""
         ref = run.get("charPrIDRef")
-        if ref is None or self.is_black(ref):
+        if ref is None or not self.needs_body(ref):
             return False
         new_ref = self.black_ref(ref)
         if new_ref == ref:
@@ -496,7 +533,7 @@ def _inherit_charpr(tc, black: Optional[_BlackCharPr] = None) -> str:
             continue
         if first is None:
             first = ref
-        if black is None or black.is_black(ref):
+        if black is None or not black.needs_body(ref):
             return ref
     if first is not None:
         return first if black is None else black.black_ref(first)
@@ -505,7 +542,7 @@ def _inherit_charpr(tc, black: Optional[_BlackCharPr] = None) -> str:
     return "0" if black is None else black.black_ref("0")
 
 
-def _set_cell_text(tc, value: str, black: Optional[_BlackCharPr] = None) -> bool:
+def _set_cell_text(tc, value: str, black: Optional[_BlackCharPr] = None, *, replace_scaffold: bool = False) -> bool:
     """셀의 텍스트를 value 로 설정한다(첫 hp:t 에 기입, 나머지 hp:t 는 비움).
 
     빈/플레이스홀더 칸에만 호출되므로 잔여 hp:t 를 비워도 실데이터 손실은 없다.
@@ -524,7 +561,9 @@ def _set_cell_text(tc, value: str, black: Optional[_BlackCharPr] = None) -> bool
     """
     if _has_form_control(tc) or _has_handwritten_object(tc) or _cell_has_nested_table(tc):
         return False
-    if _split_value_spans(tc):
+    if _split_value_spans(tc) and (
+        not replace_scaffold or _date_placeholder_crosses_spans(tc)
+    ):
         return False
     paras = list(tc.iter(_q("p")))
     if not paras:
@@ -640,6 +679,23 @@ def _fill_inline_fields_in_p(
     if ":" not in flat and "：" not in flat:
         return False
     changed = False
+
+    # onlab 서약서처럼 정확히 '팀 명 :'만 있는 문단은 팀명에 한해 콜론 뒤에 쓴다.
+    # 비고/주의 등 일반 콜론 문단은 기존대로 채우지 않는다.
+    colon_only = re.fullmatch(r"\s*(.*?)\s*[:：]\s*", flat, re.DOTALL)
+    if colon_only and _key(colon_only.group(1)) == _key("팀명"):
+        for want_key, lbl, val in wants:
+            if want_key in used_keys or want_key != _key("팀명"):
+                continue
+            last = ts[-1]
+            last.text = (last.text or "") + " " + str(val)
+            _invalidate_lineseg(p)
+            filled[lbl] = str(val)
+            used_keys.add(want_key)
+            changed = True
+            flat = "".join(t.text or "" for t in ts)
+            break
+
     fields = list(_iter_line_fields(flat))
     # 역순 스플라이스: 뒤 구간부터 교체해야 앞 필드 offset 이 유효.
     for label_raw, value_raw, f_start, f_end in reversed(fields):
@@ -652,6 +708,8 @@ def _fill_inline_fields_in_p(
             continue
         for want_key, lbl, val in wants:
             if want_key in used_keys:
+                continue
+            if _exact_identity_blocks_synonym(field_key, want_key, wants, used_keys):
                 continue
             if _held_for_other_label(exact_held, field_key, want_key):
                 continue
@@ -940,18 +998,120 @@ def _left_label_text(tc) -> str:
     return ""
 
 
-def _cell_text_fillable(tc) -> bool:
-    """텍스트 기준 채움 가능 판정 — 비었거나 '명백한 예시 플레이스홀더'면 True.
+_EXAMPLE_OMASK_RE = re.compile(r"^[O○〇ㅇo]{3,}$")
+_EXAMPLE_ZERO_RE = re.compile(r"^[0.\-\s]{6,}$")
+_EXAMPLE_DATE_RE = re.compile(r"^0{4}\s*년\s*0{1,2}\s*월\s*0{1,2}\s*일$")
+_EXAMPLE_GUIDED_OMASK_RE = re.compile(
+    r"^[O○〇ㅇo]{3,}\s*[\(（].*(?:기입|작성|동일).*[\)）]\s*$"
+)
+_EXAMPLE_GUIDED_DATE_RE = re.compile(
+    r"^0{4}\s*년\s*0{1,2}\s*월\s*0{1,2}\s*일\s*(.+)$"
+)
 
-    이미 실제 값이 있으면 False(덮어쓰기 금지). 빈칸 외에는 _is_obvious_placeholder
-    (불가능 날짜·전부-0 수량·더미 등록번호)만 채울 대상으로 본다(O마스크 제외).
-    치환(replacements) 보호 판정은 이 기준만 쓴다 — 치환은 '기존 텍스트 덮어쓰기'라
-    폼 컨트롤 존재와 무관하다(컨트롤 옆 예시토큰 치환은 종전대로 허용, 적대검증 D5).
+
+def _date_placeholder_crosses_spans(tc) -> bool:
+    """날짜 자체가 여러 span 에 나뉜 경우만 보존한다.
+
+    완전한 날짜 예시 뒤의 별도 안내 run 은 교체할 수 있지만, 년/월/일이
+    서로 다른 run 에 있으면 기존 날짜 서식과 span 경계를 합치지 않는다.
+    """
+    raw = _cell_text(tc)
+    if not (_EXAMPLE_DATE_RE.fullmatch(raw) or _EXAMPLE_GUIDED_DATE_RE.fullmatch(raw)):
+        return False
+    texts = _cell_texts(tc)
+    first = re.sub(r"\s+", " ", str(texts[0].text or "")).strip() if texts else ""
+    return not (
+        _EXAMPLE_DATE_RE.fullmatch(first) or _EXAMPLE_GUIDED_DATE_RE.fullmatch(first)
+    )
+
+
+_GUIDANCE_VALUE_RE = re.compile(
+    r"^(?:예비창업|해당|예시|참고|입력|기재)[^\n]{0,70}(?:기재|작성)[^\n]{0,12}$"
+)
+_GUIDANCE_CONTACT_RE = re.compile(
+    r"^[\(（]\s*(?:휴대폰|휴대전화|연락처)\s*[\)）]$",
+    re.IGNORECASE,
+)
+_GUIDANCE_PAREN_RE = re.compile(
+    r"^[\(（]\s*(?:"
+    r"(?:본인이|신청자가)\s*희망하는\s*[^()（）\n:：;；]{1,55}\s*(?:에\s*대하여|을|를)\s*(?:간략히|간단히)\s*"
+    r"|해당\s*(?:사항|내용|항목)(?:을|를)\s*(?:(?:간략히|간단히)\s*)?"
+    r"|(?:사업\s*내용|창업\s*아이템)(?:을|를|에\s*대하여)\s*(?:간략히|간단히)\s*"
+    r")"
+    r"(?:소개|기재|작성)(?:\s*(?:하세요|해\s*주세요|하십시오|바랍니다))?\s*[\)）]$"
+)
+
+
+def _is_hwpx_guidance_placeholder(text: str) -> bool:
+    """값 칸 자체가 무엇을 쓰라는 짧은 안내뿐이면 빈칸으로 본다."""
+    raw = re.sub(r"\s+", " ", str(text or "")).strip()
+    if re.fullmatch(r"ex\s*\)\s*\S.{0,230}", raw, re.IGNORECASE):
+        return True
+    if not raw or len(raw) > 90:
+        return False
+    return bool(
+        _GUIDANCE_CONTACT_RE.fullmatch(raw)
+        or _GUIDANCE_VALUE_RE.fullmatch(raw)
+        or _GUIDANCE_PAREN_RE.fullmatch(raw)
+    )
+
+_EXAMPLE_CHOICE_RE = re.compile(r"\s*/\s*")
+_REGION_SCAFFOLD_CHARS_RE = re.compile(r"[O○〇ㅇ0\s·・.\-도특별시군구읍면동로길번지]")
+
+
+def _is_hwpx_example_scaffold(text: str) -> bool:
+    """칸 전체가 양식 예시(OOO·0마스크·지역 뼈대·선택 안내)면 True.
+
+    cross-form ``_is_obvious_placeholder`` 는 단독 O마스크를 일부러 제외한다
+    (GOOGLE/SOHO 오탐). 이 판정은 HWPX 값칸을 채울 때만 쓰고, 칸 문자열 전체에
+    다른 글자가 없을 때만 예시로 본다.
+    """
+    raw = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not raw or len(raw) > 240:
+        return False
+    if any(mark in raw for mark in ("□", "☐", "■", "☑")):
+        return False
+    compact = re.sub(r"\s+", "", raw)
+    if _EXAMPLE_OMASK_RE.fullmatch(compact):
+        return True
+    if _EXAMPLE_GUIDED_OMASK_RE.fullmatch(raw):
+        return True
+    if _EXAMPLE_DATE_RE.fullmatch(raw):
+        return True
+    guided_date = _EXAMPLE_GUIDED_DATE_RE.fullmatch(raw)
+    if guided_date and re.search(r"기입|작성|기재|기준|사업자등록|법인등기", guided_date.group(1)):
+        return True
+    if _EXAMPLE_ZERO_RE.fullmatch(compact) and "0" in compact and not re.search(r"[1-9]", compact):
+        return True
+    if re.search(r"[O○〇ㅇ]{2,}", raw) and re.search(r"[도시군구]", raw):
+        if _REGION_SCAFFOLD_CHARS_RE.sub("", raw) == "":
+            return True
+    # '직위/직책' 처럼 슬래시만 붙은 복합 라벨은 예시가 아니다.
+    # '개인사업자 / 법인사업자', '남 / 여' 처럼 슬래시 옆에 공백이 있을 때만 선택 안내로 본다.
+    if re.search(r"\s/|/\s|／", raw):
+        parts = [part.strip() for part in _EXAMPLE_CHOICE_RE.split(raw) if part.strip()]
+        if 2 <= len(parts) <= 6 and all(
+            1 <= len(part) <= 20 and not re.search(r"[.。!?]", part) for part in parts
+        ):
+            return True
+    return False
+
+
+def _cell_text_fillable(tc) -> bool:
+    """텍스트 기준 채움 가능 판정 — 비었거나 예시 칸이면 True.
+
+    이미 실제 값이 있으면 False(덮어쓰기 금지). 빈칸 외에는 명백한 플레이스홀더와
+    HWPX 예시 칸(OOO, 000-0000-0000, OO도 OO시·군, '개인사업자 / 법인사업자')을
+    채울 대상으로 본다. 문서 추출용 O마스크 금지는 ``_is_obvious_placeholder`` 에 남긴다.
     """
     txt = _cell_text(tc)
     if not txt:
         return True
-    return _is_obvious_placeholder(txt)
+    return (
+        _is_obvious_placeholder(txt)
+        or _is_hwpx_example_scaffold(txt)
+        or _is_hwpx_guidance_placeholder(txt)
+    )
 
 
 def _cell_is_fillable(tc) -> bool:
@@ -963,6 +1123,30 @@ def _cell_is_fillable(tc) -> bool:
     if _has_form_control(tc) or _cell_has_nested_table(tc):
         return False
     return _cell_text_fillable(tc)
+
+
+
+def _cell_has_blue_example_style(tc, black: Optional[_BlackCharPr]) -> bool:
+    """값 칸 전체가 파란 예시체이면 현재 매칭된 프로필 값으로 교체 가능한가.
+
+    텍스트 자체가 실값처럼 보여도 charPr가 양식 예시 파랑(#0000FF)인 경우에만 True.
+    호출 위치가 이미 라벨↔identity 매칭 뒤이므로 해당 프로필 필드가 있을 때만 적용된다.
+    """
+    if black is None or _has_form_control(tc) or _cell_has_nested_table(tc):
+        return False
+    seen = False
+    for t in _cell_texts(tc):
+        if not str(t.text or "").strip():
+            continue
+        run = t.getparent()
+        if run is None or _local(getattr(run, "tag", "")) != "run":
+            return False
+        ref = run.get("charPrIDRef") or ""
+        color = re.sub(r"[^0-9A-Fa-f]", "", black.colors.get(ref, "") or "").upper()
+        if color != "0000FF":
+            return False
+        seen = True
+    return seen
 
 
 _REGION_PROTECTED_LABEL_RE = re.compile(
@@ -1001,9 +1185,18 @@ def region_cell_is_writable(tc, label: str = "") -> bool:
 
 
 def _is_label_like(tc) -> bool:
-    """그 칸이 값칸이 아니라 '라벨/안내' 칸으로 보이면 True(값 기입 금지 대상)."""
+    """그 칸이 값칸이 아니라 '라벨/안내' 칸으로 보이면 True(값 기입 금지 대상).
+
+    OOO·000-0000-0000 같은 예시 칸은 잡음 라벨로 보이지만 채울 값 칸이다.
+    """
     txt = _cell_text(tc)
     if not txt:
+        return False
+    if (
+        _is_obvious_placeholder(txt)
+        or _is_hwpx_example_scaffold(txt)
+        or _is_hwpx_guidance_placeholder(txt)
+    ):
         return False
     norm = _key(txt)
     return _cluster_rep(norm) is not None or _is_noise_label(txt, norm)
@@ -1032,6 +1225,123 @@ def _in_protected_cell(t) -> bool:
     return False
 
 
+_PRIOR_SUPPORT_RE = re.compile(
+    r"창업지원금|수혜\s*이력|지원\s*이력|기\s*지원|기지혜|과거\s*지원|참여\s*이력|"
+    r"지원금\s*수혜|수혜\s*실적|기수혜|타\s*창업지원사업|"
+    r"신청\s*[·ㆍ/]?\s*수행\s*여부|중복\s*지원|수행\s*실적"
+)
+_PRIOR_SUPPORT_PROJECT_KEYS = frozenset(
+    _key(name) for name in ("사업명", "과제명") if _key(name)
+)
+_SUPPORT_AGENCY_HEADER_KEYS = frozenset(
+    _key(name) for name in ("지원기관",) if _key(name)
+)
+
+
+def _table_first_row_text_by_col(tbl, tc) -> str:
+    """표 첫 행에서 tc와 같은 colAddr의 머리글 텍스트를 반환."""
+    col = _cell_addr(tc)
+    rows = _direct(tbl, "tr")
+    if col is None or not rows:
+        return ""
+    for header_tc in _direct(rows[0], "tc"):
+        if _cell_addr(header_tc) == col:
+            return _cell_text(header_tc)
+    return ""
+
+
+def _repeats_prior_support_header(tbl, tc) -> bool:
+    """이력표 데이터 셀이 같은 열 머리글을 그대로 반복하면 라벨로 쓰지 않는다."""
+    text = _cell_text(tc)
+    header = _table_first_row_text_by_col(tbl, tc)
+    return bool(text and header and _key(text) == _key(header))
+
+
+def _prior_support_target_is_agency_column(tbl, target) -> bool:
+    """이력표의 지원기관 열인지 머리글 기준으로 판정."""
+    return _key(_table_first_row_text_by_col(tbl, target)) in _SUPPORT_AGENCY_HEADER_KEYS
+
+
+_APPLICANT_IDENTITY_REPS = frozenset(
+    rep for rep in (
+        _cluster_rep(_key(name))
+        for name in (
+            "기업명", "대표자", "연락처", "주소", "이메일",
+            "사업자등록번호", "설립일",
+        )
+    )
+    if rep
+)
+
+
+def _is_applicant_identity(want_key: str) -> bool:
+    """신청인 신원(기업·대표·연락)이면 True. 과제명 같은 서술 키는 아니다."""
+    rep = _cluster_rep(want_key) or want_key
+    return rep in _APPLICANT_IDENTITY_REPS
+
+
+def _element_text(el) -> str:
+    return "".join((node.text or "") for node in el.iter(_q("t")))
+
+
+_SECTION_HEADING_RE = re.compile(
+    r"^(?:\d+|[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]+|[가-하])\s*[.．)]"
+)
+
+
+def _is_section_heading(text: str) -> bool:
+    folded = re.sub(r"\s+", "", text or "")
+    if not folded or len(folded) > 40:
+        return False
+    return _SECTION_HEADING_RE.match(re.sub(r"\s+", " ", text).strip()) is not None
+
+
+def _text_outside_table(paragraph, tbl) -> str:
+    """문단 글자 중 이 표 안은 뺀다. 같은 문단의 소제목을 보기 위함이다."""
+    parts: list[str] = []
+    for node in paragraph.iter(_q("t")):
+        cur = node
+        inside = False
+        while cur is not None and cur is not paragraph:
+            if cur is tbl:
+                inside = True
+                break
+            cur = cur.getparent()
+        if not inside:
+            parts.append(node.text or "")
+    return "".join(parts)
+
+
+def _is_prior_support_table(tbl) -> bool:
+    """바로 위 제목이나 표 머리글이 수혜·창업지원금 이력 표이면 True.
+
+    신청인 정보 표는 제목이 달라도 채운다. 가장 가까운 번호 제목에서 걷기를
+    멈춰, 앞 절의 '창업지원금' 이 신청인 표까지 물들이지 않게 한다.
+    """
+    chunks: list[str] = []
+    for tr in _direct(tbl, "tr")[:2]:
+        chunks.append(_element_text(tr))
+    node = tbl
+    while node is not None and _local(getattr(node, "tag", "")) != "p":
+        node = node.getparent()
+    if node is not None:
+        same = _text_outside_table(node, tbl).strip()
+        if same:
+            chunks.append(same)
+    prev = node.getprevious() if node is not None else None
+    hops = 0
+    while prev is not None and hops < 4:
+        if _local(getattr(prev, "tag", "")) == "p":
+            text = _element_text(prev).strip()
+            if text:
+                chunks.append(text)
+                hops += 1
+                if _is_section_heading(text):
+                    break
+        prev = prev.getprevious()
+    return _PRIOR_SUPPORT_RE.search(" ".join(chunks)) is not None
+
+
 def _label_matches(cell_key: str, want_key: str) -> bool:
     """정규화 라벨 cell_key 가 want_key 와 같은 항목인가(정확일치 또는 동의어 클러스터)."""
     if not cell_key or not want_key:
@@ -1041,6 +1351,22 @@ def _label_matches(cell_key: str, want_key: str) -> bool:
     rep_c = _cluster_rep(cell_key)
     rep_w = _cluster_rep(want_key)
     return rep_c is not None and rep_c == rep_w
+
+
+def _exact_identity_blocks_synonym(cell_key: str, want_key: str, wants, used_keys) -> bool:
+    """칸 라벨 자체가 아직 안 쓴 identity 키면 동의어 매칭을 막는다.
+
+    기업명·팀명은 같은 동의어 묶음이다. identity 에 둘 다 있으면 팀명 칸이
+    기업명 값을 먼저 가져가지 않게, 그 칸과 같은 키를 우선한다.
+    """
+    if not cell_key or cell_key == want_key:
+        return False
+    for other_key, _lbl, _val in wants:
+        if other_key in used_keys:
+            continue
+        if other_key == cell_key:
+            return True
+    return False
 
 
 def _value_cell(label_tc, cells: list):
@@ -1062,6 +1388,99 @@ def _value_cell(label_tc, cells: list):
     except ValueError:
         return None
     return cells[idx + 1] if idx + 1 < len(cells) else None
+
+
+_PERIOD_HEADER_RE = re.compile(
+    r"^[\(（]?(?:\d+년전|전년(?:도)?|작년|당년(?:도)?|금년|현재|최근|"
+    r"올해(?:[\(（]예상[\)）])?|20\d{2}년?)[\)）]?$"
+)
+
+
+def _current_period_value_cell(tbl, label_tc, cells: list, *, notes=None, label=""):
+    """라벨 앞의 가장 가까운 기간 헤더를 논리 열 범위로 대응한다.
+
+    올해(예상) → 현재 표현 → 실제 올해의 숫자 연도 순으로 선택한다.
+    과거 기간만 있거나 병합 범위가 여러 값 칸에 걸치면 이유를 남기고 쓰지 않는다.
+    """
+    def reject(reason):
+        if notes is not None:
+            _note_region(notes, "period", f"{label or _cell_text(label_tc)} {reason}", label_tc)
+        return None
+
+    periods = []
+    ambiguous_header = False
+    label_row = _row_of(label_tc)
+    for row in _direct(tbl, "tr"):
+        if row is label_row:
+            break
+        row_periods = []
+        header_row = True
+        for cell in _direct(row, "tc"):
+            text = re.sub(r"\s+", "", _cell_text(cell))
+            if _PERIOD_HEADER_RE.fullmatch(text):
+                if text.startswith(("(", "（")) and text.endswith((")", "）")):
+                    text = text[1:-1]
+                row_periods.append((text, _cell_addr(cell), _cell_colspan(cell)))
+            elif text and not re.match(r"^(?:구분|연도|년도|기간|항목)(?:$|별|[\(（])", text):
+                # 설립연도/2026년 같은 정보 행의 실값을 기간 헤더로 오인하지 않는다.
+                header_row = False
+        if row_periods and (header_row or len(row_periods) > 1 or any(
+            not re.fullmatch(r"20\d{2}년?", period[0]) for period in row_periods
+        )):
+            periods = row_periods
+            ambiguous_header = not header_row
+    if not periods:
+        return _value_cell(label_tc, cells)
+    if ambiguous_header:
+        return reject("AMBIGUOUS_PERIOD_HEADER")
+    if any(col is None or col < 0 or span < 1 for _, col, span in periods):
+        return reject("AMBIGUOUS_PERIOD_HEADER")
+    label_col = _cell_addr(label_tc)
+    if label_col is not None:
+        label_end = label_col + _cell_colspan(label_tc)
+        following_labels = [_cell_addr(cell) for cell in cells if cell is not label_tc
+                            and _cell_addr(cell) is not None
+                            and _cell_addr(cell) >= label_end and _is_label_like(cell)]
+        label_stop = min(following_labels) if following_labels else None
+        periods = [period for period in periods if period[1] + period[2] > label_end
+                   and (label_stop is None or period[1] < label_stop)]
+        if not periods:
+            return _value_cell(label_tc, cells)
+        if any(col < label_end or (label_stop is not None and col + span > label_stop)
+               for _, col, span in periods):
+            return reject("AMBIGUOUS_PERIOD_HEADER")
+    for i, (_, col, span) in enumerate(periods):
+        if any(max(col, other_col) < min(col + span, other_col + other_span)
+               for _, other_col, other_span in periods[i + 1:]):
+            return reject("AMBIGUOUS_PERIOD_HEADER")
+    current = [period for period in periods if period[0] == "올해(예상)" or period[0] == "올해（예상）"]
+    if not current:
+        current = [period for period in periods if period[0] in {"올해", "현재", "당년", "당년도", "금년", "최근"}]
+    if not current:
+        absolute = [period for period in periods if re.fullmatch(r"20\d{2}년?", period[0])]
+        year = date.today().year
+        current = [period for period in absolute if int(period[0][:4]) == year]
+        if not current:
+            if not absolute or all(int(period[0][:4]) < year for period in absolute):
+                return reject("PAST_PERIOD_ONLY")
+            return reject("CURRENT_PERIOD_MISSING")
+    if len(current) != 1:
+        return reject("AMBIGUOUS_PERIOD_HEADER")
+    _, col, span = current[0]
+    candidates = []
+    for cell in cells:
+        if cell is label_tc:
+            continue
+        addr, width = _cell_addr(cell), _cell_colspan(cell)
+        if addr is None or addr < 0 or width < 1:
+            return reject("AMBIGUOUS_PERIOD_CELL")
+        if max(addr, col) < min(addr + width, col + span):
+            if addr < col or addr + width > col + span:
+                return reject("AMBIGUOUS_PERIOD_CELL")
+            candidates.append(cell)
+    if len(candidates) != 1:
+        return reject("AMBIGUOUS_PERIOD_CELL")
+    return candidates[0]
 
 
 def _cell_rowspan(tc) -> int:
@@ -1201,6 +1620,37 @@ def _layout_scope(el):
     return el
 
 
+def _owned_paragraph_text(paragraph) -> str:
+    """이 문단 직계 run 의 글자. 중첩 표 안 문단은 그 문단 것이다."""
+    parts: list[str] = []
+    for child in paragraph:
+        if _local(getattr(child, "tag", "")) != "run":
+            continue
+        for node in child:
+            if _local(getattr(node, "tag", "")) == "t":
+                parts.append(node.text or "")
+    return "".join(parts)
+
+
+def _drop_owned_lineseg(paragraph) -> int:
+    """이 문단 소속 linesegarray 만 제거한다. 중첩 문단 캐시는 남긴다."""
+    removed = 0
+
+    def walk(el) -> None:
+        nonlocal removed
+        for child in list(el):
+            if _local(getattr(child, "tag", "")) == "p":
+                continue
+            if _local(getattr(child, "tag", "")) == "linesegarray":
+                el.remove(child)
+                removed += 1
+                continue
+            walk(child)
+
+    walk(paragraph)
+    return removed
+
+
 def _invalidate_lineseg(el) -> int:
     """텍스트를 바꾼 요소의 줄위치 캐시(hp:linesegarray)를 즉시 제거한다.
 
@@ -1247,6 +1697,103 @@ def _strip_linesegarray(root, *, only_under=None) -> int:
     return removed
 
 
+def relax_t02_written_layout(hwpx_path: str | Path, specs: list[dict]) -> int:
+    """T02 가 글을 넣은 문단의 lineseg 를 지우고, 빈 run 에 넣은 값은 본문 스타일로 바꾼다.
+
+    exact writer 는 텍스트 노드만 바꾸고 lineseg·charPr 를 유지한다(범위 검사).
+    제출 경로에서 그 다음에 이 함수를 불러 한글이 줄을 다시 잡게 한다.
+    라벨과 값을 한 run 에 이어 쓴 경우(expected_raw_text 가 있음)는 라벨 서식을 유지한다.
+    """
+    path = Path(hwpx_path)
+    if not specs or not path.is_file():
+        return 0
+    wanted: dict[str, list[dict]] = {}
+    for spec in specs:
+        member = str(spec.get("section_member") or "")
+        if not member:
+            continue
+        wanted.setdefault(member, []).append(spec)
+    if not wanted:
+        return 0
+    with zipfile.ZipFile(path) as zin:
+        infos = zin.infolist()
+        data = {info.filename: zin.read(info.filename) for info in infos}
+    header_name = "Contents/header.xml"
+    black: Optional[_BlackCharPr] = None
+    if header_name in data:
+        try:
+            black = _BlackCharPr(etree.fromstring(data[header_name]))
+        except etree.XMLSyntaxError:
+            black = None
+    changed_members: set[str] = set()
+    touched = 0
+    for member, items in wanted.items():
+        raw = data.get(member)
+        if raw is None:
+            continue
+        try:
+            root = etree.fromstring(raw)
+        except etree.XMLSyntaxError:
+            continue
+        paragraphs = [el for el in root.iter(_q("p"))]
+        member_changed = False
+        for spec in items:
+            index = spec.get("paragraph_index")
+            if not isinstance(index, int) or index < 0 or index >= len(paragraphs):
+                continue
+            paragraph = paragraphs[index]
+            if _drop_owned_lineseg(paragraph):
+                member_changed = True
+                touched += 1
+            if spec.get("expected_raw_text"):
+                continue
+            run_index = spec.get("run_index")
+            if not isinstance(run_index, int) or black is None:
+                continue
+            runs = [child for child in paragraph if _local(getattr(child, "tag", "")) == "run"]
+            if run_index < 0 or run_index >= len(runs):
+                continue
+            if black.fix_run(runs[run_index]):
+                member_changed = True
+                touched += 1
+        if member_changed:
+            standalone = _detect_standalone(raw)
+            data[member] = etree.tostring(
+                root, xml_declaration=True, encoding="UTF-8", standalone=standalone,
+            )
+            changed_members.add(member)
+    if black is not None and black.changed and header_name in data:
+        standalone = _detect_standalone(data[header_name])
+        data[header_name] = etree.tostring(
+            black.root, xml_declaration=True, encoding="UTF-8", standalone=standalone,
+        )
+        changed_members.add(header_name)
+    if not changed_members:
+        return 0
+    tmp = path.with_name(f"{path.stem}.{os.getpid()}.lineseg.tmp")
+    try:
+        with zipfile.ZipFile(tmp, "w") as zout:
+            if "mimetype" in data:
+                info = zipfile.ZipInfo("mimetype")
+                info.compress_type = zipfile.ZIP_STORED
+                zout.writestr(info, data["mimetype"])
+            for info in infos:
+                if info.filename == "mimetype":
+                    continue
+                copied = zipfile.ZipInfo(info.filename, date_time=info.date_time)
+                copied.compress_type = info.compress_type
+                copied.external_attr = info.external_attr
+                copied.internal_attr = info.internal_attr
+                copied.create_system = info.create_system
+                zout.writestr(copied, data[info.filename])
+        os.replace(tmp, path)
+    except BaseException:
+        if tmp.exists():
+            tmp.unlink()
+        raise
+    return touched
+
+
 def _fill_section_xml(
     xml_bytes: bytes,
     identity: dict[str, str],
@@ -1276,6 +1823,12 @@ def _fill_section_xml(
     변경이 없으면 입력 바이트를 그대로 반환한다(불필요한 재직렬화·선언 변형 회피).
     """
     root = etree.fromstring(xml_bytes)
+    # lxml element proxy의 id()는 순회 중 재사용될 수 있으므로 위치 순서로 기준선을 잡는다.
+    # 텍스트 편집은 문단을 추가/삭제하지 않으므로 paragraph_index가 이 경로의 안정 키다.
+    before_text = [
+        _owned_paragraph_text(paragraph)
+        for paragraph in root.iter(_q("p"))
+    ]
     if span_notes is None:
         span_notes = []
     if existing_labels is None:
@@ -1286,6 +1839,7 @@ def _fill_section_xml(
     replaced = 0
     changed = False
     edited: list = []  # L074: lineseg strip 대상(편집된 tc/p)
+    table_used: dict[Any, set[str]] = {}
 
     wants = [
         (_key(lbl), lbl, val)
@@ -1295,6 +1849,8 @@ def _fill_section_xml(
 
     # 1) 표 라벨→값 칸 채움 (cellAddr 기반 값칸 선택 + 라벨칸 보호)
     for tbl in root.iter(_q("tbl")):
+        table_used[tbl] = set()
+        prior_support = _is_prior_support_table(tbl)
         for tr in _direct(tbl, "tr"):
             cells = _direct(tr, "tc")
             for tc in cells:
@@ -1304,14 +1860,35 @@ def _fill_section_xml(
                 for want_key, lbl, val in wants:
                     if want_key in used_keys:
                         continue
+                    if prior_support and _is_applicant_identity(want_key):
+                        continue
+                    if prior_support and _repeats_prior_support_header(tbl, tc):
+                        continue
+                    if _exact_identity_blocks_synonym(cell_key, want_key, wants, used_keys):
+                        continue
                     if _held_for_other_label(exact_held, cell_key, want_key):
                         continue
                     if not _label_matches(cell_key, want_key):
                         continue
-                    target = _value_cell(tc, cells)
+                    note_count = len(span_notes)
+                    target = _current_period_value_cell(tbl, tc, cells, notes=span_notes, label=lbl)
                     if target is None or target is tc:
+                        if len(span_notes) > note_count:
+                            # 이 표의 인라인 빈칸 경로도 동일한 기간 보류를 따라야 한다.
+                            table_used[tbl].update(
+                                key for key, _, _ in wants if _label_matches(cell_key, key)
+                            )
+                            _hold_exact_label(exact_held, cell_key, want_key)
+                            break
                         continue
-                    if _is_label_like(target):
+                    if (
+                        prior_support
+                        and want_key in _PRIOR_SUPPORT_PROJECT_KEYS
+                        and _prior_support_target_is_agency_column(tbl, target)
+                    ):
+                        continue
+                    blue_example = _cell_has_blue_example_style(target, black)
+                    if _is_label_like(target) and not blue_example:
                         continue  # 값칸 후보가 또 라벨 → 기입 금지
                     if _cell_has_nested_table(target):
                         _note_region(span_notes, "nested", lbl, target)
@@ -1325,19 +1902,28 @@ def _fill_section_xml(
                         _note_region(span_notes, "handwritten", lbl, target)
                         _hold_exact_label(exact_held, cell_key, want_key)
                         break
-                    if not _cell_is_fillable(target):
+                    if not _cell_is_fillable(target) and not blue_example:
                         # 실값만 EXISTING_VALUE. ____·더미날짜·□ 는 각자 게이트에 남긴다.
                         if _cell_has_real_value(target):
+                            table_used[tbl].add(want_key)
                             _note_existing_value(span_notes, lbl, target, existing_labels)
                             _hold_exact_label(exact_held, cell_key, want_key)
                         break
-                    if _split_value_spans(target):
+                    scaffold = (
+                        _is_hwpx_example_scaffold(_cell_text(target))
+                        or _is_hwpx_guidance_placeholder(_cell_text(target))
+                        or blue_example
+                    )
+                    if _split_value_spans(target) and (
+                        not scaffold or _date_placeholder_crosses_spans(target)
+                    ):
                         _note_unfilled_span(span_notes, lbl, target)
                         _hold_exact_label(exact_held, cell_key, want_key)
                         break
-                    if _set_cell_text(target, str(val), black):
+                    if _set_cell_text(target, str(val), black, replace_scaffold=scaffold):
                         filled[lbl] = str(val)
                         used_keys.add(want_key)
+                        table_used[tbl].add(want_key)
                         changed = True
                         edited.append(target)
                         _note_overflow(overflow_cells, lbl, target, str(val))
@@ -1350,14 +1936,17 @@ def _fill_section_xml(
     #      옆 값칸을 가리키는 경우와 구별이 안 되므로 제외(_is_visible_blank).
     if wants:
         for tc in root.iter(_q("tc")):
+            owner_table = next((a for a in tc.iterancestors() if a.tag == _q("tbl")), None)
+            inline_used = table_used.get(owner_table, used_keys)
             for sub in _direct(tc, "subList"):
                 for p in _direct(sub, "p"):
                     if _fill_inline_fields_in_p(
-                        p, wants, used_keys, filled, span_notes, existing_labels,
+                        p, wants, inline_used, filled, span_notes, existing_labels,
                         exact_held,
                     ):
                         changed = True
                         edited.append(p)
+                        used_keys.update(inline_used)
 
     # 1.7) 체크박스(□→■) 자동 체크 — 인라인/왼쪽셀 라벨 그룹을 보수적으로 마킹.
     #      표(1)·인라인(1.5)과 동일한 used_keys 를 공유한다(이중처리 금지).
@@ -1383,6 +1972,8 @@ def _fill_section_xml(
                         continue
                     for want_key, lbl, val in wants:
                         if want_key in used_keys:
+                            continue
+                        if _exact_identity_blocks_synonym(group_key, want_key, wants, used_keys):
                             continue
                         if _held_for_other_label(exact_held, group_key, want_key):
                             continue
@@ -1425,6 +2016,8 @@ def _fill_section_xml(
                 for want_key, lbl, val in wants:
                     if want_key in used_keys:
                         continue
+                    if _exact_identity_blocks_synonym(label_key, want_key, wants, used_keys):
+                        continue
                     if _held_for_other_label(exact_held, label_key, want_key):
                         continue
                     if not _label_matches(label_key, want_key):
@@ -1457,13 +2050,18 @@ def _fill_section_xml(
     #      공유: 가시 빈칸만(산문 `주의 : ...`·콜론+공백만 `비고 : ` 는 절대 안 채움)·
     #      used_keys 공유(표/인라인/체크박스와 이중 기입 금지)·형제 run 보존.
     if wants:
+        body_used = used_keys
         for p in _direct(root, "p"):
+            text = "".join(t.text or "" for t in _inline_texts(p)).strip()
+            if re.search(r"서약서|확약서", text) and ":" not in text and "：" not in text:
+                body_used = set()
             if _fill_inline_fields_in_p(
-                p, wants, used_keys, filled, span_notes, existing_labels,
+                p, wants, body_used, filled, span_notes, existing_labels,
                 exact_held,
             ):
                 changed = True
                 edited.append(p)
+                used_keys.update(body_used)
 
     # 2) 직접 텍스트 치환 — 라벨/실값 칸은 보호(채울 수 있는 칸·본문에만 적용).
     #    lxml proxy id 재사용을 피하려 id() 집합 대신 조상(tc) 순회로 판별한다.
@@ -1529,9 +2127,15 @@ def _fill_section_xml(
     if not changed:
         return xml_bytes, filled, replaced, used_keys
 
-    # L074: 편집한 문단/셀의 lineseg 만 제거(안내박스 등 미편집 영역 전역 strip 금지).
-    # HWPX→한글 직접 납품 시 겹침 방지는 '텍스트를 바꾼 곳'에만 필요(L002∩L074).
-    _strip_linesegarray(root, only_under=edited or None)
+    # L074: 실제 텍스트가 바뀐 문단만 줄좌표 캐시를 제거한다.
+    # id(element)는 lxml proxy 재사용으로 미편집 제목을 다른 문단으로 오인할 수 있으므로
+    # 위에서 잡은 paragraph_index 기준선과 비교한다. edited tc 전체를 재귀 strip 하지 않는다.
+    for paragraph_index, paragraph in enumerate(root.iter(_q("p"))):
+        if paragraph_index >= len(before_text):
+            continue
+        if _owned_paragraph_text(paragraph) == before_text[paragraph_index]:
+            continue
+        _drop_owned_lineseg(paragraph)
 
     standalone = _detect_standalone(xml_bytes)
     out = etree.tostring(
@@ -1591,12 +2195,11 @@ def fill_hwpx(
                   라벨-값 매칭도 replacements 도 닿지 않는 자리를 채운다.
                   앵커는 문서 내 유일해야 하고, 옵션·치환 문자열도 그 문단에서
                   정확히 1개여야 적용한다(모호하면 스킵 + notes — 오편집<미편집).
-        force_black: True(기본)면 채운 값이 유색 예시체(charPr)를 승계할 때
-                  글꼴·크기는 유지하고 색(글자색·밑줄/취소선/그림자색·형광배경)만
-                  검정/제거인 클론으로 바꾼다(제출본 검정 원칙). 적용 범위는
-                  표 라벨→값 채움과 '값 전용 run' 치환 — 인라인 빈칸(1.5/1.8)·
-                  텍스트 체크(1.7)는 라벨과 run 을 공유해 미적용(유색 잔존 가능,
-                  차기 run 분할 과제). 헤더에 색 정보가 없으면 no-op.
+        force_black: 호출 호환용. 값을 쓴 run 이 유색이거나 기울임(예시 안내체)이면
+                  False 여도 글꼴·크기는 유지하고 검정·정자체 클론으로 바꾼다.
+                  원본 charPr 와 손대지 않은 양식 글자는 그대로다. 라벨과 값을
+                  한 run 에 이어 쓴 인라인은 라벨 서식을 유지한다. 헤더에
+                  charPr 가 없으면 no-op.
 
     Returns:
         HwpxFillReport — 채운 항목·치환수·잔여(미매칭 라벨)·체크 결과·변경 섹션수.
@@ -1653,14 +2256,18 @@ def fill_hwpx(
     if not section_names:
         report.notes.append("Contents/section*.xml 을 찾지 못했습니다(빈 양식?).")
 
-    # 2.5) 유색 예시체 차단 준비 — 헤더 charPr 색 지도(파싱 실패/부재 시 no-op).
+    # 2.5) 안내 스타일(유색·기울임) 차단 — 헤더 charPr 지도.
+    # preserve_template 는 force_black=False 지만, 값을 넣는 run 이 예시 파란색·
+    # 기울임이면 본문 스타일 클론으로 바꾼다. 안 건드린 charPr 는 그대로다.
     header_name = "Contents/header.xml"
     black: Optional[_BlackCharPr] = None
-    if force_black and header_name in data:
+    if header_name in data:
         try:
             black = _BlackCharPr(etree.fromstring(data[header_name]))
         except etree.XMLSyntaxError:
             black = None
+    # force_black 은 호출 호환용이다. 값을 쓴 run 이 유색·기울임이면 본문 클론을 쓴다.
+    _ = force_black
 
     # 3) 섹션 XML 만 채움/치환
     all_used: set[str] = set()

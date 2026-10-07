@@ -1,0 +1,170 @@
+# CLAUDE.md — auto_write 프로젝트 작업 지침
+
+> `D:\auto_write` 전용. 정부지원사업 문서 자동생성 + 문서 품질 개선 하네스 프로젝트.
+> 공통 지침(글로벌 CLAUDE.md)과 충돌 시 이 repo-local 규칙을 우선한다.
+>
+> **🔄 세션을 새로 시작했다면 `RESUME.md` 를 먼저 읽어라** — 진행 상태·남은 일·재개 명령이 있다.
+> 작업을 잠시 멈추거나 컨텍스트가 무거워지면 "체크포인트 저장"으로 RESUME.md 를 갱신하고,
+> 새 세션에서 "이어서"로 복원한다(session-resume 스킬).
+>
+> **현재 상태(2026-06-12):** 실사용 39건 수정 트랙(US-0~US-8) 완료 — 수용검사 게이트
+> (R8/R9)·블라인드 마스킹(`--blind-review`)·제출 정리(`--submit-clean`)·HWP 형식 게이트
+> (`--required-format`)·`--strict` 종료코드(0/1/2/3) 배선. 변경이력 표가 잘려 보여도
+> 이 줄이 최신이다. 테스트는 반드시 `py -3.11 -m pytest` (기본 3.14 는 matplotlib 부재).
+
+## 프로젝트 개요
+
+- 핵심: 양식 DOCX 분석 → AI 작성 → DOCX 렌더링 → 검수(`app/auto_write/services/`).
+- 실행: 시스템 Python(venv 없음) — **테스트·실행은 `py -3.11` 권장**(PATH 기본 3.14 는
+  matplotlib 부재로 pytest 수집 에러). `app/` 이 import 기준. AI 키 없어도 동작.
+- 진단 CLI: `app/_build_chochang.py inspect|analyze|generate|finalize|struct|heads`.
+- **평생개발목표: DOCX↔HWP 양방향 변환 일치도 100%**(측정 하네스 conversion_fidelity 로
+  baseline%→개선 루프, 거짓완료 금지 — 항상 측정값으로 보고). 정부양식이 HWP 라 입출력단
+  변환은 `docx-hwp-conversion` 스킬이 담당한다.
+
+---
+
+## 하네스: 문서 품질 개선 (Document Quality Harness)
+
+**목표:** 완성된 DOCX(사업계획서·R&D·컨설팅·정책자금·인증·수출·현장클리닉 보고서)의
+서식·구조·강조·시각화 품질을 자동으로 끌어올리고 100점 품질점수로 게이팅한다.
+
+**트리거:** 다음 요청 시 `document-quality-orchestrator` 스킬을 사용하라.
+- "문서 품질 개선", "DOCX 후처리", "양식 안내문구 삭제", "글머리표 공백 정리",
+  "인포그래픽 제안", "auto_write 문서검수", "제출문서 서식 보정", "PSST 검사",
+  "품질점수 산정", "문서 최종검수", "사업계획서 다듬어줘", "보고서 정리해줘"
+- 재실행·수정·보완·부분 재실행(특정 단계만)·회귀 검수 요청도 동일 스킬로 처리.
+- 단순 질문은 직접 응답 가능.
+
+### 실행 명령 (PowerShell)
+
+```powershell
+cd D:\auto_write\app
+python document_quality_orchestrator.py "C:\경로\문서.docx"            # 전체 1회
+python document_quality_orchestrator.py 문서.docx -o 결과.docx --underline
+python document_quality_orchestrator.py --rollback "..\results\backup\<ts>" 결과.docx
+python _build_chochang.py inspect "결과.docx"                          # 진단만
+python auto_write_autopilot.py "문서.docx" --submit-clean --strict     # 무인 수정+수용검사 게이트
+python self_diagnose.py "제출본.docx"                                  # 제출 가능성 진단(0/1/2/3)
+# 테스트 (반드시 py -3.11 — 기본 3.14 는 matplotlib 부재로 수집 에러)
+py -3.11 -m pytest tests/ -q
+```
+
+### 에이전트 (`.claude/agents/`) — 6개 (2026-06-07 슬림화: 12→6)
+
+- **doc-architect** — 파이프라인 설계·단계 조율 (구 document-architect)
+- **doc-safety-guard** — 원본 백업·롤백 + 보안 게이트 (구 backup-rollback-agent + security-agent)
+- **doc-analyzer** — 유형분류 + PSST 심사 + 인포그래픽 제안 (읽기 전용; 구 document-type-classifier + psst-review-agent + infographic-suggestion-agent)
+- **doc-postprocessor** — 안내문구 삭제 + 서식 정규화 + 핵심문장 강조 (DOCX 변형; 구 template-cleanup-agent + formatting-normalizer + content-emphasis-agent)
+- **doc-quality-gate** — 채점·85점 게이트 + 회귀·비훼손 검수 (구 quality-gate-agent + qa-document-agent)
+- **doc-writer** — 최종 리포트·핸드오프 문서화 (구 documentation-agent)
+
+> 실행 순서: doc-architect → doc-safety-guard(백업) → doc-analyzer → doc-postprocessor → doc-quality-gate(미달 시 재작업 루프) → doc-safety-guard(실패 시 복구) → doc-writer.
+
+### 스킬 (`.claude/skills/`)
+
+오케스트레이터 허브: **document-quality-orchestrator**.
+세부: docx-template-cleanup · bullet-spacing-normalization · paragraph-font-sizing ·
+table-whitespace-cleanup · content-emphasis · document-type-classification ·
+psst-structure-check · infographic-suggestion · document-quality-scoring ·
+backup-and-rollback · document-quality-inspection ·
+**docx-hwp-conversion**(DOCX↔HWP/HWPX 양방향 변환, 입출력단)
+
+### 커맨드 (`.claude/commands/`)
+
+`/improve-doc-quality` · `/auto-write-inspect` · `/auto-write-psst` ·
+`/auto-write-images` · `/auto-write-autopilot` · `/auto-write-bizplan` ·
+`/auto-write-analyze` · `/auto-write-selfdev`
+> ※ `/auto-write-quality`(→`/improve-doc-quality` 와 완전중복)·`/auto-write-finalize`(→`/auto-write-autopilot` 로 흡수)는
+> 2026-07-16 통폐합으로 아카이브(`~/.claude/skills_archive/20260716-autowrite-consolidation/`). CLI(.py)는 보존. 단일 진입점은 `bizdoc-hub`.
+
+### 핵심 코드 (`app/auto_write/services/`)
+
+doc_quality_ops · document_type_classifier · psst_check · infographic_suggest ·
+doc_quality_score · document_quality_orchestrator (진입: `app/document_quality_orchestrator.py`,
+`scripts/run_document_quality_harness.py`) ·
+**usage_acceptance**(수용검사 엔진+AcceptanceConfig+force_draft_name) ·
+**autopilot_pipeline**(무인 수정+게이트, 진입: `app/auto_write_autopilot.py`) ·
+**submission_orchestrator**(제출 end-to-end, 진입: `python -m auto_write.submit`) ·
+self_diagnose(진단 CLI: `app/self_diagnose.py`) · image_apply(NotebookLM 삽입/추출/제거) ·
+hwp_docx_convert(HWP↔DOCX 변환, COM 대화형 전용)
+
+### 품질 게이트
+
+100점 만점, 9항목(안내문구15/글머리표10/문단공백10/글자크기15/표10/강조10/유형구조15/PSST10/이미지5).
+**90 우수 / 85 통과 / 70 보완 / 미만 실패.** 미달 시 최대 10회 보완 루프, 수렴 시 조기종료 후 수동확인 항목 명시.
+
+**⚠ 이중 게이트:** 점수 게이트는 '서식 품질'만 본다. 제출 가능성은 별도의
+**수용검사 게이트(usage_acceptance, R7/R8/R9)** 가 판정한다 — fail 결함(마커·자기삽입
+블록·자리표시·미체크 선택란·공란 필수칸·유색 텍스트·폰트 혼용 등) 1개라도 있으면
+출력명에 `_DRAFT` 강제(제출 금지). 점수 99 라도 `_DRAFT` 면 제출불가다.
+진단: `python self_diagnose.py` (exit 0=제출가능/1=입력오류/2=제출불가/3=검사불능).
+
+### 백업·롤백
+
+후처리 전 원본을 `results/backup/<YYYYMMDD_HHMMSS>/` 에 백업. **원본 절대 덮어쓰기 금지**
+(출력=입력 경로면 ValueError). 복구: `--rollback <backup_dir> <target>`.
+
+### 금지
+
+원본 덮어쓰기 · 백업 없는 수정 · Secret/API Key/.env 출력 · 유료 API 무단 호출 ·
+기존 생성 기능 삭제 · results/templates 원본 삭제 · 테스트 없이 완료 보고 · 실패의 성공 보고.
+
+### 글로벌 `D:\.claude` 와의 관계
+
+글로벌은 웹 개발 하네스 전용으로 도메인이 다르다. 직접 재사용·훼손하지 않는다.
+
+---
+
+## 하네스: 빈 양식 자동완성·제출완성 (cross-form-submission)
+
+**목표:** 빈 새 양식 B + 완성된 기존 사업계획서 A → A 의 **사실 항목을 B 의 유사 칸에 전사**
+(표칸·본문빈칸·선택칸 □→■)하고 검수해서 **즉시 제출 가능한 B** 로 완성한다. 이미지는 직접
+생성하지 않고 **NotebookLM 프롬프트로 대체**. A 에 없는 칸은 `[확인필요]`(사실)/`[작성 필요]`
+(서술)로 정직하게 남긴다. **글을 새로 쓰지 않는 "사실 재배열 전사" 전용**(서술 문장 작성은
+다음 단계 하네스).
+
+**트리거:** 다음 요청 시 `cross-form-submission` 스킬을 사용하라. 단순 질문은 직접 응답 가능.
+- "빈 양식 채워줘", "이 양식에 옮겨줘", "기존 사업계획서로 새 양식 작성", "양식 자동완성",
+  "새 양식 제출본 만들어줘", "A 내용으로 B 채워 제출가능하게", "cross-form", "전사해서 제출본 완성"
+- 재실행·수정·보완·부분 재실행(전사만/검수만)·needs_confirm 확정·다른 양식 재전사도 동일 스킬.
+
+**경계:** '완성 DOCX 다듬기'=document-quality-orchestrator / '처음부터 작성'=bizplan-orchestrator
+/ '공고·양식 분석'=announcement-form-analysis. 이 스킬은 **입력 2개(완성본 A + 빈 양식 B)** 로
+"전사 후 제출완성"만 한다. 엔진은 모두 기존 코드 재사용(cross_form_autofill·usage_acceptance·
+submission_orchestrator·image_apply). 신규 에이전트는 `cross-form-filler` 1개, 나머지 6개 재사용.
+
+---
+
+## 하네스: 지원사업 문서 단일 진입점 (bizdoc-hub)
+
+**목표:** 스킬이 많아 헷갈리는 문제 해소 — 문서 작업 요청의 **입구를 1개**로 통일하고,
+의도(분석/작성/채움/다듬기/변환/제출)를 파악해 알맞은 기존 스킬·CLI 로 자동 라우팅한다.
+기존 스킬을 대체하지 않는다(직접 지목 호출도 계속 가능).
+
+**트리거:** "지원사업 문서 도와줘", "문서 도와줘", "사업계획서 도와줘", "공고부터 제출까지",
+"이 문서 뭘로 처리해", "어떤 스킬 써야 해", "문서허브", "bizdoc" — 또는 공고/양식/사업계획서
+요청인데 어느 단계인지 불분명할 때 `bizdoc-hub` 스킬 사용.
+
+**연계 흐름:** 분석(announcement-form-analysis) → 본문 작성(bizplan-orchestrator) →
+값 채움(cross-form-submission | HWPX 직접: hwp_fill_direct/hwpx_submit) →
+품질·검수(document-quality-orchestrator | hwpx_submit 게이트) → 제출본. HWPX 파리티는
+PR #60(2026-07-05) 기준 — 채움 4경로·제출 파이프라인(exit 0/1/2/3·fail 시 _DRAFT) 완성.
+
+---
+
+**변경 이력**
+
+| 날짜 | 변경 내용 | 대상 | 사유 |
+|------|----------|------|------|
+| 2026-06-28 | HWP/HWPX 원본 양식 '변환 왕복 없는' 직접 채우기 (PR #48 병합) | 신규 app/auto_write/services/{hwpx_fill,hwp_com_fill}.py·app/hwp_fill_direct.py·app/tests/{test_hwpx_fill,test_hwp_com_fill}.py | 사용자 요구 '원본 양식 훼손 없이 값만 입력'. HWPX(=ZIP/OWPML)의 section*.xml 값 칸 hp:t 텍스트만 수정하고 header.xml(서식)·BinData(이미지)·mimetype 바이트 보존→**양식 100% 유지**(한글 불필요·샌드박스 검증). 바이너리 .hwp 는 한글 COM 누름틀 PutFieldText(정직 degradation). 매칭은 cross_form_autofill 재사용(동의어·플레이스홀더·라벨가드)·날조0·실값/라벨 덮어쓰기금지·원본미수정(하드링크 samefile 차단)·원자적 쓰기. 적대검증 5렌즈→실결함 9건 수정(하드링크 out==in critical·cellAddr/colSpan 병합셀 값칸선택 high·replacements 보호·lxml proxy id 회피). py-3.11 395 passed(신규 34, 회귀 0) |
+| 2026-06-28 | 표 양식 .hwp 원-커맨드 자동 파이프라인 (.hwp→hwpx→채움→.hwp) | 수정 app/auto_write/services/hwp_com_fill.py(fill_hwp_via_hwpx)·app/hwp_fill_direct.py(.hwp 기본 자동·--field 옵션)·app/tests/test_hwp_com_fill.py(신규 6) | selfdev: 실측—STAR·도보네비게이션 양식이 누름틀 0개 '표 양식'이라 .hwp 직접 필드채움은 0칸. 한글 COM 이 자기 네이티브 HWPX 로 저장/되돌리는 **무손실 변환**을 이용해 .hwp 하나만 넣으면 자동 변환→표칸 채움(hwpx_fill)→.hwp 복원. 원본미수정·원자적쓰기·구조보존 측정(표/행/셀 동일 확인). 실제 STAR.hwp E2E: 4칸 채움·표16/행40/칸121 동일·비어있지않은칸 67→71(정확히 +4)·출력 .hwp 에 값 4개 전부 보존·원본 미수정. py-3.11 신규 6(회귀 0) |
+| 2026-07-02 | cross-form 자동채움: 표 셀 '안' 인라인 빈칸(`라벨 : ______`) 전사 (recall 확대, 야간 격리본) | 수정 app/auto_write/services/cross_form_autofill.py / 테스트 app/tests/test_cross_form_autofill.py(신규 5) | 실측 갭: python-docx `doc.paragraphs` 가 표 셀 단락을 포함하지 않아, 정부양식 표지/개요 박스에 흔한 한 셀 안 인라인 필드(`신청기업명 : ____  대표자 : ___`)가 **전혀 탐지·전사되지 않던** recall 갭. 해결: `find_target_fields` 에 각 논리셀 단락 스캔 추가(kind="cell_paragraph") → `match_fields`(cell_para_index 전파) → `autofill_from_source` 셀 단락 기입 루프(`_fill_paragraph_fields` 재사용). 셀 인라인은 **'보이는 빈칸'(밑줄/점/대시)만**(`_is_visible_blank`) — 콜론 뒤 공백/빈값은 옆 값칸 패턴과 모호해 제외(오기입 방지). 안전 불변: 실값·마스킹(○○○) 보존·날조0·원본 미수정. `_key` 가 콜론을 보존해 표-라벨 경로가 인라인 셀을 무매칭 → 이중 기입 없음 실측 확인. 한 셀 4칸(신청기업명·대표자·연락처·이메일) 동시 채움 E2E, 동의어(성명←대표자) 포함. py-3.11 **568 passed**(신규 5, 회귀 0). 중첩 표 인라인은 최상위 표 한계로 차기 |
+| 2026-07-13 | SFT 데이터 레이어 P0~P2 + 기업 Master JSON P3(슬1) 구축 (PR #74~#77) | 신규 app/auto_write/services/{generation_store,sft_export,company_extract}.py·app/{sft_export,company_master}.py·app/auto_write/services/learning_store.py(feedback/generation_traces 추가)·project_service.py·openai_client.py / 테스트 3종(test_generation_store·test_sft_human_approved·test_sft_export·test_company_extract) | 사용자 요구 '현행 자동작성 유지 + AI 입력/생성답안/사람 수정본을 자동 저장해 LoRA SFT 데이터 축적 + 기업정보 자산화'. 계획 wiki `.omc/wiki/auto-write-sft-master-json-2026-07-13.md`(정찰 4에이전트+적대검증 2에이전트). **P0**(#74) 생성 계측: `_complete_text` fail-safe 훅(로깅 실패가 AI 호출 안 깸·재시도 attempt=2)→generation_traces.jsonl(큰 본문 gen_blobs/<sha1> 해시참조)·generate 초입 입력스냅샷·ai_draft_snapshot(AI원문↔반영본)·answers_provenance(user/docx_seed/psst/ai/fallback/needs_confirm). **P1**(#75) 사람수정 캡처: feedback.jsonl·_capture_human_edits(save_project_form에서 P0 ai_draft_snapshot.reflected와 대조, **첫 divergence 게이트**로 사람 v1→v2 오라벨 방지, edited/draft_rejected). **P2**(#76) 학습셋 변환기+소비자: sft_export→sft_dataset.jsonl(chat, **사람승인본 우선**·rejected제외·dedup·--mask)+learned_snippets.json→`_suggest_learned_snippets`가 항목 라벨정확일치로 **AI 컨텍스트에만** few-shot 주입(폴백/문서 직접삽입 제외). **P3 슬1**(#77) 기업 Master JSON: company_extract(라벨정규화=cross_form_autofill 동의어 재사용·**숫자 사실값 보존**[extract_source_fields는 숫자 폐기라 미사용]·항목단위 provenance{file,raw_label}·confidence high/medium/conflict·불일치=conflict candidates·없으면 missing·전부 confirmed=false·하이픈무시 거짓충돌방지)+company_master.py CLI. **날조0·부수효과 fail-safe·기존흐름 무변경(계측만 추가)** 불변. 저장 workspace/learning·<project>/sft·workspace/companies(gitignore). py-3.11 810→**845 passed**(신규 29, 회귀 0). 각 단계 CLI/무키 E2E exit 0. 남음: P3 후속(페이지마커·양식커버리지·검수루프·생성 2단분리)·P4(비전·시각자료)·미결 5건 |
+| 2026-07-13 | hwpx-doctor: 안 열리는 한글 파일 진단·자동수정(표 격자 결함) + 엔진 예방 배선 + 스킬 | 신규 app/hwpx_doctor.py·.claude/skills/hwpx-doctor / 수정 app/auto_write/services/hwpx_layout_fix.py(repair_table_grid·repair_all_table_grids·check_hwpx_semantics·finalize repair_grid 배선) / 테스트 test_hwpx_layout_fix.py(신규 5) | 실측: 박다솜 프로필 v3~v7 hwpx가 한글에서 안 열림(불러오기도 실패). 지난번 zip/XML 구문검증만으론 '정상' 오판(오답노트 L033) → 심층 의미검증(itemCnt·ID참조·표격자)으로 **표 격자 결함 확정**: 수행 프로젝트 표(4×3) 마지막 행 rowAddr가 2로 중복 지정(정상=3)→row2 6칸 겹침·row3 텅 빔→한글 열기 거부. 원인=채움 스크립트가 행 추가 시 rowAddr 미증가(v3부터). 수정본 생성→한글에서 열림 확인(원인 확정). **재발방지**: P0 validate_table_grid(검출)에 repair(교정) 추가 + `finalize_layout_hwpx(repair_grid=True 기본)`에 배선 → hwpx_submit 등 제출·마감 경로가 저장 직전 깨진 격자 자동교정(병합표 rowSpan/colSpan>1은 보호·멱등·원본미수정). on-demand CLI `hwpx_doctor.py diagnose|repair`(exit 0/2) + 전역 스킬 hwpx-doctor(안 열림 자동발동). py-3.11 신규 5·회귀 0 |
+| 2026-08-02 | autowrite 잔여 고유자산 흡수 완료(run/docs/tests) + 통합 문서 정리; 원격 삭제는 owner 수동 | tools/injector/{run.bat,run.sh,docs/,tests/} · REPO_DUPLICATION_CHECK · ONBOARDING · run_auto_loop_15.bat | 사용자 요청: autowrite에만 있던 기능 가져오고 autowrite 삭제. 코어는 상위호환·인젝터 잔여 7파일 이전·원격 admin권한 없어 삭제 절차 문서화 |
+
+> **이전 이력 35건은 [docs/CHANGELOG.md](docs/CHANGELOG.md) 로 옮겼다**(2026-07-20).
+> 이 표가 파일의 80%(42KB)를 차지했고, `CLAUDE.md` 는 매 세션 통째로 로드되기 때문이다.
+> **지운 것은 없다** — 전체 40건이 그 파일에 그대로 있다. 새 이력은 여기 맨 아래에 추가하고,
+> 5건을 넘기면 오래된 것부터 `docs/CHANGELOG.md` 로 옮긴다.

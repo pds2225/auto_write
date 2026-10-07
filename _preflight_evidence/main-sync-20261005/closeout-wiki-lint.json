@@ -1,0 +1,721 @@
+{
+  "issues": [
+    {
+      "page": "1.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"사업계획서 자동작성 — 양식 서식 보존 원칙 (제1원칙)\" not updated in 105 days"
+    },
+    {
+      "page": "2026-07-05.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"박다솜 이력서/규칙 세션 요청 로그 (2026-07-05)\""
+    },
+    {
+      "page": "2026-07-05.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"박다솜 이력서/규칙 세션 요청 로그 (2026-07-05)\" not updated in 92 days"
+    },
+    {
+      "page": "2026-07-27.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"울산 기업민원처리센터 전문상담위원 신청 (박다솜, 마감 2026-07-27)\""
+    },
+    {
+      "page": "2026-07-27.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"울산 기업민원처리센터 전문상담위원 신청 (박다솜, 마감 2026-07-27)\" not updated in 62 days"
+    },
+    {
+      "page": "2026-1-1.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"2026 찾아가는 1:1 교육(경영애로 개선 컨설팅) 컨설턴트 지원 기록 (박다솜)\""
+    },
+    {
+      "page": "2026-1-1.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"2026 찾아가는 1:1 교육(경영애로 개선 컨설팅) 컨설턴트 지원 기록 (박다솜)\" not updated in 81 days"
+    },
+    {
+      "page": "2026-2.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"달구벌 여성창업스타전 2026 — 제출 상태 (도보내비·마켓게이트 2건)\" not updated in 60 days"
+    },
+    {
+      "page": "2026.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"박다솜 지원사업 후보 비교 (2026 상반기 공고첨부 폴더)\" not updated in 91 days"
+    },
+    {
+      "page": "210-ssot.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"박다솜 종합 이력 (경력·자격·실적 210건 — 이력서 재료 SSOT)\""
+    },
+    {
+      "page": "210-ssot.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"박다솜 종합 이력 (경력·자격·실적 210건 — 이력서 재료 SSOT)\" not updated in 93 days"
+    },
+    {
+      "page": "3-2026.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"비앤코 수출바우처 3차 신청 (2026) — 산출물·확정값\" not updated in 69 days"
+    },
+    {
+      "page": "7-14.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"비앤코 인천 디자인개발지원사업 신청 건 (~7/14) — 산출물·확정값\" not updated in 90 days"
+    },
+    {
+      "page": "aimy-t-20260814-02.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"AIMY급 자동작성 T-20260814-02는 명세만 — 구현 대기\" not updated in 50 days"
+    },
+    {
+      "page": "auto-write-2026-07-20.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"auto_write 레포 구조 정리 (2026-07-20 진단·조치)\" not updated in 76 days"
+    },
+    {
+      "page": "auto-write-4-2026-08-04.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"auto_write 공유 체크아웃 동시세션 위험 — 미커밋 4파일 + 백그라운드 편집 가드 (2026-08-04)\""
+    },
+    {
+      "page": "auto-write-4-2026-08-04.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"auto_write 공유 체크아웃 동시세션 위험 — 미커밋 4파일 + 백그라운드 편집 가드 (2026-08-04)\" not updated in 62 days"
+    },
+    {
+      "page": "auto-write-autocapture-off-2026-07-28.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"auto_write 위키 저장소 정리 + autoCapture off (2026-07-28)\" not updated in 62 days"
+    },
+    {
+      "page": "auto-write-b01-m1-handoff-2026-07-24.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"auto_write B01 완료와 NotebookLM M1 Cursor 인계\""
+    },
+    {
+      "page": "auto-write-b01-m1-handoff-2026-07-24.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"auto_write B01 완료와 NotebookLM M1 Cursor 인계\" not updated in 73 days"
+    },
+    {
+      "page": "auto-write-fastapi-jinja-headless.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"auto_write 웹앱 구조 + 실행법 (FastAPI+Jinja, headless 아님)\""
+    },
+    {
+      "page": "auto-write-fastapi-jinja-headless.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"auto_write 웹앱 구조 + 실행법 (FastAPI+Jinja, headless 아님)\" not updated in 97 days"
+    },
+    {
+      "page": "auto-write-github-main.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"auto_write GitHub 기본 브랜치는 main\" not updated in 50 days"
+    },
+    {
+      "page": "auto-write-hwpx-quality-path.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"auto_write 품질검증 — HWPX 주경로 vs DOCX 하네스\" not updated in 88 days"
+    },
+    {
+      "page": "auto-write-l-lessons-md-pr-113.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"auto_write L규칙(lessons.md) 레지스트리 번호충돌 정리 완료 (PR #113)\" not updated in 58 days"
+    },
+    {
+      "page": "auto-write-learning-layer-phase-1.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"auto_write 자가학습 레이어 (learning layer) — Phase 1 구현·설계\""
+    },
+    {
+      "page": "auto-write-learning-layer-phase-1.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"auto_write 자가학습 레이어 (learning layer) — Phase 1 구현·설계\" not updated in 85 days"
+    },
+    {
+      "page": "auto-write-m3-docx-insert-handoff-2026-07-24.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"auto_write M3 DOCX insert Cursor handoff\""
+    },
+    {
+      "page": "auto-write-m3-docx-insert-handoff-2026-07-24.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"auto_write M3 DOCX insert Cursor handoff\" not updated in 73 days"
+    },
+    {
+      "page": "auto-write-sft-master-json-2026-07-13.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"auto_write SFT 데이터 레이어 + 기업 Master JSON 개발계획 (2026-07-13)\" not updated in 84 days"
+    },
+    {
+      "page": "auto-write-sft-master-json-2026-07-13.md",
+      "severity": "warning",
+      "type": "oversized",
+      "message": "\"auto_write SFT 데이터 레이어 + 기업 Master JSON 개발계획 (2026-07-13)\" is 14.6KB — consider splitting into smaller pages"
+    },
+    {
+      "page": "aw-003-aw-008-l167-2026-09-18.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"AW-003/AW-008 실제 구현 현황 + L167 오케스트레이션 방어선 실측 (2026-09-18)\""
+    },
+    {
+      "page": "claude-code-prefill.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"Claude Code — 추천 프롬프트를 사용자 입력창에 자동 입력(prefill)하는 기능은 없다\""
+    },
+    {
+      "page": "claude-code-prefill.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"Claude Code — 추천 프롬프트를 사용자 입력창에 자동 입력(prefill)하는 기능은 없다\" not updated in 50 days"
+    },
+    {
+      "page": "cmd.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"지원사업 공고 첨부·양식 다운로드 위치와 실행법 (공고첨부_받기.cmd)\""
+    },
+    {
+      "page": "cmd.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"지원사업 공고 첨부·양식 다운로드 위치와 실행법 (공고첨부_받기.cmd)\" not updated in 93 days"
+    },
+    {
+      "page": "cross-form-autofill.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"cross_form_autofill 잠복버그 — 같은 값이 두 칸에 정당 반복되면 통째로 버려짐\" not updated in 74 days"
+    },
+    {
+      "page": "cross-form.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"빈 양식 자동완성 하네스 요구사항 (cross-form 제출완성)\" not updated in 103 days"
+    },
+    {
+      "page": "fail-open.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"수용검사 게이트 fail-open 결함 클래스 + 검출↔교정↔리포트 정합 원칙\" not updated in 97 days"
+    },
+    {
+      "page": "frontmatter-yaml-5-2026-08-04.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"스킬 전역적용 함정 — frontmatter YAML 깨짐 + 트리거 5곳 (2026-08-04)\" not updated in 62 days"
+    },
+    {
+      "page": "hwpx-6-com-2026-07-27.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"HWPX 양식 채움 6대 함정 (한글 COM 왕복 실측, 2026-07-27)\" not updated in 62 days"
+    },
+    {
+      "page": "hwpx-docx.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"제출본 공통 후처리 원칙 (HWPX/DOCX 전체 양식 공통)\" not updated in 98 days"
+    },
+    {
+      "page": "hwpx-hangul-2024-textdir-2026-08-04.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"hwpx 가 한글에서 안 열리는 진짜 원인 — 한글 2024 전용 textDir (2026-08-04 실측)\""
+    },
+    {
+      "page": "hwpx-hangul-2024-textdir-2026-08-04.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"hwpx 가 한글에서 안 열리는 진짜 원인 — 한글 2024 전용 textDir (2026-08-04 실측)\" not updated in 62 days"
+    },
+    {
+      "page": "hwpx-horizontal-choice-cell-fill.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"HWPX 가로 텍스트 선택칸(□ 없음) 채우기 — ■/□ 프리픽스 마킹\""
+    },
+    {
+      "page": "hwpx-horizontal-choice-cell-fill.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"HWPX 가로 텍스트 선택칸(□ 없음) 채우기 — ■/□ 프리픽스 마킹\" not updated in 85 days"
+    },
+    {
+      "page": "hwpx-owpml-com.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"HWPX 직접 채우기 — 엔진·OWPML 표 생성·한글 COM 함정\" not updated in 60 days"
+    },
+    {
+      "page": "hwpx-pic-offset.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"HWPX 서명 삽입 — 도너 pic 재사용 시 offset 리셋 필수\""
+    },
+    {
+      "page": "k-navi-cloud-drive-ingest.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"K-Navi cloud Drive ingest\" not updated in 46 days"
+    },
+    {
+      "page": "k-navi-mvp-highlight-edit.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"K-Navi MVP highlight edit\" not updated in 46 days"
+    },
+    {
+      "page": "lessons-md-sha256-pretooluse.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"lessons.md 정본 SHA256 자동백업 체계 (PreToolUse 훅)\""
+    },
+    {
+      "page": "lessons-md-sha256-pretooluse.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"lessons.md 정본 SHA256 자동백업 체계 (PreToolUse 훅)\" not updated in 58 days"
+    },
+    {
+      "page": "m3-docx-insert-handoff.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"M3 DOCX INSERT — Cursor paste-ready handoff\""
+    },
+    {
+      "page": "m3-docx-insert-handoff.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"M3 DOCX INSERT — Cursor paste-ready handoff\" not updated in 73 days"
+    },
+    {
+      "page": "mail-monitor-0-fail-loud.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"mail-monitor 수집소 0건 복구 + 커버리지 실패신호 규약 (fail-loud)\""
+    },
+    {
+      "page": "mail-monitor-0-fail-loud.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"mail-monitor 수집소 0건 복구 + 커버리지 실패신호 규약 (fail-loud)\" not updated in 93 days"
+    },
+    {
+      "page": "mail.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"mail 메일 발송 구조 — 제목·수신자·필터·발송현황\""
+    },
+    {
+      "page": "mail.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"mail 메일 발송 구조 — 제목·수신자·필터·발송현황\" not updated in 88 days"
+    },
+    {
+      "page": "main.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"검증 범위와 main 동기화 결정\""
+    },
+    {
+      "page": "night-report-2026-06-28.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"야간 자동개발 복사본은 누적되지 않는다 — NIGHT_REPORT 수치 불신 (2026-06-28 실측)\""
+    },
+    {
+      "page": "night-report-2026-06-28.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"야간 자동개발 복사본은 누적되지 않는다 — NIGHT_REPORT 수치 불신 (2026-06-28 실측)\" not updated in 62 days"
+    },
+    {
+      "page": "omc-ralph-autopilot-ralplan-plan-qa.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"OMC 스킬 차이 빠른 참조 (ralph·autopilot·ralplan·plan·QA계열)\""
+    },
+    {
+      "page": "omc-ralph-autopilot-ralplan-plan-qa.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"OMC 스킬 차이 빠른 참조 (ralph·autopilot·ralplan·plan·QA계열)\" not updated in 115 days"
+    },
+    {
+      "page": "on-lab-2026-7-24-17.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"온랩(On-Lab) 2026 제출 작업 상태 + 파일 지도 (마켓게이트·마감 7/24 17시)\""
+    },
+    {
+      "page": "on-lab-2026-7-24-17.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"온랩(On-Lab) 2026 제출 작업 상태 + 파일 지도 (마켓게이트·마감 7/24 17시)\" not updated in 74 days"
+    },
+    {
+      "page": "page-00d256a9.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"개발 원칙 — 실사용 가능 우선·껍데기 금지·단계적 발전 (전역)\" not updated in 104 days"
+    },
+    {
+      "page": "page-042a282b.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"지원사업 문서 — 원본 양식에 작성·최종본은 원본 파일형식 유지\""
+    },
+    {
+      "page": "page-042a282b.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"지원사업 문서 — 원본 양식에 작성·최종본은 원본 파일형식 유지\" not updated in 82 days"
+    },
+    {
+      "page": "page-0486dafc.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"결과물 파일 완료 후 자동 실행 (소프트 규칙)\""
+    },
+    {
+      "page": "page-0486dafc.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"결과물 파일 완료 후 자동 실행 (소프트 규칙)\" not updated in 92 days"
+    },
+    {
+      "page": "page-084f178f.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"메일 정확도 자가학습 루프 — 부품 완비·자동 배선 미완 (사용자 원하는 지속보완)\""
+    },
+    {
+      "page": "page-084f178f.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"메일 정확도 자가학습 루프 — 부품 완비·자동 배선 미완 (사용자 원하는 지속보완)\" not updated in 81 days"
+    },
+    {
+      "page": "page-1b00b1c9.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"지원사업 공고 조회 시 '교육' 프로그램 제외 (박다솜 선호)\""
+    },
+    {
+      "page": "page-1b00b1c9.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"지원사업 공고 조회 시 '교육' 프로그램 제외 (박다솜 선호)\" not updated in 84 days"
+    },
+    {
+      "page": "page-1f40991c.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"박다솜 창업 신분·증빙 사실 (예비창업자 판정 + 사실증명 종류)\" not updated in 60 days"
+    },
+    {
+      "page": "page-25469aec.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"박다솜 자필 서명 이미지 파일 위치 (신청서 서명란 삽입용)\" not updated in 85 days"
+    },
+    {
+      "page": "page-2c6c9baf.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"박다솜 이력서·프로필 양식 폴더 (모든 이력서 원본 위치)\""
+    },
+    {
+      "page": "page-2c6c9baf.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"박다솜 이력서·프로필 양식 폴더 (모든 이력서 원본 위치)\" not updated in 93 days"
+    },
+    {
+      "page": "page-2fb42948.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"파일 경로는 사용자에게 직접 물어본다\" not updated in 118 days"
+    },
+    {
+      "page": "page-3135242f.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"파일명 \"최종\"·\"완료\" 믿지 말고 내부 안내문구 먼저 확인\""
+    },
+    {
+      "page": "page-3135242f.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"파일명 \"최종\"·\"완료\" 믿지 말고 내부 안내문구 먼저 확인\" not updated in 35 days"
+    },
+    {
+      "page": "page-345607ea.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"지원사업 문서 이미지·캡션 규칙 (박다솜)\""
+    },
+    {
+      "page": "page-345607ea.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"지원사업 문서 이미지·캡션 규칙 (박다솜)\" not updated in 88 days"
+    },
+    {
+      "page": "page-44e80459.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"비앤코 인터내셔날 회사 정보 (지원사업 신청용 사실)\""
+    },
+    {
+      "page": "page-44e80459.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"비앤코 인터내셔날 회사 정보 (지원사업 신청용 사실)\" not updated in 97 days"
+    },
+    {
+      "page": "page-5038efbe.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"이력서 내용 소스 규칙 — 항상 '가장 최근본' 기준 (박다솜)\" not updated in 85 days"
+    },
+    {
+      "page": "page-516e8048.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"실사용 기능 우선 — 안전·테스트·보안보다 (전역 지침)\" not updated in 88 days"
+    },
+    {
+      "page": "page-5a8d0a54.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"사업계획서 자동작성 — 사용자(박다솜) 요구사항·작성 규칙 [기억]\" not updated in 105 days"
+    },
+    {
+      "page": "page-5b79cefe.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"기본 파일 검색 경로 (밸류업파트너스)\" not updated in 118 days"
+    },
+    {
+      "page": "page-7a70b6d5.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"비앤코 인터내셔날 — 회사 프로필 (지원사업 신청용 기본정보)\""
+    },
+    {
+      "page": "page-7a70b6d5.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"비앤코 인터내셔날 — 회사 프로필 (지원사업 신청용 기본정보)\" not updated in 92 days"
+    },
+    {
+      "page": "page-7e8f9587.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"지원사업 문서 각색 시 프로그램 특징 항목은 신청 사업 기준 (박다솜)\" not updated in 88 days"
+    },
+    {
+      "page": "pdf.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"증빙 PDF 세금계산서 제목 규칙 (박다솜)\""
+    },
+    {
+      "page": "pdf.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"증빙 PDF 세금계산서 제목 규칙 (박다솜)\" not updated in 90 days"
+    },
+    {
+      "page": "pr-auto-mode.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"자가 작성 PR 병합은 auto-mode 분류기가 차단 — 명시 승인 필요\" not updated in 85 days"
+    },
+    {
+      "page": "psst.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"PSST 모듈 팩 운영 — 경로·되는것·안되는것\" not updated in 50 days"
+    },
+    {
+      "page": "repo-handoff-backup-gitignore.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"공개 repo 개인문서 자동노출 차단 (handoff/backup 스냅샷 + gitignore)\""
+    },
+    {
+      "page": "repo-handoff-backup-gitignore.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"공개 repo 개인문서 자동노출 차단 (handoff/backup 스냅샷 + gitignore)\" not updated in 76 days"
+    },
+    {
+      "page": "rusalka.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"RUSALKA 개인 맞춤형 발레 토슈즈 사업 (예술분야 초기창업 · 비앤코 연결)\" not updated in 58 days"
+    },
+    {
+      "page": "self-diagnose.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"사업계획서 제출 게이트(self_diagnose) + 멀티에이전트 품질고도화 패턴\" not updated in 98 days"
+    },
+    {
+      "page": "session-2026-08-16-aimy-psst.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"Session 2026-08-16 AIMY PSST 체크포인트\""
+    },
+    {
+      "page": "session-2026-08-16-aimy-psst.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"Session 2026-08-16 AIMY PSST 체크포인트\" not updated in 50 days"
+    },
+    {
+      "page": "session-2026-08-20-k-navi-mvp.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"Session 2026-08-20 K-Navi MVP\" not updated in 46 days"
+    },
+    {
+      "page": "session-2026-08-20-star-gnss.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"Session 2026-08-20 — STAR 위성항법 출처 + 스킬수확\""
+    },
+    {
+      "page": "session-2026-08-20-star-gnss.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"Session 2026-08-20 — STAR 위성항법 출처 + 스킬수확\" not updated in 46 days"
+    },
+    {
+      "page": "session-2026-08-23.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"세션 2026-08-23 마무리 — tech-framing-provenance 의미 확인\""
+    },
+    {
+      "page": "session-2026-08-23.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"세션 2026-08-23 마무리 — tech-framing-provenance 의미 확인\" not updated in 43 days"
+    },
+    {
+      "page": "session-closeout-auto.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"세션 자동 마무리(session-closeout-auto) 전역 활성 + 클로드 로그인 만료 수정\" not updated in 97 days"
+    },
+    {
+      "page": "skill-request-hooks.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"스킬 훅 = 요청 원문 우선 · 자동 미발동이면 효용 감소 (2026-08-20)\" not updated in 46 days"
+    },
+    {
+      "page": "star-exploration.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"STAR-Exploration 공고 + 도보네비게이션 항공우주(위성항법) 연계 전략\" not updated in 97 days"
+    },
+    {
+      "page": "tech-framing-provenance.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"지원사업 기술 프레이밍 vs 보유기술 — 출처 추적 (2026-08-20)\" not updated in 46 days"
+    },
+    {
+      "page": "v1-v2.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"작성본 버전 규칙(v1,v2) + 반복 질문 금지 (사용자 선호)\" not updated in 93 days"
+    },
+    {
+      "page": "v7.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"은평창업지원센터 입주신청 제출본 — 최종본은 v7 (검사 통과)\" not updated in 76 days"
+    },
+    {
+      "page": "windows-github-https.md",
+      "severity": "info",
+      "type": "orphan",
+      "message": "No other pages link to \"Windows GitHub HTTPS 인증 오류 해결 절차\""
+    },
+    {
+      "page": "windows-github-https.md",
+      "severity": "warning",
+      "type": "stale",
+      "message": "\"Windows GitHub HTTPS 인증 오류 해결 절차\" not updated in 50 days"
+    },
+    {
+      "page": "2026-07-05.md",
+      "severity": "info",
+      "type": "structural-contradiction",
+      "message": "Tag \"박다솜\" appears in pages with different categories: session-log, reference"
+    },
+    {
+      "page": "auto-write-2026-07-20.md",
+      "severity": "info",
+      "type": "structural-contradiction",
+      "message": "Tag \"auto_write\" appears in pages with different categories: reference, environment, decision, session-log, architecture"
+    },
+    {
+      "page": "k-navi-cloud-drive-ingest.md",
+      "severity": "info",
+      "type": "structural-contradiction",
+      "message": "Tag \"k-navi\" appears in pages with different categories: environment, convention"
+    }
+  ],
+  "stats": {
+    "totalPages": 79,
+    "orphanCount": 38,
+    "staleCount": 76,
+    "brokenRefCount": 0,
+    "lowConfidenceCount": 0,
+    "oversizedCount": 1,
+    "contradictionCount": 3
+  }
+}

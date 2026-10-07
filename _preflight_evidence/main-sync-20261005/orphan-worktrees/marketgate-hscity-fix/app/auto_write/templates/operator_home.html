@@ -1,0 +1,51 @@
+{% extends "operator_base.html" %}
+{% block title %}문서 작업 · Auto Write{% endblock %}
+{% block eyebrow %}DOCUMENT WORKSPACE{% endblock %}
+{% block page_title %}문서 작업{% endblock %}
+{% block content %}
+{% if error %}<div class="alert alert-error"><strong>실행 오류</strong><pre>{{ error }}</pre></div>{% endif %}
+<section class="summary-strip">
+  <div><span>GitHub</span><strong>{{ git.status }}</strong><small>{{ git.repository }} · {{ git.branch }}</small></div>
+  <div><span>L 규칙</span><strong>{{ rule_summary.counts.total }}</strong><small>canonical registry 자동 로드</small></div>
+  <div><span>시스템 연결</span><strong>{{ architecture.normal }}/{{ architecture.nodes|length }}</strong><small>실제 파일·심볼 기준</small></div>
+  <div><span>최근 실행</span><strong>{{ recent_runs|length }}</strong><small>runtime event 기록</small></div>
+</section>
+<section class="workspace-grid">
+  <article class="work-card work-card-primary">
+    <div class="work-card-head"><div class="number-box">01</div><div><h2>문서 작성</h2><p>신규 작성과 기존 자료 활용을 한 화면에서 처리합니다. 입력 자료를 기존 엔진이 분석합니다.</p></div></div>
+    <form class="stack-form" method="post" action="/console/documents/write" enctype="multipart/form-data">
+      <div class="field-grid">
+        <label><span>사업계획서 양식 <b class="required">필수</b></span><input type="file" name="template_file" accept=".docx,.hwp,.hwpx" required><small>실제 repo가 지원하는 템플릿 형식만 허용합니다.</small></label>
+        <label><span>참고자료</span><input type="file" name="reference_files" multiple><small>공고문·기존 사업계획서·기업자료·상담메모 등을 함께 선택</small></label>
+      </div>
+      <div class="field-grid">
+        <label><span>문서/과제명</span><input type="text" name="project_title" placeholder="예: 2026 초기창업패키지 사업계획서"></label>
+        <label><span>기업명</span><input type="text" name="organization_name" placeholder="예: 주식회사 예시"></label>
+      </div>
+      <label><span>작성 지시</span><textarea name="instruction" rows="4" placeholder="예: 기존 자료의 사실만 활용하고 이번 공고 평가항목에 맞게 사업계획서를 작성해줘."></textarea></label>
+      <div class="form-actions"><button class="btn btn-primary" type="submit">기존 엔진으로 문서 작성</button><span class="inline-note">양식 분석 → DomainRouter → L 규칙 참조 → ProjectService.generate</span></div>
+    </form>
+  </article>
+  <article class="work-card">
+    <div class="work-card-head"><div class="number-box">02</div><div><h2>문서 수정·보완</h2><p>기존 문서를 구조 템플릿이자 사실자료로 사용해 수정본을 생성합니다.</p></div></div>
+    <form class="stack-form" method="post" action="/console/documents/revise" enctype="multipart/form-data">
+      <label><span>기존 문서 <b class="required">필수</b></span><input type="file" name="document_file" accept=".docx,.hwp,.hwpx" required></label>
+      <label><span>수정 지시 <b class="required">필수</b></span><textarea name="instruction" rows="4" required placeholder="예: 시장분석 부분만 수치 근거 중심으로 보완하고 나머지 구조는 유지해줘."></textarea></label>
+      <label><span>결과 문서명</span><input type="text" name="project_title" placeholder="비워두면 원본명 + 수정본"></label>
+      <button class="btn btn-secondary" type="submit">수정본 생성</button>
+    </form>
+  </article>
+  <article class="work-card">
+    <div class="work-card-head"><div class="number-box">03</div><div><h2>문서 변환</h2><p>기존 HWP/DOCX 변환 서비스를 그대로 호출합니다.</p></div></div>
+    <form class="stack-form" method="post" action="/console/documents/convert" enctype="multipart/form-data">
+      <label><span>입력 파일</span><input type="file" name="file" accept=".hwp,.hwpx,.docx" required></label>
+      <label><span>목표 형식</span><select name="target" required><option value="docx">DOCX — HWP/HWPX → DOCX</option><option value="hwp">HWP — DOCX → HWP (한글 COM 필요)</option><option value="hwpx">HWPX — DOCX → HWPX (한글 COM 필요)</option></select></label>
+      <button class="btn btn-secondary" type="submit">변환 실행</button>
+    </form>
+  </article>
+</section>
+<section class="section-head"><div><p class="eyebrow">RUNTIME</p><h2>최근 실행</h2></div><a class="text-link" href="/console/monitor">전체 실행 보기 →</a></section>
+<div class="run-list">
+{% if recent_runs %}{% for run in recent_runs %}<article class="run-row"><div class="run-icon run-{{ run.status|lower }}"></div><div><strong>{{ run.label }}</strong><small>{{ run.started_at }}</small></div><span class="badge badge-{{ run.status|lower }}">{{ run.status }}</span><span>{{ run.steps|length }} steps</span></article>{% endfor %}{% else %}<div class="empty-state">아직 실행 기록이 없습니다. 위에서 문서 작업을 실행하면 실제 단계가 기록됩니다.</div>{% endif %}
+</div>
+{% endblock %}

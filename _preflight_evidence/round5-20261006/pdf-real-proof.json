@@ -1,0 +1,64 @@
+{
+  "hancom_2022": true,
+  "dispatch_count": 1,
+  "source_sha256": "ba66cb52e113f7823ad98dfc34ec4fded4c8c5c041fd226ef87b116cee68e973",
+  "existing_hwp": [
+    78708
+  ],
+  "stages": [
+    {
+      "name": "Dispatch",
+      "seconds": 10.953,
+      "result": "<COMObject HWPFrame.HwpObject>"
+    },
+    {
+      "name": "RegisterModule",
+      "seconds": 0.094,
+      "result": "True"
+    },
+    {
+      "name": "SetMessageBoxMode",
+      "seconds": 0.031,
+      "result": "0"
+    },
+    {
+      "name": "Open",
+      "seconds": 0.579,
+      "result": "True"
+    },
+    {
+      "name": "SaveAs[PDF]",
+      "seconds": 65.609,
+      "result": "True"
+    },
+    {
+      "name": "Clear",
+      "seconds": 0.031,
+      "result": "None"
+    },
+    {
+      "name": "Quit",
+      "seconds": 0.016,
+      "result": "None"
+    }
+  ],
+  "dialogs": [],
+  "saves": [
+    {
+      "name": "baseline.pdf",
+      "saved": true,
+      "seconds": 65.609,
+      "pages": 2,
+      "bytes": 156406,
+      "has_expected_text": true
+    }
+  ],
+  "owned_pid": 84448,
+  "Version": "12, 0, 0, 893",
+  "IsTrackChange": "0",
+  "PageCount": "3",
+  "original_hash_preserved": true,
+  "source_copy_hash_preserved": true,
+  "existing_hwp_preserved": true,
+  "remaining_owned": []
+}

@@ -22,6 +22,7 @@ from auto_write.services.hwpx_integrity_gate import REVIEW_REQUIRED, run_hwpx_in
 from auto_write.services.hwpx_submit import (
     RHWP_ABSENT_RENDER_NOTE,
     RHWP_ABSENT_REPAIR_NOTE,
+    RHWP_DISABLED_RENDER_NOTE,
     XML_OVERFLOW_NOT_L005_NOTE,
     submit_hwpx,
 )
@@ -171,6 +172,7 @@ def _no_leftovers(folder: Path) -> None:
 
 
 def _force_rhwp_absent(monkeypatch) -> None:
+    monkeypatch.delenv("AUTO_WRITE_ENABLE_RHWP", raising=False)
     monkeypatch.delenv("RHWP_EXE", raising=False)
     monkeypatch.setattr(native_hwp, "rhwp_available", lambda: False)
 
@@ -203,18 +205,20 @@ def test_filled_package_keeps_zip_members_section_and_spine_binding(tmp_path, mo
     assert rep.submittable is True
     assert Path(rep.final) == out
     _assert_package(out, _FILL, _EXISTING)
-    assert rep.native_render.get("render_status") == "UNAVAILABLE"
+    assert rep.native_render.get("render_status") == "NOT_RUN"
     assert rep.native_render.get("reopen_status") == "NOT_RUN"
-    assert rep.native_render.get("l005_pixel") == "ENV_BLOCKED"
-    assert rep.native_render.get("l050_pdf") == "ENV_BLOCKED"
+    assert rep.native_render.get("l005_pixel") == "NOT_RUN"
+    assert rep.native_render.get("l050_pdf") == "NOT_RUN"
+    assert rep.native_render.get("disabled") is True
     assert rep.native_render.get("pixel_reopen_claimed") is False
     assert rep.native_render.get("ok") is False
-    assert RHWP_ABSENT_RENDER_NOTE in rep.notes
+    assert rep.native_render.get("severity") == "PASS"
+    assert RHWP_DISABLED_RENDER_NOTE in rep.notes
     assert rep.integrity["final_status"] == "PASS"
     render = next(v for v in rep.integrity["validators"] if v["source_validator"] == "rendering_validator")
-    assert render["validator_status"] == "UNAVAILABLE"
+    assert render["validator_status"] == "NOT_RUN"
     assert render["severity"] == "PASS"
-    assert render["defect_code"] == "RHWP_ABSENT"
+    assert render["defect_code"] == "RHWP_DISABLED"
     _no_leftovers(tmp_path)
 
 
@@ -233,9 +237,17 @@ def test_same_path_refusal_preserves_source_sha_and_writes_nothing(tmp_path):
 
 
 def test_acceptance_fail_leaves_one_valid_draft_and_source_sha(tmp_path, monkeypatch):
+    """양식에 있던 유색은 결함이 아니다. 잔여 더미명(홍길동)만 초안을 남긴다."""
     _force_rhwp_absent(monkeypatch)
     src = tmp_path / "colored.hwpx"
-    _write(src, _section_clean(), colored=True)
+    section = _section_clean().replace(
+        b"</hs:sec>",
+        (
+            '<hp:p><hp:run charPrIDRef="0"><hp:t>참고 홍길동</hp:t></hp:run></hp:p>'
+            "</hs:sec>"
+        ).encode("utf-8"),
+    )
+    _write(src, section, colored=True)
     before = _sha(src)
     out = tmp_path / "out.hwpx"
 
@@ -262,6 +274,7 @@ def test_acceptance_fail_leaves_one_valid_draft_and_source_sha(tmp_path, monkeyp
 
 def test_rhwp_absent_skips_grid_repair_without_corrupting_package(tmp_path, monkeypatch):
     _force_rhwp_absent(monkeypatch)
+    monkeypatch.setenv("AUTO_WRITE_ENABLE_RHWP", "1")
     src = tmp_path / "broken.hwpx"
     _write(src, _section_protected_broken())
     before = _sha(src)
@@ -401,6 +414,7 @@ def test_unavailable_plus_pixel_pass_claim_is_rejected(tmp_path):
 
 
 def test_verify_success_does_not_set_l005_or_l050_pass(tmp_path, monkeypatch):
+    monkeypatch.setenv("AUTO_WRITE_ENABLE_RHWP", "1")
     candidate = tmp_path / "candidate.hwpx"
     candidate.write_bytes(b"hwpx-bytes-for-hash")
 
@@ -429,8 +443,78 @@ def test_verify_success_does_not_set_l005_or_l050_pass(tmp_path, monkeypatch):
     assert not (tmp_path / "candidate.pdf").exists()
 
 
+def test_default_rhwp_does_not_spawn_or_draft(tmp_path, monkeypatch):
+    """설치된 rhwp 도 기본값은 실행하지 않고 NOT_RUN 이며 _DRAFT 사유가 아니다."""
+    exe = tmp_path / "rhwp.exe"
+    exe.write_bytes(b"MZ")
+    monkeypatch.delenv("AUTO_WRITE_ENABLE_RHWP", raising=False)
+    monkeypatch.setenv("RHWP_EXE", str(exe))
+    calls: list = []
+    monkeypatch.setattr(
+        native_hwp.subprocess,
+        "run",
+        lambda *args, **kwargs: calls.append(args),
+    )
+    assert native_hwp.rhwp_enabled() is False
+    assert native_hwp.resolve_rhwp_executable() is None
+    assert native_hwp.rhwp_available() is False
+    candidate = tmp_path / "candidate.hwpx"
+    candidate.write_bytes(b"PK")
+    evidence = native_hwp.verify_hwpx_native(candidate)
+    assert evidence["render_status"] == "NOT_RUN"
+    assert evidence["reopen_status"] == "NOT_RUN"
+    assert evidence["disabled"] is True
+    assert evidence["severity"] == "PASS"
+    assert evidence["l005_pixel"] == "NOT_RUN"
+    assert "disabled" in evidence["message"]
+    assert calls == []
+
+    src = tmp_path / "form.hwpx"
+    _write(src, _section_clean())
+    out = tmp_path / "out.hwpx"
+    monkeypatch.setattr(
+        "core.docx.services.hwp_docx_convert.hancom_com_available",
+        lambda: False,
+    )
+    rep = submit_hwpx(
+        src,
+        out,
+        identity={"기업명": _FILL},
+        normalize_colors=False,
+        submission_cleanup=False,
+        preserve_template=True,
+    )
+    assert rep.ok is True
+    assert rep.submittable is True
+    assert Path(rep.final) == out
+    assert not (tmp_path / "out_DRAFT.hwpx").exists()
+    assert rep.native_render.get("render_status") == "NOT_RUN"
+    assert rep.native_render.get("severity") == "PASS"
+    assert calls == []
+    _no_leftovers(tmp_path)
+
+
+def test_disabled_not_run_plus_pixel_pass_claim_is_rejected(tmp_path):
+    src = tmp_path / "form.hwpx"
+    _write(src, _section_clean())
+
+    def _lie(_path: str) -> dict:
+        payload = native_hwp._disabled_render_evidence()
+        payload["reopen_status"] = "PASS"
+        payload["l005_pixel"] = "PASS"
+        return payload
+
+    report = run_hwpx_integrity_gate(str(src), render_validator=_lie)
+    assert report.final_status == REVIEW_REQUIRED
+    render = next(v for v in report.validators if v.source_validator == "rendering_validator")
+    assert render.validator_status == "ERROR"
+    assert render.defect_code == "RENDER_CLAIM_WITHOUT_TOOL"
+    assert render.severity == REVIEW_REQUIRED
+
+
 def test_verify_absent_rhwp_is_env_blocked_not_reopen_pass(tmp_path, monkeypatch):
     _force_rhwp_absent(monkeypatch)
+    monkeypatch.setenv("AUTO_WRITE_ENABLE_RHWP", "1")
     candidate = tmp_path / "candidate.hwpx"
     candidate.write_bytes(b"hwpx-bytes")
     evidence = native_hwp.verify_hwpx_native(candidate)
@@ -458,7 +542,12 @@ def test_xml_overflow_note_is_not_an_l005_pass(tmp_path, monkeypatch):
     assert rep.routing_status == "LOCAL_LAYOUT_RISK"
     assert Path(rep.final) == out
     assert XML_OVERFLOW_NOT_L005_NOTE in rep.notes
-    assert rep.native_render.get("l005_pixel") == "ENV_BLOCKED"
+    assert rep.native_render.get("l005_pixel") == "NOT_RUN"
+    assert rep.native_render.get("render_status") == "NOT_RUN"
+    assert rep.native_render.get("severity") == "PASS"
+    render = next(v for v in rep.integrity["validators"] if v["source_validator"] == "rendering_validator")
+    assert render["severity"] == "PASS"
+    assert render["defect_code"] == "RHWP_DISABLED"
     assert rep.integrity["final_status"] == "REVIEW_REQUIRED"
     risk = next(v for v in rep.integrity["validators"] if v["source_validator"] == "fixed_cell_height_guard")
     assert risk["evidence"]["render_confirmed"] is False

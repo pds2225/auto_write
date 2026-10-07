@@ -3,11 +3,12 @@
 > `D:\auto_write` 전용. 정부지원사업 문서 자동생성 + 문서 품질 개선 하네스 프로젝트.
 > 공통 지침(글로벌 CLAUDE.md)과 충돌 시 이 repo-local 규칙을 우선한다.
 >
-> **🔄 세션을 새로 시작했다면 `git fetch origin --prune` 후 `TASK.md`를 먼저 읽어라.**
+> **작업 시작·재개 전 `git fetch origin --prune` 후 `origin/main:TASK.md` → `origin/main:RESUME.md`를 반드시 읽는다.**
+> 로컬·다른 PC·클라우드·GitHub 및 어떤 작업 브랜치에서도 적용한다. 원격 TASK의 LIST와 열린 8-1, 원격 RESUME 확인 전에는 제품 코드 수정·테스트·새 작업에 착수하지 않는다. 읽은 main SHA와 현재 상태·다음 액션을 짧게 보고한다. 조회 실패는 먼저 해결한다. 상세 `AGENTS.md` §10.
 > 개발 작업 상태·우선순위·다음 작업의 공식 정본은 `origin/main:TASK.md` 하나다.
 > `RESUME.md`는 중단 지점·실행 로그·재개 힌트용 세션 체크포인트이며 TASK를 덮어쓰지 않는다.
 > 작업을 잠시 멈추거나 컨텍스트가 무거워지면 "체크포인트 저장"으로 RESUME.md 를 갱신하고,
-> 새 세션에서 TASK를 먼저 확인한 뒤 "이어서"로 복원한다(session-resume 스킬).
+> 새 세션에서 원격 TASK와 RESUME를 위 순서대로 확인한 뒤 복원한다(session-resume 스킬).
 > **마무리 예약(로컬·클라우드·GitHub · Cursor/Claude/Codex 공통):**
 > `python scripts/session_closeout.py plant|status|sync-disk|ack|cancel`.
 > `due: true` 이고 이 (agent, location) 이 아직 ack 가 아니면 `RESUME.md` 갱신 후

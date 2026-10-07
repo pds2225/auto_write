@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Auto Write Console{% endblock %}</title>
+  <link rel="stylesheet" href="/static/operator.css">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="op-sidebar">
+      <a href="/console" class="op-brand">
+        <span class="brand-mark">AW</span>
+        <span>
+          <strong>Auto Write</strong>
+          <small>운영 콘솔</small>
+        </span>
+      </a>
+
+      <nav class="op-nav" aria-label="주 메뉴">
+        <a class="{% if request.url.path in ['/', '/console'] %}active{% endif %}" href="/console"><span>01</span> 문서 작업</a>
+        <a class="{% if '/console/lrules' in request.url.path %}active{% endif %}" href="/console/lrules"><span>02</span> L 규칙 관리</a>
+        <a class="{% if '/console/workflows' in request.url.path %}active{% endif %}" href="/console/workflows"><span>03</span> 업무 플로우</a>
+        <a class="{% if '/console/architecture' in request.url.path %}active{% endif %}" href="/console/architecture"><span>04</span> 시스템 아키텍처</a>
+        <a class="{% if '/console/monitor' in request.url.path %}active{% endif %}" href="/console/monitor"><span>05</span> 실행 모니터링</a>
+        <a class="{% if '/console/settings' in request.url.path %}active{% endif %}" href="/console/settings"><span>06</span> 설정·Git</a>
+      </nav>
+
+      <div class="sidebar-foot">
+        <div class="mini-label">GitHub 연결</div>
+        <div class="git-mini"><span class="dot status-dot-{{ git.status|lower }}"></span><strong>{{ git.status }}</strong></div>
+        <code>{{ git.branch or '-' }}</code>
+        <small>{{ (git.local_sha or '-')[:8] }}</small>
+      </div>
+    </aside>
+
+    <main class="op-main">
+      <header class="op-topbar">
+        <div>
+          <p class="eyebrow">{% block eyebrow %}AUTO_WRITE OPERATOR{% endblock %}</p>
+          <h1>{% block page_title %}운영 콘솔{% endblock %}</h1>
+        </div>
+        <div class="top-status-group">
+          <div class="top-status"><span class="mini-label">AI</span><strong>{{ ai_status_text }}</strong></div>
+          <a href="/console/settings" class="sync-pill sync-{{ git.status|lower }}">
+            <span class="dot"></span>{{ git.status }}
+            {% if git.behind %}<b>↓{{ git.behind }}</b>{% endif %}
+            {% if git.ahead %}<b>↑{{ git.ahead }}</b>{% endif %}
+          </a>
+        </div>
+      </header>
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</body>
+</html>

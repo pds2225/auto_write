@@ -1,0 +1,169 @@
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional
+
+
+@dataclass(frozen=True)
+class Settings:
+    app_root: Path
+    workspace_root: Path
+    template_root: Path
+    project_root: Path
+    results_root: Path
+    static_root: Path
+    template_view_root: Path
+    host: str
+    port: int
+    openai_api_key: str
+    openai_model: str
+    openai_search_model: str
+    openai_image_model: str
+    anthropic_api_key: str
+    anthropic_model: str
+    anthropic_search_model: str
+    gemini_api_key: str = ""
+    gemini_image_model: str = "gemini-2.5-flash-image"
+    template_ai_refine_enabled: bool = False
+    reference_library_dir: Optional[Path] = None
+
+    @property
+    def has_openai(self) -> bool:
+        return bool(self.openai_api_key)
+
+    @property
+    def has_anthropic(self) -> bool:
+        return bool(self.anthropic_api_key)
+
+    @property
+    def has_gemini(self) -> bool:
+        return bool(self.gemini_api_key)
+
+    @property
+    def ai_provider(self) -> str:
+        if self.has_openai:
+            return "openai"
+        if self.has_anthropic:
+            return "anthropic"
+        return "none"
+
+
+def _load_env_file(env_path: Path) -> None:
+    if not env_path.exists():
+        return
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+def _can_write_to_dir(path: Path) -> bool:
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        probe = path / ".auto_write_probe"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink(missing_ok=True)
+        return True
+    except OSError:
+        return False
+
+
+def _resolve_workspace_root(app_root: Path) -> Path:
+    configured = os.getenv("AUTO_WRITE_WORKSPACE_ROOT", "").strip()
+    if configured:
+        return Path(configured)
+
+    default_root = app_root.parent / "workspace"
+    if _can_write_to_dir(default_root):
+        return default_root
+
+    return app_root / "workspace"
+
+
+def get_settings() -> Settings:
+    app_root = Path(__file__).resolve().parent.parent
+    _load_env_file(app_root / ".env")
+    workspace_root = _resolve_workspace_root(app_root)
+    template_root = workspace_root / "templates"
+    project_root = workspace_root / "projects"
+    results_root = app_root.parent / "results"
+    static_root = app_root / "auto_write" / "static"
+    template_view_root = app_root / "auto_write" / "templates"
+    reference_dir_env = os.getenv("AUTO_WRITE_REFERENCE_LIBRARY_DIR", "").strip()
+    reference_library_dir: Optional[Path]
+    if reference_dir_env:
+        reference_library_dir = Path(reference_dir_env)
+    else:
+        reference_library_dir = None
+
+    return Settings(
+        app_root=app_root,
+        workspace_root=workspace_root,
+        template_root=template_root,
+        project_root=project_root,
+        results_root=results_root,
+        static_root=static_root,
+        template_view_root=template_view_root,
+        host=os.getenv("AUTO_WRITE_HOST", "127.0.0.1"),
+        port=int(os.getenv("AUTO_WRITE_PORT", "8765")),
+        openai_api_key=os.getenv("OPENAI_API_KEY", "").strip(),
+        openai_model=os.getenv("AUTO_WRITE_OPENAI_MODEL", "gpt-4.1-mini").strip(),
+        openai_search_model=os.getenv("AUTO_WRITE_OPENAI_SEARCH_MODEL", "gpt-4.1-mini").strip(),
+        openai_image_model=os.getenv("AUTO_WRITE_OPENAI_IMAGE_MODEL", "gpt-image-1").strip(),
+        anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", "").strip(),
+        anthropic_model=os.getenv("AUTO_WRITE_ANTHROPIC_MODEL", "claude-sonnet-4-20250514").strip(),
+        anthropic_search_model=os.getenv("AUTO_WRITE_ANTHROPIC_SEARCH_MODEL", "claude-sonnet-4-20250514").strip(),
+        gemini_api_key=(os.getenv("GEMINI_API_KEY", "") or os.getenv("GOOGLE_API_KEY", "")).strip(),
+        gemini_image_model=os.getenv("AUTO_WRITE_GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image").strip(),
+        template_ai_refine_enabled=os.getenv("AUTO_WRITE_TEMPLATE_AI_REFINE", "").strip().lower()
+        in {"1", "true", "yes", "on"},
+        reference_library_dir=reference_library_dir,
+    )
+
+
+def ensure_directories(settings: Settings) -> None:
+    for path in (
+        settings.workspace_root,
+        settings.template_root,
+        settings.project_root,
+        settings.results_root,
+        settings.static_root,
+        settings.template_view_root,
+    ):
+        path.mkdir(parents=True, exist_ok=True)
+
+
+# --- Domain-aware workspace/results routing ---
+
+def get_domain_workspace(domain: str, settings: Settings | None = None) -> Path:
+    """도메인별 workspace 경로를 반환한다. 기존 경로는 fallback으로 유지."""
+    if settings is None:
+        settings = get_settings()
+    domain_dir = settings.workspace_root / domain
+    domain_dir.mkdir(parents=True, exist_ok=True)
+    return domain_dir
+
+
+def get_domain_results(domain: str, settings: Settings | None = None) -> Path:
+    """도메인별 results 경로를 반환한다. 기존 경로는 fallback으로 유지."""
+    if settings is None:
+        settings = get_settings()
+    domain_dir = settings.results_root / domain
+    domain_dir.mkdir(parents=True, exist_ok=True)
+    return domain_dir
+
+
+def get_project_dir(project_id: str, domain: str | None = None, settings: Settings | None = None) -> Path:
+    """프로젝트 디렉토리를 반환한다. domain이 지정되면 도메인 하위에 생성."""
+    if settings is None:
+        settings = get_settings()
+    if domain:
+        return get_domain_workspace(domain, settings) / "projects" / project_id
+    return settings.project_root / project_id

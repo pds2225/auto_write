@@ -1,0 +1,29 @@
+{
+  "purpose": "threshold_calibration_only_not_holdout",
+  "thresholds": {
+    "AUTO_THRESHOLD": 0.78,
+    "REVIEW_THRESHOLD": 0.60,
+    "MARGIN_MIN": 0.08
+  },
+  "notes": [
+    "Do not retune thresholds against holdout/ fixtures.",
+    "Hold-out gates remain macro F1 >= 0.90 and matching top-1 >= 0.90."
+  ],
+  "samples": [
+    {
+      "id": "cal-auto-clear",
+      "description": "clear PSST+keyword+visual match should land in auto band",
+      "expected_band": "auto"
+    },
+    {
+      "id": "cal-review-margin",
+      "description": "near-tie twins force review even if score is high",
+      "expected_band": "review"
+    },
+    {
+      "id": "cal-skip-low",
+      "description": "unrelated asset stays below review threshold",
+      "expected_band": "skip"
+    }
+  ]
+}

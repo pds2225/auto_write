@@ -1,0 +1,143 @@
+{
+  "verified_at_kst": "2026-10-06 00:37:47 +09:00",
+  "github_main": "b0e8eedebc16c6d878d76809b8eeafba0d43a50b",
+  "synced_locations": 14,
+  "locations": [
+    {
+      "path": "D:\\auto_write",
+      "head": "b0e8eedebc16c6d878d76809b8eeafba0d43a50b",
+      "branch": "main",
+      "tracked_clean": true,
+      "product_blob_hashes_match": true,
+      "untracked_status": "?? _preflight_evidence/"
+    },
+    {
+      "path": "C:\\Users\\ekth3\\AppData\\Local\\v_up\\dashboard_worktrees\\auto_write\\dashboard-main",
+      "head": "b0e8eedebc16c6d878d76809b8eeafba0d43a50b",
+      "branch": null,
+      "tracked_clean": true,
+      "product_blob_hashes_match": true,
+      "untracked_status": ""
+    },
+    {
+      "path": "D:\\auto_write\\.claude\\worktrees\\dapper-launching-hamming",
+      "head": "b0e8eedebc16c6d878d76809b8eeafba0d43a50b",
+      "branch": null,
+      "tracked_clean": true,
+      "product_blob_hashes_match": true,
+      "untracked_status": ""
+    },
+    {
+      "path": "D:\\auto_write\\.claude\\worktrees\\feat+harden-fill-accuracy",
+      "head": "b0e8eedebc16c6d878d76809b8eeafba0d43a50b",
+      "branch": null,
+      "tracked_clean": true,
+      "product_blob_hashes_match": true,
+      "untracked_status": ""
+    },
+    {
+      "path": "D:\\auto_write\\.claude\\worktrees\\feat+hwpx-layout-guards",
+      "head": "b0e8eedebc16c6d878d76809b8eeafba0d43a50b",
+      "branch": null,
+      "tracked_clean": true,
+      "product_blob_hashes_match": true,
+      "untracked_status": ""
+    },
+    {
+      "path": "D:\\auto_write\\.claude\\worktrees\\k-navi-jeju-market-54fb3f",
+      "head": "b0e8eedebc16c6d878d76809b8eeafba0d43a50b",
+      "branch": null,
+      "tracked_clean": true,
+      "product_blob_hashes_match": true,
+      "untracked_status": ""
+    },
+    {
+      "path": "D:\\auto_write\\.claude\\worktrees\\marketgate-hscity-fix",
+      "head": "b0e8eedebc16c6d878d76809b8eeafba0d43a50b",
+      "branch": null,
+      "tracked_clean": true,
+      "product_blob_hashes_match": true,
+      "untracked_status": ""
+    },
+    {
+      "path": "D:\\auto_write\\.claude\\worktrees\\typed-herding-marble",
+      "head": "b0e8eedebc16c6d878d76809b8eeafba0d43a50b",
+      "branch": null,
+      "tracked_clean": true,
+      "product_blob_hashes_match": true,
+      "untracked_status": ""
+    },
+    {
+      "path": "D:\\auto_write\\.worktrees\\pr211-round3",
+      "head": "b0e8eedebc16c6d878d76809b8eeafba0d43a50b",
+      "branch": null,
+      "tracked_clean": true,
+      "product_blob_hashes_match": true,
+      "untracked_status": ""
+    },
+    {
+      "path": "D:\\auto_write_main",
+      "head": "b0e8eedebc16c6d878d76809b8eeafba0d43a50b",
+      "branch": null,
+      "tracked_clean": true,
+      "product_blob_hashes_match": true,
+      "untracked_status": ""
+    },
+    {
+      "path": "D:\\aw_pr211",
+      "head": "b0e8eedebc16c6d878d76809b8eeafba0d43a50b",
+      "branch": null,
+      "tracked_clean": true,
+      "product_blob_hashes_match": true,
+      "untracked_status": ""
+    },
+    {
+      "path": "D:\\tmp\\auto_write-stabilize-baseline-0918",
+      "head": "b0e8eedebc16c6d878d76809b8eeafba0d43a50b",
+      "branch": null,
+      "tracked_clean": true,
+      "product_blob_hashes_match": true,
+      "untracked_status": ""
+    },
+    {
+      "path": "D:\\tmp\\wt-auto_write-m4-generate-prep",
+      "head": "b0e8eedebc16c6d878d76809b8eeafba0d43a50b",
+      "branch": null,
+      "tracked_clean": true,
+      "product_blob_hashes_match": true,
+      "untracked_status": ""
+    },
+    {
+      "path": "D:\\auto_write\\.worktrees\\pr211-round4",
+      "head": "b0e8eedebc16c6d878d76809b8eeafba0d43a50b",
+      "branch": "main",
+      "tracked_clean": true,
+      "product_blob_hashes_match": true,
+      "untracked_status": ""
+    }
+  ],
+  "proof_files": [
+    "app/auto_write/services/autopilot_pipeline.py",
+    "app/auto_write/services/finalizer.py",
+    "app/auto_write/services/hwpx_submit.py",
+    "app/auto_write/services/image_apply.py",
+    "app/auto_write/services/lrule_enforcer.py",
+    "app/hwpx_submit.py",
+    "app/tools/step3a_section_match.py"
+  ],
+  "canonical_product_blob_hashes": [
+    "0910ae275bcbf39cb2325e8bd729077364efda11",
+    "c9384d7ca72df0656ed22ac707f1bd1f379dced7",
+    "14569a3ce6962f8ac63c79b2c5da13be0d0bb08c",
+    "89f8215ee69675ab75bfb7e7754920f40b543a93",
+    "fdac9b10af59d97538ba2a2340be9ec82562c94f",
+    "00bd1dcdddf63c55ce00f26fb9daaa668b7e61c0",
+    "f0ce03275100c19a6b4a8dcb7196b4512e575baa"
+  ],
+  "stash_count": 12,
+  "original_and_preservation_stashes_intact": true,
+  "merge_tree_equals_validated_pr": true,
+  "pr211": 211,
+  "pr212": 212,
+  "unreachable_nightcopy_exists": false
+}

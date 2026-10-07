@@ -1,0 +1,11 @@
+{
+  "name": "auto_write",
+  "install": "python3 -m pip install --break-system-packages -r app/requirements.txt && python3 -m pip install --break-system-packages pytest",
+  "terminals": [
+    {
+      "name": "web-console",
+      "command": "cd app && AUTO_WRITE_HOST=127.0.0.1 AUTO_WRITE_PORT=8765 python3 -m uvicorn auto_write.operator_main:app --host 127.0.0.1 --port 8765"
+    }
+  ],
+  "ports": [{ "name": "web-console", "port": 8765 }]
+}

@@ -1,0 +1,99 @@
+[
+  {
+    "folder": "D:\\auto_write\\.claude\\worktrees\\dapper-launching-hamming",
+    "base": "worktree-dapper-launching-hamming",
+    "unchanged_code_files": 538,
+    "candidate_changes": []
+  },
+  {
+    "folder": "D:\\auto_write\\.claude\\worktrees\\feat+harden-fill-accuracy",
+    "base": "53f66bcfbde6aeda66ba7f4d0943c1d3a94cc860",
+    "unchanged_code_files": 302,
+    "candidate_changes": [
+      {
+        "path": "app/auto_write/image_automation/generate_missing.py",
+        "baseline_blob": "b1490b4c8e0194f527c81bde309001d06ebdd40d",
+        "main_blob": "216cf1da485cc00d8e9b51cb50836238226e92f1",
+        "sha256": "7cfd3fbbd5373f24bf452b7015fa2db2e95a3a6f7f29a709902ae70485e3578b"
+      },
+      {
+        "path": "app/auto_write/services/cross_form_autofill.py",
+        "baseline_blob": "2cf259854a9bd55b9da7f2f195474c808cc486af",
+        "main_blob": "4feec8415857c1e24a467804477379bf05e6e2fa",
+        "sha256": "952132d3f365a4e471bab8838c2e98f40f0f266f8c34b2c418030be821471520"
+      },
+      {
+        "path": "app/auto_write/services/hwpx_charpr_guard.py",
+        "baseline_blob": "722fb61112a203dd12c12df27accf8e339639a5a",
+        "main_blob": "81a50e1970353b70fa4307bc60537c5428ad3ddc",
+        "sha256": "dbf62284b86b9c4d423fd0eedf6c18775993845fcc4da1e5238dbb1a1eef0dfa"
+      },
+      {
+        "path": "app/auto_write/services/hwpx_fill_coverage.py",
+        "baseline_blob": "f0a02fbd48b6c227cdff17dadf8624082a365e38",
+        "main_blob": "63fdbf558b073879d17c63a2b81e7246792e8f13",
+        "sha256": "66c8979f635d06ed196840ae5bb313e8e9c498fd547cdff48db5de994f246d82"
+      },
+      {
+        "path": "app/auto_write/services/hwpx_submission_cleanup.py",
+        "baseline_blob": "4ec2ba10449fadad95a2bc80dcc5e62502f21c4c",
+        "main_blob": "721a687fefc3c8c0b4520abe590550072d526837",
+        "sha256": "15e8452ac733b6eefdb5f3ac22840c98ca32af98525873b11b39342ee471944a"
+      },
+      {
+        "path": "app/auto_write/services/output_naming.py",
+        "baseline_blob": "81a621e5120d22536d0e737a4cc8a1596bfa4144",
+        "main_blob": "0251b03327200c59f5f646a5565643f4bccb71fa",
+        "sha256": "98bd9ae13d2fded6c544f6a53d0feaa1d8bf9500af483ad943e63177d1c58fc6"
+      },
+      {
+        "path": "app/scripts/run_business_plan_images.py",
+        "baseline_blob": "ec255c783863d543430427666709db1ff97cd6f3",
+        "main_blob": "8b26c46edcc02e8d34105ad797c18208757d268c",
+        "sha256": "d5f1314331bb122d8d794a52f10bbef98d3c84d74af8c6fa142a5b77410e1981"
+      },
+      {
+        "path": "app/tests/test_cross_form_autofill.py",
+        "baseline_blob": "2c549357cd1d3617d5c2036edb08b26e02c7bd71",
+        "main_blob": "03f64cb5d38afd1c269174f20670ffa0cea4fd0a",
+        "sha256": "0a13725f4de94b8eba8cb9ad21b11d503f836eaf3c19ee267e3f2b5a30f9226a"
+      },
+      {
+        "path": "app/tests/test_generate_missing.py",
+        "baseline_blob": "2e3dabfd237008436b2b5f18770a1a720cebc255",
+        "main_blob": "52a1b6e5511de113c02b98369cbf86e14f1510a1",
+        "sha256": "d9060c9f51c6e7751c4d81e15e5f4354c4eb9dfffc104563d0fb63f0d8357040"
+      },
+      {
+        "path": "app/tests/test_pure_hwpx_section_split.py",
+        "baseline_blob": null,
+        "main_blob": "15e52a885d6e4b8f73e9197c2c5a6662131e664c",
+        "sha256": "4b48fb6684d54be4ca3886e2bfc0a503158e6af9a2c02ed72211540ec1f9f301"
+      },
+      {
+        "path": "app/tests/test_run_business_plan_images_m4.py",
+        "baseline_blob": null,
+        "main_blob": "24cc1d165db08bf52e5bc16392d000e693a4ea71",
+        "sha256": "1711a6c4de2587ac7b5b65b57994473fdae6e01f4d0c5d8312eb3e63c3745a9f"
+      }
+    ]
+  },
+  {
+    "folder": "D:\\auto_write\\.claude\\worktrees\\feat+hwpx-layout-guards",
+    "base": "worktree-feat+hwpx-layout-guards",
+    "unchanged_code_files": 332,
+    "candidate_changes": []
+  },
+  {
+    "folder": "D:\\auto_write\\.claude\\worktrees\\marketgate-hscity-fix",
+    "base": "worktree-marketgate-hscity-fix",
+    "unchanged_code_files": 548,
+    "candidate_changes": []
+  },
+  {
+    "folder": "D:\\auto_write\\.claude\\worktrees\\typed-herding-marble",
+    "base": "worktree-typed-herding-marble",
+    "unchanged_code_files": 548,
+    "candidate_changes": []
+  }
+]

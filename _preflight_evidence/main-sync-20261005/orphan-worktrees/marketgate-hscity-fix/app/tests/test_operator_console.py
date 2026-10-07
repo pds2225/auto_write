@@ -1,0 +1,683 @@
+from __future__ import annotations
+
+import json
+import re
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
+from docx import Document
+from fastapi.testclient import TestClient
+
+import auto_write.operator_main as operator_main
+from auto_write.operator_main import app
+from auto_write.services.docx_edit_service import DocxEditService
+from auto_write.services.git_sync_service import GitSyncError, GitSyncService
+from auto_write.services.lrule_console_service import LRuleConsoleService, RuleTestResult
+from auto_write.services.system_map_service import SystemMapService
+from auto_write.services.workflow_monitor import WorkflowMonitor
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+RULE_REL = Path("app/tests/lessons_coverage.json")
+
+
+def test_operator_console_smoke():
+    client = TestClient(app)
+    response = client.get("/console")
+    assert response.status_code == 200
+    assert "문서 작업" in response.text
+    assert "L 규칙" in response.text
+    assert "GitHub" in response.text
+
+
+def test_lrule_preview_route_renders_failed_validation_without_confirm(monkeypatch):
+    class FakeSnapshot:
+        def as_dict(self):
+            return {
+                "repository": "test/repo",
+                "branch": "main",
+                "base_branch": "main",
+                "local_sha": "abc123",
+                "remote_sha": "abc123",
+                "base_remote_sha": "abc123",
+                "ahead": 0,
+                "behind": 0,
+                "dirty_count": 0,
+                "status": "SYNCED",
+                "last_error": "",
+            }
+
+    class FakeGitSync:
+        def snapshot(self, *, fetch=False):
+            return FakeSnapshot()
+
+        def assert_write_base(self, expected):
+            assert expected == "abc123"
+
+        def _run(self, *args, check=True):
+            assert args == ("diff", "--", "app/tests/lessons_coverage.json")
+            return "diff --git a/app/tests/lessons_coverage.json b/app/tests/lessons_coverage.json\n"
+
+    class FakeLRuleConsole:
+        REGISTRY_RELATIVE = RULE_REL
+
+        def __init__(self):
+            self.restored = ""
+
+        def update_rule(self, code, updates):
+            assert code == "L001"
+            assert updates["summary"] == "preview change"
+            return {}, '{"lessons": []}\n'
+
+        def run_registry_tests(self):
+            return RuleTestResult(False, "pytest fake", "failed output", 1)
+
+        def restore_text(self, text):
+            self.restored = text
+
+    fake_lrules = FakeLRuleConsole()
+    monkeypatch.setattr(operator_main, "git_sync", FakeGitSync())
+    monkeypatch.setattr(operator_main, "lrule_console", fake_lrules)
+
+    response = TestClient(app).post(
+        "/console/lrules/L001/preview",
+        data={
+            "base_remote_sha": "abc123",
+            "summary": "preview change",
+            "mechanizable": "yes",
+            "category": "mechanized",
+            "guard_ref": "app/example.py",
+            "gap_desc": "",
+            "change_reason": "test",
+            "impact": "high",
+            "domain": "all",
+        },
+    )
+
+    assert response.status_code == 200
+    assert fake_lrules.restored == '{"lessons": []}\n'
+    assert "VALIDATION FAILED" in response.text
+    assert "failed output" in response.text
+    assert "확정 · GitHub PR에 반영" not in response.text
+
+
+def test_operator_lrules_exposes_entire_canonical_registry():
+    service = LRuleConsoleService(REPO_ROOT)
+    data = service.load()
+    rules = service.list_rules()
+    assert len(rules) == len(data["lessons"])
+    assert len(rules) == data["counts"]["total"]
+    assert rules[0]["_code"].startswith("L")
+
+
+def test_architecture_map_checks_real_files():
+    lrules = LRuleConsoleService(REPO_ROOT)
+    service = SystemMapService(REPO_ROOT, lrules)
+    overview = service.overview()
+    keys = {node["key"] for node in overview["nodes"]}
+    assert {"web", "router", "lrule", "project", "converter"}.issubset(keys)
+    router = next(node for node in overview["nodes"] if node["key"] == "router")
+    assert router["path"] == "app/auto_write/domains/domain_router.py"
+    assert router["status"] == "NORMAL"
+
+
+def test_docx_browser_edit_never_overwrites_source_and_locks(tmp_path):
+    source = tmp_path / "source.docx"
+    doc = Document()
+    doc.add_paragraph("원문")
+    table = doc.add_table(rows=1, cols=1)
+    table.cell(0, 0).text = "표 원문"
+    doc.save(source)
+
+    output = tmp_path / "edited.docx"
+    locks = tmp_path / "user_locks.json"
+    service = DocxEditService()
+    report = service.apply_edits(
+        source,
+        {"p:0": "사용자 수정", "t:0:r:0:c:0": "표 수정"},
+        output,
+        locks,
+    )
+
+    assert report["applied_count"] == 2
+    assert source.read_bytes() != output.read_bytes()
+    assert Document(source).paragraphs[0].text == "원문"
+    assert Document(output).paragraphs[0].text == "사용자 수정"
+    assert json.loads(locks.read_text(encoding="utf-8"))["locks"]["p:0"] == "사용자 수정"
+
+    second = service.apply_edits(
+        Path(report["output"]),
+        {"p:0": "사용자 2차 수정"},
+        output,
+        locks,
+    )
+    assert Path(second["output"]).name == "output_user_edited_v2.docx"
+    assert Document(output).paragraphs[0].text == "사용자 수정"
+    assert Document(second["output"]).paragraphs[0].text == "사용자 2차 수정"
+
+
+def test_docx_editor_deduplicates_merged_table_cells(tmp_path):
+    source = tmp_path / "merged.docx"
+    doc = Document()
+    table = doc.add_table(rows=1, cols=2)
+    merged = table.cell(0, 0).merge(table.cell(0, 1))
+    merged.text = "병합 셀"
+    doc.save(source)
+
+    blocks = DocxEditService().load_blocks(source)
+    table_blocks = [block for block in blocks if block["kind"] == "표"]
+    assert len(table_blocks) == 1
+    assert table_blocks[0]["text"] == "병합 셀"
+
+
+def test_workflow_monitor_records_actual_wrapped_step(tmp_path):
+    monitor = WorkflowMonitor(tmp_path / "runs.json")
+    run_id = monitor.start_run("write", "문서 작성")
+    with monitor.step(run_id, "route", "업무 분류", "DomainRouter"):
+        value = 1 + 1
+        assert value == 2
+    monitor.finish_run(run_id, {"result": "ok"})
+
+    run = monitor.get_run(run_id)
+    assert run is not None
+    assert run["status"] == "SUCCESS"
+    assert run["steps"][0]["status"] == "SUCCESS"
+    assert run["steps"][0]["service"] == "DomainRouter"
+
+
+def test_git_sync_source_forbids_force_and_base_direct_push():
+    source = (REPO_ROOT / "app/auto_write/services/git_sync_service.py").read_text(encoding="utf-8")
+    assert '"--force"' not in source
+    assert '"--force-with-lease"' not in source
+    assert "AUTO_WRITE_GIT_WRITE_MODE" not in source
+    assert 'write_mode = "direct"' not in source
+    assert re.search(r'AUTO_WRITE_GIT_BASE_BRANCH["\']\s*,\s*["\']master["\']', source) is None
+    assert 'FALLBACK_BASE_BRANCH = "main"' in source
+    assert "def _detect_default_branch" in source
+
+
+def _git(cwd: Path, *args: str) -> str:
+    proc = subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if proc.returncode != 0:
+        raise AssertionError((proc.stderr or proc.stdout).strip())
+    return (proc.stdout or "").strip()
+
+
+def _rule_payload(summary: str) -> str:
+    return json.dumps(
+        {
+            "counts": {"mechanized": 1, "gap": 0, "judgment": 0, "total": 1},
+            "lessons": [
+                {
+                    "id": "L001 | 테스트 규칙",
+                    "summary": summary,
+                    "mechanizable": "yes",
+                    "category": "mechanized",
+                    "guard_ref": "app/example.py; app/tests/test_example.py",
+                    "gap_desc": "",
+                    "impact": "high",
+                    "domain": "all",
+                }
+            ],
+        },
+        ensure_ascii=False,
+        indent=2,
+    ) + "\n"
+
+
+def _write_rule(repo: Path, summary: str) -> None:
+    path = repo / RULE_REL
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_rule_payload(summary), encoding="utf-8")
+
+
+def _setup_git_remote(tmp_path: Path, *, base_branch: str = "main") -> tuple[Path, Path, Path]:
+    remote = tmp_path / "remote.git"
+    seed = tmp_path / "seed"
+    web = tmp_path / "web"
+    peer = tmp_path / "peer"
+
+    subprocess.run(["git", "init", "--bare", str(remote)], check=True, capture_output=True)
+    subprocess.run(["git", "clone", str(remote), str(seed)], check=True, capture_output=True)
+    _git(seed, "config", "user.email", "test@example.com")
+    _git(seed, "config", "user.name", "Auto Write Test")
+    _write_rule(seed, "v1")
+    _git(seed, "add", str(RULE_REL).replace("\\", "/"))
+    _git(seed, "commit", "-m", "seed rule")
+    _git(seed, "branch", "-M", base_branch)
+    _git(seed, "push", "-u", "origin", base_branch)
+    subprocess.run(
+        ["git", "--git-dir", str(remote), "symbolic-ref", "HEAD", f"refs/heads/{base_branch}"],
+        check=True,
+        capture_output=True,
+    )
+
+    subprocess.run(["git", "clone", "-b", base_branch, str(remote), str(web)], check=True, capture_output=True)
+    subprocess.run(["git", "clone", "-b", base_branch, str(remote), str(peer)], check=True, capture_output=True)
+    for repo in (web, peer):
+        _git(repo, "config", "user.email", "test@example.com")
+        _git(repo, "config", "user.name", "Auto Write Test")
+    return remote, web, peer
+
+
+def _disable_gh(monkeypatch) -> None:
+    original_which = shutil.which
+    monkeypatch.setattr(shutil, "which", lambda name: None if name == "gh" else original_which(name))
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
+def test_git_remote_to_web_and_stale_base_guard(tmp_path):
+    _, web, peer = _setup_git_remote(tmp_path)
+    service = GitSyncService(web)
+
+    assert service.base_branch == "main"
+    assert service.snapshot(fetch=True).status == "SYNCED"
+
+    (peer / "remote_change.txt").write_text("remote v2\n", encoding="utf-8")
+    _git(peer, "add", "remote_change.txt")
+    _git(peer, "commit", "-m", "remote update")
+    _git(peer, "push", "origin", service.base_branch)
+    synced = service.sync_from_remote()
+    assert synced.status == "SYNCED"
+    assert (web / "remote_change.txt").read_text(encoding="utf-8") == "remote v2\n"
+
+    stale_base = service.base_remote_sha()
+    (peer / "remote_change_2.txt").write_text("remote v3\n", encoding="utf-8")
+    _git(peer, "add", "remote_change_2.txt")
+    _git(peer, "commit", "-m", "remote race")
+    _git(peer, "push", "origin", service.base_branch)
+    with pytest.raises(GitSyncError, match="REMOTE_CHANGED"):
+        service.assert_write_base(stale_base)
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
+def test_git_web_rule_edit_uses_feature_branch_and_returns_after_merge(tmp_path, monkeypatch):
+    _, web, _ = _setup_git_remote(tmp_path)
+    _disable_gh(monkeypatch)
+    service = GitSyncService(web)
+
+    expected = service.base_remote_sha()
+    service.assert_write_base(expected)
+    _write_rule(web, "v2-web")
+    result = service.commit_and_push(
+        [str(RULE_REL).replace("\\", "/")],
+        message="web rule update",
+        expected_base_remote_sha=expected,
+    )
+
+    assert result["branch"].startswith("web/lrule-")
+    assert service.current_branch() == result["branch"]
+    assert service.remote_sha(result["branch"]) == service.local_sha()
+    assert service.base_remote_sha() != service.local_sha()
+
+    _git(web, "push", "origin", f"{result['branch']}:{service.base_branch}")
+    synced = service.sync_from_remote()
+    assert service.current_branch() == service.base_branch
+    assert synced.status == "SYNCED"
+    assert json.loads((web / RULE_REL).read_text(encoding="utf-8"))["lessons"][0]["summary"] == "v2-web"
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
+def test_git_feature_branch_reuses_branch_and_syncs_new_master(tmp_path, monkeypatch):
+    _, web, peer = _setup_git_remote(tmp_path)
+    _disable_gh(monkeypatch)
+    service = GitSyncService(web)
+
+    base = service.base_remote_sha()
+    service.assert_write_base(base)
+    _write_rule(web, "v2")
+    first = service.commit_and_push(
+        [str(RULE_REL).replace("\\", "/")],
+        message="rule v2",
+        expected_base_remote_sha=base,
+    )
+
+    (peer / "master_change.txt").write_text("advanced\n", encoding="utf-8")
+    _git(peer, "add", "master_change.txt")
+    _git(peer, "commit", "-m", "advance master")
+    _git(peer, "push", "origin", service.base_branch)
+
+    synced = service.sync_from_remote()
+    assert service.current_branch() == first["branch"]
+    assert synced.status == "SYNCED"
+    assert (web / "master_change.txt").read_text(encoding="utf-8") == "advanced\n"
+    assert service.remote_sha(first["branch"]) == service.local_sha()
+    assert subprocess.run(
+        ["git", "merge-base", "--is-ancestor", f"origin/{service.base_branch}", "HEAD"],
+        cwd=web,
+        capture_output=True,
+    ).returncode == 0
+
+    base2 = service.base_remote_sha()
+    service.assert_write_base(base2)
+    _write_rule(web, "v3")
+    second = service.commit_and_push(
+        [str(RULE_REL).replace("\\", "/")],
+        message="rule v3",
+        expected_base_remote_sha=base2,
+    )
+    assert second["branch"] == first["branch"]
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
+def test_failed_base_merge_push_rolls_back_local_merge(tmp_path, monkeypatch):
+    remote, web, peer = _setup_git_remote(tmp_path)
+    _disable_gh(monkeypatch)
+    service = GitSyncService(web)
+
+    base = service.base_remote_sha()
+    service.assert_write_base(base)
+    _write_rule(web, "v2")
+    first = service.commit_and_push(
+        [str(RULE_REL).replace("\\", "/")],
+        message="rule v2",
+        expected_base_remote_sha=base,
+    )
+    original_sha = service.local_sha()
+
+    (peer / "master_change.txt").write_text("advanced\n", encoding="utf-8")
+    _git(peer, "add", "master_change.txt")
+    _git(peer, "commit", "-m", "advance master")
+    _git(peer, "push", "origin", service.base_branch)
+
+    hook = remote / "hooks" / "pre-receive"
+    hook.write_text("#!/bin/sh\necho rejected >&2\nexit 1\n", encoding="utf-8")
+    hook.chmod(0o755)
+    with pytest.raises(GitSyncError):
+        service.sync_from_remote()
+
+    assert service.current_branch() == first["branch"]
+    assert service.local_sha() == original_sha
+    assert _git(web, "status", "--porcelain") == ""
+    assert not (web / "master_change.txt").exists()
+
+    hook.unlink()
+    synced = service.sync_from_remote()
+    assert synced.status == "SYNCED"
+    assert service.remote_sha(first["branch"]) == service.local_sha()
+    assert (web / "master_change.txt").read_text(encoding="utf-8") == "advanced\n"
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
+def test_equal_registry_content_does_not_false_detect_merge_without_pr_state(tmp_path, monkeypatch):
+    _, web, peer = _setup_git_remote(tmp_path)
+    _disable_gh(monkeypatch)
+    service = GitSyncService(web)
+
+    base = service.base_remote_sha()
+    service.assert_write_base(base)
+    _write_rule(web, "same-value")
+    feature = service.commit_and_push(
+        [str(RULE_REL).replace("\\", "/")],
+        message="feature rule",
+        expected_base_remote_sha=base,
+    )
+
+    # Independent master commit happens to produce identical registry content.
+    # This is not proof that the still-open feature PR was merged.
+    _write_rule(peer, "same-value")
+    _git(peer, "add", str(RULE_REL).replace("\\", "/"))
+    _git(peer, "commit", "-m", "independent same rule value")
+    _git(peer, "push", "origin", service.base_branch)
+
+    synced = service.sync_from_remote()
+    assert service.current_branch() == feature["branch"]
+    assert synced.status == "SYNCED"
+    assert service.remote_sha(feature["branch"]) == service.local_sha()
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
+def test_reported_merged_pr_allows_squash_return_to_master(tmp_path, monkeypatch):
+    _, web, peer = _setup_git_remote(tmp_path)
+    _disable_gh(monkeypatch)
+    service = GitSyncService(web)
+
+    base = service.base_remote_sha()
+    service.assert_write_base(base)
+    _write_rule(web, "squash-value")
+    feature = service.commit_and_push(
+        [str(RULE_REL).replace("\\", "/")],
+        message="feature rule",
+        expected_base_remote_sha=base,
+    )
+
+    # Simulate a squash merge: master gets an independent commit carrying the
+    # same final rule value, while GitHub PR state is authoritative for merge.
+    _write_rule(peer, "squash-value")
+    _git(peer, "add", str(RULE_REL).replace("\\", "/"))
+    _git(peer, "commit", "-m", "squash merged rule")
+    _git(peer, "push", "origin", service.base_branch)
+    monkeypatch.setattr(service, "_feature_pr_merged", lambda branch: branch == feature["branch"])
+
+    synced = service.sync_from_remote()
+    assert service.current_branch() == service.base_branch
+    assert synced.status == "SYNCED"
+    assert json.loads((web / RULE_REL).read_text(encoding="utf-8"))["lessons"][0]["summary"] == "squash-value"
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
+def test_git_failed_feature_push_rolls_back_worktree(tmp_path, monkeypatch):
+    remote, web, _ = _setup_git_remote(tmp_path)
+    _disable_gh(monkeypatch)
+    service = GitSyncService(web)
+
+    hook = remote / "hooks" / "pre-receive"
+    hook.write_text("#!/bin/sh\necho rejected >&2\nexit 1\n", encoding="utf-8")
+    hook.chmod(0o755)
+
+    expected = service.base_remote_sha()
+    service.assert_write_base(expected)
+    _write_rule(web, "must-rollback")
+
+    with pytest.raises(GitSyncError):
+        service.commit_and_push(
+            [str(RULE_REL).replace("\\", "/")],
+            message="rejected update",
+            expected_base_remote_sha=expected,
+        )
+
+    assert service.current_branch() == service.base_branch
+    assert _git(web, "status", "--porcelain") == ""
+    assert json.loads((web / RULE_REL).read_text(encoding="utf-8"))["lessons"][0]["summary"] == "v1"
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
+def test_successful_push_with_post_push_fetch_failure_is_not_rolled_back(tmp_path, monkeypatch):
+    _, web, _ = _setup_git_remote(tmp_path)
+    _disable_gh(monkeypatch)
+    service = GitSyncService(web)
+
+    expected = service.base_remote_sha()
+    service.assert_write_base(expected)
+
+    real_fetch = service.fetch
+    fetch_calls = 0
+
+    def flaky_fetch() -> None:
+        nonlocal fetch_calls
+        fetch_calls += 1
+        if fetch_calls > 1:
+            raise GitSyncError("network fetch failed")
+        real_fetch()
+
+    monkeypatch.setattr(service, "fetch", flaky_fetch)
+
+    _write_rule(web, "push-kept")
+    result = service.commit_and_push(
+        [str(RULE_REL).replace("\\", "/")],
+        message="push succeeds before fetch failure",
+        expected_base_remote_sha=expected,
+    )
+
+    assert result["branch"].startswith("web/lrule-")
+    assert service.current_branch() == result["branch"]
+    assert service.local_sha() == result["commit_sha"]
+    assert service.remote_sha(result["branch"]) == result["commit_sha"]
+    assert result["snapshot"]["status"] == "SYNCED"
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
+def test_git_precommit_remote_change_restores_managed_registry(tmp_path, monkeypatch):
+    _, web, peer = _setup_git_remote(tmp_path)
+    _disable_gh(monkeypatch)
+    service = GitSyncService(web)
+
+    base = service.base_remote_sha()
+    service.assert_write_base(base)
+    _write_rule(web, "v2")
+    first = service.commit_and_push(
+        [str(RULE_REL).replace("\\", "/")],
+        message="first branch edit",
+        expected_base_remote_sha=base,
+    )
+
+    stale_base = service.base_remote_sha()
+    service.assert_write_base(stale_base)
+    _write_rule(web, "pending-v3")
+
+    (peer / "master_change.txt").write_text("remote advanced\n", encoding="utf-8")
+    _git(peer, "add", "master_change.txt")
+    _git(peer, "commit", "-m", "advance master")
+    _git(peer, "push", "origin", service.base_branch)
+
+    with pytest.raises(GitSyncError, match="REMOTE_CHANGED"):
+        service.commit_and_push(
+            [str(RULE_REL).replace("\\", "/")],
+            message="must abort",
+            expected_base_remote_sha=stale_base,
+        )
+
+    assert service.current_branch() == first["branch"]
+    assert _git(web, "status", "--porcelain") == ""
+    assert json.loads((web / RULE_REL).read_text(encoding="utf-8"))["lessons"][0]["summary"] == "v2"
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
+def test_git_unrelated_dirty_abort_preserves_pending_rule_edit_for_retry(tmp_path, monkeypatch):
+    _, web, _ = _setup_git_remote(tmp_path)
+    _disable_gh(monkeypatch)
+    service = GitSyncService(web)
+
+    base = service.base_remote_sha()
+    service.assert_write_base(base)
+    _write_rule(web, "pending")
+    (web / "scratch.txt").write_text("unrelated\n", encoding="utf-8")
+
+    with pytest.raises(GitSyncError, match="규칙 파일 외"):
+        service.commit_and_push(
+            [str(RULE_REL).replace("\\", "/")],
+            message="blocked",
+            expected_base_remote_sha=base,
+        )
+    assert json.loads((web / RULE_REL).read_text(encoding="utf-8"))["lessons"][0]["summary"] == "pending"
+
+    (web / "scratch.txt").unlink()
+    service.assert_write_base(base)
+    result = service.commit_and_push(
+        [str(RULE_REL).replace("\\", "/")],
+        message="retry succeeds",
+        expected_base_remote_sha=base,
+    )
+    assert result["branch"].startswith("web/lrule-")
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
+def test_rule_history_tracks_field_edits_not_only_id_occurrence_changes(tmp_path):
+    _, web, _ = _setup_git_remote(tmp_path)
+    service = GitSyncService(web)
+
+    _write_rule(web, "v2")
+    _git(web, "add", str(RULE_REL).replace("\\", "/"))
+    _git(web, "commit", "-m", "change L001 summary to v2")
+    (web / "other.txt").write_text("not a rule\n", encoding="utf-8")
+    _git(web, "add", "other.txt")
+    _git(web, "commit", "-m", "unrelated commit")
+    _write_rule(web, "v3")
+    _git(web, "add", str(RULE_REL).replace("\\", "/"))
+    _git(web, "commit", "-m", "change L001 summary to v3")
+
+    history = service.rule_history("L001", str(RULE_REL).replace("\\", "/"), limit=10)
+    subjects = [item["subject"] for item in history]
+    assert subjects[0] == "change L001 summary to v3"
+    assert "change L001 summary to v2" in subjects
+    assert "seed rule" in subjects
+    assert "unrelated commit" not in subjects
+
+
+def test_git_sync_this_repository_follows_github_default_main(monkeypatch):
+    monkeypatch.delenv("AUTO_WRITE_GIT_BASE_BRANCH", raising=False)
+    service = GitSyncService(REPO_ROOT)
+    assert service.base_branch == "main"
+    assert service.snapshot(fetch=False).base_branch == "main"
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
+def test_git_sync_detects_legacy_master_remote_head(tmp_path, monkeypatch):
+    monkeypatch.delenv("AUTO_WRITE_GIT_BASE_BRANCH", raising=False)
+    _, web, _ = _setup_git_remote(tmp_path, base_branch="master")
+    service = GitSyncService(web)
+    assert service.base_branch == "master"
+    assert service.snapshot(fetch=True).base_branch == "master"
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
+def test_git_sync_env_overrides_detected_default(tmp_path, monkeypatch):
+    _, web, _ = _setup_git_remote(tmp_path, base_branch="main")
+    monkeypatch.setenv("AUTO_WRITE_GIT_BASE_BRANCH", "release")
+    service = GitSyncService(web)
+    assert service.base_branch == "release"
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
+def test_git_sync_prefers_detected_main_over_leftover_master(tmp_path, monkeypatch):
+    monkeypatch.delenv("AUTO_WRITE_GIT_BASE_BRANCH", raising=False)
+    _, web, peer = _setup_git_remote(tmp_path, base_branch="main")
+    _git(peer, "branch", "master")
+    _git(peer, "push", "origin", "master")
+    _git(web, "fetch", "origin")
+    service = GitSyncService(web)
+    assert service.base_branch == "main"
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
+def test_git_sync_fallback_is_main_when_no_remote(tmp_path, monkeypatch):
+    monkeypatch.delenv("AUTO_WRITE_GIT_BASE_BRANCH", raising=False)
+    repo = tmp_path / "solo"
+    subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
+    _git(repo, "config", "user.email", "test@example.com")
+    _git(repo, "config", "user.name", "Auto Write Test")
+    (repo / "readme.txt").write_text("solo\n", encoding="utf-8")
+    _git(repo, "add", "readme.txt")
+    _git(repo, "commit", "-m", "init")
+    service = GitSyncService(repo)
+    assert service.base_branch == GitSyncService.FALLBACK_BASE_BRANCH
+    assert service.base_branch == "main"
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git executable required")
+def test_git_sync_ls_remote_head_when_origin_head_missing(tmp_path, monkeypatch):
+    monkeypatch.delenv("AUTO_WRITE_GIT_BASE_BRANCH", raising=False)
+    _, web, _ = _setup_git_remote(tmp_path, base_branch="main")
+    subprocess.run(
+        ["git", "symbolic-ref", "-d", "refs/remotes/origin/HEAD"],
+        cwd=web,
+        capture_output=True,
+        check=False,
+    )
+    subprocess.run(
+        ["git", "update-ref", "-d", "refs/remotes/origin/HEAD"],
+        cwd=web,
+        capture_output=True,
+        check=False,
+    )
+    service = GitSyncService(web)
+    assert service.base_branch == "main"

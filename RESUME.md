@@ -1,57 +1,55 @@
-# RESUME.md — PR #211 Round-3
+# RESUME.md — 다른 위치에서 이어가기
 
-## 현재 상태
-- 사용자 지정: pds2225/auto_write draft PR #211, cursor/rhwp-unsupported-lrule-status-6a12. 시작 SHA aa15a6aea5e8282af6dd3e9cfaa1d474a3d4ab5d.
-- 작업 공간: D:\auto_write\.worktrees\pr211-round3. 루트 main의 기존 변경, stash, 다른 worktree 보존.
-- 원격 PR/branch/main SHA 확인. fetch는 기존 broken backup ref 때문에 실패; 원격 직접조회로 교차 확인.
-- 결함 1(DIPS 사업명→지원기관)은 f72e7aa/aa15a6a에 해결됨. 2~7 수정 진행.
+> 이 파일과 docs/SESSION_RECAP.md는 GitHub main의 공유 기록이다. TASK 우선순위·상태의 정본은 origin/main:TASK.md다.
 
-## 제약
-- 같은 브랜치에 항목별 검증 후 commit+push. 새 PR/merge 금지.
-- 테스트 삭제/약화/추가 skip 금지. 범위 최소. L050 mechanized=false 유지.
-- rhwp 기본 OFF, AUTO_WRITE_ENABLE_RHWP=1만 ON.
-- 사용자 Hwp 종료 금지; 소유 PID만 종료. 원본 데이터 보존.
+## 0. 현재 상태 — 2026-10-06
+- 문서 PR #215는 main에 병합됐다. main 기준 SHA는 12b5095f9fbeacb02257b3f169d5924f7fc947a2다. AGENTS.md·CLAUDE.md에 모든 위치에서 fetch 후 원격 TASK→RESUME 필수 확인을 명시했고, GitHub 공유판을 실제 조회했다.
+- 현재 codex/round5-fill-fixes는 위 main에서 생성했다. 현재 기간·병합 범위·양옆 라벨 경계와 괄호 실값 보호를 수정했다. 기간 보류는 인라인 동의어 경로에도 적용한다. 커밋: 8284b26(값 채움), 2cb684e8d3310411019656f015b3054451990a9f(PDF mock). 영향 회귀 89 passed/0 failed. 이 코드에서 전체 Windows pytest 1회: 2275 passed/0 failed/5 기존 skipped/23 subtests passed, exit 0. Draft PR #216(https://github.com/pds2225/auto_write/pull/216), main 미병합. 이후 변경은 검증 문서뿐이다.
+- 사용자가 이어가기를 확인했다. 검증용 한글 인스턴스는 모두 종료했고 원본 해시·기존 사용자 프로세스 보존 및 소유 프로세스 잔존 없음이 확인됐다.
+- 한글 2022 12.0.0.893에서 2026년 IP디딤돌 HWP 사본은 65.609초/2페이지, 2025년 HWPX 사본은 1.578초/2페이지, 변경 추적+문구 삽입 사본은 3.953초/3페이지로 기존 SaveAs[PDF] 성공. FileSaveAsPdf 대안도 추적 사본에서 성공했으나 기존 호출보다 빨라지지 않았다. 120초 타임아웃의 실제 원인은 미재현이며 PDF 코어·120초 제한은 수정하지 않았다. 사용자는 실패 파일 경로를 모른다고 답했다.
+- 사용자가 변경 추적 문서의 다른 형식 저장 경고(저장/취소) 화면을 제공했다. 변경 추적 이력을 보존하려면 HWP/HWPX를 유지하라는 안내이며, PDF 출력 목적이면 별도 PDF로 저장할 수 있다. 자동 저장 대기 원인의 후보이나 이 화면만으로 120초 타임아웃 원인이 확정된 것은 아니다. 다음 확인은 경고 후 수동 저장 결과와 정확한 입력 경로다. 이 추가 기록은 로컬 체크포인트이며 아직 push하지 않았다.
+- 개발 main 통합 요청은 완료됐다. PR #211·#212 병합, 제품 코드 검증 기준 b0e8eedebc16c6d878d76809b8eeafba0d43a50b. 당시 접근 가능한 14개 작업 위치의 HEAD·제품 코드 해시 일치를 확인했다.
+- 세션 마무리의 최신 개발 회고·재개 정보를 이제 원격 공유판으로 관리한다. 회고: [docs/SESSION_RECAP.md](docs/SESSION_RECAP.md). root SESSION_RECAP.md는 로컬 전체 회고이며 Git에서 제외되어 있다.
+- 아직 실제 한글 2022 DOCX Open 실패·소유 PID 미확인 시 COM hard timeout 한계가 남아 있다. AW-001 REQUEST_SOLVED=NO. Git 통합 성공을 실제 변환 성공으로 보고하지 않는다.
 
-## 다음 액션
-1. 2 예시+안내/날짜/팀명 등 → 3 미입력/동의어/서술 → 4 편집 문단 linesegarray 범위 수정.
-2. 5 PDF 대화상자·단계별 hard timeout → 6 Windows PID helper → 7 동시 COM 소유권.
-3. 합성 HWPX/COM mock 회귀와 python -m pytest app/tests -q 실행, 결과·새 head 한국어 보고.
+- 새 요청: C:\Users\ekth3\Downloads\CODEX_PROMPT.md 전체를 읽었다. D1~D6 엔진 커버리지 수정과 독립 QA·실양식 검증·draft PR 지시이며, 사용자가 재개를 확인했다. 원격 TASK/RESUME와 PR #214·#216 상태 확인 후 구현한다. 기존 로컬 변경은 보존한다.
 
-## 인덱스
-- 정본: app/core/docx/services/hwpx_fill.py, hwp_docx_convert.py, submission_gates.py.
-- app/auto_write/services는 호환 모듈. 기존 회귀: app/tests/test_hwpx_round2_fill.py, test_hwp_docx_convert.py.
-- 이전 루트 체크포인트 보존: _preflight_evidence/pr211-round3/RESUME-before-round3.md.
-- TASK 공식 정본: origin/main:TASK.md (AW-001 진행 중). 이전 주간 검토의 타 저장소 조치는 이번 범위에 없음.
+- 엔진 커버리지: codex/engine-coverage-fixes, 작업 폴더 C:\Users\ekth3\.codex\worktrees\engine-coverage-fixes\auto_write. D1~D6 구현 중, 합성 32 passed·기존 form-diff 13 passed. 실제 양식 웹 출력/PDF 생성 성공했으나 form-diff 초기 오탐 보완 및 독립 QA 지적 수정 중. 전체 테스트·커밋·push·draft PR은 아직이다.
 
-## 재개 상태 확인 — 2026-10-04 18:35 KST
-- 현재 요청: resume. 복원 요약과 재개 순서를 제시했으며, 재개 방향 확인 대기. 이번 턴 제품 코드·테스트 수정 없음.
-- 라이브 확인: repo D:\auto_write, origin https://github.com/pds2225/auto_write.git. main/origin/main=6ed289fd4d7875f143436d966073177a2837528b. draft PR #211은 OPEN·미병합, 원격 head=360cbf99f6fda4008d790eb67976da0028b9438d.
-- 기존 Round-3 작업 트리 HEAD=aa15a6a. 원격은 그 이후 결함 2~7 및 CI 관련 12개 커밋이 추가됨. 위의 '2~7 수정 진행'은 이전 체크포인트이며, 새 원격 코드 검증 결과를 뜻하지 않음.
-- 미커밋 보존: .worktrees\pr211-round3의 RESUME.md, TASK.md, hwpx_submit.py, hwpx_fill.py; 미추적 test_hwpx_round3_fill.py, docs/PR211_ROUND3.md. 루트 RESUME.md·_preflight_evidence 및 다른 worktree·stash도 보존.
-- D:\aw_pr211은 원격 head 360cbf9의 detached worktree이며 조회 당시 clean. 이전 HANDOFF.md/RESUME.md의 과거 완료·대기 기록을 현재 증거로 사용하지 않음.
-- git fetch origin --prune는 exit 0. 오래된 worktree 메타데이터 삭제 권한 경고 있음; 별도 정리/복구 미실행. GitHub API와 git ls-remote로 PR/head/main 교차 확인. .session/closeout_due.json due=false.
-- 다음 1: 원격 최신 코드와 기존 미커밋 변경을 항목별 대조해 이미 반영된 수정과 잔여 수정을 구분한다. 기존 변경 삭제·덮어쓰기 금지.
-- 다음 2: 최신 head의 영향 회귀 및 Windows 한글 실제 사용자 경로를 검증하고, 남은 blocker만 같은 PR 브랜치에서 수정한다. 새 PR·merge 금지 유지. 이번 턴 테스트·실사용 검증 미실행.
-## 최신 상태 조회 — 2026-10-05 15:43 KST
-- 요청: '지금뭐가최신?' 상태 조회만 수행. 제품 코드·커밋·push·PR 본문 수정 없음.
-- 최신 수정본: D:\auto_write\.worktrees\pr211-round4 (독립 복제본). 로컬 HEAD와 GitHub PR #211 head 모두 360cbf99f6fda4008d790eb67976da0028b9438d. Round-4 수정은 미커밋이며 staged 파일도 없음.
-- 미커밋: 임시 pytest workflow 삭제, company_identity/hwpx_submit/hwp_docx_convert/hwpx_fill 및 기존 COM 테스트 수정. 새 Round-4 테스트 2개와 docs/PR211_ROUND4.md 있음. 다른 창·수정본은 보존.
-- 저장된 증거 직접 파싱: .round4-evidence/full-user.xml에서 2186 passed, 12 failed, 7 skipped (10/4 실행 기록). round4-final.xml은 69 passed. 이번 턴 테스트 재실행 없음. 체크포인트의 '전체 pytest 진행 중'은 현재 결과보다 오래된 기록.
-- PR #211은 OPEN·draft·미병합. 원격 main=6ed289f. 최신 작업 코드는 Round-4 로컬 수정본, 원격 공유본은 360cbf9로 구분한다. 다음 실행 시 12개 실패와 실제 한글 smoke 결과를 확인한 뒤 기존 승인 범위의 commit/push를 수행하며 .round4-evidence는 커밋하지 않는다.
+## 1. 다른 PC·클라우드에서 빠른 재개
+저장소를 복제한 폴더에서 다음 명령으로 최신 원격 지시와 기록을 먼저 읽는다. 현재 작업 위치나 브랜치가 달라도 조회할 수 있다.
 
-## 자동화 완료 — 2026-10-05 17:13 KST
-- 일일 브리핑 완료: 오늘 시간 지정 일정 없음. 우선 확인은 로그인 알림 4건 → mail-monitor 실패/커버리지 → Render DB 10/09 조치 판단.
-- 산출물: `D:\v_up\worklog\briefings\2026-10-05.md`, `activities\2026-10-05.jsonl`, 메일 초안, 갱신된 tasks/score/dashboard. 원본은 각 단계에서 백업했다.
-- 외부 상태는 보존: 메일 읽음·회신·발송, 캘린더/Google Tasks, 계정·결제·DB 설정 변경 없음. 제품 코드 수정·테스트도 없음.
-- 로컬 HTML은 정적 파싱과 JavaScript 검증을 통과했으나 file URL 브라우저 정책 때문에 픽셀 렌더 확인은 못 했다.
-- 다음: 브리핑 TOP3를 사용자가 직접 확인. PR #211 재개점과 Round-4 미커밋 변경은 위 상태 그대로 보존한다.
+```powershell
+git status --short --branch
+git fetch origin --prune
+git show origin/main:TASK.md
+git show origin/main:RESUME.md
+git show origin/main:docs/SESSION_RECAP.md
+```
 
-## PR #211 Round-4 최종 재개점 — 2026-10-05 17:32 KST
-- 이번 요청: 'ㅇㅇ 근데 211은 왜 미병합??'. 직전 추천대로 검증·commit·push·Round-4 PR 본문 갱신 수행. 미병합은 기존 사용자 merge 금지와 draft 유지 지시 때문이며 실제 한글 변환 제한도 남아 있다.
-- 최신 원격/PR head: 7adabc2d0204d6c8bc72d3ce39791234c47e89b4. 의미별 커밋 fefb950(채움/날짜), 79a5e03(COM 소유권), 38a0048(임시 CI 삭제), 7adabc2(문서/TASK). 같은 origin 브랜치 push 완료, PR #211 OPEN/draft/미병합.
-- 실행 위치: D:\auto_write\.worktrees\pr211-round4 독립 복제본. 코드 working tree clean, data/와 .round4-evidence/는 미추적·ignored로 커밋 제외. root/Round-3/stash/다른 자동화 기록 보존.
-- 전체 pytest 최신: 2206 passed, 0 failed, 5 skipped, 23 subtests passed, 958.21초, exit 0. 이전 실패 12개 해소. 최종 COM 영향 두 파일 43 passed. 코드 해시 일치 확인 후 push.
-- 실제 한글 2022 DOCX→HWP smoke: Open 실패(ok=False). 입력 잠금 해제/원본 해시 보존/새 Hwp·Hword 잔존 없음 확인. 원본 양식 9건 E2E·픽셀·실제 변환 완료를 주장하지 않음.
-- 소유 PID 미확인 시 watchdog hard timeout 미보장은 잔존. rhwp 기본 OFF, L050 gap/mechanized=false 유지. 조회 실패/기존 사용자 객체/외부 Automation을 소유로 오인하지 않는 회귀 추가.
-- PR 본문 Round-4 A~K·전체 결과·제한 갱신 완료. GitHub 새 head docs-gate SUCCESS, mergeable=MERGEABLE/mergeStateStatus=CLEAN 확인. 항목별 보고: .worktrees/pr211-round4/docs/PR211_ROUND4.md. 로그/JUnit/smoke: 해당 .round4-evidence/ 로컬 전용.
-- 다음: 새 head 기준 5차 실제 한글/원본 양식 테스트. DOCX Open 실패와 소유 미확인 hard timeout을 확인한다. 별도 merge 요청 전 병합하지 않는다. AW-001 진행 중/REQUEST_SOLVED=NO.
+미커밋 변경을 보존하고 현재 브랜치를 확인한 뒤 main을 최신화한다. 현재 브랜치가 main이고 충돌할 변경이 없으면 `git merge --ff-only origin/main`을 사용한다. 자동 pull·reset·clean·force push는 하지 않는다.
+
+## 2. 완료·검증
+- 호환 경로·UTF-8·제출 검사 복구: 735531f, fake COM 테스트 조회 격리: a7c369c, 관련 기록: c015e34.
+- 전체 pytest는 2217 passed/8 failed/5 skipped/23 subtests passed. 가짜 COM의 실제 프로세스 목록 의존을 격리한 뒤 실패 8건 포함 영향 회귀 54 passed/0 failed, 소유권 회귀 21 passed/0 failed. 합산 대상 2225 passed/남은 실패 0이며 두 번째 전체 실행은 아니다. 제품 보호 코드는 유지했다.
+- 합성 HWPX 제출 CLI: 원본 해시 보존·값 채움·DRAFT만 생성·171규칙 증거 저장. cp949 STEP 3A CLI: exit 0·UTF-8 Golden 보고서 일치.
+- 기존 stash 9개와 보존용 stash 4개, 브랜치 ref·원본 데이터·깨진 worktree 원문을 보존했다. 개발 감사·항목별 결과는 docs/MAIN_SYNC_20261006.md와 docs/PR211_ROUND4.md를 따른다.
+
+## 3. 다음 액션
+1. 다른 위치에서는 원격 main의 TASK→RESUME를 먼저 읽은 뒤, PR #216의 codex/round5-fill-fixes 브랜치와 이 기록·docs/ROUND5_FILL_FIXES.md를 확인한다. 로컬 변경을 보존하고 자동 pull/reset/clean을 하지 않는다.
+2. PDF 타임아웃은 정확한 실패 입력 확보 후 한글 2022에서 재현해야 한다. 두 값 채움 수정과 PDF 미재현을 구분한다. Round-5 전체 요청은 PARTIAL/REQUEST_SOLVED=NO이며 main에 병합하지 않는다.
+3. 기존 실제 DOCX Open 실패·소유 미확인 hard timeout 한계와 L050 gap을 유지한다. 전체 pytest를 추가 재실행하지 않는다.
+
+## 4. 유지할 제약
+- 추가 테스트는 꼭 필요할 때만 한다. 기존 성공 assertion·skip·소유권 보호를 약화하지 않는다. rhwp 기본 OFF, L050 gap 유지.
+- 사용자 Hwp/Hword 종료·원본 덮어쓰기·main 직접 push·force push 금지. 실제 변환·원본 양식 9건 E2E 성공은 아직 주장하지 않는다.
+- 공개 저장소에는 프로젝트 공유 기록만 넣는다. 로컬 전체 회고·개인 자동화/메일/캘린더 내용·Secret·data·검증 로그·백업은 올리지 않는다.
+- 로컬 증거 경로는 다른 PC·클라우드에 존재한다고 가정하지 않는다. 필요하면 해당 Windows 환경에서 접근 가능한 입력을 확인한 뒤 필요한 검증을 다시 한다.
+
+## 5. 파일 인덱스
+- docs/SESSION_RECAP.md: 최신 개발 회고와 결정·남은 일.
+- docs/MAIN_SYNC_20261006.md: 개발 감사·검증 명령·동기화 대상·보존 기록.
+- docs/PR211_ROUND4.md: A~K 처리와 실사용 제한.
+- docs/ROUND5_FILL_FIXES.md: Round-5 항목별 수정·전체 테스트·실제 PDF 결과·남은 입력 제한.
+- 로컬 전용: D:\auto_write\_preflight_evidence\main-sync-20261005\, 독립 Round-4 복제본의 .round4-evidence/. 개인 체크포인트 원문도 로컬에서 보존하며 원격 공유판에 혼입하지 않는다.
+- Round-5 로컬 증거: D:\auto_write\_preflight_evidence\round5-20261006\ (문서 공유 조회 증거·영향 회귀 로그·실제 PDF 저장 기록). 이 폴더는 커밋하지 않는다.

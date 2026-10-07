@@ -266,13 +266,17 @@ def _hwpx_identity_from_references(
 ) -> dict[str, str]:
     """Build direct-fill labels from supplied DOCX facts only.
 
-    The target HWPX is never converted.  Existing source-field extraction is
-    reused for DOCX references; HWP/HWPX references remain available as
-    references for provenance/text extraction but are not guessed into fields.
+    The target HWPX is never converted. Company facts keep numeric values
+    (사업자등록번호·설립일) that extract_source_fields drops. 팀명 is captured
+    before the 기업명 synonym cluster. Other source labels (서명 등) stay, so
+    protected cells still record UNFILLED instead of being dropped. HWP/HWPX
+    references stay provenance only and are not guessed into fields.
     """
-    identity: dict[str, str] = {}
-    if organization_name.strip():
-        identity["기업명"] = organization_name.strip()
+    from .services.company_identity import company_profile_identity, identity_from_reference_path
+
+    identity = company_profile_identity(
+        {"name": organization_name} if organization_name.strip() else {}
+    )
     for name, content in refs:
         if Path(name).suffix.lower() != ".docx" or not content:
             continue
@@ -280,10 +284,16 @@ def _hwpx_identity_from_references(
             source = Path(work_dir) / Path(name).name
             try:
                 source.write_bytes(content)
-                fields = extract_source_fields(str(source))
+                fields = identity_from_reference_path(source)
+                broad = extract_source_fields(source)
             except Exception:
                 continue
         for label, value in fields.items():
+            if str(value).strip():
+                identity.setdefault(str(label), str(value))
+        # 기업 화이트리스트에 없는 라벨(서명 등)은 넓은 추출을 유지한다.
+        # 숫자 사실값은 identity_from_reference_path 가 이미 넣었으므로 덮지 않는다.
+        for label, value in broad.items():
             if str(value).strip():
                 identity.setdefault(str(label), str(value))
     return identity
@@ -666,6 +676,12 @@ async def operator_lrules(
             error=request.query_params.get("error", ""),
         ),
     )
+
+
+@app.get("/console/lrules/verify/status")
+async def operator_lrules_verify_status():
+    """로컬 기본값(access_gate)과 같은 콘솔 경로. 공개 바인드는 비밀번호 없이 열리지 않는다."""
+    return lrule_console.verify_status()
 
 
 @app.post("/console/lrules/verify")

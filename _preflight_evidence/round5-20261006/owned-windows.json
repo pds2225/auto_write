@@ -1,0 +1,152 @@
+[
+  {
+    "hwnd": 2959174,
+    "class": "ATL:5C738E18",
+    "text": "",
+    "id": 0,
+    "children": []
+  },
+  {
+    "hwnd": 132358,
+    "class": "HwndWrapper[Hwp.exe;;5939625d-6af3-4df2-a06a-3c458f7194ef]",
+    "text": "ipdidim_source.hwp [D:\\auto_write\\_preflight_evidence\\round5-20261006\\] - 한글",
+    "id": 0,
+    "children": [
+      {
+        "hwnd": 197900,
+        "class": "HwpRulerTabButtonWnd",
+        "text": "",
+        "id": 190336008
+      },
+      {
+        "hwnd": 197896,
+        "class": "HwpRulerWnd",
+        "text": "",
+        "id": 191771624
+      },
+      {
+        "hwnd": 132354,
+        "class": "HwpRulerWnd",
+        "text": "",
+        "id": 191764448
+      },
+      {
+        "hwnd": 132356,
+        "class": "HwpMainEditWnd",
+        "text": "",
+        "id": 14062140
+      },
+      {
+        "hwnd": 722432,
+        "class": "msctls_progress32",
+        "text": "",
+        "id": 0
+      }
+    ]
+  },
+  {
+    "hwnd": 263062,
+    "class": "MessageWindowClass+13dcc804-d75f-4689-875c-95e784a2aa30",
+    "text": "",
+    "id": 0,
+    "children": []
+  },
+  {
+    "hwnd": 132372,
+    "class": "OleDdeWndClass",
+    "text": "DDE Server Window",
+    "id": 0,
+    "children": []
+  },
+  {
+    "hwnd": 1576788,
+    "class": "TabletPenServiceHelperClass",
+    "text": "WISPTIS",
+    "id": 0,
+    "children": []
+  },
+  {
+    "hwnd": 1380252,
+    "class": "HwndWrapper[Hwp.exe;;44f25024-9764-43d4-975c-71f48447cdbf]",
+    "text": "",
+    "id": 0,
+    "children": []
+  },
+  {
+    "hwnd": 2757952,
+    "class": "HwndWrapper[Hwp.exe;;f1439593-bbe2-439e-a946-955e194b8454]",
+    "text": "",
+    "id": 0,
+    "children": []
+  },
+  {
+    "hwnd": 4008162,
+    "class": "HwndWrapper[Hwp.exe;;07313c66-47df-44e5-b492-65515db2f0a6]",
+    "text": "SystemResourceNotifyWindow",
+    "id": 0,
+    "children": []
+  },
+  {
+    "hwnd": 1969374,
+    "class": "HwndWrapper[Hwp.exe;;d120628b-f0f9-4473-aedc-bbce2257133b]",
+    "text": "MediaContextNotificationWindow",
+    "id": 0,
+    "children": []
+  },
+  {
+    "hwnd": 1903758,
+    "class": "GDI+ Hook Window Class",
+    "text": "GDI+ Window (Hwp.exe)",
+    "id": 0,
+    "children": []
+  },
+  {
+    "hwnd": 4132076,
+    "class": "HwndWrapper[Hwp.exe;;bfacd180-be35-4772-9b6c-ecf459f49798]",
+    "text": "",
+    "id": 0,
+    "children": []
+  },
+  {
+    "hwnd": 1779642,
+    "class": "HNC_DIALOG",
+    "text": "",
+    "id": 256324208,
+    "children": []
+  },
+  {
+    "hwnd": 4401702,
+    "class": "MSCTFIME UI",
+    "text": "MSCTFIME UI",
+    "id": 0,
+    "children": []
+  },
+  {
+    "hwnd": 6098572,
+    "class": "IME",
+    "text": "Default IME",
+    "id": 0,
+    "children": []
+  },
+  {
+    "hwnd": 132350,
+    "class": "HncInputManager120",
+    "text": "",
+    "id": 0,
+    "children": []
+  },
+  {
+    "hwnd": 132370,
+    "class": "IME",
+    "text": "Default IME",
+    "id": 0,
+    "children": []
+  },
+  {
+    "hwnd": 3871464,
+    "class": "IME",
+    "text": "Default IME",
+    "id": 0,
+    "children": []
+  }
+]

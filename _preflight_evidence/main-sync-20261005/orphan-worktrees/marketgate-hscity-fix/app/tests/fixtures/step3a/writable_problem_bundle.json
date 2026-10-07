@@ -1,0 +1,58 @@
+{
+  "sections": [
+    {
+      "section_id": "problem",
+      "name": "문제인식",
+      "category": "PROBLEM"
+    }
+  ],
+  "requirements": [
+    {
+      "requirement_id": "R-INTERVIEW",
+      "name": "고객 인터뷰 결과",
+      "target_section_ids": ["problem"],
+      "required": true,
+      "blocking": false,
+      "required_field": "customer_interview_count",
+      "material_type": "FACT"
+    }
+  ],
+  "step2": {
+    "facts": [],
+    "narrative_evidence": [
+      {
+        "evidence_id": "E-1",
+        "category": "PROBLEM",
+        "text": "해외 바이어 발굴에 시간이 많이 걸린다.",
+        "verification_state": "CONFIRMED",
+        "source_file": "기존사업계획서.hwp",
+        "source_location": "문제정의 / 문단 1"
+      },
+      {
+        "evidence_id": "E-2",
+        "category": "PROBLEM",
+        "text": "공공 수출지원은 정보 조회에 머문다.",
+        "verification_state": "CONFIRMED",
+        "source_file": "기존사업계획서.hwp",
+        "source_location": "문제정의 / 문단 2"
+      },
+      {
+        "evidence_id": "E-3",
+        "category": "PROBLEM",
+        "text": "민간 컨설팅 비용이 높아 초기 기업이 접근하기 어렵다.",
+        "verification_state": "CONFIRMED",
+        "source_file": "기존사업계획서.hwp",
+        "source_location": "문제정의 / 문단 3"
+      },
+      {
+        "evidence_id": "E-4",
+        "category": "PROBLEM",
+        "text": "물류·통관 복잡성 때문에 수출을 시작하지 못한다.",
+        "verification_state": "CONFIRMED",
+        "source_file": "기존사업계획서.hwp",
+        "source_location": "문제정의 / 문단 4"
+      }
+    ],
+    "conflicts": []
+  }
+}

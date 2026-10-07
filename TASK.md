@@ -93,6 +93,7 @@ REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 -->
 
 [~] AW-001 | 문서 작성이 정해진 검사 경로를 거쳐 끝나게 한다
+[~] T-20261006-01 | Round-5 현재 기간·괄호 값 채움 수정과 한글 2022 PDF 타임아웃 재현
 [ ] AW-002 | GitHub와 작업 상태를 안전하게 주고받게 한다
 [ ] AW-003 | L 규칙을 한 화면에서 보고 고칠 수 있게 한다
 [ ] AW-004 | 문서 작성 진행 상태를 한 화면에서 보게 한다
@@ -653,7 +654,7 @@ TASK_ID: AW-001
 TASK_START_SHA: d6b96b86a0015f53141054c27517607923a596a8
 TASK_BLOB_SHA: f6f8023b0dd47d301acedc75a5d4957edd147d4e
 WORK_BRANCH: cursor/overnight-aw-001-2cb9
-STATUS_THIS_TURN: 그룹3 통합 PR #191 재검증 완료. HEAD `8b5281b11c25a93c1902f97ee825d801606c7788`. pytest collect 1831 collected, collection errors 0, exit 0. 수정 영향 테스트 96 passed. docs-gate success. 그룹3 통합 판정 READY_FOR_REVIEW. PR은 draft 유지, main 미병합. LIST `[~]`. REQUEST_SOLVED=NO(HWPX `submit_hwpx`는 이미 구현된 R9 수용검사 KEEP — LRule 미연결. R9 재구현 아님).
+STATUS_THIS_TURN: 사용자 전체 main 반영·동기화 요청으로 PR #211은 2697bef5aa5e0e30d5defa129a70afa7026cf20d로 병합. 야간 호환 경로와 닫힌 #186의 검사 증거·registry 안전 조각을 회수(CODE_SHA=a7c369c). 전체 pytest 2217 passed/8 failed/5 skipped/23 subtests passed 뒤 fake COM 조회만 격리하여 실패 8건 포함 영향 회귀 54 passed/0 failed, 소유권 회귀 21 passed/0 failed. 전체+재검증 합산 2225 passed/남은 실패 0(두 번째 전체 실행은 아님). 14개 접근 가능한 작업 위치를 병합 후 최종 main으로 동기화. 실제 한글 2022 Open 실패·소유 미확인 COM hard timeout 한계는 잔존, AW-001 REQUEST_SOLVED=NO. 상세 docs/MAIN_SYNC_20261006.md. 로컬 evidence/data/개인 기록/백업 archive 커밋 금지.
 
 ### 8-1. 사용자 원문 요청
 
@@ -5008,3 +5009,23 @@ PENDING_TASKS:
 - GitHub Actions 현재 repo에는 docs-gate만 있어 pytest 자동 실행 job은 없음.
 - PR #184 자동 리뷰 P1(기존 v1_DRAFT가 있을 때 v1 재사용 가능)을 수정하고 회귀 테스트를 추가함.
 - 코드 경로 검토 기준: 원본 덮어쓰기 금지, 명시 -o 우선, HWPX 왕복 변환 추가 없음.
+
+
+# T-20261006-01 — Round-5 값 채움·PDF 저장 검증
+
+## 8-1. 사용자 원문
+> 최신 origin/main에서 codex/round5-fill-fixes 브랜치를 만들고 Round-5 3건을 고쳐서 draft PR까지만 열어. 테스트 삭제·약화·skip 금지, 범위 밖 코어 변경 금지.
+> 전체 pytest 1회 돌리고, 새 헤드 SHA·통과/실패 수·항목별 결과를 한국어로 보고하고 PR 본문에도 적어.
+
+## MUST / KEEP
+- 현재 기간은 연도·현재 표현과 논리 병합 범위로 판정한다. 과거만 있거나 모호하면 후속 인라인 경로까지 미기입하고 사유를 기록한다.
+- 괄호 안의 구체적인 안내 구문만 채우며 실제 개요 입력·원본·표 구조를 보존한다.
+- 한글 2022 PDF 타임아웃은 실제 재현과 원인 근거가 필요하다. 타임아웃 증가만으로 해결하지 않는다. 소유 PID만 정리한다.
+- 요청한 전체 Windows pytest는 1회 실행한다. mock 결과와 실제 PDF 결과를 구분한다. Round-5는 main에 병합하지 않는다.
+
+## CHECKPOINT
+- 문서 PR #215 main 병합 완료, 기준 main: 12b5095f9fbeacb02257b3f169d5924f7fc947a2.
+- 현재 기간·괄호 입력 보호 보완 후 영향 회귀 89 passed/0 failed. 전체 Windows pytest 1회: 2275 passed/0 failed/5 기존 skipped/23 subtests passed, exit 0. 제품 코드 SHA 2cb684e8d3310411019656f015b3054451990a9f에서 실행.
+- PDF: 한글 2022 12.0.0.893에서 2026년 HWP 원본 사본(65.609초/2페이지), 2025년 HWPX 원본 사본(1.578초/2페이지), 변경 추적+문구 삽입 사본(3.953초/3페이지)의 기존 SaveAs[PDF] 모두 성공. 기존 120초 타임아웃은 재현되지 않았다.
+- 사용자는 실패 파일 경로를 모른다고 답했다. PDF 코어는 근거 없는 수정 없이 유지하며 정확한 실패 입력 확보 후 재현이 필요하다. REQUEST_SOLVED=NO / TASK_STATUS=PARTIAL.
+- Draft PR #216: https://github.com/pds2225/auto_write/pull/216, main 미병합. 상세 결과 docs/ROUND5_FILL_FIXES.md. 다음: 정확한 실패 입력 확보 후 PDF 타임아웃 재현·수정. 전체 suite 재실행은 하지 않았다.
