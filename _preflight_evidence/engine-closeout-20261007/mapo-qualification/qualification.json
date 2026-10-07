@@ -1,0 +1,204 @@
+{
+  "routing_status": "NORMAL",
+  "pdf_pair": {
+    "generated": true,
+    "skipped": false,
+    "blocked": false,
+    "reason": "Hangul COM SaveAs PDF",
+    "attempts": 1,
+    "attempt_reasons": [
+      "Hangul COM SaveAs PDF"
+    ],
+    "evidence": "",
+    "missing": false,
+    "mechanized": false,
+    "claim_status": "BLOCKED"
+  },
+  "form_diff": {
+    "structure_ok": true,
+    "form_intact": true,
+    "form_phrase_edits": 0,
+    "form_phrase_drops": 0,
+    "value_fills": 14,
+    "structure_deltas": {},
+    "notes": []
+  },
+  "choice_marks": 1,
+  "guidance_replacements": 9,
+  "value_paragraphs": 12,
+  "fields": [
+    {
+      "table": 1,
+      "row": 0,
+      "col": 7,
+      "before": "□ 예비창업자",
+      "after": "■ 예비창업자"
+    },
+    {
+      "table": 1,
+      "row": 1,
+      "col": 2,
+      "before": "",
+      "after": "홍길동"
+    },
+    {
+      "table": 1,
+      "row": 4,
+      "col": 2,
+      "before": "등록된 사업자가 있는 경우 기재",
+      "after": "해당없음"
+    },
+    {
+      "table": 1,
+      "row": 4,
+      "col": 6,
+      "before": "등록된 사업자가 있는 경우 기재",
+      "after": "해당없음"
+    },
+    {
+      "table": 1,
+      "row": 4,
+      "col": 10,
+      "before": "등록된 사업자가 있는 경우 기재",
+      "after": "해당없음"
+    },
+    {
+      "table": 1,
+      "row": 5,
+      "col": 2,
+      "before": "팀으로 참가시에만 기재",
+      "after": "테스트팀"
+    },
+    {
+      "table": 1,
+      "row": 5,
+      "col": 8,
+      "before": "팀으로 참가시에만 기재",
+      "after": "4명(대표 포함)"
+    },
+    {
+      "table": 1,
+      "row": 7,
+      "col": 2,
+      "before": "",
+      "after": "테스트 시스템"
+    },
+    {
+      "table": 1,
+      "row": 12,
+      "col": 1,
+      "before": "",
+      "after": "특허(출원)"
+    },
+    {
+      "table": 1,
+      "row": 12,
+      "col": 2,
+      "before": "",
+      "after": "테스트 시스템"
+    },
+    {
+      "table": 1,
+      "row": 12,
+      "col": 4,
+      "before": "",
+      "after": "10-2026-0000000"
+    },
+    {
+      "table": 1,
+      "row": 12,
+      "col": 7,
+      "before": "",
+      "after": "홍길동"
+    },
+    {
+      "table": 1,
+      "row": 12,
+      "col": 9,
+      "before": "",
+      "after": "2026.01.01 출원"
+    },
+    {
+      "table": 4,
+      "row": 0,
+      "col": 1,
+      "before": "",
+      "after": "테스트 시스템"
+    },
+    {
+      "table": 4,
+      "row": 1,
+      "col": 1,
+      "before": "",
+      "after": "홍길동 (팀명: 테스트팀)"
+    },
+    {
+      "table": 5,
+      "row": 0,
+      "col": 2,
+      "before": "아이디어 착안 배경, 아이디어를 통해 해결하고 싶은 문제 등에 대해 작성",
+      "after": "아이디어 제안배경 합성 본문 1: 제공된 설명으로 확인한다.아이디어 제안배경 합성 본문 2: 제공된 설명으로 확인한다.아이디어 제안배경 합성 본문 3: 제공된 설명으로 확인한다."
+    },
+    {
+      "table": 5,
+      "row": 1,
+      "col": 2,
+      "before": "신청자가 가진 강점(전공, 경험, 관심분야 등), 보유중인 기술이나 지식, 팀으로 신청 시 팀원별 역할 분담 및 협업방식 등에 대해 작성",
+      "after": "신청자 역량 합성 본문 1: 제공된 설명으로 확인한다.신청자 역량 합성 본문 2: 제공된 설명으로 확인한다.신청자 역량 합성 본문 3: 제공된 설명으로 확인한다."
+    },
+    {
+      "table": 5,
+      "row": 2,
+      "col": 2,
+      "before": "서비스 해결 또는 문제 해결 방식, 아이디어의 특징이나 차별점에 대해 작성(기존 유사 기술 등이 있는 경우 차이점 등을 기술)",
+      "after": "창업 아이디어 합성 본문 1: 제공된 설명으로 확인한다.창업 아이디어 합성 본문 2: 제공된 설명으로 확인한다.창업 아이디어 합성 본문 3: 제공된 설명으로 확인한다."
+    },
+    {
+      "table": 5,
+      "row": 3,
+      "col": 2,
+      "before": "",
+      "after": "핵심내용 합성 본문 1: 제공된 설명으로 확인한다.핵심내용 합성 본문 2: 제공된 설명으로 확인한다.핵심내용 합성 본문 3: 제공된 설명으로 확인한다."
+    },
+    {
+      "table": 5,
+      "row": 4,
+      "col": 2,
+      "before": "",
+      "after": "우수성 및 차별성 합성 본문 1: 제공된 설명으로 확인한다.우수성 및 차별성 합성 본문 2: 제공된 설명으로 확인한다.우수성 및 차별성 합성 본문 3: 제공된 설명으로 확인한다."
+    },
+    {
+      "table": 5,
+      "row": 5,
+      "col": 2,
+      "before": "",
+      "after": "시장 경쟁력 합성 본문 1: 제공된 설명으로 확인한다.시장 경쟁력 합성 본문 2: 제공된 설명으로 확인한다.시장 경쟁력 합성 본문 3: 제공된 설명으로 확인한다."
+    },
+    {
+      "table": 5,
+      "row": 6,
+      "col": 2,
+      "before": "사용자나 사회에 미치는 긍정적 변화, 향후 확장 가능성이나 기대되는 영향력 등 기재",
+      "after": "기대효과 합성 본문 1: 제공된 설명으로 확인한다.기대효과 합성 본문 2: 제공된 설명으로 확인한다.기대효과 합성 본문 3: 제공된 설명으로 확인한다."
+    },
+    {
+      "table": 7,
+      "row": 0,
+      "col": 1,
+      "before": "",
+      "after": "테스트 시스템"
+    },
+    {
+      "table": 7,
+      "row": 1,
+      "col": 1,
+      "before": "",
+      "after": "홍길동 (팀명: 테스트팀)"
+    }
+  ],
+  "output": "C:\\Users\\Public\\Documents\\ESTsoft\\CreatorTemp\\pytest-of-ekth3\\pytest-2543\\test_real_form_console_qualifi0\\workspace\\projects\\prj_542df7477d2b\\output\\output.hwpx",
+  "original_md5": "eb680cbcfd61398c694508a003f42b68",
+  "original_preserved": true,
+  "user_pids_preserved": true,
+  "instructions_remaining": 0
+}
