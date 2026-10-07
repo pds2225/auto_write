@@ -443,6 +443,14 @@ def _write_l050_evidence(source: Path, dest: Path, tool: str) -> str:
     return str(evidence)
 
 
+def _refused_saveas_reason(prior: list[str]) -> str:
+    """SaveAs 거부 사유. 앞선 시도(예: 1차 타임아웃)의 원인을 최종 reason 에도 보존한다."""
+    reason = "BLOCKED-by-form: Hangul refused SaveAs PDF for this form"
+    if prior:
+        reason += " (이전 시도 실패: " + "; ".join(prior) + ")"
+    return reason
+
+
 def _try_hangul_com_pdf(source: Path, dest: Path) -> PdfPairGenerateResult | None:
     """Windows 한글 COM SaveAs PDF.
 
@@ -485,14 +493,14 @@ def _try_hangul_com_pdf(source: Path, dest: Path) -> PdfPairGenerateResult | Non
                     dest.unlink()
                 except OSError:
                     pass
-            reason = "BLOCKED-by-form: Hangul refused SaveAs PDF for this form"
+            reason = _refused_saveas_reason(reasons)
             return PdfPairGenerateResult(False, False, True, reason,
                 attempts=attempt, attempt_reasons=tuple(reasons+[reason]))
         if dest.is_file() and dest.stat().st_size > 0:
             reasons.append("Hangul COM SaveAs PDF")
             return PdfPairGenerateResult(True, False, False, reasons[-1], "",
                 attempt, tuple(reasons))
-        reason = "BLOCKED-by-form: Hangul refused SaveAs PDF for this form"
+        reason = _refused_saveas_reason(reasons)
         return PdfPairGenerateResult(False, False, True, reason,
             attempts=attempt, attempt_reasons=tuple(reasons+[reason]))
 
