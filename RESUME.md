@@ -12,9 +12,7 @@
 - 세션 마무리의 최신 개발 회고·재개 정보를 이제 원격 공유판으로 관리한다. 회고: [docs/SESSION_RECAP.md](docs/SESSION_RECAP.md). root SESSION_RECAP.md는 로컬 전체 회고이며 Git에서 제외되어 있다.
 - 아직 실제 한글 2022 DOCX Open 실패·소유 PID 미확인 시 COM hard timeout 한계가 남아 있다. AW-001 REQUEST_SOLVED=NO. Git 통합 성공을 실제 변환 성공으로 보고하지 않는다.
 
-- 새 요청: C:\Users\ekth3\Downloads\CODEX_PROMPT.md 전체를 읽었다. D1~D6 엔진 커버리지 수정과 독립 QA·실양식 검증·draft PR 지시이며, 사용자가 재개를 확인했다. 원격 TASK/RESUME와 PR #214·#216 상태 확인 후 구현한다. 기존 로컬 변경은 보존한다.
 
-- 엔진 커버리지: codex/engine-coverage-fixes, 작업 폴더 C:\Users\ekth3\.codex\worktrees\engine-coverage-fixes\auto_write. D1~D6 구현 중, 합성 32 passed·기존 form-diff 13 passed. 실제 양식 웹 출력/PDF 생성 성공했으나 form-diff 초기 오탐 보완 및 독립 QA 지적 수정 중. 전체 테스트·커밋·push·draft PR은 아직이다.
 
 ## 1. 다른 PC·클라우드에서 빠른 재개
 저장소를 복제한 폴더에서 다음 명령으로 최신 원격 지시와 기록을 먼저 읽는다. 현재 작업 위치나 브랜치가 달라도 조회할 수 있다.
@@ -53,3 +51,9 @@ git show origin/main:docs/SESSION_RECAP.md
 - docs/ROUND5_FILL_FIXES.md: Round-5 항목별 수정·전체 테스트·실제 PDF 결과·남은 입력 제한.
 - 로컬 전용: D:\auto_write\_preflight_evidence\main-sync-20261005\, 독립 Round-4 복제본의 .round4-evidence/. 개인 체크포인트 원문도 로컬에서 보존하며 원격 공유판에 혼입하지 않는다.
 - Round-5 로컬 증거: D:\auto_write\_preflight_evidence\round5-20261006\ (문서 공유 조회 증거·영향 회귀 로그·실제 PDF 저장 기록). 이 폴더는 커밋하지 않는다.
+
+- 새 요청(2026-10-07): 범용 정부지원사업 신청 엔진 full pipeline을 구현해 draft PR까지 준비. 사용자가 재개를 확인했다. 선행 `codex/engine-coverage-fixes`가 main에 머지되었으면 최신 main에서, 아니면 그 원격 브랜치에서 `codex/engine-full-pipeline`을 분기해야 한다.
+- 직전 확인에서 선행 브랜치는 원격에 없고, 로컬 `C:\Users\ekth3\.codex\worktrees\engine-coverage-fixes\auto_write`에만 미커밋 변경이 있었다. 그 작업 트리와 root의 기존 변경은 보존한다. 재개 시 fetch 후 원격 PR/ref를 다시 확인한다.
+- 설계 방향: 공고 분석 버그는 analyzer 계층에서 고치고, HWPX submit·acceptance·picture insert·layout/integrity 등 기존 모듈을 조합하는 pipeline을 둔다. 설정 파일로 출처 우선순위·문체·접미사를 제공하고, AI 검토요청서/승인 게이트/항목별 병합·반영 로그·근거 없는 주장 거절을 구현한다. 실제 양식과 개인정보는 로컬 `data/`에서만 다룬다.
+- 선행 PR 미병합 중에는 `hwpx_fill.py`, `hwpx_protected_regions.py`, `hwpx_form_diff.py`, `project_service.py::_generate_hwpx_direct` 수정 금지. 추가 테스트는 필수 회귀만 하고 전체 pytest 반복 실행을 피한다.
+
