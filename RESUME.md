@@ -5,7 +5,7 @@
 ## 0. 현재 상태 — 2026-10-07
 - 최신 작업: `codex/engine-coverage-fixes`의 기존 미커밋 엔진 변경을 보존·검토하고 main 대상 draft PR로 공유한다. 기준 HEAD는 #216의 `2f630a6`, 원격 main은 `12b5095`. 병합하지 않는다. 아래 Round-5 검증 수치는 이전 작업 기록이다.
 - 독립 안전 QA PASS. 임의 빈칸 답안의 P14 보류 우회·제목 없는 구역 중복 진단 회귀·새 그림 문단 ID 중복을 최소 수정했다. 기존 테스트 수정 없음. 실제 양식·개인정보·로컬 증거는 커밋에서 제외한다.
-- 직접 영향 검증 66 passed. 지정 회귀 351 passed/2 skipped, 신규 합성 34 passed/실양식 1 skipped. 전체 Windows pytest는 1회 실행 중 세션 중단되어 최종 합격 미확인. 실양식 qualification·이미지 렌더·페이지 기준선은 미확인이다. 전체 요청 상태는 PARTIAL/REQUEST_SOLVED=NO. 상세: `docs/ENGINE_COVERAGE_FIXES.md`.
+- 직접 영향 검증 66 passed. 지정 회귀 351 passed/2 skipped, 신규 합성 34 passed/실양식 1 skipped. 후속 실제 마포 양식 qualification은 합성 참고자료로 1 passed: 원본 4페이지→작성본 5페이지, 안내문 잔존 0, 이미지 1, PDF attempts=1, 원본 MD5와 사용자 Hwp PID 보존. 서약 내용이 2페이지로 나뉘는 레이아웃 위험은 기록했다. 전체 Windows pytest는 15%에서 `test_gate_faildraft_invariant.py::test_submission_pipeline_fail_doc_forces_draft` 중 한글 COM RPC fatal exception(0x800706ba)으로 종료되어 전체 합격은 미확인이다. 전체 요청 상태는 PARTIAL/REQUEST_SOLVED=NO. 상세: `docs/ENGINE_COVERAGE_FIXES.md`.
 - 다음: draft PR과 원격 브랜치를 확인한 뒤 후속 세션이 `codex/engine-full-pipeline` 기준을 선택한다. 이번 PR의 생성은 병합 승인이나 전체 실사용 합격을 뜻하지 않는다.
 - 문서 PR #215는 main에 병합됐다. main 기준 SHA는 12b5095f9fbeacb02257b3f169d5924f7fc947a2다. AGENTS.md·CLAUDE.md에 모든 위치에서 fetch 후 원격 TASK→RESUME 필수 확인을 명시했고, GitHub 공유판을 실제 조회했다.
 - 현재 codex/round5-fill-fixes는 위 main에서 생성했다. 현재 기간·병합 범위·양옆 라벨 경계와 괄호 실값 보호를 수정했다. 기간 보류는 인라인 동의어 경로에도 적용한다. 커밋: 8284b26(값 채움), 2cb684e8d3310411019656f015b3054451990a9f(PDF mock). 영향 회귀 89 passed/0 failed. 이 코드에서 전체 Windows pytest 1회: 2275 passed/0 failed/5 기존 skipped/23 subtests passed, exit 0. Draft PR #216(https://github.com/pds2225/auto_write/pull/216), main 미병합. 이후 변경은 검증 문서뿐이다.
