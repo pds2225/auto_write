@@ -968,11 +968,16 @@ def document_duplicate_unfilled_cells(
     when one value is still empty. Does not authorize a write.
     Each item is ``(label, section_index, table_index, row, col)``.
     """
-    grouped: dict[str, list[tuple[int, int, object, bool]]] = {}
+    parts = document_parts(index)
+    grouped = {}
     for section_index, table_index, label, value, empty in _label_value_pairs(index):
-        grouped.setdefault(label, []).append((section_index, table_index, value, empty))
+        part = parts.get(table_index)
+        # Untitled sections retain legacy ambiguity diagnostics. Explicit title
+        # boundaries permit fan-out without weakening the existing residual gate.
+        group_part = part if part and part[1] else None
+        grouped.setdefault((group_part, label), []).append((section_index, table_index, value, empty))
     found: list[tuple[str, int, int, int, int]] = []
-    for label, cells in grouped.items():
+    for (_part, label), cells in grouped.items():
         if len(cells) < 2 or not any(empty for *_rest, empty in cells):
             continue
         for section_index, table_index, value, empty in cells:
@@ -2370,3 +2375,195 @@ def t02_write_authorized(index: HwpxStructureIndex, field: FieldAssessment) -> b
         and grant.source_sha256 == index.source_sha256
         for grant in authorize_t02_writes(index)
     )
+
+_HP = "http://www.hancom.co.kr/hwpml/2011/paragraph"
+
+# Cell-scoped grants are independent of P0 assessments and the legacy run writer.
+def normalized_cell_label(text: str) -> str:
+    return re.sub(r"[^\w가-힣]", "", str(text)).casefold()
+
+
+def is_value_cell_guidance(text: str) -> bool:
+    """Require instruction evidence; parentheses/style alone never grant a write."""
+    value = str(text or "").strip()
+    if not value or len(value) > 200:
+        return False
+    from .hwpx_fill import _is_hwpx_guidance_placeholder
+    if _is_hwpx_guidance_placeholder(value):
+        return True
+    if value.startswith("※"):
+        return bool(re.search(r"(?:작성|기재|기입|소개|서술|기술)(?:하세요|해\s*주세요|바랍니다)?$", value)) and not bool(re.search(r"(?:않|금지|하지|완료|[:：])", value))
+    unwrapped = value[1:-1].strip() if value.startswith(("(","（")) and value.endswith((")","）")) else value
+    # Qualified imperative, including an appended explanatory parenthesis.
+    return bool(re.search(
+        r"(?:에\s*대(?:해|하여)|등|내용을|내용은|사항을|사항은).{0,12}"
+        r"(?:작성|기재|기입|기술|서술)(?:하세요|해\s*주세요|바랍니다)?(?:\s*\([^)]*\))?$",
+        unwrapped,
+    ))
+
+
+def document_parts(index: HwpxStructureIndex) -> dict[int, tuple[int, int]]:
+    """Map top-level tables to verified section/title/page-break parts."""
+    from lxml import etree
+    from zipfile import ZipFile
+    parts = {}
+    pair_tables = {t.table_index for t, *_ in _coverage_pairs(index)}
+    with ZipFile(index.source_path) as archive:
+        for section in index.sections:
+            root = etree.fromstring(archive.read(section.section_member), etree.XMLParser(resolve_entities=False, no_network=True))
+            xml_tables = list(root.iter(f"{{{_HP}}}tbl"))
+            top = [t for t in index.tables if t.section_index == section.section_index and t.parent_table_index is None]
+            part = 0
+            last_page = None
+            for position, table in enumerate(top):
+                node = xml_tables[table.table_index_in_section]
+                outer = next((p for p in node.iterancestors(f"{{{_HP}}}p") if not any(a.tag == f"{{{_HP}}}tc" for a in p.iterancestors())), None)
+                page = None
+                if outer is not None:
+                    preceding = [p for p in root.iter(f"{{{_HP}}}p") if p.get("pageBreak") == "1" and not any(a.tag == f"{{{_HP}}}tc" for a in p.iterancestors())]
+                    # XMLs commonly occupy one line: use document positions, never sourceline.
+                    nodes = list(root.iter())
+                    page = sum(nodes.index(p) <= nodes.index(outer) for p in preceding)
+                if last_page is not None and page != last_page:
+                    part += 1
+                last_page = page
+                if len(table.cells) == 1 and position + 1 < len(top):
+                    title = _cell_joined(section, table.cells[0]).strip()
+                    following = top[position + 1]
+                    if title and len(title) <= 30 and not re.search(r"[:：]", title) and following.table_index in pair_tables:
+                        c = table.cells[0]
+                        if c.row_span == c.col_span == 1:
+                            part += 1
+                parts[table.table_index] = (section.section_index, part)
+    return parts
+
+
+@dataclass(frozen=True)
+class CellValueAuthorization:
+    source_sha256: str
+    section_member: str
+    table_index: int
+    physical_tr_index: int
+    physical_tc_index: int
+    row: int
+    col: int
+    row_span: int
+    col_span: int
+    field_label: str
+    expected_raw_text: str
+    kind: str
+    part: tuple[int, int]
+    record_label: str = ""
+    record_index: int = 0
+
+
+def _cell_grant(index, table, section, cell, label, kind, part, record_label="", record_index=0):
+    return CellValueAuthorization(index.source_sha256, table.section_member, table.table_index,
+        cell.physical_tr_index, cell.physical_tc_index, cell.row, cell.col, cell.row_span, cell.col_span,
+        label, _cell_joined(section, cell), kind, part, record_label, record_index)
+
+
+def _safe_cell_label(text):
+    label = str(text).strip()
+    return bool(label and len(label) <= 40 and not re.search(r"[□■☐☑:：]|서명|날인|동의|접수번호", label)
+                and not is_value_cell_guidance(label))
+
+
+def _coverage_pairs(index):
+    for table in index.tables:
+        if table.story_scope != "body" or table.parent_table_index is not None or table.addresses_overlap:
+            continue
+        section = next(s for s in index.sections if s.section_index == table.section_index)
+        for label_cell in table.cells:
+            label = _cell_joined(section, label_cell).strip()
+            if not _cell_placed(label_cell) or not _safe_cell_label(label):
+                continue
+            values = [c for c in table.cells if _cell_placed(c) and c.row == label_cell.row
+                      and c.row_span == label_cell.row_span and c.col == label_cell.col + label_cell.col_span]
+            if len(values) != 1:
+                continue
+            value = values[0]
+            if value.has_nested_table or value.has_non_text_object:
+                continue
+            if any(run.has_non_text_object or run.has_nested_table for pi in value.paragraph_indexes for run in section.paragraphs[pi].runs):
+                continue
+            yield table, section, label, value
+
+
+def find_guidance_value_targets(index: HwpxStructureIndex) -> tuple[CellValueAuthorization, ...]:
+    if index.analysis_status != "COMPLETE":
+        return ()
+    parts = document_parts(index)
+    pairs = list(_coverage_pairs(index))
+    narrative_tables = {t.table_index for t, s, _, c in pairs if is_value_cell_guidance(_cell_joined(s, c))}
+    for table in index.tables:
+        section = next(s for s in index.sections if s.section_index == table.section_index)
+        if table.parent_table_index is None and any(
+            _cell_placed(c) and c.row == 0 and re.fullmatch(r"(?:사업)?계획서|(?:사업|아이템)?개요|(?:주요|핵심)?내용", _compact(_cell_joined(section,c)))
+            for c in table.cells
+        ):
+            narrative_tables.add(table.table_index)
+    result = []
+    groups = {}
+    for table, section, label, cell in pairs:
+        text = _cell_joined(section, cell)
+        part = parts[table.table_index]
+        groups.setdefault((part, normalized_cell_label(label)), []).append(cell)
+        if text.strip():
+            if not all(is_value_cell_guidance(section.paragraphs[p].raw_text) for p in cell.paragraph_indexes if section.paragraphs[p].raw_text.strip()):
+                continue
+            kind = "GUIDANCE_VALUE"
+        elif table.table_index in narrative_tables:
+            kind = "EMPTY_NARRATIVE"
+        else:
+            kind = "PART_VALUE"
+        # No date/signature/consent facts are automatically entered here.
+        if re.search(r"생년|설립일|개시일|날짜|연월일", label) and kind == "PART_VALUE":
+            continue
+        result.append(_cell_grant(index, table, section, cell, label, kind, part))
+    return tuple(g for g in result if len(groups[(g.part, normalized_cell_label(g.field_label))]) == 1)
+
+
+def authorize_guidance_value_writes(index: HwpxStructureIndex) -> tuple[CellValueAuthorization, ...]:
+    return find_guidance_value_targets(index)
+
+
+def guidance_value_authorization_is_current(index, grant) -> bool:
+    return isinstance(grant, CellValueAuthorization) and grant in authorize_guidance_value_writes(index)
+
+
+def find_record_row_targets(index: HwpxStructureIndex) -> tuple[CellValueAuthorization, ...]:
+    if index.analysis_status != "COMPLETE":
+        return ()
+    parts = document_parts(index)
+    result = []
+    for table in index.tables:
+        if table.story_scope != "body" or table.parent_table_index is not None or table.addresses_overlap:
+            continue
+        section = next(s for s in index.sections if s.section_index == table.section_index)
+        for label_cell in table.cells:
+            if not _cell_placed(label_cell) or label_cell.row_span < 2:
+                continue
+            label = _cell_joined(section, label_cell).strip()
+            headers = sorted([c for c in table.cells if _cell_placed(c) and c.row == label_cell.row
+                              and c.col >= label_cell.col + label_cell.col_span and c.row_span == 1], key=lambda c: c.col)
+            if len(headers) < 2 or not _safe_cell_label(label) or not all(_safe_cell_label(_cell_joined(section, c)) for c in headers):
+                continue
+            for offset in range(1, label_cell.row_span):
+                targets = []
+                for header in headers:
+                    matches = [c for c in table.cells if _cell_placed(c) and c.row == label_cell.row + offset
+                               and c.row_span == 1 and c.col == header.col and c.col_span == header.col_span
+                               and not _cell_joined(section,c).strip() and not c.has_nested_table and not c.has_non_text_object]
+                    if len(matches) != 1:
+                        targets = []
+                        break
+                    targets.append((header, matches[0]))
+                for header, value in targets:
+                    result.append(_cell_grant(index, table, section, value, _cell_joined(section, header),
+                        "RECORD_VALUE", parts[table.table_index], label, offset - 1))
+    return tuple(result)
+
+
+def record_authorization_is_current(index, grant) -> bool:
+    return isinstance(grant, CellValueAuthorization) and grant in find_record_row_targets(index)

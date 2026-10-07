@@ -76,6 +76,13 @@ _COM_CONVERT_LOCK = threading.RLock()
 
 def _com_stage_timeout(stage: str) -> float:
     base = stage.split("[", 1)[0]
+    if base == "Dispatch":
+        try:
+            configured = float(os.environ.get("AUTO_WRITE_HANGUL_DISPATCH_TIMEOUT", "30"))
+            if 10 <= configured <= 180:
+                return configured
+        except (ValueError, TypeError):
+            pass
     return float(_COM_STAGE_TIMEOUTS.get(base, 60.0))
 
 
