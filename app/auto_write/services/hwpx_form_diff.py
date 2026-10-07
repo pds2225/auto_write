@@ -29,6 +29,7 @@ class FormDiffReport:
     form_phrase_edits: int = 0
     form_phrase_drops: int = 0
     value_fills: int = 0
+    check_marks: int = 0
     structure_deltas: dict[str, tuple[int, int]] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
 
@@ -48,6 +49,15 @@ class FormDiffReport:
             "structure_deltas": {k: list(v) for k, v in self.structure_deltas.items()},
             "notes": list(self.notes),
         }
+
+
+# 선택 기호는 모두 □ 로 접어서 비교한다. □→■ 같은 체크 표시 변경은 양식 훼손이 아니라 정상 기입이다.
+_CHECK_FOLD = str.maketrans({c: "□" for c in "■☑☒✔✓▣☐"})
+
+
+def _check_marks_only(old: str, new: str) -> bool:
+    """두 문구가 체크박스 기호만 다르면 True."""
+    return old != new and old.translate(_CHECK_FOLD) == new.translate(_CHECK_FOLD)
 
 
 def _load_section(path: Path):
@@ -89,12 +99,17 @@ def compare_hwpx_forms(src: str | Path, dst: str | Path) -> FormDiffReport:
         for k in range(max(len(old), len(new))):
             o = old[k] if k < len(old) else ""
             n = new[k] if k < len(new) else ""
-            if not o.strip() and n.strip():
+            if _check_marks_only(o, n):
+                rep.check_marks += 1
+                rep.value_fills += 1
+            elif not o.strip() and n.strip():
                 rep.value_fills += 1
             elif o.strip() and not n.strip():
                 rep.form_phrase_drops += 1
             elif o.strip() and n.strip() and o.strip() != n.strip():
                 rep.form_phrase_edits += 1
+    if rep.check_marks:
+        rep.notes.append(f"체크박스 기호 변경 {rep.check_marks}건은 정상 기입으로 처리")
     if not rep.form_intact:
         rep.notes.append(
             f"양식 고유 변경: 수정 {rep.form_phrase_edits}·삭제 {rep.form_phrase_drops}"

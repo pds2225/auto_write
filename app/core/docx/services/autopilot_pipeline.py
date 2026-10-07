@@ -89,6 +89,7 @@ class AutopilotReport:
     lrule_total: int = 0
     lrule_fail: int = 0
     lrule_review: int = 0
+    lrule_three_stage: str = ""  # 해당→채움→통과 3단계 집계 한 줄
     lrule_unverifiable: int = 0
     lrule_can_finalize: bool = False
     finalizer_submittable: bool = False
@@ -136,6 +137,7 @@ class AutopilotReport:
             "lrule_total": self.lrule_total,
             "lrule_fail": self.lrule_fail,
             "lrule_review": self.lrule_review,
+            "lrule_three_stage": self.lrule_three_stage,
             "lrule_unverifiable": self.lrule_unverifiable,
             "lrule_can_finalize": self.lrule_can_finalize,
             "finalizer_submittable": self.finalizer_submittable,
@@ -417,6 +419,7 @@ def run_autopilot(
             report.lrule_total = lrule_report.summary.get("total", 0)
             report.lrule_fail = lrule_report.summary.get("fail", 0)
             report.lrule_review = lrule_report.summary.get("review_required", 0)
+            report.lrule_three_stage = lrule_report.summary_text()
             report.lrule_unverifiable = lrule_report.summary.get("unverifiable", 0)
             report.lrule_can_finalize = lrule_report.can_finalize
         finalizer_result = gate.finalizer
@@ -563,6 +566,8 @@ def _write_report(results_root: Path, stem: str, report: AutopilotReport) -> str
             lines.append("- fail 결함이 있어 출력 파일명에 `_DRAFT` 를 붙였습니다 — 결함 해결 전에는 제출하지 마세요.")
     else:
         lines.append("- (게이트 생략됨 — acceptance_gate=False)")
+    if report.lrule_three_stage:
+        lines.append(f"- L규칙 3단계(해당→채움→통과): {report.lrule_three_stage}")
     lines.append("")
     lines.append("## 5) 최종본 재채점(참고)")
     if report.final_score_total > 0:
