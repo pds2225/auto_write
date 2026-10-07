@@ -38,6 +38,11 @@ class FormDiffReport:
     notes: list[str] = field(default_factory=list)
 
     @property
+    def check_marks(self) -> int:
+        """#218 호환 별칭: 체크박스 기호만 바뀐 정상 기입 수(= choice_marks)."""
+        return self.choice_marks
+
+    @property
     def form_intact(self) -> bool:
         """양식 고유 영역 변경 0 + 구조 동일."""
         return self.structure_ok and self.form_phrase_edits == 0 and self.form_phrase_drops == 0
@@ -53,6 +58,15 @@ class FormDiffReport:
             "structure_deltas": {k: list(v) for k, v in self.structure_deltas.items()},
             "notes": list(self.notes),
         }
+
+
+# 선택 기호는 모두 □ 로 접어서 비교한다. □→■ 같은 체크 표시 변경은 양식 훼손이 아니라 정상 기입이다.
+_CHECK_FOLD = str.maketrans({c: "□" for c in "■☑☒✔✓▣☐"})
+
+
+def _check_marks_only(old: str, new: str) -> bool:
+    """두 문구가 체크박스 기호만 다르면 True."""
+    return old != new and old.translate(_CHECK_FOLD) == new.translate(_CHECK_FOLD)
 
 
 def _load_section(path: Path):
@@ -76,6 +90,8 @@ def _counts(sec) -> dict[str, int]:
 
 def _choice_only(old, new):
     boxes = "□☐▢■☑✓▣"
+    if _check_marks_only(old, new):  # #218: 체크 기호만 다른 경우(☒✔ 포함)도 정상 기입
+        return True
     return old != new and len(old) == len(new) and any(c in boxes for c in old) and all(
         a == b or (a in boxes and b in boxes) for a,b in zip(old,new))
 
@@ -178,6 +194,8 @@ def _compare_roots(a,b):
             elif not o.strip() and n.strip():rep.value_fills+=1
             elif o.strip() and not n.strip():rep.form_phrase_drops+=1
             elif o.strip()!=n.strip():rep.form_phrase_edits+=1
+    if rep.choice_marks:
+        rep.notes.append(f"체크박스 기호 변경 {rep.choice_marks}건은 정상 기입으로 처리")
     if not rep.form_intact:
         rep.notes.append(f"양식 고유 변경: 수정 {rep.form_phrase_edits}·삭제 {rep.form_phrase_drops}·구조 {'OK' if rep.structure_ok else 'DIFF'}")
     return rep
