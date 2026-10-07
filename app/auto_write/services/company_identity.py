@@ -86,6 +86,13 @@ def identity_from_label_text(text: str) -> dict[str, str]:
         if label_key(label) == team_key:
             identity.setdefault("팀명", value)
             continue
+        explicit = {"팀원수": "팀원수", "구분": "구분", "기업형태": "기업형태",
+                    "참가형태": "참가형태", "아이디어명": "아이디어명", "사업자명": "사업자명",
+                    "지식재산권": "지식재산권", "지식재산권등보유현황": "지식재산권 등 보유현황"}
+        compact = label_key(label)
+        if compact in explicit:
+            identity.setdefault(explicit[compact], value)
+            continue
         canon = _canon_field(label)
         if canon and _valid_value(canon, value):
             identity.setdefault(canon, value)

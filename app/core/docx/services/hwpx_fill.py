@@ -1042,6 +1042,33 @@ _GUIDANCE_PAREN_RE = re.compile(
 )
 
 
+_GUIDANCE_CONDITIONAL_RE = re.compile(
+    r"^(?=.{1,60}$).*(?:경우(?:에만|에\s*한해)?\s*(?:기재|작성|기입)|"
+    r"시(?:에)?만?\s*(?:기재|작성|기입)|해당\s*시\s*(?:기재|작성)|경우에\s*한함)$"
+)
+
+
+def _conditional_guidance_value(guide_text: str, label: str, identity: dict) -> str | None:
+    """Evaluate only explicit registration/team facts, never company-name aliases."""
+    if not _GUIDANCE_CONDITIONAL_RE.fullmatch(re.sub(r"\s+", " ", guide_text).strip()):
+        return None
+    normalized = {re.sub(r"\s+", "", str(k)): str(v).strip() for k, v in identity.items()}
+    key = re.sub(r"\s+", "", label)
+    if "사업자" in guide_text or "법인" in guide_text:
+        number = normalized.get("사업자등록번호", "")
+        if re.fullmatch(r"\d{3}-?\d{2}-?\d{5}", number):
+            return normalized.get(key) or None
+        if number in {"해당없음", "없음", "미등록"} or any("예비창업" in normalized.get(k, "") for k in ("구분", "기업형태")):
+            return "해당없음"
+        return None
+    if "팀" in guide_text:
+        if any("개인" in normalized.get(k, "") for k in ("구분", "참가형태", "기업형태")):
+            return "해당없음"
+        if key in {"팀명", "팀원수"}:
+            return normalized.get(key) or None
+    return None
+
+
 def _is_hwpx_guidance_placeholder(text: str) -> bool:
     """값 칸 자체가 무엇을 쓰라는 짧은 안내뿐이면 빈칸으로 본다."""
     raw = re.sub(r"\s+", " ", str(text or "")).strip()
@@ -1053,6 +1080,7 @@ def _is_hwpx_guidance_placeholder(text: str) -> bool:
         _GUIDANCE_CONTACT_RE.fullmatch(raw)
         or _GUIDANCE_VALUE_RE.fullmatch(raw)
         or _GUIDANCE_PAREN_RE.fullmatch(raw)
+        or _GUIDANCE_CONDITIONAL_RE.fullmatch(raw)
     )
 
 _EXAMPLE_CHOICE_RE = re.compile(r"\s*/\s*")
@@ -1920,6 +1948,15 @@ def _fill_section_xml(
                         _note_unfilled_span(span_notes, lbl, target)
                         _hold_exact_label(exact_held, cell_key, want_key)
                         break
+                    guide_text = re.sub(r"\s+", " ", _cell_text(target)).strip()
+                    if _GUIDANCE_CONDITIONAL_RE.fullmatch(guide_text):
+                        conditional = _conditional_guidance_value(guide_text, _cell_text(tc), identity)
+                        if conditional is None:
+                            span_notes.append(f"[conditional] {_cell_text(tc)} UNDECIDED")
+                            table_used[tbl].add(want_key)
+                            _hold_exact_label(exact_held, cell_key, want_key)
+                            break
+                        val = conditional
                     if _set_cell_text(target, str(val), black, replace_scaffold=scaffold):
                         filled[lbl] = str(val)
                         used_keys.add(want_key)
@@ -3266,3 +3303,88 @@ def commit_t02_label_writes(
         report.ok = False
         return report
     return commit_exact_text_writes(src, dst, exact, source_sha256=index.source_sha256)
+
+
+def commit_guidance_value_writes(in_hwpx, out_hwpx, grants, values):
+    """All-or-nothing cell writes, reissued grants and outside-cell XML equality."""
+    import tempfile
+    from core.docx.services.hwpx_analysis_adapter import index_hwpx_structure
+    from core.docx.services.hwpx_protected_regions import (
+        guidance_value_authorization_is_current, record_authorization_is_current,
+    )
+    src, dst = Path(in_hwpx), Path(out_hwpx)
+    if _same_file(src, dst):
+        raise ValueError("원본 덮어쓰기 금지")
+    index = index_hwpx_structure(src)
+    planned = [(g, str(values.get(g, values.get(g.field_label, "")))) for g in grants]
+    planned = [(g, v) for g, v in planned if v.strip()]
+    for grant, value in planned:
+        current = record_authorization_is_current(index, grant) if grant.kind == "RECORD_VALUE" else guidance_value_authorization_is_current(index, grant)
+        if not current:
+            raise ValueError("STALE_CELL_AUTHORIZATION")
+        if re.search(r"생년|설립일|개시일|날짜|연월일|서명|날인|동의", grant.field_label) and value != "해당없음":
+            raise ValueError("UNCONFIRMED_DATE_OR_SIGNATURE")
+    with zipfile.ZipFile(src) as archive:
+        infos = archive.infolist()
+        data = {i.filename: archive.read(i.filename) for i in infos}
+    parser = etree.XMLParser(resolve_entities=False, no_network=True)
+    roots = {g.section_member: etree.fromstring(data[g.section_member], parser) for g, _ in planned}
+    before = {n: copy.deepcopy(r) for n, r in roots.items()}
+    header = etree.fromstring(data['Contents/header.xml'], parser) if 'Contents/header.xml' in data else None
+    black = _BlackCharPr(header)
+    changed = {}
+    for grant, value in planned:
+        table = index.tables[grant.table_index]
+        xml_table = list(roots[grant.section_member].iter(_q('tbl')))[table.table_index_in_section]
+        cell = _direct(_direct(xml_table, 'tr')[grant.physical_tr_index], 'tc')[grant.physical_tc_index]
+        sub = next(iter(_direct(cell, 'subList')), None)
+        if sub is None or not _direct(sub, 'p'):
+            raise ValueError('VALUE_PARAGRAPH_MISSING')
+        paragraphs = _direct(sub, 'p')
+        first = copy.deepcopy(paragraphs[0])
+        char = next(iter(first.iter(_q('run'))), None)
+        ref = black.black_ref(char.get('charPrIDRef', '0') if char is not None else '0')
+        for paragraph in paragraphs:
+            sub.remove(paragraph)
+        lines = value.splitlines() or [value]
+        lines += [""] * max(0, len(paragraphs) - len(lines))
+        for line in lines:
+            paragraph = etree.Element(_q('p'), **dict(first.attrib))
+            # Retain paragraph identity/style, but never stale line-layout cache.
+            paragraph.set('id', str(max([int(p.get('id','0')) for r in roots.values() for p in r.iter(_q('p')) if p.get('id','0').isdigit()] + [0]) + 1))
+            run = etree.SubElement(paragraph, _q('run'), charPrIDRef=ref)
+            etree.SubElement(run, _q('t')).text = line
+            sub.append(paragraph)
+        changed[grant.field_label] = value
+    # Mask only authorized cell paragraph content; cell geometry stays compared.
+    for name, root in roots.items():
+        old = before[name]
+        masked_new = copy.deepcopy(root)
+        for grant, _ in planned:
+            if grant.section_member != name:
+                continue
+            table = index.tables[grant.table_index]
+            for tree in (old, masked_new):
+                tb = list(tree.iter(_q('tbl')))[table.table_index_in_section]
+                tc = _direct(_direct(tb,'tr')[grant.physical_tr_index],'tc')[grant.physical_tc_index]
+                for sub in _direct(tc,'subList'):
+                    for paragraph in _direct(sub,'p'):
+                        sub.remove(paragraph)
+        if etree.tostring(old,method='c14n') != etree.tostring(masked_new,method='c14n'):
+            raise ValueError('OUTSIDE_CELL_XML_CHANGED')
+        data[name] = etree.tostring(root,xml_declaration=True,encoding='UTF-8',standalone=True)
+    if black.changed:
+        data['Contents/header.xml'] = etree.tostring(header,xml_declaration=True,encoding='UTF-8',standalone=True)
+    dst.parent.mkdir(parents=True,exist_ok=True)
+    fd, temporary = tempfile.mkstemp(dir=dst.parent,suffix='.hwpx'); os.close(fd)
+    try:
+        with zipfile.ZipFile(temporary,'w') as archive:
+            for info in sorted(infos,key=lambda i:i.filename != 'mimetype'):
+                if info.filename == 'mimetype':
+                    info.compress_type = zipfile.ZIP_STORED
+                archive.writestr(info,data[info.filename])
+        os.replace(temporary,dst)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+    return changed
