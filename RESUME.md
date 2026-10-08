@@ -2,9 +2,15 @@
 
 > 이 파일과 docs/SESSION_RECAP.md는 GitHub main의 공유 기록이다. TASK 우선순위·상태의 정본은 origin/main:TASK.md다.
 
-## 0. 현재 상태 — 2026-10-06
-- 이번 작업 시작 기준 main은 PR #213 병합 후 7f13ed03a237cc249e6eb1c4ff708a026c612555다. 제품 코드는 b0e8eed와 같고 회고·재개 문서는 공유되어 있다.
-- 사용자 실행 지시: 원격 TASK→RESUME 필수 확인 규칙과 최신 체크포인트를 문서 PR로 main에 먼저 반영하고, 그 최신 main에서 codex/round5-fill-fixes를 만들어 세 건 수정 후 draft PR까지만 진행한다. 현재 문서 반영 단계이며 Round-5 구현·테스트는 아직 시작하지 않았다.
+## 0. 현재 상태 — 2026-10-07
+- 최신 작업: `codex/engine-coverage-fixes`의 기존 미커밋 엔진 변경을 보존·검토하고 main 대상 draft PR로 공유한다. 기준 HEAD는 #216의 `2f630a6`, 원격 main은 `12b5095`. 병합하지 않는다. 아래 Round-5 검증 수치는 이전 작업 기록이다.
+- 독립 안전 QA PASS. 임의 빈칸 답안의 P14 보류 우회·제목 없는 구역 중복 진단 회귀·새 그림 문단 ID 중복을 최소 수정했다. 기존 테스트 수정 없음. 실제 양식·개인정보·로컬 증거는 커밋에서 제외한다.
+- 직접 영향 검증 66 passed. 지정 회귀 351 passed/2 skipped, 신규 합성 34 passed/실양식 1 skipped. 후속 실제 마포 양식 qualification은 합성 참고자료로 1 passed: 원본 4페이지→작성본 5페이지, 안내문 잔존 0, 이미지 1, PDF attempts=1, 원본 MD5와 사용자 Hwp PID 보존. 서약 내용이 2페이지로 나뉘는 레이아웃 위험은 기록했다. 전체 Windows pytest는 15%에서 `test_gate_faildraft_invariant.py::test_submission_pipeline_fail_doc_forces_draft` 중 한글 COM RPC fatal exception(0x800706ba)으로 종료되어 전체 합격은 미확인이다. 전체 요청 상태는 PARTIAL/REQUEST_SOLVED=NO. 상세: `docs/ENGINE_COVERAGE_FIXES.md`.
+- 다음: draft PR과 원격 브랜치를 확인한 뒤 후속 세션이 `codex/engine-full-pipeline` 기준을 선택한다. 이번 PR의 생성은 병합 승인이나 전체 실사용 합격을 뜻하지 않는다.
+- 문서 PR #215는 main에 병합됐다. main 기준 SHA는 12b5095f9fbeacb02257b3f169d5924f7fc947a2다. AGENTS.md·CLAUDE.md에 모든 위치에서 fetch 후 원격 TASK→RESUME 필수 확인을 명시했고, GitHub 공유판을 실제 조회했다.
+- 현재 codex/round5-fill-fixes는 위 main에서 생성했다. 현재 기간·병합 범위·양옆 라벨 경계와 괄호 실값 보호를 수정했다. 기간 보류는 인라인 동의어 경로에도 적용한다. 커밋: 8284b26(값 채움), 2cb684e8d3310411019656f015b3054451990a9f(PDF mock). 영향 회귀 89 passed/0 failed. 이 코드에서 전체 Windows pytest 1회: 2275 passed/0 failed/5 기존 skipped/23 subtests passed, exit 0. Draft PR #216(https://github.com/pds2225/auto_write/pull/216), main 미병합. 이후 변경은 검증 문서뿐이다.
+- 사용자가 이어가기를 확인했다. 검증용 한글 인스턴스는 모두 종료했고 원본 해시·기존 사용자 프로세스 보존 및 소유 프로세스 잔존 없음이 확인됐다.
+- 한글 2022 12.0.0.893에서 2026년 IP디딤돌 HWP 사본은 65.609초/2페이지, 2025년 HWPX 사본은 1.578초/2페이지, 변경 추적+문구 삽입 사본은 3.953초/3페이지로 기존 SaveAs[PDF] 성공. FileSaveAsPdf 대안도 추적 사본에서 성공했으나 기존 호출보다 빨라지지 않았다. 120초 타임아웃의 실제 원인은 미재현이며 PDF 코어·120초 제한은 수정하지 않았다. 사용자는 실패 파일 경로를 모른다고 답했다.
 - 개발 main 통합 요청은 완료됐다. PR #211·#212 병합, 제품 코드 검증 기준 b0e8eedebc16c6d878d76809b8eeafba0d43a50b. 당시 접근 가능한 14개 작업 위치의 HEAD·제품 코드 해시 일치를 확인했다.
 - 세션 마무리의 최신 개발 회고·재개 정보를 이제 원격 공유판으로 관리한다. 회고: [docs/SESSION_RECAP.md](docs/SESSION_RECAP.md). root SESSION_RECAP.md는 로컬 전체 회고이며 Git에서 제외되어 있다.
 - 아직 실제 한글 2022 DOCX Open 실패·소유 PID 미확인 시 COM hard timeout 한계가 남아 있다. AW-001 REQUEST_SOLVED=NO. Git 통합 성공을 실제 변환 성공으로 보고하지 않는다.
@@ -14,7 +20,7 @@
 
 ```powershell
 git status --short --branch
-git fetch origin
+git fetch origin --prune
 git show origin/main:TASK.md
 git show origin/main:RESUME.md
 git show origin/main:docs/SESSION_RECAP.md
@@ -29,9 +35,9 @@ git show origin/main:docs/SESSION_RECAP.md
 - 기존 stash 9개와 보존용 stash 4개, 브랜치 ref·원본 데이터·깨진 worktree 원문을 보존했다. 개발 감사·항목별 결과는 docs/MAIN_SYNC_20261006.md와 docs/PR211_ROUND4.md를 따른다.
 
 ## 3. 다음 액션
-1. AGENTS.md·CLAUDE.md의 모든 위치 작업 시작 순서를 원격 TASK→RESUME 필수 확인으로 고정하고 이 체크포인트와 함께 문서 PR을 자동병합한다. 원격 공유판을 실제 조회해 확인한다.
-2. 최신 main에서 Round-5: 종업원수 현재 연도/병합 열 선택·괄호 안내문 오탐 방지·한글 2022 PDF SaveAs 타임아웃을 수정한다. 과거 칸만 있거나 대응이 모호하면 기록 후 미기입. 실제 입력값·소유 PID 보호 유지. mock과 실제 PDF 결과를 구분한다.
-3. 영향 회귀와 요청한 전체 pytest 1회 후 새 헤드 SHA·통과/실패/기존 skip 수·항목별 한국어 결과를 draft PR 본문에도 기록한다. Round-5는 병합하지 않는다. 실제 한글 2022 Open 실패·소유 미확인 hard timeout 한계는 별도로 보존한다.
+1. 다른 위치에서는 원격 main의 TASK→RESUME를 먼저 읽은 뒤, PR #216의 codex/round5-fill-fixes 브랜치와 이 기록·docs/ROUND5_FILL_FIXES.md를 확인한다. 로컬 변경을 보존하고 자동 pull/reset/clean을 하지 않는다.
+2. PDF 타임아웃은 정확한 실패 입력 확보 후 한글 2022에서 재현해야 한다. 두 값 채움 수정과 PDF 미재현을 구분한다. Round-5 전체 요청은 PARTIAL/REQUEST_SOLVED=NO이며 main에 병합하지 않는다.
+3. 기존 실제 DOCX Open 실패·소유 미확인 hard timeout 한계와 L050 gap을 유지한다. 전체 pytest를 추가 재실행하지 않는다.
 
 ## 4. 유지할 제약
 - 추가 테스트는 꼭 필요할 때만 한다. 기존 성공 assertion·skip·소유권 보호를 약화하지 않는다. rhwp 기본 OFF, L050 gap 유지.
@@ -43,4 +49,6 @@ git show origin/main:docs/SESSION_RECAP.md
 - docs/SESSION_RECAP.md: 최신 개발 회고와 결정·남은 일.
 - docs/MAIN_SYNC_20261006.md: 개발 감사·검증 명령·동기화 대상·보존 기록.
 - docs/PR211_ROUND4.md: A~K 처리와 실사용 제한.
+- docs/ROUND5_FILL_FIXES.md: Round-5 항목별 수정·전체 테스트·실제 PDF 결과·남은 입력 제한.
 - 로컬 전용: D:\auto_write\_preflight_evidence\main-sync-20261005\, 독립 Round-4 복제본의 .round4-evidence/. 개인 체크포인트 원문도 로컬에서 보존하며 원격 공유판에 혼입하지 않는다.
+- Round-5 로컬 증거: D:\auto_write\_preflight_evidence\round5-20261006\ (문서 공유 조회 증거·영향 회귀 로그·실제 PDF 저장 기록). 이 폴더는 커밋하지 않는다.

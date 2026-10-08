@@ -83,8 +83,8 @@ def test_round4_profile_overview_fills_synthetic_hwpx(tmp_path, profile_key):
 @pytest.mark.parametrize("headers,expected", [
     (["(3년전)", "(2년전)", "전년", "현재"], 4),
     (["현재", "전년", "(2년전)", "(3년전)"], 1),
-    (["(3년전)", "(2년전)", "전년"], 3),
-    (["2023년", "2024년", "2025년"], 3),
+    (["(3년전)", "(2년전)", "전년"], None),
+    (["2023년", "2024년", "2025년"], None),
     (["(3년전)", "(2년전)", "(전년)", "(현재)"], 4),
 ])
 def test_round4_employee_count_only_in_current_period(tmp_path, headers, expected):
@@ -92,8 +92,15 @@ def test_round4_employee_count_only_in_current_period(tmp_path, headers, expecte
         '<hp:tr>' + _cell(0, 1, _run("종업원수")) + ''.join(_cell(i, 1, _run("")) for i in range(1,len(headers)+1)) + '</hp:tr>']
     src = _form(tmp_path, rows, columns=len(headers)+1)
     out = tmp_path / "out.hwpx"
-    fill_hwpx(src, out, identity={"직원수": "12명"})
+    report = fill_hwpx(src, out, identity={"직원수": "12명"})
     data = _tables(out)[0][1]
+    if expected is None:
+        # Round-5: 과거 값 칸에 현재 인원수를 쓰던 기대를 비훼손 검사로 강화한다.
+        assert _tables(out) == _tables(src)
+        assert report.filled == {}
+        assert all(value == "" for value in data[1:])
+        assert any("PAST_PERIOD_ONLY" in note for note in report.notes)
+        return
     assert data[expected] == "12명"
     assert [v for v in data[1:] if v] == ["12명"]
 
