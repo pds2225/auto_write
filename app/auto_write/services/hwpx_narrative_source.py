@@ -3,12 +3,13 @@ from __future__ import annotations
 import re
 from pathlib import Path
 from core.docx.services.hwpx_protected_regions import normalized_cell_label
+from auto_write.services.submit_finish.body_fill import heading_key, json_reference_inputs
 
 
 def reference_sections(refs, labels=()):
     from docx import Document
     sections = {}
-    allowed = {normalized_cell_label(label) for label in labels}
+    allowed = {heading_key(label) for label in labels}
     duplicates = set()
     for ref in refs:
         path = Path(ref if isinstance(ref,(str,Path)) else ref.saved_path)
@@ -21,9 +22,10 @@ def reference_sections(refs, labels=()):
             style = paragraph.style.name if paragraph.style else ''
             # Heading styles are a positive boundary. Short standalone lines are
             # accepted only when the following paragraph is ordinary body text.
-            heading = style.startswith('Heading') or style in {'Title','Subtitle'} or normalized_cell_label(text) in allowed
+            # F3: "1. 아이디어 제안배경"처럼 번호 붙은 제목도 같은 라벨로 본다(정확 일치 유지).
+            heading = style.startswith('Heading') or style in {'Title','Subtitle'} or heading_key(text) in allowed
             if heading:
-                current = normalized_cell_label(text)
+                current = heading_key(text)
                 if current in sections:
                     duplicates.add(current)
                 sections.setdefault(current, {'label':text,'body':[],'images':[]})
@@ -55,7 +57,14 @@ def direct_cell_plan(index, identity, refs, meta):
     from core.docx.services.hwpx_fill import _GUIDANCE_CONDITIONAL_RE, _conditional_guidance_value
     candidate_grants = authorize_guidance_value_writes(index)
     sections = reference_sections(refs, [g.field_label for g in candidate_grants])
+    # F3: 참고자료 JSON(회사 마스터·사업계획 데이터·반복표)도 입력으로 쓴다. 명시 identity 우선.
+    json_in = json_reference_inputs(refs)
+    identity = {**json_in['identity'], **{k:v for k,v in identity.items() if str(v).strip()}}
+    record_meta = {**json_in['records'], **(meta.get('hwpx_records') or {})}
     facts = {normalized_cell_label(k):str(v) for k,v in identity.items() if str(v).strip()}
+    for k,v in list(identity.items()):
+        if str(v).strip():
+            facts.setdefault(heading_key(k), str(v))
     representative = facts.get(normalized_cell_label('대표자'))
     team = facts.get(normalized_cell_label('팀명'))
     if representative and team:
@@ -72,8 +81,8 @@ def direct_cell_plan(index, identity, refs, meta):
                 continue
             notes.append(f'[conditional] {label} RESOLVED')
         elif grant.kind in {'GUIDANCE_VALUE','EMPTY_NARRATIVE'}:
-            section = sections.get(key)
-            value = '\n'.join(section['body']) if section else facts.get(key)
+            section = sections.get(heading_key(label))
+            value = '\n'.join(section['body']) if section else (facts.get(key) or facts.get(heading_key(label)))
             if not value:
                 notes.append(f'[narrative] {label} NO_SOURCE')
                 continue
@@ -97,11 +106,11 @@ def direct_cell_plan(index, identity, refs, meta):
     for grant in records:
         grouped.setdefault(grant.record_label,[]).append(grant)
     for label, targets in grouped.items():
-        provided = (meta.get('hwpx_records') or {}).get(label)
+        provided = record_meta.get(label)
         if provided is None:
             # Record label equivalence is explicit, restricted to a suffix.
             short = re.sub(r'\s*(?:등\s*)?보유현황$','',label).strip()
-            provided = (meta.get('hwpx_records') or {}).get(short)
+            provided = record_meta.get(short)
         if provided is None:
             raw = facts.get(normalized_cell_label(label)) or facts.get(normalized_cell_label(re.sub(r'\s*(?:등\s*)?보유현황$','',label)))
             if raw:
