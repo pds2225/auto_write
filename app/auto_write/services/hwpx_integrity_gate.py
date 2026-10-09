@@ -14,6 +14,7 @@ from typing import Any, Callable, Mapping
 
 from .hwpx_acceptance import run_hwpx_acceptance
 from .hwpx_layout_fix import check_hwpx_semantics
+from .hwpx_template_survival import compare_hwpx_template_survival
 
 PASS = "PASS"
 WARNING = "WARNING"
@@ -217,6 +218,8 @@ def _run_structural_validator(
 def _run_render_validator(
     path: str,
     validator: Callable[[str], Any] | None,
+    *,
+    require_evidence: bool = False,
 ) -> ValidatorResult | None:
     """선택적으로 렌더링 validator를 실행한다.
 
@@ -225,7 +228,16 @@ def _run_render_validator(
     제공된 렌더 validator의 실행 실패는 REVIEW_REQUIRED로 집계한다.
     """
     if validator is None:
-        return None
+        if not require_evidence:
+            return None
+        return ValidatorResult(
+            source_validator="rendering_validator",
+            validator_status=UNAVAILABLE,
+            severity=REVIEW_REQUIRED,
+            message="최종 HWPX 재열기·렌더·시각검수 증거가 필요하지만 validator가 연결되지 않았습니다.",
+            defect_code="RENDER_EVIDENCE_REQUIRED",
+            evidence={"required": True, "environment": _environment()},
+        )
     try:
         payload = validator(path)
     except TimeoutError as exc:
@@ -279,6 +291,22 @@ def _run_render_validator(
                 defect_code="RENDER_CLAIM_WITHOUT_TOOL",
                 evidence={"report": data},
             )
+        if require_evidence:
+            return ValidatorResult(
+                source_validator="rendering_validator",
+                validator_status=("NOT_RUN" if render_status == "NOT_RUN" else UNAVAILABLE),
+                severity=REVIEW_REQUIRED,
+                message=str(
+                    data.get("message")
+                    or "최종 HWPX 재열기·렌더 증거가 없어 FINAL 판정을 보류합니다."
+                ),
+                defect_code=(
+                    "RENDER_NOT_RUN_REQUIRED"
+                    if render_status == "NOT_RUN"
+                    else "RENDER_UNAVAILABLE_REQUIRED"
+                ),
+                evidence={"report": data, "required": True},
+            )
         if render_status == "NOT_RUN":
             return ValidatorResult(
                 source_validator="rendering_validator",
@@ -296,6 +324,30 @@ def _run_render_validator(
             defect_code="RHWP_ABSENT",
             evidence={"report": data},
         )
+    if require_evidence:
+        reopen_status = str(data.get("reopen_status") or "")
+        visual_review = str(data.get("visual_review") or "")
+        candidate_sha = str(data.get("candidate_sha256") or "")
+        render_sha = str(data.get("render_source_sha256") or "")
+        evidence_complete = (
+            render_status == "PASS"
+            and reopen_status == "PASS"
+            and visual_review == "PASS"
+            and bool(candidate_sha)
+            and candidate_sha == render_sha
+        )
+        if not evidence_complete:
+            return ValidatorResult(
+                source_validator="rendering_validator",
+                validator_status=EXECUTED,
+                severity=REVIEW_REQUIRED,
+                message=(
+                    "최종 HWPX는 재열기·전체 렌더·시각검수·candidate/render hash "
+                    "증거가 모두 PASS여야 합니다."
+                ),
+                defect_code="RENDER_EVIDENCE_INCOMPLETE",
+                evidence={"report": data, "required": True},
+            )
     ok = bool(data.get("ok"))
     severity = data.get("severity") if data.get("severity") in _SEVERITY_RANK else (PASS if ok else REVIEW_REQUIRED)
     return ValidatorResult(
@@ -317,6 +369,9 @@ def run_hwpx_integrity_gate(
     render_validator: Callable[[str], Any] | None = None,
     fixed_cell_overflow: list[str] | tuple[str, ...] = (),
     acceptance_baseline: str | None = None,
+    template_survival_baseline: str | None = None,
+    require_protected_anchors: bool = True,
+    require_render_evidence: bool = False,
 ) -> IntegrityGateReport:
     """HWPX 구조·수용검사를 공통 계약으로 실행하고 severity를 집계한다.
 
@@ -328,6 +383,11 @@ def run_hwpx_integrity_gate(
     유색·안내문구·미편집 문단의 linesegarray 는 결함이 아니다. 생략하면 산출물
     절대 개수(기존 계약)이고, baseline 인자를 받지 않는 커스텀 validator 에는
     넘기지 않는다.
+
+    ``template_survival_baseline`` 은 원본의 section/table/row/cell/병합/폼컨트롤
+    감소와 보호 앵커 소실을 HARD_FAIL로 막는다. ``require_render_evidence`` 가 True면
+    재열기·전체 렌더·시각검수·candidate/render hash가 모두 PASS가 아니면 FINAL을
+    허용하지 않는다.
     """
     report = IntegrityGateReport(source=str(path))
     report.validators.append(
@@ -344,6 +404,16 @@ def run_hwpx_integrity_gate(
             **acceptance_kwargs,
         )
     )
+    if template_survival_baseline:
+        report.validators.append(
+            _run_structural_validator(
+                "template_survival",
+                compare_hwpx_template_survival,
+                template_survival_baseline,
+                path,
+                require_protected_anchors=require_protected_anchors,
+            )
+        )
     if fixed_cell_overflow:
         report.validators.append(
             ValidatorResult(
@@ -359,7 +429,11 @@ def run_hwpx_integrity_gate(
                 },
             )
         )
-    rendered = _run_render_validator(path, render_validator)
+    rendered = _run_render_validator(
+        path,
+        render_validator,
+        require_evidence=require_render_evidence,
+    )
     if rendered is not None:
         report.validators.append(rendered)
     return report

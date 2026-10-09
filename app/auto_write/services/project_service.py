@@ -1259,6 +1259,8 @@ class ProjectService:
                 normalize_colors=False,
                 submission_cleanup=False,
                 preserve_template=True,
+                require_render_evidence=True,
+                template_survival_baseline=source,
                 field_writes=field_writes or None,
                 expected_sha256=expected_sha,
             )
