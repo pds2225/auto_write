@@ -2,6 +2,11 @@
 
 > 이 파일과 docs/SESSION_RECAP.md는 GitHub main의 공유 기록이다. TASK 우선순위·상태의 정본은 origin/main:TASK.md다.
 
+## 로컬 자동화 체크포인트 — 2026-10-12
+- `automation-2` 일일 브리핑을 읽기 전용으로 실행 중이다. 오늘·향후 3일 캘린더, 2026-10-09 08:01 KST 이후 중요 미확인 메일, `D:\v_up\worklog`의 오늘 할 일을 수집한다.
+- 메일 읽음 처리·회신·발송, 캘린더·할 일 수정, 계정·결제·보안 설정 변경은 하지 않는다. 개인 브리핑 내용은 공개 Git 기록에 올리지 않는다.
+- 다음: 수집 결과를 구조화해 `D:\v_up\worklog\briefings\2026-10-12.md`로 저장하고, 우선순위·마감·즉시 행동을 사용자에게 보고한다.
+
 ## 0. 현재 상태 — 2026-10-06
 - 2026-10-07 #217 Mimo QA BLOCKER: engine-coverage-fixes에서 PDF 재시도의 최종 reason에 이전 timeout/SaveAs 원인을 보존하는 3줄 최소 수정. 지정 L005/L050·COM 보호 회귀 24 passed. 전체 pytest 실행 중. 기존 assert 변경 없음. 다음: 전체 결과 확인 후 해당 코드만 같은 브랜치 commit/push, merge 금지.
 - 2026-10-07 별도 #217 COM 표적 검증: engine-coverage-fixes(f567336)에서 중단 케이스 3 passed/18.77초/exit 0, mock 보호 회귀 6 passed. RPC 0x800706ba 재발로 실제 변환 성공은 미확인. 제품/원본/#218 수정 및 병합 없음. 상세는 해당 워크트리 docs/ENGINE_COVERAGE_FIXES.md §7. 다음은 실제 COM 장애 별도 해결; 전체 suite 반복 금지.
