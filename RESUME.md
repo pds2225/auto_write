@@ -2,6 +2,12 @@
 
 > 이 파일과 docs/SESSION_RECAP.md는 GitHub main의 공유 기록이다. TASK 우선순위·상태의 정본은 origin/main:TASK.md다.
 
+## 0-A. 진행 중 — 제출 마감 기능 7종 (2026-10-11, 브랜치 claude/submit-finish, 기준 main 1f0afef)
+- 위치: `D:\auto_write\.worktrees\submit-finish`, 코드는 `app/auto_write/services/submit_finish/`. Draft PR 대상(병합 금지).
+- 완료(합성 데이터 단위·통합 테스트): F1 직인(팀원은 사용자 승인 시에만)·F2 체크박스·F3 본문·F4 이미지·F5 첨부 가림·F6 PDF 변환/합본/파일명·F7 구조검증/Visual QA/보고서, 그리고 `pipeline.py` 오케스트레이터 + `pdf_checks.py` PDF 레이아웃 검사(결함 주입 테스트 포함). submit_finish 테스트 71 passed.
+- 남음(사용자 환경 필요): 마포 실양식 E2E(`AUTO_WRITE_MAPO_FORM`·`AUTO_WRITE_E2E_OUT` 환경변수, 현재 stage1 채움까지만 테스트화), G밸리 양식 검증, 실제 한글 COM PDF 변환, 실제 AI provider 시각 검수.
+- 미검증: 실제 COM, 실제 AI provider 호출, 실제 초본 OCR 정확도. 마포 `fill.py` 는 저장소에 없음. 전체 pytest 결과는 PR 본문에 기록.
+
 ## 0. 현재 상태 — 2026-10-07
 - 최신 작업: `codex/engine-coverage-fixes`의 기존 미커밋 엔진 변경을 보존·검토하고 main 대상 draft PR로 공유한다. 기준 HEAD는 #216의 `2f630a6`, 원격 main은 `12b5095`. 병합하지 않는다. 아래 Round-5 검증 수치는 이전 작업 기록이다.
 - 독립 안전 QA PASS. 임의 빈칸 답안의 P14 보류 우회·제목 없는 구역 중복 진단 회귀·새 그림 문단 ID 중복을 최소 수정했다. 기존 테스트 수정 없음. 실제 양식·개인정보·로컬 증거는 커밋에서 제외한다.
