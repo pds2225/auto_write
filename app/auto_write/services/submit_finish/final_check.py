@@ -35,6 +35,7 @@ def check_hwpx_structure(
     *,
     baseline_form: str | Path | None = None,
     allowed_names: tuple[str, ...] = (),
+    expected_phrase_edits: int = 0,
 ) -> list[Finding]:
     """HWPX 구조·수용검사(R9 보호영역·무결성 포함 게이트)와 양식 생존 비교를 실행한다."""
     from auto_write.services.hwpx_integrity_gate import EXECUTED, run_hwpx_integrity_gate
@@ -64,10 +65,20 @@ def check_hwpx_structure(
             from auto_write.services.hwpx_form_diff import compare_hwpx_forms
 
             diff = compare_hwpx_forms(baseline_form, hwpx)
-            st = Status.PASS if diff.form_intact else Status.FAIL
-            findings.append(_mk("FORM_INTACT", st,
-                                "자동 검사 PASS: 원본 양식 구조 유지" if diff.form_intact else "구조 검사 FAIL: 원본 양식 구조 변경",
-                                str(diff.structure_deltas) if not diff.form_intact else ""))
+            edits = getattr(diff, "form_phrase_edits", 0)
+            only_expected_edits = (not diff.form_intact and not diff.structure_deltas
+                                   and not getattr(diff, "form_phrase_drops", 0)
+                                   and 0 < edits <= expected_phrase_edits)
+            if diff.form_intact:
+                findings.append(_mk("FORM_INTACT", Status.PASS, "자동 검사 PASS: 원본 양식 구조 유지"))
+            elif only_expected_edits:
+                # 이름 기입 등 우리가 의도해 넣은 값 때문에 양식 문구가 바뀐 경우: 건수가 일치할 때만 확인 요청으로 낮춘다.
+                findings.append(_mk("FORM_INTACT", Status.REVIEW,
+                                    f"사용자 확인 필요: 값 기입으로 양식 문구 {edits}건 변경(구조 변화 없음, 삭제 없음)",
+                                    f"기대 변경 {expected_phrase_edits}건 이내"))
+            else:
+                findings.append(_mk("FORM_INTACT", Status.FAIL, "구조 검사 FAIL: 원본 양식 구조 변경",
+                                    f"deltas={diff.structure_deltas} edits={edits}"))
         except Exception as exc:
             findings.append(_mk("FORM_INTACT", Status.UNVERIFIED, "기술적 검증 미실행", f"{type(exc).__name__}: {exc}"))
     return findings

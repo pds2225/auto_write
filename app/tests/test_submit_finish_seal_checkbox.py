@@ -317,3 +317,141 @@ def test_member_seal_only_when_user_approved(seal_doc, tmp_path: Path) -> None:
     assert f.meta["target"] == "김철수" and f.meta["source"] == "user"
     # 박영수 칸은 여전히 REVIEW (다른 팀원 승인으로 추정 금지)
     assert "F1_SEAL_OTHER_PARTY" in [x.code for x in r1["findings"]]
+
+
+# ── F1 슬롯 라벨 바인딩(동의서 하단: 한 표 칸 안에 대표+팀원1~4 서명 줄) ─────────
+_GAP = " " * 19
+
+
+@pytest.fixture()
+def consent_doc(tmp_path: Path) -> tuple[Path, dict[str, Path]]:
+    cell = [
+        _p("본인은 팀원 및 신청자의 개인정보 수집·이용에 동의합니다."),
+        _p("                 신청자(팀 대표) 성명  :" + _GAP + "(서명/인)"),
+        *[_p(f"팀원{i}" + _GAP + "(서명/인)") for i in range(1, 5)],
+    ]
+    src = tmp_path / "consent.hwpx"
+    _write_hwpx(src, _tbl([[cell]]))
+    imgs: dict[str, Path] = {}
+    for i, (who, size) in enumerate([("가대표", (300, 300)), ("나팀원", (400, 200)),
+                                     ("다팀원", (200, 400)), ("라팀원", (300, 150))]):
+        imgs[who] = tmp_path / f"seal_{i}.png"
+        Image.new("RGBA", size, (200, 0, i * 40, 255)).save(imgs[who])
+    return src, imgs
+
+
+def _bind_specs(imgs: dict[str, Path], approved: bool = True) -> list[SealSpec]:
+    labels = {"가대표": "신청자(팀 대표) 성명", "나팀원": "팀원1", "다팀원": "팀원2", "라팀원": "팀원3"}
+    return [SealSpec(owner=who, image=imgs[who], source="user", width_mm=15,
+                     user_approved=approved, slot_label=labels[who]) for who in labels]
+
+
+def _para_texts(path: Path) -> list[str]:
+    return ["".join(t.text or "" for t in p.iter(f"{{{_HP}}}t"))
+            for p in _section(path).iter(f"{{{_HP}}}p") if "(서명/인)" in "".join(
+                t.text or "" for t in p.iter(f"{{{_HP}}}t")) and p.find(f".//{{{_HP}}}tbl") is None]
+
+
+def test_rep_line_role_and_labels(consent_doc) -> None:
+    src, _ = consent_doc
+    slots = find_seal_slots(src)
+    assert [s.label for s in slots] == ["신청자(팀대표)성명", "팀원1", "팀원2", "팀원3", "팀원4"]
+    assert [s.role for s in slots] == ["representative"] + ["member"] * 4   # ① 대표 줄 인식
+    assert all("label" in s.to_dict() for s in slots)
+
+
+def test_slot_label_binding_stamps_bound_lines_only(consent_doc, tmp_path: Path) -> None:
+    src, imgs = consent_doc
+    before = src.read_bytes()
+    out = tmp_path / "out.hwpx"
+    report = stamp_seals(src, out, _bind_specs(imgs))
+    assert report["inserted"] == 4                                         # ② 대표+팀원1~3
+    assert src.read_bytes() == before
+    ins = {f.meta["label"]: f for f in report["findings"] if f.code == "F1_SEAL_INSERTED"}
+    assert {k: v.meta["target"] for k, v in ins.items()} == {
+        "신청자(팀대표)성명": "가대표", "팀원1": "나팀원", "팀원2": "다팀원", "팀원3": "라팀원"}
+    assert all(f.meta["binding"] == "slot_label" and f.meta["source"] == "user" for f in ins.values())
+    review = [f for f in report["findings"] if f.status is Status.REVIEW]
+    assert [f.meta["label"] for f in review] == ["팀원4"]                    # 팀원4 미삽입
+    # 각 그림은 자기 줄(문단)에 붙고, 서로 다른 BinData 4개
+    paras = {}
+    for pic in _pics(out):
+        p = pic.getparent().getparent()
+        paras["".join(t.text or "" for t in p.iter(f"{{{_HP}}}t"))] = pic
+    assert len(paras) == 4 and not any(k.startswith("팀원4") for k in paras)
+    with zipfile.ZipFile(out) as archive:
+        assert archive.testzip() is None
+        assert len([n for n in archive.namelist() if n.startswith("BinData/")]) == 4
+
+
+def test_binding_ignored_without_approval(consent_doc, tmp_path: Path) -> None:
+    src, imgs = consent_doc
+    report = stamp_seals(src, tmp_path / "o.hwpx", _bind_specs(imgs, approved=False))
+    assert report["inserted"] == 0                                         # ③ 승인 없음 → 무시
+    assert all(f.status is Status.REVIEW for f in report["findings"])
+    assert not any(f.meta.get("binding") for f in report["findings"])
+
+
+def test_partial_label_does_not_bind(consent_doc, tmp_path: Path) -> None:
+    src, imgs = consent_doc
+    spec = SealSpec(owner="나팀원", image=imgs["나팀원"], source="user", user_approved=True, slot_label="팀원")
+    report = stamp_seals(src, tmp_path / "o.hwpx", [spec])
+    assert report["inserted"] == 0                                         # ④ 부분일치 금지
+    assert len(_pics(tmp_path / "o.hwpx")) == 0
+
+
+def test_two_specs_same_slot_review(consent_doc, tmp_path: Path) -> None:
+    src, imgs = consent_doc
+    specs = [SealSpec(owner="나팀원", image=imgs["나팀원"], user_approved=True, slot_label="팀원1"),
+             SealSpec(owner="다팀원", image=imgs["다팀원"], user_approved=True, slot_label="팀원 1")]
+    report = stamp_seals(src, tmp_path / "o.hwpx", specs)
+    assert report["inserted"] == 0                                         # ⑤ 같은 줄 2개 → REVIEW
+    conflict = [f for f in report["findings"] if f.code == "F1_SEAL_BINDING_CONFLICT"]
+    assert len(conflict) == 1 and conflict[0].status is Status.REVIEW
+    assert sorted(conflict[0].meta["candidates"]) == ["나팀원", "다팀원"]
+
+
+def test_write_names_once_and_idempotent(consent_doc, tmp_path: Path) -> None:
+    src, imgs = consent_doc
+    first, second = tmp_path / "a.hwpx", tmp_path / "b.hwpx"
+    r1 = stamp_seals(src, first, _bind_specs(imgs), write_names=True)
+    texts = _para_texts(first)
+    width = len("팀원1" + _GAP + "(서명/인)")
+    assert texts[0].count("가대표") == 1 and texts[0].index("가대표") < texts[0].index("(서명/인)")
+    assert texts[0].startswith("                 신청자(팀 대표) 성명  :")   # 라벨 보존
+    for i, who in enumerate(["나팀원", "다팀원", "라팀원"], start=1):
+        assert texts[i].startswith(f"팀원{i}  {who} ") and texts[i].endswith("(서명/인)")
+        assert texts[i].count(who) == 1
+        assert len(texts[i]) == width - 3                                  # 공백을 이름 폭만큼 줄임
+    assert texts[4] == "팀원4" + _GAP + "(서명/인)"                          # 미바인딩 줄 그대로
+    assert sum(1 for f in r1["findings"] if f.meta.get("name_written")) == 4
+    r2 = stamp_seals(first, second, _bind_specs(imgs), write_names=True)   # ⑥ 재실행
+    assert _para_texts(second) == texts                                    # 이름 중복 0
+    assert r2["inserted"] == 0                                             # ⑦ 직인 중복 0
+    assert [f.code for f in r2["findings"]].count("F1_SEAL_PRESENT") == 4
+    assert len(_pics(second)) == 4
+    assert all(f.meta.get("name_written") is False for f in r2["findings"] if f.code == "F1_SEAL_PRESENT")
+    with zipfile.ZipFile(second) as archive:
+        assert len([n for n in archive.namelist() if n.startswith("BinData/")]) == 4
+    assert not list(_section(first).iter(f"{{{_HP}}}linesegarray"))
+
+
+def test_write_names_off_by_default(consent_doc, tmp_path: Path) -> None:
+    src, imgs = consent_doc
+    out = tmp_path / "o.hwpx"
+    stamp_seals(src, out, _bind_specs(imgs))
+    assert _para_texts(out)[1] == "팀원1" + _GAP + "(서명/인)"
+
+
+def test_bound_seal_aspect_ratio(consent_doc, tmp_path: Path) -> None:
+    src, imgs = consent_doc
+    out = tmp_path / "o.hwpx"
+    stamp_seals(src, out, _bind_specs(imgs))
+    ratios = sorted(round(int(p.find(f"{{{_HP}}}sz").get("width")) / int(p.find(f"{{{_HP}}}sz").get("height")), 2)
+                    for p in _pics(out))
+    assert ratios == [0.5, 1.0, 2.0, 2.0]                                  # ⑧ 가로·세로 비율 보존
+    for pic in _pics(out):
+        assert pic.get("textWrap") == "IN_FRONT_OF_TEXT"
+        pos = pic.find(f"{{{_HP}}}pos")
+        assert pos.get("treatAsChar") == "0"
+        assert int(pos.get("vertOffset")) >= 0 and int(pos.get("horzOffset")) >= 0

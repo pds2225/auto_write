@@ -39,7 +39,7 @@ from auto_write.services.hwpx_pic_insert import (
     minimal_picture_template,
     picture_display_wh,
 )
-from core.docx.services.hwpx_fill import _local, _q, _strip_linesegarray, _tc_of
+from core.docx.services.hwpx_fill import _local, _q, _splice_run_text, _strip_linesegarray, _tc_of
 
 from .hwpx_xml import (
     HPF_NAME,
@@ -72,7 +72,12 @@ _ROLE_TOKENS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("representative", ("대표자", "대표이사", "대표")),
     ("applicant", ("신청인", "신청자", "제출자", "본인", "서약자", "확인인")),
 )
+# 마커 문단 '자체' 글자로 역할을 먼저 정한다(표 한 칸에 서명 줄이 여러 개 있는 동의서 대비).
+# 팀원N 은 member 를 유지하고, 아래 표기는 대표 줄로 본다.
+_OWN_MEMBER_TOKENS = ("팀원", "참여인력", "참여연구원", "구성원", "공동대표")
+_OWN_REP_TOKENS = ("신청자(팀대표)", "(팀대표)", "팀대표", "대표자", "신청자")
 _ALLOWED_ROLES = {"representative", "applicant", "unknown"}
+_BINDABLE_ROLES = {"member", "representative", "applicant", "unknown"}  # 명시 바인딩 허용 역할
 _TAG_PREFIX = "AW_SEAL:"
 _DEFAULT_WIDTH_MM = {"seal": 15.0, "signature": 18.0}
 
@@ -95,6 +100,9 @@ class SealSpec:
     # 사용자가 이 소유자(팀원)의 도장 사용을 명시 승인했을 때만 True. 기본 False 이면 팀원 칸은 REVIEW.
     # 기관·확인자(third_party) 칸은 이 값과 무관하게 자동 기입하지 않는다.
     user_approved: bool = False
+    # 사용자가 "이 도장은 이 줄"이라고 지정한 슬롯 라벨(예: '팀원1'). user_approved=True 일 때만 쓰며,
+    # 슬롯 label 과 정규화 후 정확히 같아야 한다(부분일치 금지). 지정된 spec 은 이름 문맥 매칭에서 빠진다.
+    slot_label: str | None = None
 
     @property
     def key(self) -> str:
@@ -115,18 +123,35 @@ class SealSlot:
     role: str  # representative | applicant | member | third_party | unknown
     has_picture: bool = False
     existing_tag: str = ""
+    label: str = ""  # 마커 문단에서 마커·공백·콜론을 뺀 앞부분(정규화). 예: '신청자(팀대표)성명', '팀원1'
     _anchor: Any = field(default=None, repr=False, compare=False)  # hp:p 또는 hp:tc
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "slot_id": self.slot_id, "section": self.section, "kind": self.kind,
             "cell": self.cell, "marker_text": self.marker_text, "near_text": self.near_text,
-            "role": self.role, "has_picture": self.has_picture,
+            "role": self.role, "has_picture": self.has_picture, "label": self.label,
         }
 
 
 def _compact(text: str) -> str:
     return re.sub(r"\s+", "", text or "")
+
+
+def _norm_label(text: str) -> str:
+    """라벨 정규화: 공백·콜론 제거, 전각 괄호를 반각으로."""
+    out = _compact(text).replace("（", "(").replace("）", ")")
+    return re.sub(r"[:：]", "", out)
+
+
+def _own_role(text: str) -> str | None:
+    """마커 문단 자체 글자(마커 제외)로 정한 역할. 근거가 없으면 None."""
+    own = _norm_label(_SEAL_MARKER_RE.sub("", text))
+    if any(token in own for token in _OWN_MEMBER_TOKENS):
+        return "member"
+    if any(token in own for token in _OWN_REP_TOKENS):
+        return "representative"
+    return None
 
 
 def _role_of(text: str) -> str:
@@ -192,6 +217,15 @@ def _slot_state(anchor) -> tuple[bool, str]:
     return bool(pics), (tags[0] if tags else "")
 
 
+def _marker_state(p, tc) -> tuple[bool, str]:
+    """표 칸 안 마커 문단의 상태. 같은 칸의 다른 서명 줄에 붙은 우리 직인(AW_SEAL)은 남의 것이라
+    무시하고, 표식 없는 기존 그림이 칸에 있으면 그대로 '그림 있음'으로 본다(덮어쓰기 방지)."""
+    has_pic, tag = _slot_state(p)
+    if tc is not None and any(not _seal_tag(pic) for pic in _pics_under(tc)):
+        has_pic = True
+    return has_pic, tag
+
+
 def _scan_section(sec_name: str, root) -> list[SealSlot]:
     slots: list[SealSlot] = []
     paragraphs = list(root.iter(_q("p")))
@@ -226,11 +260,12 @@ def _scan_section(sec_name: str, root) -> list[SealSlot]:
                     near = prev[0] + " " + text
             context = near
             addr = None
-        has_pic, tag = _slot_state(p if tc is None else tc)
+        has_pic, tag = _marker_state(p, tc)
         slots.append(SealSlot(
             slot_id=f"{sec_name}#p{order}", section=sec_name, kind="marker", cell=addr,
-            marker_text=match.group(0), near_text=near.strip(), role=_role_of(context),
-            has_picture=has_pic, existing_tag=tag, _anchor=p,
+            marker_text=match.group(0), near_text=near.strip(),
+            role=_own_role(text) or _role_of(context),
+            has_picture=has_pic, existing_tag=tag, label=_norm_label(text[:match.start()]), _anchor=p,
         ))
     # (2) '서명' 라벨 칸 → 오른쪽 빈칸(가로형) 또는 같은 열 아래 칸들(세로형)
     for tbl_order, tbl in enumerate(root.iter(_q("tbl"))):
@@ -329,14 +364,64 @@ def _append_to_paragraph(p, pic) -> None:
     _strip_linesegarray(p, only_under=[p])
 
 
+def _label_bound(slot: SealSlot, spec: SealSpec) -> bool:
+    """명시 바인딩 판정: 정규화 라벨 정확 일치(부분일치 금지).
+    이름을 이미 써 넣은 줄('팀원1 홍길동')은 라벨+소유자 이름과 정확히 같을 때만 같은 줄로 본다(재실행 멱등)."""
+    want = _norm_label(spec.slot_label or "")
+    if not (spec.user_approved and want and slot.label):
+        return False
+    return slot.label in (want, want + _norm_label(spec.owner))
+
+
+def _text_width(text: str) -> int:
+    """공백 칸 수로 본 글자 폭 — 한글·한자 등 전각은 2칸, 그 외 1칸."""
+    return sum(2 if ord(ch) >= 0x2E80 else 1 for ch in text)
+
+
+def _write_owner_name(p, owner: str) -> tuple[bool, str]:
+    """마커 앞 빈 공백 구간에 소유자 이름을 넣는다. 공백은 이름 폭만큼 줄여 한 줄을 유지한다.
+
+    반환: (썼는지, 사유) — 사유: written | already | other_name | no_room | no_marker | cross_run
+    """
+    name = (owner or "").strip()
+    flat = paragraph_text(p)
+    match = _SEAL_MARKER_RE.search(flat)
+    if match is None or not name:
+        return False, "no_marker"
+    prefix = flat[:match.start()]
+    if _compact(name) in _compact(prefix):
+        return False, "already"
+    colon = max(prefix.rfind(":"), prefix.rfind("："))
+    if colon >= 0:
+        if prefix[colon + 1:].strip():
+            return False, "other_name"
+        start, lead = colon + 1, 1
+    else:
+        head = prefix.strip()
+        if re.search(r"\s{2,}\S", head):  # '팀원1  홍길동' 처럼 라벨 뒤에 이미 다른 글자가 있음
+            return False, "other_name"
+        start, lead = len(prefix.rstrip()), 2
+    gap = len(prefix) - start
+    width = _text_width(name)
+    if gap < width + lead + 1:
+        return False, "no_room"
+    new = " " * lead + name + " " * (gap - width - lead)
+    if not _splice_run_text(p, start, match.start(), new):
+        return False, "cross_run"
+    _strip_linesegarray(p, only_under=[p])
+    return True, "written"
+
+
 def _mm(hwpunit: int) -> float:
     return round(hwpunit / _HWPUNIT_PER_MM, 1)
 
 
-def stamp_seals(in_hwpx, out_hwpx, seals: list[SealSpec], *, slots: list[str] | None = None) -> dict[str, Any]:
+def stamp_seals(in_hwpx, out_hwpx, seals: list[SealSpec], *, slots: list[str] | None = None,
+                write_names: bool = False) -> dict[str, Any]:
     """소유자가 일치하는 자리에만 직인을 넣어 out_hwpx 로 저장한다(원본 미수정).
 
     slots: 특정 slot_id 만 대상으로 제한(없으면 전체 후보).
+    write_names: True 면 slot_label 바인딩으로 넣은 마커 줄에 이름이 비어 있을 때 소유자 이름도 기입.
     반환: {"output": 경로, "inserted": 삽입 수, "slots": [...], "findings": [Finding]}
     """
     assert_not_same(in_hwpx, out_hwpx)
@@ -356,9 +441,21 @@ def stamp_seals(in_hwpx, out_hwpx, seals: list[SealSpec], *, slots: list[str] | 
     all_slots: list[SealSlot] = []
     inserted = 0
 
-    for name in section_names(data):
-        root = parse_xml(data[name])
-        section_slots = _scan_section(name, root)
+    # 명시 바인딩(user_approved + slot_label) spec 은 이름 문맥 매칭에서 뺀다.
+    bound_specs = [s for s in seals if s.user_approved and _norm_label(s.slot_label or "")]
+    name_specs = [s for s in seals if s not in bound_specs]
+    roots = {name: parse_xml(data[name]) for name in section_names(data)}
+    scanned = {name: _scan_section(name, root) for name, root in roots.items()}
+    # 한 spec 이 여러 줄에 걸리면(같은 라벨 중복) 어느 줄인지 모호 → 그 spec 은 REVIEW
+    spec_hits: dict[int, int] = {}
+    for section_slots in scanned.values():
+        for slot in section_slots:
+            for spec in bound_specs:
+                if _label_bound(slot, spec):
+                    spec_hits[id(spec)] = spec_hits.get(id(spec), 0) + 1
+
+    for name, root in roots.items():
+        section_slots = scanned[name]
         all_slots.extend(section_slots)
         changed = False
         next_id = _unique_ids(root)
@@ -366,26 +463,48 @@ def stamp_seals(in_hwpx, out_hwpx, seals: list[SealSpec], *, slots: list[str] | 
             if slots is not None and slot.slot_id not in slots:
                 continue
             meta: dict[str, Any] = {"slot_id": slot.slot_id, "role": slot.role, "cell": slot.cell,
-                                    "kind": slot.kind, "inserted": False}
-            hits = _owner_hits(slot, seals)
+                                    "kind": slot.kind, "label": slot.label, "inserted": False}
             evidence = f"{slot.slot_id} role={slot.role}"
-            approved_member = (slot.role == "member" and len(hits) == 1 and hits[0].user_approved)
-            if slot.role not in _ALLOWED_ROLES and not approved_member:
-                findings.append(Finding("F1_SEAL_OTHER_PARTY", Status.REVIEW,
-                                        "팀원·제3자·기관 서명란 — 자동 기입 안 함, 사용자 확인 필요",
-                                        source="engine", evidence=evidence, meta=meta))
-                continue
-            if len(hits) != 1:
-                reason = "소유자 불명" if not hits else "소유자 후보 여러 명"
-                findings.append(Finding("F1_SEAL_OWNER_UNKNOWN", Status.REVIEW,
-                                        f"{reason} — 자동 기입 안 함, 사용자 확인 필요",
-                                        source="engine", evidence=evidence, meta=meta))
-                continue
-            spec = hits[0]
+            bound = [s for s in bound_specs if _label_bound(slot, s)]
+            if bound:
+                meta["binding"] = "slot_label"
+                if len(bound) > 1 or spec_hits.get(id(bound[0]), 0) > 1:
+                    meta["candidates"] = [s.owner for s in bound]
+                    findings.append(Finding("F1_SEAL_BINDING_CONFLICT", Status.REVIEW,
+                                            "같은 서명 줄에 도장 지정이 겹침(또는 같은 라벨 줄이 여러 개) "
+                                            "— 자동 기입 안 함, 사용자 확인 필요",
+                                            source="engine", evidence=evidence, meta=meta))
+                    continue
+                if slot.role not in _BINDABLE_ROLES:
+                    findings.append(Finding("F1_SEAL_OTHER_PARTY", Status.REVIEW,
+                                            "제3자·기관 서명란 — 지정이 있어도 자동 기입 안 함, 사용자 확인 필요",
+                                            source="engine", evidence=evidence, meta=meta))
+                    continue
+                spec = bound[0]
+            else:
+                hits = _owner_hits(slot, name_specs)
+                approved_member = (slot.role == "member" and len(hits) == 1 and hits[0].user_approved)
+                if slot.role not in _ALLOWED_ROLES and not approved_member:
+                    findings.append(Finding("F1_SEAL_OTHER_PARTY", Status.REVIEW,
+                                            "팀원·제3자·기관 서명란 — 자동 기입 안 함, 사용자 확인 필요",
+                                            source="engine", evidence=evidence, meta=meta))
+                    continue
+                if len(hits) != 1:
+                    reason = "소유자 불명" if not hits else "소유자 후보 여러 명"
+                    findings.append(Finding("F1_SEAL_OWNER_UNKNOWN", Status.REVIEW,
+                                            f"{reason} — 자동 기입 안 함, 사용자 확인 필요",
+                                            source="engine", evidence=evidence, meta=meta))
+                    continue
+                spec = hits[0]
             tag = f"{_TAG_PREFIX}{spec.key}"
             meta.update({"target": spec.owner, "source": spec.source, "seal_kind": spec.kind})
+            name_ok = bool(write_names and meta.get("binding") and _local(slot._anchor.tag) == "p")
             if slot.existing_tag == tag:
                 meta["already"] = True
+                if name_ok:
+                    written, why = _write_owner_name(slot._anchor, spec.owner)
+                    meta.update({"name_written": written, "name_reason": why})
+                    changed = changed or written
                 findings.append(Finding("F1_SEAL_PRESENT", Status.PASS,
                                         "이미 같은 직인이 있음(중복 삽입 안 함) — 자동 검사 PASS",
                                         source="engine", evidence=evidence + f" source={spec.source}", meta=meta))
@@ -419,6 +538,9 @@ def stamp_seals(in_hwpx, out_hwpx, seals: list[SealSpec], *, slots: list[str] | 
                 pos = _ensure_pos(pic)  # insert_signature_into_tc 가 다시 PARA 로 강제 — 정렬 유지 확인
                 pos.set("horzAlign", align)
             else:
+                if name_ok:  # 이름은 그림 run 을 붙이기 전에 기존 글자 run 안에서만 고친다
+                    written, why = _write_owner_name(anchor, spec.owner)
+                    meta.update({"name_written": written, "name_reason": why})
                 _append_to_paragraph(anchor, pic)
             w, h = picture_display_wh(pic)  # L142: 가로·세로 모두 >0 검증
             meta.update({"inserted": True, "width_mm": _mm(w), "height_mm": _mm(h),
