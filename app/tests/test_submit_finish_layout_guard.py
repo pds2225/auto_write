@@ -328,3 +328,20 @@ def test_front_candidates_ignore_dates_and_masked_tails(text, flagged):
     boxes, front = _ocr_scan(_words(text))
     assert bool(front) is flagged
     assert boxes == []
+
+
+def test_reading_order_ignores_inversions_the_original_form_already_has(tmp_path):
+    """오른쪽 상자·여백 노트처럼 원본 양식이 처음부터 문서 순서와 다르게 배치한 쌍은 오탐으로 올리지 않는다."""
+    form = tmp_path / "form.hwpx"
+    _write_hwpx(form, _p("작성 시 유의사항 안내문") + _p("신청자 역량 본문 시작"))
+    base_pdf = _pdf(tmp_path, "base.pdf", [[(60, 300, "작성 시 유의사항 안내문"), (60, 100, "신청자 역량 본문 시작")]])
+    filled = tmp_path / "filled.hwpx"
+    _write_hwpx(filled, _p("작성 시 유의사항 안내문") + _p("신청자 역량 본문 시작") + _p("기대효과 본문 시작"))
+    out_pdf = _pdf(tmp_path, "out.pdf", [[(60, 300, "작성 시 유의사항 안내문"), (60, 100, "신청자 역량 본문 시작"),
+                                          (60, 400, "기대효과 본문 시작")]])
+    assert check_reading_order(out_pdf, filled)[0].status is Status.FAIL                       # 기준 없이는 오탐
+    assert check_reading_order(out_pdf, filled, baseline=(base_pdf, form))[0].status is Status.PASS
+    new_bad = _pdf(tmp_path, "bad.pdf", [[(60, 300, "작성 시 유의사항 안내문"), (60, 100, "신청자 역량 본문 시작"),
+                                          (60, 50, "기대효과 본문 시작")]])               # 새로 생긴 역전
+    res = check_reading_order(new_bad, filled, baseline=(base_pdf, form))
+    assert res[0].status is Status.FAIL and "기대효과" in res[0].evidence

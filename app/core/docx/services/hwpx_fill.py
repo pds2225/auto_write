@@ -166,6 +166,18 @@ def _real_existing_text(text: str) -> bool:
     return True
 
 
+def _cell_has_inline_label_lines(tc) -> bool:
+    """칸 안 문단 중 '라벨: 값' 모양 줄(콜론 앞이 짧은 라벨)이 하나라도 있는가."""
+    for sub in _direct(tc, "subList"):
+        for p in _direct(sub, "p"):
+            flat = "".join(t.text or "" for t in _inline_texts(p))
+            if (":" in flat or "：" in flat) and any(
+                len(lab.strip()) <= 12 for lab, _v, _a, _b in _iter_line_fields(flat)
+            ):
+                return True
+    return False
+
+
 def _note_existing_value(bucket: list, label: str, tc=None, labels: list | None = None) -> None:
     """Record a skipped write when the cell already holds a real value."""
     row = col = None
@@ -655,6 +667,7 @@ def _fill_inline_fields_in_p(
     p, wants, used_keys: set, filled: dict, span_notes: Optional[list] = None,
     existing_labels: Optional[list] = None,
     exact_held: Optional[set] = None,
+    black: Optional["_BlackCharPr"] = None,
 ) -> bool:
     """hp:p 하나의 인라인 필드(`라벨 : ______`)를 채운다 — 1.5(셀)·1.8(본문) 공용 커널.
 
@@ -697,10 +710,29 @@ def _fill_inline_fields_in_p(
             break
 
     fields = list(_iter_line_fields(flat))
+    # t 별 flat 구간(값 구간 글자가 예시색 안내체인지 보기 위함)
+    t_spans: list[tuple[int, int, Any]] = []
+    cursor = 0
+    for t in ts:
+        t_len = len(t.text or "")
+        t_spans.append((cursor, cursor + t_len, t))
+        cursor += t_len
     # 역순 스플라이스: 뒤 구간부터 교체해야 앞 필드 offset 이 유효.
     for label_raw, value_raw, f_start, f_end in reversed(fields):
         visible = _is_visible_blank(value_raw)
         real_value = _real_existing_text(value_raw)
+        lead_adjusted = False
+        if (not visible and value_raw.strip() and black is not None
+                and _spans_are_example_style(
+                    [t for a, b, t in t_spans
+                     if a < f_end and b > f_start and flat[max(a, f_start):min(b, f_end)].strip()], black)):
+            visible, real_value = True, False  # 콜론 뒤가 예시색 안내문 → 값으로 교체할 빈칸
+            # 라벨 run 끝의 공백이 값 구간에 걸려 있으면 run 경계를 넘지 않게 첫 글자부터 교체한다.
+            lead = len(value_raw) - len(value_raw.lstrip())
+            if lead:
+                f_start += lead
+                value_raw = value_raw.lstrip()
+                lead_adjusted = True
         if not visible and not real_value:
             continue
         field_key = _key(label_raw)
@@ -732,7 +764,7 @@ def _fill_inline_fields_in_p(
                 _note_unfilled_span(span_notes, lbl, _tc_of(p))
                 _hold_exact_label(exact_held, field_key, want_key)
                 break
-            if _splice_run_text(p, f_start, f_end, " " + str(val)):
+            if _splice_run_text(p, f_start, f_end, ("" if lead_adjusted else " ") + str(val)):
                 filled[lbl] = str(val)
                 used_keys.add(want_key)
                 changed = True
@@ -1069,13 +1101,21 @@ def _conditional_guidance_value(guide_text: str, label: str, identity: dict) -> 
     return None
 
 
+# 글자 없이 불릿만 반복된 칸(예: 줄마다 '·' 하나) — 서술칸의 자리표시자다. '-' 한 글자는 실값('없음' 표기)일 수 있어 제외.
+_BULLET_ONLY_RE = re.compile(r"(?:[·•ㆍ○◦ㅇ\-–—*▪▫]\s*){2,}")
+# 양식 제작자가 서술칸에 넣어 둔 자리표시 단어(칸 전체가 이 단어일 때만).
+_PLACEHOLDER_TOKENS = {"텍스트", "text", "내용입력", "내용을입력하세요", "여기에입력", "입력하세요", "직접입력"}
+
+
 def _is_hwpx_guidance_placeholder(text: str) -> bool:
     """값 칸 자체가 무엇을 쓰라는 짧은 안내뿐이면 빈칸으로 본다."""
     raw = re.sub(r"\s+", " ", str(text or "")).strip()
-    if re.fullmatch(r"ex\s*\)\s*\S.{0,230}", raw, re.IGNORECASE):
+    if re.fullmatch(r"[◦•·ㆍ○ㅇ\-–—*▪▫]?\s*ex\s*\)\s*\S.{0,230}", raw, re.IGNORECASE):
         return True
     if not raw or len(raw) > 90:
         return False
+    if _BULLET_ONLY_RE.fullmatch(raw) or re.sub(r"\s+", "", raw).lower() in _PLACEHOLDER_TOKENS:
+        return True
     return bool(
         _GUIDANCE_CONTACT_RE.fullmatch(raw)
         or _GUIDANCE_VALUE_RE.fullmatch(raw)
@@ -1154,27 +1194,84 @@ def _cell_is_fillable(tc) -> bool:
 
 
 
-def _cell_has_blue_example_style(tc, black: Optional[_BlackCharPr]) -> bool:
-    """값 칸 전체가 파란 예시체이면 현재 매칭된 프로필 값으로 교체 가능한가.
+def _is_example_color(color: Optional[str]) -> bool:
+    """양식이 '안내·예시 글자'에 쓰는 색인가 — 채도 높은 파랑·빨강 계열과 중간 회색.
 
-    텍스트 자체가 실값처럼 보여도 charPr가 양식 예시 파랑(#0000FF)인 경우에만 True.
-    호출 위치가 이미 라벨↔identity 매칭 뒤이므로 해당 프로필 필드가 있을 때만 적용된다.
-    """
-    if black is None or _has_form_control(tc) or _cell_has_nested_table(tc):
+    실양식 실측: 킥스업(#0000FF)·마켓게이트 신청서식(#FF0000/#0909D9)·STAR(#0000FF)·수원 멘토(#0000FF).
+    검정·흰색·미지정·진한/연한 회색(문서 본문색)은 예시색이 아니다."""
+    c = re.sub(r"[^0-9A-Fa-f]", "", color or "")
+    if len(c) != 6:
+        return False
+    r, g, b = int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16)
+    top, low = max(r, g, b), min(r, g, b)
+    if top - low >= 0x60 and top >= 0x80:
+        return True                       # 채도 높은 색(파랑·빨강·초록 계열)
+    return top - low <= 0x10 and 0x60 <= top <= 0xB0  # 중간 회색 예시체
+
+
+_LETTER_RE = re.compile(r"[가-힣A-Za-z0-9]")
+
+
+# '무엇을 쓰라'는 지시문 끝맺음(예시색이 파랑이 아닐 때 안내문임을 확인하는 글자 근거).
+_INSTRUCTION_TEXT_RE = re.compile(
+    r"^.{2,90}?(?:기재|작성|기입|입력)"
+    r"(?:\s*(?:하세요|해\s*주세요|해주세요|바랍니다|하십시오|하시오))?"
+    r"(?:\s*[\(（][^()（）]{0,40}[\)）])?[\s.]*$"
+)
+
+
+def _looks_like_instruction(text: str) -> bool:
+    flat = re.sub(r"\s+", " ", str(text or "")).strip()
+    return bool(flat) and (
+        bool(_INSTRUCTION_TEXT_RE.match(flat))
+        or bool(re.match(r"^[◦•·ㆍ○ㅇ\-–—*▪▫]?\s*(?:ex|예|예시)\s*[)):：]", flat, re.IGNORECASE))
+    )
+
+
+def _is_pure_blue(color: str) -> bool:
+    c = re.sub(r"[^0-9A-Fa-f]", "", color or "").upper()
+    return c == "0000FF"
+
+
+def _spans_are_example_style(texts, black: Optional[_BlackCharPr]) -> bool:
+    """texts(hp:t 목록)의 실제 글자가 전부 예시색 run 에 있는가(글자 없는 기호·공백 run 은 무시).
+
+    순수 파랑(#0000FF)은 기존대로 예시체로 신뢰한다. 빨강·기타 예시색·회색은 실값이 그 색으로 적히는
+    양식도 있으므로(보존해야 하는 유색 기존 값) 글자도 '기재·작성' 같은 지시문일 때만 예시체로 본다."""
+    if black is None:
         return False
     seen = False
-    for t in _cell_texts(tc):
-        if not str(t.text or "").strip():
+    all_blue = True
+    colored_text: list[str] = []
+    for t in texts:
+        text = str(t.text or "")
+        if not text.strip():
             continue
         run = t.getparent()
         if run is None or _local(getattr(run, "tag", "")) != "run":
             return False
-        ref = run.get("charPrIDRef") or ""
-        color = re.sub(r"[^0-9A-Fa-f]", "", black.colors.get(ref, "") or "").upper()
-        if color != "0000FF":
-            return False
-        seen = True
-    return seen
+        color = black.colors.get(run.get("charPrIDRef") or "", "") or ""
+        if _is_example_color(color):
+            seen = True
+            colored_text.append(text)
+            if not _is_pure_blue(color):
+                all_blue = False
+        elif _LETTER_RE.search(text):
+            return False                    # 본문색 글자가 섞이면 실값일 수 있다
+    if not seen:
+        return False
+    return all_blue or _looks_like_instruction("".join(colored_text))
+
+
+def _cell_has_blue_example_style(tc, black: Optional[_BlackCharPr]) -> bool:
+    """값 칸 전체가 '예시색'(파랑·빨강 계열·회색) 안내체이면 현재 매칭된 프로필 값으로 교체 가능한가.
+
+    텍스트 자체가 실값처럼 보여도 charPr 가 양식 예시색인 경우에만 True. 본문색 run 은 글자(한글·영숫자)가
+    없는 기호·공백일 때만 허용한다. 호출 위치가 이미 라벨↔identity 매칭 뒤이므로 해당 프로필 필드가
+    있을 때만 적용된다."""
+    if black is None or _has_form_control(tc) or _cell_has_nested_table(tc):
+        return False
+    return _spans_are_example_style(list(_cell_texts(tc)), black)
 
 
 _REGION_PROTECTED_LABEL_RE = re.compile(
@@ -1933,6 +2030,11 @@ def _fill_section_xml(
                     if not _cell_is_fillable(target) and not blue_example:
                         # 실값만 EXISTING_VALUE. ____·더미날짜·□ 는 각자 게이트에 남긴다.
                         if _cell_has_real_value(target):
+                            if _cell_has_inline_label_lines(target):
+                                # '전 화: …' 처럼 줄마다 라벨이 있는 칸은 인라인 경로(1.5)가 줄 단위로 채운다 —
+                                # 키를 소모하지 않고 기존값 기록만 남긴다.
+                                _note_existing_value(span_notes, lbl, target, existing_labels)
+                                break
                             table_used[tbl].add(want_key)
                             _note_existing_value(span_notes, lbl, target, existing_labels)
                             _hold_exact_label(exact_held, cell_key, want_key)
@@ -1979,7 +2081,7 @@ def _fill_section_xml(
                 for p in _direct(sub, "p"):
                     if _fill_inline_fields_in_p(
                         p, wants, inline_used, filled, span_notes, existing_labels,
-                        exact_held,
+                        exact_held, black,
                     ):
                         changed = True
                         edited.append(p)
@@ -2094,7 +2196,7 @@ def _fill_section_xml(
                 body_used = set()
             if _fill_inline_fields_in_p(
                 p, wants, body_used, filled, span_notes, existing_labels,
-                exact_held,
+                exact_held, black,
             ):
                 changed = True
                 edited.append(p)

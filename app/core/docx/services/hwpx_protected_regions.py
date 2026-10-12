@@ -2480,6 +2480,12 @@ def _coverage_pairs(index):
                 continue
             values = [c for c in table.cells if _cell_placed(c) and c.row == label_cell.row
                       and c.row_span == label_cell.row_span and c.col == label_cell.col + label_cell.col_span]
+            if not values:
+                # 세로형 서술 블록: 표 폭 전체를 쓰는 라벨 행 바로 아래의 전폭 칸이 값칸이다(단일 열 표 등).
+                width = max((c.col + c.col_span for c in table.cells if _cell_placed(c)), default=0)
+                if label_cell.col == 0 and label_cell.col_span == width:
+                    values = [c for c in table.cells if _cell_placed(c) and c.col == 0 and c.col_span == width
+                              and c.row == label_cell.row + label_cell.row_span and c.row_span == 1]
             if len(values) != 1:
                 continue
             value = values[0]

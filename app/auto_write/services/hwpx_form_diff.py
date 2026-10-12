@@ -61,7 +61,7 @@ class FormDiffReport:
 
 
 # 선택 기호는 모두 □ 로 접어서 비교한다. □→■ 같은 체크 표시 변경은 양식 훼손이 아니라 정상 기입이다.
-_CHECK_FOLD = str.maketrans({c: "□" for c in "■☑☒✔✓▣☐"})
+_CHECK_FOLD = str.maketrans({c: "□" for c in "■☑☒✔✓▣☐᥃"})  # U+1943: 한컴 기호 글꼴 빈 체크박스
 
 
 def _check_marks_only(old: str, new: str) -> bool:
@@ -89,7 +89,7 @@ def _counts(sec) -> dict[str, int]:
 
 
 def _choice_only(old, new):
-    boxes = "□☐▢■☑✓▣"
+    boxes = "□☐▢■☑✓▣᥃"
     if _check_marks_only(old, new):  # #218: 체크 기호만 다른 경우(☒✔ 포함)도 정상 기입
         return True
     return old != new and len(old) == len(new) and any(c in boxes for c in old) and all(
@@ -106,6 +106,22 @@ def _value_cell(cell):
     span=cell.find(f"{{{_HP}}}cellSpan")
     if address is None or span is None:
         return False
+    # 세로형 서술 블록: 표 폭 전체를 쓰는 라벨 행 바로 아래의 전폭 칸(엔진 _coverage_pairs 와 같은 규칙).
+    table_top=next(cell.iterancestors(f"{{{_HP}}}tbl"),None)
+    if table_top is not None and address.get('colAddr')=='0':
+        try:
+            cells=[tc for tc in table_top.iter(f"{{{_HP}}}tc") if next(tc.iterancestors(f"{{{_HP}}}tbl"),None) is table_top]
+            width=max(int(c.find(f'{{{_HP}}}cellAddr').get('colAddr'))+int(c.find(f'{{{_HP}}}cellSpan').get('colSpan')) for c in cells)
+            if int(span.get('colSpan'))==width:
+                above=[c for c in cells if c is not cell and c.find(f'{{{_HP}}}cellAddr').get('colAddr')=='0'
+                       and int(c.find(f'{{{_HP}}}cellAddr').get('rowAddr'))+int(c.find(f'{{{_HP}}}cellSpan').get('rowSpan'))==int(address.get('rowAddr'))
+                       and int(c.find(f'{{{_HP}}}cellSpan').get('colSpan'))==width]
+                if len(above)==1:
+                    label=''.join(_own_text(above[0])).strip()
+                    if label and len(label)<=40 and not re.search(r'[□■☑☐:：]',label):
+                        return True
+        except (TypeError,ValueError,AttributeError):
+            pass
     row=cell.getparent()
     for sibling in row.iterchildren(f"{{{_HP}}}tc"):
         if sibling is cell:
@@ -139,13 +155,97 @@ def _value_cell(cell):
     return False
 
 
-def _compare_roots(a,b):
+def _insertion_only(old: str, new: str) -> bool:
+    """new 가 old 의 '빈 자리(공백 사이·콜론 뒤·끝 공백 뒤)'에 글자만 끼워 넣은 것인가.
+
+    '기업명 : ____'·'   명/   명' 같은 인라인 빈칸 기입은 True. 라벨 글자 사이·끝에 직접 글자를 붙인 변경
+    ('모집분야'→'모집분야(수정)')은 양식 문구 수정이므로 False. 공백 모양만 바뀐 것은 무시한다."""
+    old, new = old or "", new or ""
+    ca, cb = re.sub(r"\s+", "", old), re.sub(r"\s+", "", new)
+    if len(ca) < 2 or len(cb) <= len(ca):
+        return False
+    # old 의 compact 위치 k 앞에 공백이 있었는가(k=len(ca) 는 끝)
+    gap = [False] * (len(ca) + 1)
+    k, pending = 0, bool(old[:1].isspace())
+    for ch in old:
+        if ch.isspace():
+            pending = True
+            continue
+        gap[k] = pending
+        pending = False
+        k += 1
+    gap[len(ca)] = pending
+    gained = False
+    for tag, i1, i2, j1, j2 in SequenceMatcher(None, ca, cb, autojunk=False).get_opcodes():
+        if tag == "equal":
+            continue
+        if tag != "insert":
+            return False
+        prev_colon = i1 > 0 and ca[i1 - 1] in ":："
+        if not (gap[i1] or prev_colon):
+            return False
+        gained = True
+    return gained
+
+
+def _header_colors(path) -> dict[str, str]:
+    """원본 양식 header.xml 의 charPr 글자색 지도({id: '#RRGGBB'}). 없으면 빈 사전."""
+    try:
+        with ZipFile(path) as z:
+            head = etree.fromstring(z.read("Contents/header.xml"))
+    except Exception:
+        return {}
+    return {el.get("id"): el.get("textColor") or "" for el in head.iter()
+            if etree.QName(el).localname == "charPr" and el.get("id")}
+
+
+def _example_style_texts(root, colors) -> set[str]:
+    """원본 양식에서 '예시색 안내문'으로 적힌 hp:t 원문 집합(엔진이 값으로 교체해도 되는 칸).
+
+    판정은 엔진(_spans_are_example_style)과 같다: 순수 파랑은 예시체, 빨강 등은 지시문('기재·작성')일 때만."""
+    if not colors:
+        return set()
+    from core.docx.services.hwpx_fill import _spans_are_example_style
+
+    class _Colors:  # _spans_are_example_style 가 쓰는 최소 인터페이스
+        pass
+
+    black = _Colors()
+    black.colors = colors
+    out: set[str] = set()
+    for t in root.iter(f"{{{_HP}}}t"):
+        text = (t.text or "").strip()
+        if text and _spans_are_example_style([t], black):
+            out.add(text)
+    return out
+
+
+_FORMAT_REF_ATTRS = ("charPrIDRef", "paraPrIDRef", "styleIDRef")
+
+
+def _control_fingerprint(node) -> bytes:
+    """폼 객체 비교용 지문 — 줄 위치 캐시(linesegarray)와 글자·문단 모양 참조 번호는 뺀다.
+
+    제출 후처리(검정 글씨·줄 캐시 제거)가 머리글·각주 안 문단을 건드려도 폼 객체 변경으로 오판하지 않게 한다."""
+    clone = copy.deepcopy(node)
+    for seg in [e for e in clone.iter() if etree.QName(e).localname == "linesegarray"]:
+        parent = seg.getparent()
+        if parent is not None:
+            parent.remove(seg)
+    for el in clone.iter():
+        for attr in _FORMAT_REF_ATTRS:
+            if attr in el.attrib:
+                del el.attrib[attr]
+    return etree.tostring(clone, method="c14n")
+
+
+def _compare_roots(a,b,colors=None):
     from core.docx.services.hwpx_protected_regions import is_value_cell_guidance
     rep=FormDiffReport()
     ca,cb=_counts(a),_counts(b)
     controls = {'checkBtn','radioBtn','edit','comboBox','listBox','button','ole','ctrl','secPr','header','footer','footNote','endNote'}
-    old_controls=[etree.tostring(n,method='c14n') for n in a.iter() if etree.QName(n).localname in controls]
-    new_controls=[etree.tostring(n,method='c14n') for n in b.iter() if etree.QName(n).localname in controls]
+    old_controls=[_control_fingerprint(n) for n in a.iter() if etree.QName(n).localname in controls]
+    new_controls=[_control_fingerprint(n) for n in b.iter() if etree.QName(n).localname in controls]
     if old_controls != new_controls:
         rep.structure_ok=False
         rep.notes.append('폼 객체/보호 영역 변경')
@@ -185,13 +285,16 @@ def _compare_roots(a,b):
             rep.structure_ok=False
             rep.structure_deltas[key]=(ca[key],cb[key])
     ta,tb=_texts(masked_a),_texts(masked_b)
+    example_old=_example_style_texts(a,colors)
     for tag,i1,i2,j1,j2 in SequenceMatcher(None,ta,tb,autojunk=False).get_opcodes():
         if tag=='equal':continue
         old,new=ta[i1:i2],tb[j1:j2]
         for i in range(max(len(old),len(new))):
             o=old[i] if i<len(old) else ''; n=new[i] if i<len(new) else ''
             if _choice_only(o,n):rep.choice_marks+=1
+            elif o.strip() and o.strip() in example_old and o.strip()!=n.strip():rep.guidance_replacements+=1  # 예시색 안내문 → 값
             elif not o.strip() and n.strip():rep.value_fills+=1
+            elif _insertion_only(o,n):rep.value_fills+=1
             elif o.strip() and not n.strip():rep.form_phrase_drops+=1
             elif o.strip()!=n.strip():rep.form_phrase_edits+=1
     if rep.choice_marks:
@@ -203,7 +306,8 @@ def _compare_roots(a,b):
 
 def compare_hwpx_forms(src: str | Path, dst: str | Path) -> FormDiffReport:
     """Coordinate-scoped permitted value changes; all sections are checked."""
-    rep=_compare_roots(_load_section(Path(src)),_load_section(Path(dst)))
+    colors=_header_colors(Path(src)) if Path(src).is_file() else {}
+    rep=_compare_roots(_load_section(Path(src)),_load_section(Path(dst)),colors)
     # Keep _load_section's long-standing test/consumer seam and as_dict keys.
     if Path(src).is_file() and Path(dst).is_file():
         with ZipFile(src) as a,ZipFile(dst) as b:
@@ -212,7 +316,7 @@ def compare_hwpx_forms(src: str | Path, dst: str | Path) -> FormDiffReport:
             if members!=other:
                 rep.structure_ok=False;rep.notes.append('섹션 구성 변경')
             for member in sorted((members & other)-{'Contents/section0.xml'}):
-                item=_compare_roots(etree.fromstring(a.read(member)),etree.fromstring(b.read(member)))
+                item=_compare_roots(etree.fromstring(a.read(member)),etree.fromstring(b.read(member)),colors)
                 rep.structure_ok &= item.structure_ok
                 for counter in ('form_phrase_edits','form_phrase_drops','value_fills','choice_marks','guidance_replacements','value_paragraphs'):
                     setattr(rep,counter,getattr(rep,counter)+getattr(item,counter))

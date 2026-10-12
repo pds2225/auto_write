@@ -101,6 +101,7 @@ def run_submit_finish(inp: SubmitFinishInputs) -> SubmitFinishResult:
         F.append(Finding("SUBMISSION_CLEANUP", Status.PASS, "공통 후처리 적용: 검정 글씨·linesegarray 제거",
                          source="engine", evidence=str(stats)))
         cur = dst
+    base_pdf: Path | None = None
     pre_conv = None  # 레이아웃 보정 중 마지막으로 렌더한 신청서 PDF 결과(그대로 F6 에 쓴다)
     if inp.layout_guard:
         from .layout_guard import (anchors_of, baseline_page_start_titles, compact_overflow,
@@ -108,7 +109,6 @@ def run_submit_finish(inp: SubmitFinishInputs) -> SubmitFinishResult:
         from .seal_align import align_to_markers, make_probe
 
         titles: list[str] = []
-        base_pdf: Path | None = None
         if inp.baseline_form:
             base_pdf = Path(inp.baseline_pdf) if inp.baseline_pdf else None
             if base_pdf is None or not base_pdf.is_file():
@@ -196,7 +196,8 @@ def run_submit_finish(inp: SubmitFinishInputs) -> SubmitFinishResult:
     F.extend(conv.findings)
     real_env: dict[str, Any] = {"hancom_com_real": conv.real_com, "convert_attempts": conv.attempts}
     if conv.ok and conv.pdf is not None:  # 본문이 엉뚱한 쪽으로 밀리는 사고(문서 순서 ≠ 배치 순서) 검출
-        F.extend(check_reading_order(conv.pdf, cur))
+        base_pair = (base_pdf, inp.baseline_form) if (inp.layout_guard and base_pdf is not None and inp.baseline_form) else None
+        F.extend(check_reading_order(conv.pdf, cur, baseline=base_pair))
 
     # F5 첨부 가림(원본 미수정, 사본 생성)
     merge_inputs: list[Path] = [app_pdf] if conv.ok else []

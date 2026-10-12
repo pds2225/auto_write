@@ -115,7 +115,10 @@ _ORDER_Y_TOL = 36.0        # pt, 같은 쪽 안에서 이 이상 거꾸로 가�
 
 
 def _doc_anchors(hwpx) -> list[tuple[str, str]]:
-    """HWPX 문단들을 문서 순서대로 (앵커, 원문 앞부분) 목록으로. 표 칸 안 문단도 포함한다."""
+    """HWPX 섹션 직계 블록(문단·표)마다 첫 문단 글자를 (앵커, 원문 앞부분)으로 — 문서 순서.
+
+    블록 안(표 칸 여러 개·여러 줄)의 위아래 순서는 칸 배치 때문에 문서 순서와 달라질 수 있어 비교하지 않고,
+    블록 단위 흐름(위에서 아래)만 본다."""
     from core.docx.services.hwpx_fill import _local
 
     from .hwpx_xml import paragraph_text_full, parse_xml, read_hwpx, section_names
@@ -124,21 +127,21 @@ def _doc_anchors(hwpx) -> list[tuple[str, str]]:
     out: list[tuple[str, str]] = []
     for name in section_names(data):
         root = parse_xml(data[name])
-        for p in root.iter():
-            if _local(getattr(p, "tag", "")) != "p":
+        for block in root:
+            if _local(getattr(block, "tag", "")) != "p":
                 continue
-            text = re.sub(r"\s+", "", paragraph_text_full(p))
-            if len(text) >= _ORDER_MIN_LEN:
-                out.append((text[:_ORDER_PREFIX], text[:20]))
+            for p in block.iter():
+                if _local(getattr(p, "tag", "")) != "p":
+                    continue
+                text = re.sub(r"\s+", "", paragraph_text_full(p))
+                if len(text) >= _ORDER_MIN_LEN:
+                    out.append((text[:_ORDER_PREFIX], text[:20]))
+                    break
     return out
 
 
-def check_reading_order(pdf: str | Path, hwpx: str | Path) -> list[Finding]:
-    """HWPX 문단의 문서 순서가 PDF 의 쪽·세로 배치 순서와 같은지 본다(본문이 엉뚱한 쪽으로 밀리는 사고 검출).
-
-    앵커는 문단 앞 8글자(공백 제거). PDF 와 HWPX 양쪽에서 유일한 앵커만 비교해 오탐을 줄인다.
-    같은 쪽에서는 ±36pt 이상 거꾸로 갈 때, 다른 쪽이면 앞선 문단이 더 뒤 쪽에 있을 때 FAIL.
-    """
+def _order_inversions(pdf, hwpx) -> tuple[list[tuple[str, str, str, int, int]], int]:
+    """(앞서야 할 앵커 prefix, 실제로 앞에 놓인 앵커 prefix, 표시 문구 2개, 쪽 2개)의 목록과 비교한 앵커 수."""
     import fitz
 
     anchors = _doc_anchors(hwpx)
@@ -154,25 +157,44 @@ def check_reading_order(pdf: str | Path, hwpx: str | Path) -> list[Finding]:
     counts: dict[str, int] = {}
     for key, _ in anchors:
         counts[key] = counts.get(key, 0) + 1
-    placed: list[tuple[str, int, float]] = []  # (표시 문구, page, y)
+    placed: list[tuple[str, str, int, float]] = []  # (앵커, 표시 문구, page, y)
     for key, shown in anchors:
         if counts[key] != 1:
             continue
         hits = [(pno, y) for pno, y, text in lines if text.startswith(key)]
         if len(hits) == 1:
-            placed.append((shown, hits[0][0], hits[0][1]))
-    bad: list[str] = []
+            placed.append((key, shown, hits[0][0], hits[0][1]))
+    bad: list[tuple[str, str, str, int, int]] = []
     prev = None
     for cur in placed:
         if prev is not None:
-            (pt, ppage, py), (ct, cpage, cy) = prev, cur
+            (pk, pt, ppage, py), (ck, ct, cpage, cy) = prev, cur
             if cpage < ppage or (cpage == ppage and cy < py - _ORDER_Y_TOL):
-                bad.append(f"'{ct}'(p{cpage}) 가 '{pt}'(p{ppage}) 보다 앞에 배치")
+                bad.append((pk, ck, f"'{ct}'(p{cpage}) 가 '{pt}'(p{ppage}) 보다 앞에 배치", ppage, cpage))
                 continue  # prev 는 유지해 한 번의 밀림이 연쇄 오보가 되지 않게 한다
         prev = cur
+    return bad, len(placed)
+
+
+def check_reading_order(pdf: str | Path, hwpx: str | Path, *,
+                        baseline: tuple[str | Path, str | Path] | None = None) -> list[Finding]:
+    """HWPX 블록(문단·표)의 문서 순서가 PDF 의 쪽·세로 배치 순서와 같은지 본다(본문이 엉뚱한 쪽으로 밀리는 사고 검출).
+
+    앵커는 블록 첫 문단 앞 8글자(공백 제거). PDF 와 HWPX 양쪽에서 유일한 앵커만 비교해 오탐을 줄인다.
+    같은 쪽에서는 ±36pt 이상 거꾸로 갈 때, 다른 쪽이면 앞선 블록이 더 뒤 쪽에 있을 때 FAIL.
+    baseline=(원본 양식 렌더 PDF, 원본 양식 HWPX) 를 주면 원본 양식이 이미 그렇게 배치된 쌍(오른쪽 상자·여백 노트 등)은
+    제외하고 '작성하면서 새로 생긴' 순서 이상만 보고한다."""
+    bad, compared = _order_inversions(pdf, hwpx)
+    if baseline is not None and bad:
+        try:
+            base_bad, _n = _order_inversions(*baseline)
+            known = {(a, b) for a, b, *_ in base_bad}
+            bad = [item for item in bad if (item[0], item[1]) not in known]
+        except Exception:  # 원본 판독 실패는 비교만 생략한다
+            pass
     if bad:
         return [_f("PDF_READING_ORDER", Status.FAIL,
                    "구조 검사 FAIL: 문서 순서와 PDF 배치 순서가 다름(본문이 엉뚱한 쪽·위치로 밀림 의심)", None,
-                   "; ".join(bad[:5]))]
+                   "; ".join(item[2] for item in bad[:5]))]
     return [_f("PDF_READING_ORDER", Status.PASS,
-               f"자동 검사 PASS: 문서 순서와 PDF 배치 순서 일치(비교 문단 {len(placed)}개)", None)]
+               f"자동 검사 PASS: 문서 순서와 PDF 배치 순서 일치(비교 블록 {compared}개)", None)]
