@@ -96,3 +96,38 @@ def test_messages_have_no_forbidden_phrases(tmp_path):
     for f in check_pdf_layout(p):
         assert not find_forbidden(f.message)
         assert f.source == "structural"
+
+
+def _pdf_sized(tmp: Path, pages: list[list[tuple]]) -> Path:
+    """pages: 쪽마다 [(x, y, text, fontsize), ...]."""
+    doc = fitz.open()
+    for items in pages:
+        pg = doc.new_page(width=595, height=842)
+        for x, y, text, size in items:
+            pg.insert_text((x, y), text, fontname="korea", fontsize=size)
+    out = tmp / "sized.pdf"
+    doc.save(str(out))
+    return out
+
+
+def _body(start: int, n: int = 8) -> list[tuple]:
+    return [(60, start + 16 * k, f"본문 줄 {k}", 10) for k in range(n)]
+
+
+def test_unnumbered_title_left_at_page_bottom_is_flagged(tmp_path):
+    """실양식 AI 시각검수에서 발견: 번호 없는 큰 제목이 쪽 중간에 홀로 남고 본문은 다음 쪽으로 넘어간 경우."""
+    p = _pdf_sized(tmp_path, [_body(80) + [(60, 330, "개인정보 수집 이용 및 제3자 제공 동의서", 16)], _body(80)])
+    findings = check_pdf_layout(p)
+    orphan = [f for f in findings if f.code == "PDF_ORPHAN_HEADING"]
+    assert len(orphan) == 1 and orphan[0].page == 1 and orphan[0].status is Status.REVIEW
+
+
+def test_title_followed_by_body_on_same_page_is_not_flagged(tmp_path):
+    p = _pdf_sized(tmp_path, [[(60, 80, "개인정보 동의서", 16)] + _body(110, 40), _body(80)])
+    assert "PDF_ORPHAN_HEADING" not in codes(check_pdf_layout(p))
+
+
+def test_closing_line_at_page_end_is_not_a_title(tmp_path):
+    """'… 귀하' 같은 맺음 줄은 글자가 커도 제목이 아니다."""
+    p = _pdf_sized(tmp_path, [_body(80) + [(60, 330, "서울특별시 마포구청장 귀하", 14)], _body(80)])
+    assert "PDF_ORPHAN_HEADING" not in codes(check_pdf_layout(p))
