@@ -345,3 +345,145 @@ def test_reading_order_ignores_inversions_the_original_form_already_has(tmp_path
                                           (60, 50, "기대효과 본문 시작")]])               # 새로 생긴 역전
     res = check_reading_order(new_bad, filled, baseline=(base_pdf, form))
     assert res[0].status is Status.FAIL and "기대효과" in res[0].evidence
+
+
+def test_f2_label_before_box_group_is_selected_by_exact_label(tmp_path):
+    from auto_write.services.submit_finish.checkbox_select import find_checkbox_groups, select_checkboxes
+
+    src = tmp_path / "in.hwpx"
+    _write_hwpx(src, _tbl([[[_p("입주 형태")], [_p("본점   □   지점   □")]]]))
+    groups = find_checkbox_groups(src)
+    assert [[o.label for o in g.options] for g in groups] == [["본점", "지점"]]
+    out = tmp_path / "out.hwpx"
+    res = select_checkboxes(src, out, {"입주 형태": {"value": "지점", "source": "user"}})
+    assert res["selected"] == 1
+    text = "".join(t.text or "" for t in _section(out).iter(HPX + "t"))
+    assert "본점   □   지점   ■" in text
+
+
+def test_f2_two_consent_questions_in_one_paragraph_are_separate_groups(tmp_path):
+    from auto_write.services.submit_finish.checkbox_select import find_checkbox_groups, select_checkboxes
+
+    src = tmp_path / "in.hwpx"
+    _write_hwpx(src, _p("개인정보의 수집 및 이용에 (□ 동의함 □ 동의하지 않음)     제3자 제공에 (□ 동의함 □ 동의하지 않음)"))
+    groups = find_checkbox_groups(src)
+    assert [(g.label, [o.label for o in g.options]) for g in groups] == [
+        ("개인정보의 수집 및 이용에", ["동의함", "동의하지 않음"]), ("제3자 제공에", ["동의함", "동의하지 않음"])]
+    assert len({g.group_id for g in groups}) == 2
+    out = tmp_path / "out.hwpx"
+    res = select_checkboxes(src, out, {}, consents={"개인정보의 수집 및 이용에": True})   # 한 질문만 승인
+    assert res["selected"] == 1
+    text = "".join(t.text or "" for t in _section(out).iter(HPX + "t"))
+    assert "(■ 동의함 □ 동의하지 않음)" in text and "제3자 제공에 (□ 동의함" in text
+    res2 = select_checkboxes(src, tmp_path / "out2.hwpx", {},
+                             consents={"개인정보의 수집 및 이용에": True, "제3자 제공에": True})
+    assert res2["selected"] == 2
+
+
+# ── 줄이 쌓인 서명 구간의 직인 크기 ─────────────────────────────────
+def _stacked_doc(tmp_path):
+    src = tmp_path / "in.hwpx"
+    _write_hwpx(src, _p("2026년 10월 6일") + _p("신청자(대표자)        (서명/인)") + _p("팀원1        (서명/인)"))
+    spec = SealSpec(owner="홍길동", image=_seal_img(tmp_path), user_approved=True,
+                    bind_roles=("representative",), width_mm=17)
+    stamped = tmp_path / "stamped.hwpx"
+    res = stamp_seals(src, stamped, [spec])
+    assert res["inserted"] == 1
+    return stamped
+
+
+def test_stacked_seal_keeps_capped_default_but_remembers_intended_size(tmp_path):
+    stamped = _stacked_doc(tmp_path)
+    pic = next(_section(stamped).iter(HPX + "pic"))
+    comment = next(c for c in pic if etree.QName(c).localname == "shapeComment").text
+    assert "|w=17.0|c=" in comment                       # 원래 크기와 줄인 크기를 보존
+    sz = next(c for c in pic if etree.QName(c).localname == "sz")
+    assert int(sz.get("width")) / 283.46 < 8             # 기본 삽입은 줄 간격 안(겹침 없음)
+    again = tmp_path / "again.hwpx"
+    res = stamp_seals(stamped, again, [SealSpec(owner="홍길동", image=_seal_img(tmp_path), user_approved=True,
+                                                bind_roles=("representative",), width_mm=17)])
+    assert res["inserted"] == 0 and res["findings"][0].code == "F1_SEAL_PRESENT"  # '|' 보조 정보가 멱등 판정을 깨지 않음
+
+
+def test_stacked_seal_grows_upward_when_free_and_shrinks_when_it_would_cover_text(tmp_path):
+    stamped = _stacked_doc(tmp_path)
+    probe = tmp_path / "probe.hwpx"
+    make_probe(stamped, probe)
+    pos = next(_section(probe).iter(HPX + "pos"))
+    assert pos.get("vertAlign") == "BOTTOM"
+    sz = next(_section(probe).iter(HPX + "sz"))
+    full_pt = int(sz.get("width")) / 100.0
+    assert abs(full_pt - 17 / 25.4 * 72) < 1.0           # 원래 크기로 복원
+    w = full_pt
+    free_pdf = _pdf(tmp_path, "free.pdf", [[(60, 100, "2026년 10월 6일"), (60, 200, "신청자(대표자)"), (300, 200, "(서명/인)")]],
+                    images={0: [((60, 200 - w, 60 + w, 200), _png(300, 300))]})
+    out_free = tmp_path / "free.hwpx"
+    r1 = align_to_markers(probe, free_pdf, out_free)
+    assert r1["aligned"] == 1 and not any(f.code == "SEAL_ALIGN_SHRUNK" for f in r1["findings"])
+    assert abs(int(next(_section(out_free).iter(HPX + "sz")).get("width")) / 100.0 - full_pt) < 1.0
+    # 윗줄에 글자가 있어 키운 직인이 덮는 경우 → 줄인 크기로 복귀
+    busy_pdf = _pdf(tmp_path, "busy.pdf", [[(300, 200 - w / 2, "윗줄 글자"), (60, 200, "신청자(대표자)"), (300, 200, "(서명/인)")]],
+                    images={0: [((60, 200 - w, 60 + w, 200), _png(300, 300))]})
+    out_busy = tmp_path / "busy.hwpx"
+    r2 = align_to_markers(probe, busy_pdf, out_busy)
+    assert any(f.code == "SEAL_ALIGN_SHRUNK" for f in r2["findings"])
+    assert int(next(_section(out_busy).iter(HPX + "sz")).get("width")) / 100.0 < 25
+
+
+def test_long_single_cell_narrative_box_is_split_into_rows_at_paragraph_boundaries(tmp_path):
+    from auto_write.services.submit_finish.layout_guard import split_long_narrative_cells
+    long_text = "가" * 400   # 문단 하나가 약 10줄
+    body = "".join(f"<hp:p><hp:run><hp:t>{i}번 {long_text}</hp:t></hp:run></hp:p>" for i in range(8))
+    body += "<hp:p><hp:run><hp:t></hp:t></hp:run></hp:p>" * 6          # 칸 끝 빈 문단 여백
+    cell = ('<hp:tc><hp:subList>' + body + '</hp:subList><hp:cellAddr colAddr="0" rowAddr="0"/>'
+            '<hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc>')
+    root = etree.fromstring(
+        f'<hp:sec xmlns:hp="{_HP}"><hp:p><hp:run><hp:tbl rowCnt="1" colCnt="1" pageBreak="CELL"><hp:tr>{cell}</hp:tr>'
+        f'</hp:tbl></hp:run></hp:p><hp:p><hp:run><hp:tbl rowCnt="1" colCnt="1"><hp:tr><hp:tc><hp:subList><hp:p><hp:run>'
+        f'<hp:t>짧음</hp:t></hp:run></hp:p></hp:subList><hp:cellAddr colAddr="0" rowAddr="0"/><hp:cellSpan colSpan="1" '
+        f'rowSpan="1"/></hp:tc></hp:tr></hp:tbl></hp:run></hp:p></hp:sec>')
+    texts_before = [t.text for t in root.iter(HPX + "t")]
+    assert split_long_narrative_cells(root) == 1
+    tbls = list(root.iter(HPX + "tbl"))
+    rows = tbls[0].findall(HPX + "tr")
+    assert len(rows) >= 2 and tbls[0].get("rowCnt") == str(len(rows))
+    assert [r.find(HPX + "tc").find(HPX + "cellAddr").get("rowAddr") for r in rows] == [str(i) for i in range(len(rows))]
+    kept = [t.text for t in tbls[0].iter(HPX + "t") if t.text]
+    assert kept == [t for t in texts_before[:8]]                      # 본문 순서·내용 그대로
+    assert len(tbls[1].findall(HPX + "tr")) == 1                      # 짧은 상자는 그대로
+
+
+def test_seal_align_keeps_seal_inside_right_edge_of_text(tmp_path):
+    src = tmp_path / "in.hwpx"
+    _write_hwpx(src, _p("대표자  박다솜          (서명/인)"))
+    stamped = tmp_path / "stamped.hwpx"
+    stamp_seals(src, stamped, [SealSpec(owner="박다솜", image=_seal_img(tmp_path), user_approved=True,
+                                        bind_roles=("representative",), width_mm=17)])
+    probe = tmp_path / "probe.hwpx"
+    make_probe(stamped, probe)
+    w = 17 / 25.4 * 72
+    pdf = _pdf(tmp_path, "probe.pdf", [[(60, 100, "대표자 박다솜"), (500, 100, "(서명/인)")]],
+               images={0: [((60, 80, 60 + w, 80 + w), _png(300, 300))]})
+    with fitz.open(str(pdf)) as d:
+        right_edge = max(wd[2] for wd in d[0].get_text("words"))
+    out = tmp_path / "aligned.hwpx"
+    assert align_to_markers(probe, pdf, out)["aligned"] == 1
+    off = int(next(_section(out).iter(HPX + "pos")).get("horzOffset"))
+    assert 60 + off / 100 + w <= right_edge + 0.5          # 표식 가운데 맞춤이면 오른쪽으로 삐져나갈 위치를 끌어당김
+
+
+def test_narrative_box_split_only_when_the_original_box_was_empty(tmp_path):
+    from auto_write.services.submit_finish.layout_guard import repair_layout
+    long = "".join(_p(f"{i}번 " + "가" * 400) for i in range(8))
+    filled = tmp_path / "filled.hwpx"
+    _write_hwpx(filled, _tbl([[[long]]]))
+    empty_base = tmp_path / "empty_base.hwpx"
+    _write_hwpx(empty_base, _tbl([[[_p("- 텍스트")]]]))
+    text_base = tmp_path / "text_base.hwpx"
+    _write_hwpx(text_base, _tbl([[["".join(_p(f"원본 안내 문단 {i}") for i in range(6))]]]))
+    r1 = repair_layout(filled, tmp_path / "o1.hwpx", baseline_hwpx=empty_base)
+    r2 = repair_layout(filled, tmp_path / "o2.hwpx", baseline_hwpx=text_base)   # 원본에 글이 든 상자 → 그대로
+    r3 = repair_layout(filled, tmp_path / "o3.hwpx")                           # 기준 양식 없음 → 그대로
+    assert r1["cell_rows"] == 1 and r2["cell_rows"] == 0 and r3["cell_rows"] == 0
+    rows = list(_section(tmp_path / "o1.hwpx").iter(HPX + "tr"))
+    assert len(rows) >= 2

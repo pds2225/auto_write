@@ -1,9 +1,9 @@
 {
   "counts": {
-    "mechanized": 69,
+    "mechanized": 72,
     "gap": 1,
-    "judgment": 101,
-    "total": 171
+    "judgment": 102,
+    "total": 175
   },
   "coverage_note": "2026-09-30 L152–L171 분류. 중복이던 뒤쪽 L163/L164 는 lessons.md 에서 L170/L171 로 번호를 바꿨다. mechanized 69·갭 1·사람판단 101·합계 171. L154–L156 은 lessons.md 에 있고 require_sample_ok·safe_body_accent·REF_IMAGE_FRAME_MM 가드가 있어 mechanized. L050 은 gap·mechanized false. rhwp export-pdf 우선, 없으면 Windows 한글 COM SaveAs. COM 성공과 Linux 목은 mechanized 가 아니다. Windows *.l050.json 실측은 Mimo. L005 픽셀은 judgment. PASS 는 한글 GUI 스크린샷+체크리스트가 있을 때만이고 이 클라우드 BLOCKED.",
   "top_gaps": [
@@ -1725,6 +1725,46 @@
       "guard_ref": "",
       "gap_desc": "",
       "impact": "med",
+      "domain": "all"
+    },
+    {
+      "id": "L172 | 문서작성 | 2026-10-12 | 글자색만으로 '안내문'이라 판단해 일반화하면 유색 실값을 덮어쓴다 — 지시문 글자 근거를 같이 요구",
+      "summary": "예시색은 지시문 근거가 있을 때만 안내문으로 본다",
+      "mechanizable": "yes",
+      "category": "mechanized",
+      "guard_ref": "test_hwpx_form_generalization.py::test_red_actual_value_is_preserved_but_red_instruction_is_replaced",
+      "gap_desc": "",
+      "impact": "high",
+      "domain": "all"
+    },
+    {
+      "id": "L173 | 도구사용 | 2026-10-12 | 이 환경 Bash 에서 pgrep 이 없고, 코드 문자열 안의 `\\` 는 한 겹 벗겨진다",
+      "summary": "Bash 환경 pgrep 부재·코드 문자열 백슬래시 벗겨짐 주의",
+      "mechanizable": "no",
+      "category": "judgment",
+      "guard_ref": "",
+      "gap_desc": "",
+      "impact": "low",
+      "domain": "all"
+    },
+    {
+      "id": "L174 | 문서작성 | 2026-10-12 | 제출 명칭 차단은 모든 검사가 끝난 뒤 다시 판정하라 — 앞단 한 번만 계산하면 뒤 검사 FAIL 이 '(제출)' 로 나간다",
+      "summary": "합본 후 PDF 검사 FAIL 이면 (제출) 명칭을 쓰지 않는다",
+      "mechanizable": "yes",
+      "category": "mechanized",
+      "guard_ref": "test_submit_finish_pipeline.py::test_pdf_layout_fail_after_merge_renames_named_pdf_to_review",
+      "gap_desc": "",
+      "impact": "high",
+      "domain": "all"
+    },
+    {
+      "id": "L175 | 문서작성 | 2026-10-12 | 긴 단일 칸 서술 상자는 쪽을 넘으면 뒤가 잘린다 — 행으로 나누되 행 높이를 복사하지 말고 글자 취급을 풀어라",
+      "summary": "긴 단일 칸 서술 상자를 문단 경계에서 행으로 나눈다",
+      "mechanizable": "yes",
+      "category": "mechanized",
+      "guard_ref": "test_submit_finish_layout_guard.py::test_long_single_cell_narrative_box_is_split_into_rows_at_paragraph_boundaries",
+      "gap_desc": "",
+      "impact": "high",
       "domain": "all"
     }
   ]

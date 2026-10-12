@@ -174,7 +174,8 @@ def _pics_under(el) -> list:
 def _seal_tag(pic) -> str:
     sc = _find_child(pic, "shapeComment")
     text = (sc.text or "") if sc is not None else ""
-    return text if text.startswith(_TAG_PREFIX) else ""
+    # '|w=17.0|c=7.1' 같은 보조 정보(줄이 쌓인 구간에서 줄인 크기의 원래 크기)는 표식 비교에서 뺀다.
+    return text.split("|", 1)[0] if text.startswith(_TAG_PREFIX) else ""
 
 
 def _row_cells(tc) -> list:
@@ -592,7 +593,10 @@ def stamp_seals(in_hwpx, out_hwpx, seals: list[SealSpec], *, slots: list[str] | 
                     width_mm = round(capped, 2)
                     meta["cramped_cap"] = True
             align = "RIGHT" if (slot.kind == "marker" and slot.cell is None) else "CENTER"
-            pic = _build_seal_pic(registered[spec.key], px, width_mm, tag, next_id, align)
+            pic_tag = tag
+            if meta.get("cramped_cap"):
+                pic_tag = f"{tag}|w={float(spec.width_mm or _DEFAULT_WIDTH_MM.get(spec.kind, 15.0)):.1f}|c={width_mm:.1f}"
+            pic = _build_seal_pic(registered[spec.key], px, width_mm, pic_tag, next_id, align)
             next_id += 2
             anchor = slot._anchor
             if _local(anchor.tag) == "tc":

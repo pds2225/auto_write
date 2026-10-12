@@ -101,6 +101,19 @@ def _own_text(cell):
             if next(t.iterancestors(f"{{{_HP}}}tc"),None) is cell]
 
 
+def _is_placeholder_narrative_cell(cell) -> bool:
+    from core.docx.services.hwpx_protected_regions import _NARRATIVE_PLACEHOLDER_RE
+    tbl=next(cell.iterancestors(f"{{{_HP}}}tbl"),None)
+    if tbl is None:
+        return False
+    cells=[tc for tc in tbl.iter(f"{{{_HP}}}tc") if next(tc.iterancestors(f"{{{_HP}}}tbl"),None) is tbl]
+    if len(cells)!=1 or cells[0] is not cell:
+        return False
+    lines=["".join(p.itertext()).strip() for p in cell.iter(f"{{{_HP}}}p")]
+    lines=[x for x in lines if x]
+    return bool(lines) and all(_NARRATIVE_PLACEHOLDER_RE.match(x) for x in lines)
+
+
 def _value_cell(cell):
     address=cell.find(f"{{{_HP}}}cellAddr")
     span=cell.find(f"{{{_HP}}}cellSpan")
@@ -239,6 +252,39 @@ def _control_fingerprint(node) -> bytes:
     return etree.tostring(clone, method="c14n")
 
 
+def _top_tables(root):
+    return [t for t in root.iter(f'{{{_HP}}}tbl') if next(t.iterancestors(f'{{{_HP}}}tbl'),None) is None]
+
+
+def _merge_split_narrative_rows(old_root, new_root) -> int:
+    """원본에서 칸 하나였던 최상위 표가 새 문서에서 '한 칸짜리 행 여러 개'로 나뉘었으면 한 칸으로 되돌린다(비교용 사본)."""
+    old_tbls,new_tbls=_top_tables(old_root),_top_tables(new_root)
+    if len(old_tbls)!=len(new_tbls):
+        return 0
+    merged=0
+    tr_tag,tc_tag,sub_tag=f'{{{_HP}}}tr',f'{{{_HP}}}tc',f'{{{_HP}}}subList'
+    for o,n in zip(old_tbls,new_tbls):
+        o_rows=[r for r in o if r.tag==tr_tag]
+        n_rows=[r for r in n if r.tag==tr_tag]
+        if len(o_rows)!=1 or len(n_rows)<2 or len([c for c in o_rows[0] if c.tag==tc_tag])!=1:
+            continue
+        if any(len([c for c in r if c.tag==tc_tag])!=1 for r in n_rows):
+            continue
+        first_sub=next((c for c in next(c for c in n_rows[0] if c.tag==tc_tag) if c.tag==sub_tag),None)
+        if first_sub is None:
+            continue
+        for row in n_rows[1:]:
+            sub=next((c for c in next(c for c in row if c.tag==tc_tag) if c.tag==sub_tag),None)
+            if sub is not None:
+                for p in list(sub):
+                    first_sub.append(p)
+            n.remove(row)
+        if n.get('rowCnt'):
+            n.set('rowCnt','1')
+        merged+=1
+    return merged
+
+
 def _compare_roots(a,b,colors=None):
     from core.docx.services.hwpx_protected_regions import is_value_cell_guidance
     rep=FormDiffReport()
@@ -250,6 +296,8 @@ def _compare_roots(a,b,colors=None):
         rep.structure_ok=False
         rep.notes.append('폼 객체/보호 영역 변경')
     masked_a,masked_b=copy.deepcopy(a),copy.deepcopy(b)
+    if _merge_split_narrative_rows(masked_a,masked_b):
+        cb=_counts(masked_b)   # 쪽 넘침 방지로 나눈 서술 상자 행은 원래 한 칸으로 되돌려 비교한다
     old_cells=list(masked_a.iter(f'{{{_HP}}}tc'))
     new_cells=list(masked_b.iter(f'{{{_HP}}}tc'))
     if len(old_cells)==len(new_cells):
@@ -263,6 +311,8 @@ def _compare_roots(a,b,colors=None):
             ot,nt=_own_text(old),_own_text(new)
             value_cell=_value_cell(old)
             guidance=value_cell and is_value_cell_guidance("".join(ot))
+            if not guidance and _is_placeholder_narrative_cell(old):
+                value_cell=guidance=True   # '- 텍스트' 한 줄만 든 단일 칸 서술 상자(엔진 서술 칸 규칙과 동일)
             blank=value_cell and not any(t.strip() for t in ot)
             forbidden = {'tbl','ctrl','checkBtn','radioBtn','edit','comboBox','listBox','button','ole','secPr','header','footer','footNote','endNote'}
             has_form = any(etree.QName(n).localname in forbidden for cell in (old,new) for n in cell.iter() if n is not cell)

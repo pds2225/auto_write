@@ -89,6 +89,18 @@ def _parse_options(p) -> tuple[str, list[_Option]]:
     if len(boxes) == 1 and _is_square_heading(flat):
         return "", []  # '□ 사업 개요' 같은 제목 글머리표
     options: list[_Option] = []
+    # 라벨 뒤 박스('본점 □ 지점 □'): 마지막 박스 뒤에 라벨이 없고 첫 박스 앞에 콜론으로 끝나지 않는 글자가 있을 때.
+    head = flat[: boxes[0][0]].strip()
+    after_last = flat[boxes[-1][1]:].strip()
+    if len(boxes) >= 2 and not after_last and head and not head.endswith((":", "：")):
+        prev_end = 0
+        for start, end, mark, checked in boxes:
+            label = _option_text(re.sub("[" + chr(0xE000) + "-" + chr(0xF8FF) + "]", "", flat[prev_end:start])).strip(" ,/·ㆍ")
+            prev_end = end
+            if not label or len(label) > _MAX_OPTION_LEN:
+                return "", []
+            options.append(_Option(label, p, start, end, mark, checked))
+        return "", options
     for i, (start, end, mark, checked) in enumerate(boxes):
         stop = boxes[i + 1][0] if i + 1 < len(boxes) else len(flat)
         label = _option_text(flat[end:stop]).strip(" ,/·ㆍ")
@@ -99,20 +111,45 @@ def _parse_options(p) -> tuple[str, list[_Option]]:
     return inline, options
 
 
+def _split_paren_questions(p, inline: str, options: list[_Option]) -> list[tuple[str, list[_Option]]]:
+    """한 문단에 '질문 (□ 예 □ 아니오)  질문2 (□ 예 □ 아니오)' 처럼 괄호 질문이 여럿이면 질문별로 나눈다.
+
+    괄호 안에 옵션이 든 구간이 2개 이상일 때만 나누고, 라벨은 직전 괄호 뒤~이번 괄호 앞 글자다.
+    """
+    flat = paragraph_text(p)
+    spans = [(m.start(), m.end()) for m in re.finditer(r"[(（][^()（）]*[)）]", flat)]
+    spans = [(s, e) for s, e in spans if any(s <= o.start < e for o in options)]
+    if len(spans) < 2 or any(not any(s <= o.start < e for s, e in spans) for o in options):
+        return [(inline, options)]
+    out: list[tuple[str, list[_Option]]] = []
+    prev_end = 0
+    for s, e in spans:
+        label = re.sub(r"[:：]\s*$", "", flat[prev_end:s].strip()).strip()
+        if not label:
+            return [(inline, options)]
+        inside = [o for o in options if s <= o.start < e]
+        for o in inside:  # 옵션 글자는 다음 박스까지 읽었으므로 괄호 닫힘에서 자른다
+            o.label = re.split(r"[)）]", o.label, maxsplit=1)[0].strip()
+        out.append((label, inside))
+        prev_end = e
+    return out
+
+
 def _scan_groups(sec_name: str, root) -> list[CheckboxGroup]:
     paragraphs = list(root.iter(_q("p")))
     order = {id(p): i for i, p in enumerate(paragraphs)}
-    parsed: dict[int, tuple[str, list[_Option]]] = {}
+    parsed: dict[int, list[tuple[str, list[_Option]]]] = {}
     for p in paragraphs:
         inline, options = _parse_options(p)
         if options:
-            parsed[id(p)] = (inline, options)
+            parsed[id(p)] = _split_paren_questions(p, inline, options)
 
     groups: list[CheckboxGroup] = []
     done: set[int] = set()
 
-    def new_group(first_p, label: str) -> CheckboxGroup:
-        group = CheckboxGroup(f"{sec_name}#p{order[id(first_p)]}", label)
+    def new_group(first_p, label: str, nth: int = 1) -> CheckboxGroup:
+        suffix = "" if nth == 1 else f".{nth}"   # 한 문단 질문 여럿이면 #p12, #p12.2 …
+        group = CheckboxGroup(f"{sec_name}#p{order[id(first_p)]}{suffix}", label)
         groups.append(group)
         return group
 
@@ -129,28 +166,32 @@ def _scan_groups(sec_name: str, root) -> list[CheckboxGroup]:
                     label, current = text, None
                 continue
             for p in option_ps:
-                inline, options = parsed[id(p)]
                 done.add(id(p))
-                if inline:
-                    current = new_group(p, inline)
-                elif current is None:
-                    current = new_group(p, label)
-                current.options.extend(options)
+                for nth, (inline, options) in enumerate(parsed[id(p)], 1):
+                    if inline:
+                        current = new_group(p, inline, nth)
+                    elif current is None:
+                        current = new_group(p, label, nth)
+                    current.options.extend(options)
     # 표 밖 문단: 문단 = 그룹. 인라인 라벨이 없으면 바로 앞 문단 글자를 라벨로.
     for p in paragraphs:
         if id(p) in done or id(p) not in parsed:
             continue
-        inline, options = parsed[id(p)]
-        label = inline
-        if not label:
-            prev = p.getprevious()
-            while prev is not None and _local(getattr(prev, "tag", "")) != "p":
-                prev = prev.getprevious()
-            if prev is not None and id(prev) not in parsed:
-                label = paragraph_text(prev).strip()
-        group = new_group(p, label)
-        group.options.extend(options)
-    groups.sort(key=lambda g: int(g.group_id.rsplit("#p", 1)[1]))
+        for nth, (inline, options) in enumerate(parsed[id(p)], 1):
+            label = inline
+            if not label:
+                prev = p.getprevious()
+                while prev is not None and _local(getattr(prev, "tag", "")) != "p":
+                    prev = prev.getprevious()
+                if prev is not None and id(prev) not in parsed:
+                    label = paragraph_text(prev).strip()
+            group = new_group(p, label, nth)
+            group.options.extend(options)
+    def _order_key(g: CheckboxGroup):
+        idx, _, nth = g.group_id.rsplit("#p", 1)[1].partition(".")
+        return int(idx), int(nth or 1)
+
+    groups.sort(key=_order_key)
     return groups
 
 

@@ -122,7 +122,7 @@ def run_submit_finish(inp: SubmitFinishInputs) -> SubmitFinishResult:
             if base_pdf is not None:
                 titles = baseline_page_start_titles(inp.baseline_form, base_pdf)
         dst = nxt("layout")
-        r = repair_layout(cur, dst, page_start_titles=titles)
+        r = repair_layout(cur, dst, page_start_titles=titles, baseline_hwpx=inp.baseline_form)
         F.extend(r["findings"])
         cur = dst
         compact_steps: list[int] = []
@@ -235,6 +235,16 @@ def run_submit_finish(inp: SubmitFinishInputs) -> SubmitFinishResult:
             res.artifacts["merged_pdf"] = str(mg.out)
             real_env["merged_pages"] = mg.total_pages
             F.extend(check_pdf_layout(mg.out, expected_order=list(inp.expected_page_order) or None))
+            if not res.named_pdf_blocked and should_block_submission_named_pdf(F):
+                # PDF 쪽 검사에서 나온 기술적 FAIL(글자·그림 쪽 밖 이탈 등)도 '(제출)' 명칭을 막는다.
+                res.named_pdf_blocked = True
+                renamed = mg.out.with_name(mg.out.name.replace("(제출)", "(검토용)", 1))
+                if renamed != mg.out:
+                    if renamed.exists():
+                        renamed.unlink()
+                    mg.out.replace(renamed)
+                    merged = renamed
+                    res.artifacts["merged_pdf"] = str(renamed)
             real_env["manifest"] = mg.manifest
 
     # F7-B Visual QA (가림 확인 전에는 외부 전송 차단)

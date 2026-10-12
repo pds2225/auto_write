@@ -12,7 +12,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import re
+
 from core.docx.services.hwpx_fill import _local
+from auto_write.services.hwpx_pic_insert import _HWPUNIT_PER_MM, resize_hwpx_picture
 
 from .hwpx_xml import assert_not_same, paragraph_text_full, parse_xml, read_hwpx, section_names, serialize_xml, write_hwpx
 from .seal_stamp import _SEAL_MARKER_RE, _TAG_PREFIX
@@ -42,6 +45,13 @@ def _pos(pic):
     return next(c for c in pic if _local(c.tag) == "pos")
 
 
+def _intent_mm(pic) -> tuple[float, float] | None:
+    """줄이 쌓인 구간에서 줄여 넣은 직인이면 (원래 크기 mm, 줄인 크기 mm). 아니면 None."""
+    sc = next((c for c in pic if _local(c.tag) == "shapeComment"), None)
+    m = re.search(r"\|w=([0-9.]+)\|c=([0-9.]+)", (sc.text or "") if sc is not None else "")
+    return (float(m.group(1)), float(m.group(2))) if m else None
+
+
 def _owner_paragraph(pic):
     el = pic.getparent()
     while el is not None and _local(el.tag) != "p":
@@ -63,7 +73,13 @@ def make_probe(in_hwpx, out_hwpx) -> dict[str, Any]:
             pos.set("horzAlign", "LEFT")
             pos.set("horzOffset", "0")
             pos.set("vertRelTo", "PARA")
-            pos.set("vertAlign", "CENTER")
+            intent = _intent_mm(pic)
+            if intent and intent[0] > intent[1]:
+                # 줄이 쌓인 서명 구간: 원래 크기로 되돌리고 줄 아래쪽에 맞춰 윗줄 쪽으로 키운다(아랫줄은 덮지 않음).
+                resize_hwpx_picture(pic, target_width=int(intent[0] * _HWPUNIT_PER_MM))
+                pos.set("vertAlign", "BOTTOM")
+            else:
+                pos.set("vertAlign", "CENTER")
             pos.set("vertOffset", "0")
         if pics:
             data[name] = serialize_xml(root, data[name])
@@ -120,7 +136,26 @@ def align_to_markers(probe_hwpx, probe_pdf, out_hwpx) -> dict[str, Any]:
             cy = (y0 + y1) / 2
             rect = min(rects, key=lambda r: abs((r.y0 + r.y1) / 2 - cy))
             width = x1 - x0
-            target_x0 = (rect.x0 + rect.x1) / 2 - width / 2
+            cx = (rect.x0 + rect.x1) / 2
+            intent = _intent_mm(pic)
+            if intent and intent[0] > intent[1]:
+                # 키운 직인이 표식 말고 다른 글자를 덮으면 줄인 크기로 되돌린다.
+                box = fitz.Rect(cx - width / 2, y0, cx + width / 2, y1)
+                hit = [w for w in page.get_text("words")
+                       if fitz.Rect(w[:4]).intersects(box) and not fitz.Rect(w[:4]).intersects(rect)]
+                if hit:
+                    resize_hwpx_picture(pic, target_width=int(intent[1] * _HWPUNIT_PER_MM))
+                    _pos(pic).set("vertAlign", "CENTER")
+                    width = intent[1] / 25.4 * 72
+                    findings.append(Finding(
+                        "SEAL_ALIGN_SHRUNK", Status.REVIEW,
+                        "줄이 쌓인 서명 구간: 큰 직인이 다른 글자를 덮어 줄인 크기를 유지함 — 사용자 확인 필요",
+                        source="engine", page=pno))
+            target_x0 = cx - width / 2
+            # 직인이 오른쪽 테두리·여백 밖으로 나가지 않게 한다: 같은 쪽 글자의 오른쪽 끝(표식 포함)을 넘지 않는다.
+            right_limit = max([w[2] for w in page.get_text("words") if w[3] < page.rect.height - 50] or [rect.x1])
+            right_limit = max(right_limit, rect.x1)
+            target_x0 = min(target_x0, right_limit - width)
             delta = target_x0 - x0
             if delta < 0:
                 delta = 0.0

@@ -128,19 +128,144 @@ def apply_page_starts(root, titles: Sequence[str]) -> int:
     return n
 
 
-def repair_layout(in_hwpx, out_hwpx, *, page_start_titles: Sequence[str] = ()) -> dict[str, Any]:
+_ROW_BUDGET_PT = 240.0     # 한 행 높이 상한 — 행은 쪽 사이에서 나뉘지 않으므로 작게 잘라 제목 표 아래 남는 자리를 채운다
+_CHARS_PER_LINE = 42       # 본문 글자 크기 기준 한 줄 글자 수(보수적 추정)
+_LINE_PT = 17.6            # 11pt 글자의 줄 간격(160%)
+
+
+def _para_height_pt(p) -> float:
+    """문단 하나가 차지할 높이 추정(pt): 글줄 수 × 줄 간격 + 안에 든 그림 높이."""
+    text = "".join(t.text or "" for t in p.iter() if _local(getattr(t, "tag", "")) == "t")
+    lines = max(1, -(-len(text) // _CHARS_PER_LINE)) if text else 1
+    pics = 0.0
+    for pic in p.iter():
+        if _local(getattr(pic, "tag", "")) != "pic":
+            continue
+        for ch in pic:
+            if _local(getattr(ch, "tag", "")) == "sz":
+                try:
+                    pics += int(ch.get("height", "0")) / 100.0
+                except ValueError:
+                    pass
+                break
+    return lines * _LINE_PT + pics
+
+
+def _blank_para(p) -> bool:
+    return not _full_text(p) and not any(_local(getattr(x, "tag", "")) in ("pic", "tbl") for x in p.iter())
+
+
+def _top_level_tables(root) -> list:
+    return [t for t in root.iter() if _local(getattr(t, "tag", "")) == "tbl"
+            and not any(_local(getattr(a, "tag", "")) == "tbl" for a in t.iterancestors())]
+
+
+def empty_box_table_indexes(hwpx) -> set[int]:
+    """원본 양식에서 '칸 하나 + 글자 있는 줄 2개 이하' 인 빈 서술 상자의 최상위 표 번호(문서 순서, 구역 이어서)."""
+    _infos, data = read_hwpx(hwpx)
+    out: set[int] = set()
+    k = 0
+    for name in section_names(data):
+        for tbl in _top_level_tables(parse_xml(data[name])):
+            cells = [c for c in tbl.iter() if _local(getattr(c, "tag", "")) == "tc"]
+            rows = [r for r in tbl if _local(getattr(r, "tag", "")) == "tr"]
+            if len(rows) == 1 and len(cells) == 1:
+                lines = [_full_text(p) for p in cells[0].iter() if _local(getattr(p, "tag", "")) == "p"]
+                if sum(1 for x in lines if x) <= 2:
+                    out.add(k)
+            k += 1
+    return out
+
+
+def split_long_narrative_cells(root, eligible: set[int] | None = None, start: int = 0) -> int:
+    """칸 하나뿐인 서술 상자가 쪽 높이를 넘으면 한글이 칸을 쪽 사이에서 나누지 못해 넘친 글·그림이 잘린다.
+
+    본문 최상위 단일 칸 표 중 추정 높이가 한 쪽 분량을 넘는 표를 문단 경계에서 여러 행으로 나눈다
+    (수작업 제출본이 서술 상자를 여러 칸으로 나눈 것과 같은 처리). 문단·그림·글자는 그대로 옮기고
+    행 단위만 늘어난다. 칸 끝의 빈 문단 여백은 하나만 남긴다. 반환: 나눈 표 수."""
+    n = 0
+    for pos, tbl in enumerate(_top_level_tables(root)):
+        if eligible is not None and (start + pos) not in eligible:
+            continue   # 원본에서 이미 글이 든 칸(동의서 본문 등)은 원래 한 쪽에 들어가므로 건드리지 않는다
+        rows = [r for r in tbl if _local(getattr(r, "tag", "")) == "tr"]
+        if len(rows) != 1:
+            continue
+        cells = [c for c in rows[0] if _local(getattr(c, "tag", "")) == "tc"]
+        if len(cells) != 1:
+            continue
+        sub = next((c for c in cells[0] if _local(getattr(c, "tag", "")) == "subList"), None)
+        if sub is None:
+            continue
+        paras = [p for p in sub if _local(getattr(p, "tag", "")) == "p"]
+        if any(_local(getattr(x, "tag", "")) == "tbl" for p in paras for x in p.iter()):
+            continue
+        while len(paras) > 2 and _blank_para(paras[-1]) and _blank_para(paras[-2]):
+            sub.remove(paras.pop())
+        total = sum(_para_height_pt(p) for p in paras)
+        if total <= _ROW_BUDGET_PT * 1.1:
+            continue
+        chunks: list[list] = [[]]
+        used = 0.0
+        for p in paras:
+            h = _para_height_pt(p)
+            if chunks[-1] and used + h > _ROW_BUDGET_PT:
+                chunks.append([])
+                used = 0.0
+            chunks[-1].append(p)
+            used += h
+        if len(chunks) < 2:
+            continue
+        template = copy.deepcopy(rows[0])
+        heights: list[int] = []
+        for idx, chunk in enumerate(chunks):
+            if idx == 0:
+                row = rows[0]
+            else:
+                row = copy.deepcopy(template)
+                tbl.append(row)
+            tc = next(c for c in row if _local(getattr(c, "tag", "")) == "tc")
+            tsub = next(c for c in tc if _local(getattr(c, "tag", "")) == "subList")
+            for old in [q for q in tsub if _local(getattr(q, "tag", "")) == "p"]:
+                tsub.remove(old)
+            for q in chunk:
+                tsub.append(q)
+            height = max(1000, int(sum(_para_height_pt(q) for q in chunk) * 100))   # 행 최소 높이(원본 한 칸 높이를 복사하지 않는다)
+            heights.append(height)
+            for ch in tc:
+                if _local(getattr(ch, "tag", "")) == "cellAddr":
+                    ch.set("rowAddr", str(idx))
+                elif _local(getattr(ch, "tag", "")) == "cellSz":
+                    ch.set("height", str(height))
+        tbl.set("rowCnt", str(len(chunks)))
+        for ch in tbl:
+            if _local(getattr(ch, "tag", "")) == "sz":
+                ch.set("height", str(sum(heights)))
+            elif _local(getattr(ch, "tag", "")) == "pos" and ch.get("treatAsChar") == "1":
+                # 글자처럼 취급된 표는 쪽을 넘으면 뒤가 잘린다 — 수작업 제출본처럼 글자 취급을 풀어 행 단위로 쪽을 넘기게 한다.
+                ch.set("treatAsChar", "0")
+        n += 1
+    return n
+
+
+def repair_layout(in_hwpx, out_hwpx, *, page_start_titles: Sequence[str] = (),
+                  baseline_hwpx=None) -> dict[str, Any]:
     """떠 있는 표 분리 + 원본 쪽 시작 제목 고정을 적용해 out_hwpx 로 저장한다(원본 미수정)."""
     assert_not_same(in_hwpx, out_hwpx)
     infos, data = read_hwpx(in_hwpx)
-    split = breaks = 0
+    split = breaks = cells = 0
+    eligible = empty_box_table_indexes(baseline_hwpx) if baseline_hwpx else set()   # 기준 양식이 있어야 서술 상자를 나눈다
+    offset = 0
     for name in section_names(data):
         root = parse_xml(data[name])
         s = split_floating_tables(root)
         b = apply_page_starts(root, page_start_titles)
-        if s or b:
+        c = split_long_narrative_cells(root, eligible, offset)
+        offset += len(_top_level_tables(root))
+        if s or b or c:
             data[name] = serialize_xml(root, data[name])
         split += s
         breaks += b
+        cells += c
     write_hwpx(infos, data, out_hwpx)
     findings: list[Finding] = []
     if split:
@@ -153,7 +278,12 @@ def repair_layout(in_hwpx, out_hwpx, *, page_start_titles: Sequence[str] = ()) -
             "LAYOUT_PAGE_START", Status.PASS,
             f"자동 검사 PASS: 원본 양식에서 새 쪽에서 시작하던 제목 {breaks}곳에 쪽 나눔 고정",
             source="engine", meta={"page_breaks": breaks}))
-    return {"output": str(out_hwpx), "split": split, "page_breaks": breaks, "findings": findings}
+    if cells:
+        findings.append(Finding(
+            "LAYOUT_CELL_ROWS", Status.PASS,
+            f"자동 검사 PASS: 긴 서술 상자 {cells}개를 문단 경계에서 여러 행으로 나눔(쪽을 넘는 글·그림 잘림 방지)",
+            source="engine", meta={"cell_rows": cells}))
+    return {"output": str(out_hwpx), "split": split, "page_breaks": breaks, "cell_rows": cells, "findings": findings}
 
 
 # ─────────────── 쪽 넘침 보정: 빈 문단(spacer) 제거 ───────────────

@@ -772,6 +772,33 @@ def _fill_inline_fields_in_p(
     return changed
 
 
+_PUA_RE = re.compile("[" + chr(0xE000) + "-" + chr(0xF8FF) + "]")
+
+
+def _label_before_box_options(flat: str) -> Optional[list[tuple[int, str]]]:
+    """'본점 □ 지점 □' 처럼 박스가 라벨 '뒤'에 오는 줄의 [(box_pos, 옵션라벨)]. 해당 형식이 아니면 None.
+
+    마지막 박스 뒤에 라벨이 없고(= 일반 '박스 → 라벨' 읽기로는 마지막 박스가 라벨 없는 상태가 됨),
+    첫 박스 앞에 콜론으로 끝나지 않는 글자가 있을 때만 이 형식으로 본다. 체크된 박스(■)도 구간 경계로 쓰되
+    옵션은 빈 박스만 돌려준다(이미 체크된 칸은 건드리지 않음)."""
+    boxes = list(_ANY_BOX_RE.finditer(flat))
+    if len(boxes) < 2 or flat[boxes[-1].end():].strip():
+        return None
+    head = flat[: boxes[0].start()].strip()
+    if not head or head.endswith((":", "：")):
+        return None
+    options: list[tuple[int, str]] = []
+    prev_end = 0
+    for m in boxes:
+        label = _option_text(_PUA_RE.sub("", flat[prev_end:m.start()])).strip(" ,/·ㆍ")
+        prev_end = m.end()
+        if not label:
+            return None
+        if _EMPTY_BOX_RE.match(m.group(0)):
+            options.append((m.start(), label))
+    return options
+
+
 def _parse_checkbox_options(flat: str) -> tuple[str, list[tuple[int, str]]]:
     """flat 문자열에서 (인라인 라벨, [(box_pos, 옵션라벨), ...]) 을 파싱한다.
 
@@ -780,6 +807,9 @@ def _parse_checkbox_options(flat: str) -> tuple[str, list[tuple[int, str]]]:
     이미 체크된 박스(■/☑ 등)는 옵션으로 세지 않는다 → 재실행이 안 건드림(멱등).
     box_pos 는 flat offset — _splice_run_text 와 동일한 _inline_texts 결합 기준.
     """
+    before = _label_before_box_options(flat)
+    if before is not None:
+        return "", before
     boxes = list(_EMPTY_BOX_RE.finditer(flat))
     if not boxes:
         return "", []
@@ -1127,6 +1157,43 @@ _EXAMPLE_CHOICE_RE = re.compile(r"\s*/\s*")
 _REGION_SCAFFOLD_CHARS_RE = re.compile(r"[O○〇ㅇ0\s·・.\-도특별시군구읍면동로길번지]")
 
 
+# 만 나이 자리표시('(만   세)', '    .   .   . (만   세)') — 생년월일 값에서 계산해 채운다.
+_AGE_SCAFFOLD_RE = re.compile(r"[년월일.:/\-]*[\(（]만세[\)）]")
+_BIRTH_DATE_RE = re.compile(r"(?<!\d)(\d{4})\s*[.년/\-]\s*(\d{1,2})\s*[.월/\-]\s*(\d{1,2})")
+_AGE_REF_KEYS = ("기준일", "작성일", "제출일", "신청일")
+
+
+def _age_scaffold_value(cell_text: str, value: str, identity: dict) -> Optional[str]:
+    """셀이 '(만 세)' 자리표시이고 value 가 생년월일이면 '1992.04.06 (만 34세)' 를 돌려준다. 아니면 None.
+
+    기준일은 identity 의 기준일·작성일·제출일(YYYY-MM-DD 또는 YYYY.MM.DD)이 있으면 그것, 없으면 오늘이다."""
+    from datetime import date
+
+    if not _AGE_SCAFFOLD_RE.fullmatch(re.sub(r"\s+", "", cell_text or "")):
+        return None
+    m = _BIRTH_DATE_RE.search(str(value))
+    if not m:
+        return None
+    try:
+        born = date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    except ValueError:
+        return None
+    ref = date.today()
+    for key in _AGE_REF_KEYS:
+        raw = str(identity.get(key, "")).strip()
+        rm = _BIRTH_DATE_RE.search(raw) if raw else None
+        if rm:
+            try:
+                ref = date(int(rm.group(1)), int(rm.group(2)), int(rm.group(3)))
+                break
+            except ValueError:
+                pass
+    age = ref.year - born.year - ((ref.month, ref.day) < (born.month, born.day))
+    if age < 0 or age > 120:
+        return None
+    return f"{m.group(1)}.{int(m.group(2)):02d}.{int(m.group(3)):02d} (만 {age}세)"
+
+
 def _is_hwpx_example_scaffold(text: str) -> bool:
     """칸 전체가 양식 예시(OOO·0마스크·지역 뼈대·선택 안내)면 True.
 
@@ -1140,6 +1207,8 @@ def _is_hwpx_example_scaffold(text: str) -> bool:
     if any(mark in raw for mark in ("□", "☐", "■", "☑")):
         return False
     compact = re.sub(r"\s+", "", raw)
+    if _AGE_SCAFFOLD_RE.fullmatch(compact):
+        return True
     if _EXAMPLE_OMASK_RE.fullmatch(compact):
         return True
     if _EXAMPLE_GUIDED_OMASK_RE.fullmatch(raw):
@@ -1535,9 +1604,25 @@ def _current_period_value_cell(tbl, label_tc, cells: list, *, notes=None, label=
     periods = []
     ambiguous_header = False
     label_row = _row_of(label_tc)
+    if _cell_rowspan(label_tc) > 1:
+        # 세로로 병합된 블록 라벨(반복 표 머리글 옆)은 위쪽 다른 블록의 기간 머리글을 따르지 않는다.
+        return _value_cell(label_tc, cells)
+    table_width = max((( _cell_addr(c) or 0) + _cell_colspan(c) for r in _direct(tbl, "tr") for c in _direct(r, "tc")), default=0)
     for row in _direct(tbl, "tr"):
         if row is label_row:
             break
+        # 새 블록의 시작(전폭 칸 행, 또는 자체 머리글을 가진 세로 병합 블록 라벨 행)이면 위쪽 기간 머리글을 버린다.
+        row_cells = _direct(row, "tc")
+        full_width = len(row_cells) == 1 and table_width >= 2 and _cell_colspan(row_cells[0]) >= table_width
+        block_head = any(
+            _cell_rowspan(c) > 1 and (_cell_addr(c) or 0) == 0 and sum(
+                1 for o in row_cells if o is not c and _is_label_like(o)
+                and not _PERIOD_HEADER_RE.fullmatch(re.sub(r"\s+", "", _cell_text(o)))
+            ) >= 2
+            for c in row_cells
+        )
+        if full_width or block_head:
+            periods, ambiguous_header = [], False
         row_periods = []
         header_row = True
         for cell in _direct(row, "tc"):
@@ -1966,11 +2051,23 @@ def _fill_section_xml(
     edited: list = []  # L074: lineseg strip 대상(편집된 tc/p)
     table_used: dict[Any, set[str]] = {}
 
+    # 같은 라벨이 반복되는 표(수상 이력 칸 여러 개, 행마다 같은 '성명' 등): '라벨#2' 키로 n 번째 라벨 칸 값을
+    # 따로 준다(n≥2, 문서 순서). '라벨'(번호 없음)은 기존대로 첫 채울 칸에 쓴다. 명시한 값만 쓰므로 날조가 아니다.
+    nth_values: dict[str, dict[int, tuple[str, str]]] = {}
+    plain_identity: dict[str, str] = {}
+    for lbl, val in identity.items():
+        m = re.fullmatch(r"(.+?)\s*#\s*(\d+)", str(lbl))
+        if m and int(m.group(2)) >= 2 and _key(m.group(1)):
+            if str(val or "").strip():
+                nth_values.setdefault(_key(m.group(1)), {})[int(m.group(2))] = (m.group(1).strip(), str(val))
+        else:
+            plain_identity[lbl] = val
     wants = [
         (_key(lbl), lbl, val)
-        for lbl, val in identity.items()
+        for lbl, val in plain_identity.items()
         if str(val or "").strip()
     ]
+    nth_seen: dict[str, int] = {}
 
     # 1) 표 라벨→값 칸 채움 (cellAddr 기반 값칸 선택 + 라벨칸 보호)
     for tbl in root.iter(_q("tbl")):
@@ -1982,7 +2079,17 @@ def _fill_section_xml(
                 cell_key = _key(_cell_text(tc))
                 if not cell_key:
                     continue
-                for want_key, lbl, val in wants:
+                cell_wants = wants
+                for base_key, by_n in nth_values.items():
+                    if _label_matches(cell_key, base_key):
+                        nth_seen[base_key] = nth_seen.get(base_key, 0) + 1
+                        hit = by_n.get(nth_seen[base_key])
+                        if hit is not None:
+                            # n 번째 라벨 칸: 명시한 값을 우선 사용(base_key 자체로 매칭, 사용 표시는 n 별로 따로).
+                            cell_wants = [(base_key, hit[0], hit[1])] + [w for w in wants if w[0] != base_key]
+                            used_keys.discard(base_key)
+                            table_used.get(tbl, set()).discard(base_key)
+                for want_key, lbl, val in cell_wants:
                     if want_key in used_keys:
                         continue
                     if prior_support and _is_applicant_identity(want_key):
@@ -2059,6 +2166,9 @@ def _fill_section_xml(
                             _hold_exact_label(exact_held, cell_key, want_key)
                             break
                         val = conditional
+                    age_value = _age_scaffold_value(_cell_text(target), str(val), identity)
+                    if age_value is not None:
+                        val, scaffold = age_value, True
                     if _set_cell_text(target, str(val), black, replace_scaffold=scaffold):
                         filled[lbl] = str(val)
                         used_keys.add(want_key)
@@ -2262,6 +2372,13 @@ def _fill_section_xml(
             f01_bucket["style"].update(style)
         if f01_changed:
             changed = True
+
+    if span_notes is not None:
+        for tc in root.iter(_q("tc")):
+            if _AGE_SCAFFOLD_RE.fullmatch(re.sub(r"\s+", "", _cell_text(tc))):
+                note = f"[computed] {_left_label_text(tc) or '생년월일'} 만 나이 칸: 생년월일 근거 없음 — 사용자 확인 필요(REVIEW)"
+                if note not in span_notes:
+                    span_notes.append(note)
 
     if not changed:
         return xml_bytes, filled, replaced, used_keys

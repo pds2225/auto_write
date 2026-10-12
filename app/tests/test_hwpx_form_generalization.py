@@ -151,3 +151,137 @@ def test_pure_blue_example_keeps_existing_behavior(tmp_path):
     body = table([_row(0, "대표자", "홍길동", "34")])   # #0000FF 예시체(실값처럼 보여도 예시)
     _src, out = _fill(tmp_path, body, {"대표자": "박다솜"})
     assert _texts(out)[1] == "박다솜"
+
+
+# ── 라벨 뒤 체크박스('본점 □ 지점 □') ────────────────────────────────
+@pytest.mark.parametrize("value,expected", [
+    ("본점", "본점 ■  지점 □"),
+    ("지점", "본점 □  지점 ■"),
+])
+def test_label_before_box_checks_the_box_after_matching_label(tmp_path, value, expected):
+    body = table([_row(0, "입주 형태", "본점 □  지점 □", BLACK)])
+    _src, out = _fill(tmp_path, body, {"입주 형태": value})
+    assert _texts(out)[1].split() == expected.split()
+
+
+def test_standard_box_before_label_is_unchanged_and_ambiguous_value_untouched(tmp_path):
+    body = table([_row(0, "입주 형태", "□ 본점  □ 지점", BLACK), _row(1, "구분", "본점 □  지점 □", BLACK)])
+    _src, out = _fill(tmp_path, body, {"입주 형태": "지점", "구분": "법인"})
+    cells = _texts(out)
+    assert cells[1].split() == ["□", "본점", "■", "지점"]   # 기존 읽기 그대로
+    assert "■" not in cells[3]                              # 일치하는 라벨 없음 → 건드리지 않음
+
+
+def test_label_before_box_with_symbol_glyph_and_checked_box(tmp_path):
+    body = table([_row(0, "동의 여부", "동의함 □    동의하지 않음 □", BLACK)])
+    _src, out = _fill(tmp_path, body, {"동의 여부": "동의하지 않음"})
+    assert _texts(out)[1].split()[-1] == "□" or "■" in _texts(out)[1]
+    assert _texts(out)[1].rstrip().endswith("■")
+
+
+# ── 계산형 칸: (만   세) ─────────────────────────────────────────────
+@pytest.mark.parametrize("born,ref,age", [("1992.04.06", "2026-10-12", 34), ("1992.10.13", "2026-10-12", 33),
+                                          ("1992-04-06", "2026.04.06", 34)])
+def test_age_scaffold_is_computed_from_birthdate_and_reference_date(tmp_path, born, ref, age):
+    body = table([_row(0, "생년월일", "(만     세)", BLACK)])
+    _src, out = _fill(tmp_path, body, {"생년월일": born, "제출일": ref})
+    cell = _texts(out)[1]
+    assert f"(만 {age}세)" in cell and cell.startswith(born.replace("-", ".")[:4])
+
+
+def test_age_scaffold_without_birthdate_stays_and_is_flagged_for_review(tmp_path):
+    body = table([_row(0, "생년월일", "(만     세)", BLACK), _row(1, "성명", "", BLACK)])
+    src = package(tmp_path, body)
+    out = tmp_path / "out.hwpx"
+    report = fill_hwpx(src, out, identity={"성명": "홍길동"})
+    assert _texts(out)[1] == "(만     세)"
+    assert any("만 나이" in n and "REVIEW" in n for n in report.notes)
+
+
+# ── 반복 표의 같은 라벨: '라벨#n' 으로 n 번째 칸 값을 명시 ─────────────
+def test_repeated_label_cells_take_explicit_nth_values_in_document_order(tmp_path):
+    body = table([_row(0, "수상자명", "", BLACK), _row(1, "아이템명", "", BLACK), _row(2, "수상자명", "", BLACK),
+                  _row(3, "수상자명", "", BLACK)])
+    src, out = _fill(tmp_path, body, {"수상자명": "가", "수상자명#2": "나", "수상자명#3": "다", "아이템명": "아이템"})
+    cells = _texts(out)
+    assert [cells[1], cells[3], cells[5], cells[7]] == ["가", "아이템", "나", "다"]
+    assert src.read_bytes()  # 원본 보존은 기존 테스트가 담당 — 여기서는 순서만 확인
+
+
+def test_repeated_label_without_nth_key_stays_unfilled_as_before(tmp_path):
+    body = table([_row(0, "수상자명", "", BLACK), _row(1, "수상자명", "", BLACK)])
+    _src, out = _fill(tmp_path, body, {"수상자명": "가"})
+    cells = _texts(out)
+    assert cells[1] == "가" and cells[3] == ""          # 번호 없는 값은 첫 칸에만(기존 보수 규칙 유지)
+
+
+# ── 기간 머리글이 아래 블록 라벨로 번지지 않는다 ─────────────────────
+def _span_cell(col, row, text, rows=1):
+    return (f'<hp:tc><hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="1" rowSpan="{rows}"/>'
+            f'<hp:subList><hp:p>{_run(text)}</hp:p></hp:subList></hp:tc>')
+
+
+def test_period_headers_of_upper_block_do_not_leak_into_lower_record_block(tmp_path):
+    rows = [
+        "<hp:tr>" + _span_cell(0, 0, "매출액", 2) + _span_cell(1, 0, "2023년") + _span_cell(2, 0, "2024년") + "</hp:tr>",
+        "<hp:tr>" + _span_cell(1, 1, "") + _span_cell(2, 1, "") + "</hp:tr>",
+        "<hp:tr>" + _span_cell(0, 2, "입주공간", 2) + _span_cell(1, 2, "희망여부") + _span_cell(2, 2, "희망규모") + "</hp:tr>",
+        "<hp:tr>" + _span_cell(1, 3, "") + _span_cell(2, 3, "") + "</hp:tr>",
+    ]
+    src = package(tmp_path, table(rows))
+    out = tmp_path / "out.hwpx"
+    report = fill_hwpx(src, out, identity={"입주공간": "여"})
+    assert not any("AMBIGUOUS_PERIOD_HEADER" in n for n in report.notes), report.notes
+
+
+# ── 반복 표(레코드 행): 라벨 표기 차이 · 일부 항목만 · 예시색 예시 행 ────────
+def test_record_label_lookup_ignores_whitespace_and_partial_rows_are_flagged(tmp_path):
+    from test_hwpx_engine_coverage_synthetic import apply, record_table
+    body, headers = record_table()
+    src = package(tmp_path, body)
+    row = dict(zip(headers, ["특허", "테스트 시스템", "10-2026-0000000", "홍길동", ""]))   # 기타 항목 근거 없음
+    row.pop("기타")
+    out, written, notes, _ = apply(tmp_path, src, {}, meta={"hwpx_records": {" 지식 재산권 ": [row]}})
+    assert len(written) == 4
+    assert any("ROW_PARTIAL" in n and "기타" in n and "REVIEW" in n for n in notes), notes
+    text = "".join(root(out).itertext())
+    assert "테스트 시스템" in text and "홍길동" in text
+
+
+def test_record_row_with_blue_example_text_is_a_write_target(tmp_path):
+    from test_hwpx_engine_coverage_synthetic import apply
+    headers = ["학교명", "학위"]
+    label = _cell(0, 0, _run("주요학력")).replace('rowSpan="1"', 'rowSpan="2"')
+    row0 = "<hp:tr>" + label + "".join(_cell(i + 1, 0, _run(h)) for i, h in enumerate(headers)) + "</hp:tr>"
+    row1 = "<hp:tr>" + "".join(_cell(i + 1, 1, _run(v, "34")) for i, v in enumerate(["XX대학교", "석사"])) + "</hp:tr>"
+    src = package(tmp_path, table([row0, row1]))
+    out, written, notes, _ = apply(tmp_path, src, {}, meta={"hwpx_records": {"주요학력": [{"학교명": "한양대학교", "학위": "박사"}]}})
+    text = "".join(root(out).itertext())
+    assert "한양대학교" in text and "XX대학교" not in text and len(written) == 2
+
+
+# ── 머리글 행 + 빈 데이터 행 반복 표 (앞 문단이 표 이름) ─────────────
+def _header_record_body(choice: bool = False) -> str:
+    heads = ["등록명", "종류", "등록일자"]
+    head_row = "<hp:tr>" + "".join(_cell(i, 0, _run(h)) for i, h in enumerate(heads)) + "</hp:tr>"
+    kind = _run("□ 특허 □ 상표") if choice else _run("")
+    data = "<hp:tr>" + _cell(0, 1, _run("")) + _cell(1, 1, kind) + _cell(2, 1, _run("")) + "</hp:tr>"
+    return "<hp:p><hp:run><hp:t>□ 지식재산권 등록 현황</hp:t></hp:run></hp:p>" + table([head_row, data])
+
+
+def test_header_row_repeating_table_is_a_record_table_named_by_preceding_paragraph(tmp_path):
+    from test_hwpx_engine_coverage_synthetic import apply
+    src = package(tmp_path, _header_record_body())
+    row = {"등록명": "테스트 시스템", "종류": "특허", "등록일자": "2026.01.01"}
+    out, written, notes, _ = apply(tmp_path, src, {}, meta={"hwpx_records": {"지식재산권": [row]}})   # 꼬리('등록 현황') 다른 표기
+    text = "".join(root(out).itertext())
+    assert len(written) == 3 and "테스트 시스템" in text and "2026.01.01" in text, notes
+
+
+def test_header_row_table_skips_checkbox_choice_column_for_the_record_write(tmp_path):
+    from test_hwpx_engine_coverage_synthetic import apply
+    src = package(tmp_path, _header_record_body(choice=True))
+    row = {"등록명": "테스트 시스템", "등록일자": "2026.01.01"}
+    out, written, notes, _ = apply(tmp_path, src, {}, meta={"hwpx_records": {"지식재산권 등록 현황": [row]}})
+    text = "".join(root(out).itertext())
+    assert len(written) == 2 and "□ 특허 □ 상표" in text, notes   # 선택 칸은 그대로(체크박스 단계의 몫)

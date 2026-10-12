@@ -105,12 +105,27 @@ def direct_cell_plan(index, identity, refs, meta):
     grouped = {}
     for grant in records:
         grouped.setdefault(grant.record_label,[]).append(grant)
+    record_norm = {normalized_cell_label(k): v for k, v in record_meta.items()}
     for label, targets in grouped.items():
         provided = record_meta.get(label)
+        if provided is None:
+            # 줄바꿈·공백만 다른 표기도 같은 라벨로 본다.
+            provided = record_norm.get(normalized_cell_label(label))
         if provided is None:
             # Record label equivalence is explicit, restricted to a suffix.
             short = re.sub(r'\s*(?:등\s*)?보유현황$','',label).strip()
             provided = record_meta.get(short)
+        if provided is None:
+            # '지식재산권 등록 현황'·'수상경력(경진대회 등)'·'정부과제 수행실적' 처럼 끝 괄호·'현황/실적' 꼬리만 다른 표기.
+            base = re.sub(r'\s*[(（][^)）]*[)）]\s*$','',label).strip()
+            tail = re.sub(r'\s*(?:등\s*)?(?:보유|등록|수행)?\s*(?:현황|실적)$','',base).strip()
+            for cand in (base, tail):
+                if cand and cand != label:
+                    provided = record_meta.get(cand)
+                    if provided is None:
+                        provided = record_norm.get(normalized_cell_label(cand))
+                    if provided is not None:
+                        break
         if provided is None:
             raw = facts.get(normalized_cell_label(label)) or facts.get(normalized_cell_label(re.sub(r'\s*(?:등\s*)?보유현황$','',label)))
             if raw:
@@ -122,18 +137,26 @@ def direct_cell_plan(index, identity, refs, meta):
                     notes.append(f'[record-row] {label} FIELD_COUNT_MISMATCH')
         if not isinstance(provided,list):
             continue
-        capacity=max(g.record_index for g in targets)+1
+        slots=sorted({g.record_index for g in targets})   # 채울 수 있는 행(예시가 든 첫 행 등은 빠질 수 있음)
+        capacity=len(slots)
         if len(provided)>capacity:
             notes.append(f'[record-row] {label} OVERFLOW')
-        for row in range(min(len(provided),capacity)):
-            row_targets=[g for g in targets if g.record_index==row]
-            item=provided[row]
-            if not isinstance(item,dict) or set(map(normalized_cell_label,item)) != set(normalized_cell_label(g.field_label) for g in row_targets):
+        for pos in range(min(len(provided),capacity)):
+            row_targets=[g for g in targets if g.record_index==slots[pos]]
+            item=provided[pos]
+            header_keys=set(normalized_cell_label(g.field_label) for g in row_targets)
+            if not isinstance(item,dict) or not item or not set(map(normalized_cell_label,item)) <= header_keys:
                 notes.append(f'[record-row] {label} FIELD_COUNT_MISMATCH'); continue
             fields={normalized_cell_label(k):str(v) for k,v in item.items()}
-            if not all(fields[normalized_cell_label(g.field_label)].strip() for g in row_targets):
+            given=[g for g in row_targets if fields.get(normalized_cell_label(g.field_label),'').strip()]
+            if not given:
                 continue
-            for grant in row_targets:
+            for grant in given:
                 grants.append(grant); values[grant]=fields[normalized_cell_label(grant.field_label)]
-            notes.append(f'[record-row] {label} WRITTEN')
+            if len(given)==len(row_targets):
+                notes.append(f'[record-row] {label} WRITTEN')
+            else:
+                # 일부 항목만 근거가 있는 행: 있는 값만 쓰고 나머지는 비워 둔 채 사용자 확인 대상으로 남긴다(날조 0).
+                missing=[g.field_label for g in row_targets if g not in given]
+                notes.append(f'[record-row] {label} ROW_PARTIAL REVIEW 비움: {", ".join(missing)}')
     return grants, values, notes, images

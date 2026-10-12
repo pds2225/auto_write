@@ -69,3 +69,21 @@ def test_pipeline_failed_conversion_makes_no_merged_pdf(tmp_path: Path) -> None:
     assert "merged_pdf" not in res.artifacts
     assert any(f.status is Status.FAIL for f in res.findings)
     assert res.report_json.is_file()
+
+
+def test_pdf_layout_fail_after_merge_renames_named_pdf_to_review(tmp_path: Path) -> None:
+    """합본 뒤 PDF 쪽 검사에서 기술적 FAIL(쪽 밖 글자)이 나오면 '(제출)' 명칭을 쓰지 않는다."""
+    def offpage(hwpx, pdf):
+        doc = fitz.open()
+        pg = doc.new_page(width=595, height=842)
+        pg.insert_text((60, 100), "참가신청서 본문 가짜 데이터", fontname="korea", fontsize=11)
+        pg.insert_text((60, 846), "쪽 밖으로 나간 글자", fontname="korea", fontsize=11)
+        doc.save(pdf)
+
+    inp = SubmitFinishInputs(filled_hwpx=_form(tmp_path), out_dir=tmp_path / "out3", doc_name="참가신청서",
+                             company="가짜", rep="홍길동", converter=offpage, apply_submission_cleanup=False)
+    res = run_submit_finish(inp)
+    merged = Path(res.artifacts["merged_pdf"])
+    assert any(f.code == "PDF_TEXT_OFFPAGE" and f.status is Status.FAIL for f in res.findings)
+    assert res.named_pdf_blocked and "(검토용)" in merged.name and "(제출)" not in merged.name and merged.is_file()
+    assert not list((tmp_path / "out3").glob("(제출)*"))
