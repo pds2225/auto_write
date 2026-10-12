@@ -48,6 +48,7 @@ from .hwpx_xml import (
     cell_text,
     find_manifest,
     paragraph_text,
+    paragraph_text_full,
     parse_xml,
     read_hwpx,
     section_names,
@@ -196,7 +197,7 @@ def _table_caption(tbl) -> str:
     if holder is None:
         return ""
     prev = holder.getprevious()
-    return paragraph_text(prev) if prev is not None and _local(prev.tag) == "p" else ""
+    return paragraph_text_full(prev) if prev is not None and _local(prev.tag) == "p" else ""
 
 
 def _prev_texts(p, limit: int = 2) -> list[str]:
@@ -204,7 +205,7 @@ def _prev_texts(p, limit: int = 2) -> list[str]:
     cur = p.getprevious()
     while cur is not None and len(out) < limit:
         if _local(getattr(cur, "tag", "")) == "p":
-            text = paragraph_text(cur).strip()
+            text = paragraph_text_full(cur).strip()
             if text:
                 out.append(text)
         cur = cur.getprevious()
@@ -232,7 +233,7 @@ def _scan_section(sec_name: str, root) -> list[SealSlot]:
     seen_cells: set[int] = set()
     # (1) 괄호 표식 문단
     for order, p in enumerate(paragraphs):
-        text = paragraph_text(p)
+        text = paragraph_text_full(p)
         compact = _compact(text)
         if not compact or len(compact) > 60 or compact.startswith(("※", "*", "-")):
             continue
@@ -362,6 +363,17 @@ def _append_to_paragraph(p, pic) -> None:
     run.set("charPrIDRef", char_ref)
     run.append(pic)
     _strip_linesegarray(p, only_under=[p])
+
+
+_CRAMPED_MAX_HEIGHT_MM = 7.0  # 한글 본문 한 줄 높이 안쪽
+
+
+def _next_paragraph_is_marker(p) -> bool:
+    """바로 다음 문단이 또 다른 서명·날인 표식 줄인가(서명 줄이 쌓인 구간)."""
+    nxt = p.getnext()
+    while nxt is not None and _local(getattr(nxt, "tag", "")) != "p":
+        nxt = nxt.getnext()
+    return nxt is not None and _SEAL_MARKER_RE.search(paragraph_text_full(nxt)) is not None
 
 
 def _label_bound(slot: SealSlot, spec: SealSpec) -> bool:
@@ -529,6 +541,12 @@ def stamp_seals(in_hwpx, out_hwpx, seals: list[SealSpec], *, slots: list[str] | 
                 registered[spec.key] = image_id
             px = _px_size(image)
             width_mm = float(spec.width_mm or _DEFAULT_WIDTH_MM.get(spec.kind, 15.0))
+            # 서명 줄이 연달아 쌓인 칸(대표→팀원1…)은 줄 간격(≈7mm)보다 큰 그림이 다음 줄 라벨을 덮는다(실양식 렌더에서 확인).
+            if _local(slot._anchor.tag) == "p" and _next_paragraph_is_marker(slot._anchor):
+                capped = _CRAMPED_MAX_HEIGHT_MM * px[0] / max(px[1], 1)
+                if capped < width_mm:
+                    width_mm = round(capped, 2)
+                    meta["cramped_cap"] = True
             align = "RIGHT" if (slot.kind == "marker" and slot.cell is None) else "CENTER"
             pic = _build_seal_pic(registered[spec.key], px, width_mm, tag, next_id, align)
             next_id += 2

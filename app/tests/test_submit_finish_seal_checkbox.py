@@ -455,3 +455,50 @@ def test_bound_seal_aspect_ratio(consent_doc, tmp_path: Path) -> None:
         pos = pic.find(f"{{{_HP}}}pos")
         assert pos.get("treatAsChar") == "0"
         assert int(pos.get("vertOffset")) >= 0 and int(pos.get("horzOffset")) >= 0
+
+
+# ── 실환경에서 발견: 표식이 <t> 안 <tab/> 의 tail 에 있는 실양식(마포 참가신청서) ──
+def _tab_p(label: str, marker: str) -> str:
+    return (f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0">'
+            f'<hp:t>{label}<hp:tab width="8000" leader="0" type="1"/>{marker}</hp:t></hp:run></hp:p>')
+
+
+def test_marker_in_tab_tail_is_detected_and_stamped(tmp_path: Path) -> None:
+    """'신청자(대표자)<tab/>(서명/인)' 처럼 표식이 tab 뒤 tail 글자면 이전엔 슬롯으로 잡히지 않았다."""
+    src = tmp_path / "tab.hwpx"
+    _write_hwpx(src, _tab_p("신청자(대표자)", "(서명/인)") + _p("끝"))
+    img = tmp_path / "fake_seal.png"
+    Image.new("RGBA", (300, 200), (200, 0, 0, 255)).save(img)
+    slots = find_seal_slots(src)
+    assert [s.role for s in slots] == ["representative"]
+    out = tmp_path / "out.hwpx"
+    spec = SealSpec(owner="홍길동", image=img, kind="seal", width_mm=15, aliases=("대표자", "신청자"))
+    report = stamp_seals(src, out, [spec])
+    assert report["inserted"] == 1 and len(_pics(out)) == 1
+    # 같은 양식의 팀원 줄(라벨 사이에 tab)도 슬롯으로 잡히되 승인 없이는 자동 기입하지 않는다.
+    team = tmp_path / "team.hwpx"
+    _write_hwpx(team, _tab_p("팀원1", "(서명/인)"))
+    only = find_seal_slots(team)
+    assert [s.role for s in only] == ["member"]
+    rep2 = stamp_seals(team, tmp_path / "team_out.hwpx", [spec])
+    assert rep2["inserted"] == 0
+
+
+def test_stacked_signature_lines_cap_seal_height_to_one_line(tmp_path: Path) -> None:
+    """서명 줄이 연달아 있으면 그림 높이를 한 줄(≈7mm) 안으로 줄여 다음 줄 라벨을 덮지 않는다(실렌더 확인)."""
+    src = tmp_path / "stack.hwpx"
+    _write_hwpx(src, _tab_p("신청자(팀 대표) 성명 :", "(서명/인)") + _tab_p("팀원1", "(서명/인)") + _tab_p("팀원2", "(서명/인)"))
+    img = tmp_path / "fake_seal.png"
+    Image.new("RGBA", (300, 200), (200, 0, 0, 255)).save(img)
+    spec = SealSpec(owner="홍길동", image=img, kind="seal", width_mm=18, aliases=("대표자", "팀 대표"))
+    report = stamp_seals(src, tmp_path / "out.hwpx", [spec])
+    inserted = [f for f in report["findings"] if f.code == "F1_SEAL_INSERTED"]
+    assert len(inserted) == 1
+    assert inserted[0].meta.get("cramped_cap") is True
+    assert inserted[0].meta["height_mm"] <= 7.05
+    # 단독 줄은 요청 크기 유지
+    lone = tmp_path / "lone.hwpx"
+    _write_hwpx(lone, _tab_p("신청자(대표자)", "(서명/인)") + _p("끝"))
+    rep2 = stamp_seals(lone, tmp_path / "lone_out.hwpx", [spec])
+    f2 = [f for f in rep2["findings"] if f.code == "F1_SEAL_INSERTED"][0]
+    assert f2.meta["width_mm"] == 18.0 and not f2.meta.get("cramped_cap")

@@ -89,9 +89,20 @@ def paragraph_text(p) -> str:
     return "".join(t.text or "" for t in _inline_texts(p))
 
 
+def paragraph_text_full(p) -> str:
+    """문단 직계 글자 + t 안쪽 요소(tab 등) 뒤에 붙은 tail 글자까지(읽기 전용 판독용).
+
+    실양식은 ``<t>신청자(대표자)<tab/>(서명/인)</t>`` 처럼 표식이 tab 의 tail 에 있다.
+    ``paragraph_text`` 는 run 오프셋 치환용이라 t.text 만 읽으므로 판독에는 이것을 쓴다.
+    """
+    from core.docx.services.hwpx_fill import _inline_texts
+
+    return "".join("".join(t.itertext()) for t in _inline_texts(p))
+
+
 def cell_text(tc) -> str:
-    """셀 안 모든 hp:t 글자(중첩 표 포함 — 문맥 판단용)."""
-    return "".join(el.text or "" for el in tc.iter() if _local(getattr(el, "tag", "")) == "t")
+    """셀 안 모든 hp:t 글자(중첩 표 포함, tab 뒤 tail 포함 — 문맥 판단용)."""
+    return "".join("".join(el.itertext()) for el in tc.iter() if _local(getattr(el, "tag", "")) == "t")
 
 
 def cell_addr(tc) -> tuple[int, int]:
