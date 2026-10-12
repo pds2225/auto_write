@@ -15,7 +15,7 @@ import re
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Protocol, runtime_checkable
+from typing import Any, Callable, Collection, Protocol, runtime_checkable
 
 from .status import Finding, Status, find_forbidden
 
@@ -34,13 +34,15 @@ _REPLACED = "[금지표현 제거]"
 # 모델에 보낼 검사 항목과 JSON 응답 스키마(모듈 상수).
 CHECK_ITEMS: tuple[str, ...] = (
     "글자 잘림", "표 넘침", "직인 위치 이탈·중복", "이미지 누락·비율 왜곡",
-    "체크박스 상태", "개인정보 가림 상태", "비정상 페이지 분할", "페이지 순서",
+    "체크박스 상태", "주민등록번호 뒷자리 가림 상태", "비정상 페이지 분할", "페이지 순서",
 )
 RESPONSE_SCHEMA = '[{"code": "VISUAL_...", "status": "PASS|FAIL|REVIEW", "message": "...", "bbox": [x0, y0, x1, y1]}]'
 PROMPT = (
     "다음은 문서 PDF 의 한 페이지 이미지다. 아래 항목을 시각적으로 검사해라: "
     + ", ".join(CHECK_ITEMS)
     + ". 오류가 의심되면 해당 영역의 bbox(페이지 기준 0~1 정규화 [x0,y0,x1,y1])를 포함해라. "
+    "신청서 본문에 적힌 신청자 성명·생년월일·연락처·주소는 제출용 정보이므로 보이는 것이 정상이며 가림 오류로 보고하지 마라"
+    "(주민등록번호 뒷자리처럼 가려야 하는 값이 보일 때만 보고). "
     "최종 제출 여부는 판단하지 말고 관찰한 사실만 적어라. "
     "JSON 배열만 응답해라(설명·코드펜스 금지). 이상이 없으면 빈 배열 []. 스키마: " + RESPONSE_SCHEMA
 )
@@ -291,7 +293,11 @@ def _crop(page: Any, bbox: list[float], dpi: int, out: Path) -> None:
 
 def run_visual_qa(pdf_path: str | Path, out_dir: str | Path, provider: Any, *, dpi: int = DEFAULT_DPI,
                   redaction_confirmed: bool = False, cache_dir: str | Path | None = None,
-                  context: dict | None = None, manual_findings: list[Finding] | None = None) -> VisualQAReport:
+                  context: dict | None = None, manual_findings: list[Finding] | None = None,
+                  confirmed_pages: Collection[int] | None = None) -> VisualQAReport:
+    """confirmed_pages: 쪽 단위 확인 목록(1부터). 있으면 이 쪽만 외부 전송 대상이다(redaction_confirmed 는 전체 확인).
+
+    합본 안에 가림 확인이 안 된 첨부가 섞여 있어도, 우리가 만든 신청서 쪽까지 막지 않게 하려는 것이다."""
     import fitz
 
     out = Path(out_dir)
@@ -307,7 +313,8 @@ def run_visual_qa(pdf_path: str | Path, out_dir: str | Path, provider: Any, *, d
         for idx, page in enumerate(doc):
             no = idx + 1
             png = page.get_pixmap(dpi=dpi).tobytes("png")
-            findings = _inspect_one(page, png, no, provider, redaction_confirmed, cdir, ctx, report)
+            confirmed = redaction_confirmed or (confirmed_pages is not None and no in confirmed_pages)
+            findings = _inspect_one(page, png, no, provider, confirmed, cdir, ctx, report)
             for f in findings:
                 bbox = f.meta.get("bbox")
                 if bbox:
@@ -333,7 +340,7 @@ def _inspect_one(page, png, no, provider, redaction_confirmed, cdir, ctx, report
     if provider.external:
         if not redaction_confirmed:
             return [make_finding("VISUAL_EXTERNAL_BLOCKED", Status.REVIEW,
-                                 "사용자 확인 필요: 개인정보 가림 확인 전 외부 전송 차단", source="visual-ai", page=no)]
+                                 "사용자 확인 필요: 개인정보 가림 확인 전 외부 전송 차단(이 쪽만)", source="visual-ai", page=no)]
         if _RRN_RE.search(page.get_text() or ""):
             return [make_finding("VISUAL_PII_BLOCKED", Status.REVIEW,
                                  "사용자 확인 필요: 주민번호 패턴이 보여 외부 전송 차단", source="visual-ai", page=no)]

@@ -231,6 +231,8 @@ def select_checkboxes(in_hwpx, out_hwpx, decisions: dict, *, consents: dict | No
                     if len(agree) == 1:
                         decision = {"value": agree[0].label, "source": "user", "single": True}
             if decision is None:
+                if group.options and all(o.checked for o in group.options):
+                    continue  # 이미 모두 ■ — 고를 것이 없다(본문 글머리 ■ 문단 묶음 등)
                 findings.append(Finding("F2_NO_BASIS", Status.REVIEW,
                                         "선택 근거 없음 — 건드리지 않음, 사용자 확인 필요",
                                         source="engine", evidence=ev, meta=meta))

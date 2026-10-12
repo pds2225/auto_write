@@ -104,6 +104,10 @@ class SealSpec:
     # 사용자가 "이 도장은 이 줄"이라고 지정한 슬롯 라벨(예: '팀원1'). user_approved=True 일 때만 쓰며,
     # 슬롯 label 과 정규화 후 정확히 같아야 한다(부분일치 금지). 지정된 spec 은 이름 문맥 매칭에서 빠진다.
     slot_label: str | None = None
+    # 사용자가 "이 도장은 대표자(신청자) 서명란 전부"라고 승인한 경우의 역할 바인딩(예: ('representative', 'applicant')).
+    # user_approved=True 일 때만 쓰며, 같은 역할 서명 줄이 여러 개여도(신청서·서약서·동의서) 모두 넣는다.
+    # 칸 주변에 이름이 없는 빈 양식에서 대표 직인을 쓰기 위한 것이다. 팀원·제3자 줄은 목록에 넣지 않는 한 건드리지 않는다.
+    bind_roles: tuple[str, ...] = ()
 
     @property
     def key(self) -> str:
@@ -390,6 +394,33 @@ def _text_width(text: str) -> int:
     return sum(2 if ord(ch) >= 0x2E80 else 1 for ch in text)
 
 
+def _write_owner_name_before_tab(p, name: str) -> tuple[bool, str]:
+    """표식이 `<t>라벨<tab/>(서명/인)</t>` 처럼 탭 뒤 tail 글자에 있는 줄 — 탭 앞 라벨 뒤에 이름을 붙인다.
+
+    실양식(마포)의 서명 줄 모양이다. 라벨이 비었거나 라벨 뒤에 이미 다른 글자가 있으면 건드리지 않는다."""
+    from core.docx.services.hwpx_fill import _inline_texts, _invalidate_lineseg
+
+    for t in _inline_texts(p):
+        tails = "".join((child.tail or "") for child in t)
+        if _SEAL_MARKER_RE.search(tails) is None:
+            continue
+        head = t.text or ""
+        if _compact(name) in _compact(head):
+            return False, "already"
+        if not head.strip():
+            return False, "no_marker"
+        colon = max(head.rfind(":"), head.rfind("："))
+        if colon >= 0:
+            if head[colon + 1:].strip():
+                return False, "other_name"
+        elif re.search(r"\s{2,}\S", head.strip()):
+            return False, "other_name"
+        t.text = head.rstrip() + "  " + name + "  "
+        _invalidate_lineseg(p)
+        return True, "written"
+    return False, "no_marker"
+
+
 def _write_owner_name(p, owner: str) -> tuple[bool, str]:
     """마커 앞 빈 공백 구간에 소유자 이름을 넣는다. 공백은 이름 폭만큼 줄여 한 줄을 유지한다.
 
@@ -398,6 +429,8 @@ def _write_owner_name(p, owner: str) -> tuple[bool, str]:
     name = (owner or "").strip()
     flat = paragraph_text(p)
     match = _SEAL_MARKER_RE.search(flat)
+    if match is None and name:
+        return _write_owner_name_before_tab(p, name)
     if match is None or not name:
         return False, "no_marker"
     prefix = flat[:match.start()]
@@ -455,7 +488,8 @@ def stamp_seals(in_hwpx, out_hwpx, seals: list[SealSpec], *, slots: list[str] | 
 
     # 명시 바인딩(user_approved + slot_label) spec 은 이름 문맥 매칭에서 뺀다.
     bound_specs = [s for s in seals if s.user_approved and _norm_label(s.slot_label or "")]
-    name_specs = [s for s in seals if s not in bound_specs]
+    role_specs = [s for s in seals if s.user_approved and s.bind_roles and s not in bound_specs]
+    name_specs = [s for s in seals if s not in bound_specs and s not in role_specs]
     roots = {name: parse_xml(data[name]) for name in section_names(data)}
     scanned = {name: _scan_section(name, root) for name, root in roots.items()}
     # 한 spec 이 여러 줄에 걸리면(같은 라벨 중복) 어느 줄인지 모호 → 그 spec 은 REVIEW
@@ -478,7 +512,17 @@ def stamp_seals(in_hwpx, out_hwpx, seals: list[SealSpec], *, slots: list[str] | 
                                     "kind": slot.kind, "label": slot.label, "inserted": False}
             evidence = f"{slot.slot_id} role={slot.role}"
             bound = [s for s in bound_specs if _label_bound(slot, s)]
-            if bound:
+            role_hits = [] if bound else [s for s in role_specs if slot.role in s.bind_roles]
+            if role_hits:
+                meta["binding"] = "role"
+                if len(role_hits) > 1:
+                    meta["candidates"] = [s.owner for s in role_hits]
+                    findings.append(Finding("F1_SEAL_BINDING_CONFLICT", Status.REVIEW,
+                                            "같은 역할 서명 줄에 도장 지정이 겹침 — 자동 기입 안 함, 사용자 확인 필요",
+                                            source="engine", evidence=evidence, meta=meta))
+                    continue
+                spec = role_hits[0]
+            elif bound:
                 meta["binding"] = "slot_label"
                 if len(bound) > 1 or spec_hits.get(id(bound[0]), 0) > 1:
                     meta["candidates"] = [s.owner for s in bound]

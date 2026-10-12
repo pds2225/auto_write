@@ -36,6 +36,13 @@ _DASHES = "-‐‑‒–—―−"
 _HYPHEN_W = 0.5  # 글자 폭 가중치: 숫자 1.0, 하이픈류 0.5
 # 앞 6자리(생년월일 YYMMDD) 후보: 월 01~12, 일 01~31.
 _FRONT_RE = re.compile(r"(?<!\d)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])(?!\d)")
+# 날짜 문맥: 앞에 '숫자+구분자'(예: 19.05.) 또는 뒤에 '구분자+1~2자리+구분자'(예: -05-15) 가 오면 주민번호 앞자리가 아니다.
+_DATE_BEFORE_RE = re.compile(r"\d{1,4}[-./]$")
+_DATE_AFTER_RE = re.compile(r"[-./]\d{1,2}[-./]")
+# 이미 가려진 표기: 하이픈 + (성별 숫자) + 가림 문자 3개 이상.
+_MASKED_AFTER_RE = re.compile(r"^[-‐‑‒–—―−]?[1-4]?[*＊●○◯■□Xx•·∙]{3,}")
+_BOX_DARK_LUMA = 80      # 이 밝기 미만이면 어두운 화소
+_BOX_DARK_FRAC = 0.6     # 확인 영역 중 어두운 화소 비율이 이 이상이면 검은 박스로 가려진 것으로 본다
 
 
 @dataclass
@@ -215,9 +222,40 @@ def _ocr_scan(words: list[OcrWord]):
             x1 = wd.x + wd.w * sum(ws[:hi + 1]) / total
             pad = (wd.w / total) * _OCR_PAD_FRAC  # 숫자 1자 폭 기준 여백
             boxes.append((x0 - pad, wd.y - _OCR_PAD_Y, x1 + pad, wd.y + wd.h + _OCR_PAD_Y))
-    front_only = any(
-        not any(a <= fm.start() < b for a, b in covered) for fm in _FRONT_RE.finditer(joined))
-    return boxes, front_only
+    # 앞 6자리만 보이고 뒷자리가 확정되지 않은 후보. 날짜(…-05-15)·이미 가려진 표기(920101-*******)는 제외한다.
+    front_boxes: list[tuple[float, float, float, float]] = []
+    for fm in _FRONT_RE.finditer(joined):
+        if any(a <= fm.start() < b for a, b in covered):
+            continue
+        before = joined[max(0, fm.start() - 6):fm.start()]
+        after = joined[fm.end():fm.end() + 12]
+        if _DATE_BEFORE_RE.search(before) or _DATE_AFTER_RE.match(after) or _MASKED_AFTER_RE.match(after):
+            continue
+        wi = chars[fm.end() - 1][1]
+        if wi >= 0:
+            wd = words[wi]
+            front_boxes.append((wd.x, wd.y, wd.x + wd.w, wd.y + wd.h))
+    return boxes, front_boxes
+
+
+def _black_box_right_of(pix: "fitz.Pixmap", box: tuple[float, float, float, float]) -> bool:
+    """앞자리 단어 오른쪽(글자 높이의 7배 폭)이 어두운 박스인지 격자 표본으로 확인한다."""
+    x0, y0, x1, y1 = box
+    height = max(y1 - y0, 1.0)
+    left, right = int(x1 + 0.3 * height), int(x1 + 7 * height)
+    top, bottom = int(y0 + 0.2 * height), int(y1 - 0.2 * height)
+    left, top = max(left, 0), max(top, 0)
+    right, bottom = min(right, pix.width - 1), min(bottom, pix.height - 1)
+    if right <= left or bottom <= top:
+        return False
+    dark = total = 0
+    for yy in range(top, bottom + 1, max((bottom - top) // 4, 1)):
+        for xx in range(left, right + 1, max((right - left) // 12, 1)):
+            r, g, b = pix.pixel(xx, yy)[:3]
+            total += 1
+            if (0.299 * r + 0.587 * g + 0.114 * b) < _BOX_DARK_LUMA:
+                dark += 1
+    return total > 0 and dark / total >= _BOX_DARK_FRAC
 
 
 def redact_pdf(src, dst, *, dpi: int = 250, overwrite: bool = False,
@@ -283,7 +321,10 @@ def redact_pdf(src, dst, *, dpi: int = 250, overwrite: bool = False,
                             source="engine", page=pno + 1,
                             evidence=f"OCR 판독 단어 {len(words)}개(<{_OCR_MIN_WORDS})"))
                     else:
-                        boxes, front_only = _ocr_scan(words)
+                        boxes, front_boxes = _ocr_scan(words)
+                        # 앞 6자리 바로 오른쪽이 이미 검은 박스로 가려져 있으면 확인된 것으로 본다(스캔 시 가림 처리된 서류).
+                        front_boxes = [fb for fb in front_boxes if not _black_box_right_of(pix, fb)]
+                        front_only = bool(front_boxes)
                         n_ok = 0
                         for x0, y0, x1, y1 in boxes:
                             irect = fitz.IRect(int(x0), int(y0), int(x1) + 1, int(y1) + 1)

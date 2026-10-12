@@ -17,6 +17,7 @@ _HEADING = re.compile(r"^(\d+\s*[.)]|[가-힣]\s*[.)]|[ⅠⅡⅢⅣⅤ]+\s*[.)])
 _TITLE_SIZE_RATIO = 1.1    # 쪽 본문 중앙값 대비 이 배수 이상이면 제목 후보
 _TITLE_BLANK_FRAC = 0.15   # 제목 아래 빈 공간이 쪽 높이의 이 비율을 넘으면 본문이 다음 쪽으로 넘어간 것으로 본다
 _CLOSING = re.compile(r"(귀하|귀중|드림|올림|제출|\.)$")  # 맺음 줄은 제목이 아니다
+_CAPTION = re.compile(r"^[\[\(<]?\s*(그림|표|사진|Figure|Fig\.?|Table)\s*\d+")  # 그림·표 캡션도 제목이 아니다
 
 
 def _f(code: str, status: Status, msg: str, page: int | None, evidence: str = "") -> Finding:
@@ -41,7 +42,7 @@ def _orphan_title_line(page) -> str:
         return ""
     median = statistics.median(size for _, size, _ in lines)
     bottom, size, text = max(lines, key=lambda x: x[0])
-    if len(text) > 50 or _CLOSING.search(text) or size < median * _TITLE_SIZE_RATIO:
+    if len(text) > 50 or _CLOSING.search(text) or _CAPTION.match(text) or size < median * _TITLE_SIZE_RATIO:
         return ""
     if (page.rect.height - bottom) / page.rect.height <= _TITLE_BLANK_FRAC:
         return ""
@@ -104,3 +105,74 @@ def check_pdf_layout(pdf: str | Path, *, expected_order: Sequence[str] | None = 
     if not out:
         out.append(_f("PDF_LAYOUT", Status.PASS, "자동 검사 PASS: 쪽 밖 글자·이미지 이탈·왜곡·중복·순서 이상 미발견", None))
     return out
+
+
+# ───────────────────── 읽기 순서(문서 순서 vs PDF 배치) ─────────────────────
+
+_ORDER_PREFIX = 8          # 앵커로 쓰는 글자 수(공백 제거 후 앞부분)
+_ORDER_MIN_LEN = 6         # 이보다 짧은 문단은 앵커로 쓰지 않는다(숫자·기호만 있는 칸 등)
+_ORDER_Y_TOL = 36.0        # pt, 같은 쪽 안에서 이 이상 거꾸로 가야 순서 이상으로 본다
+
+
+def _doc_anchors(hwpx) -> list[tuple[str, str]]:
+    """HWPX 문단들을 문서 순서대로 (앵커, 원문 앞부분) 목록으로. 표 칸 안 문단도 포함한다."""
+    from core.docx.services.hwpx_fill import _local
+
+    from .hwpx_xml import paragraph_text_full, parse_xml, read_hwpx, section_names
+
+    _infos, data = read_hwpx(hwpx)
+    out: list[tuple[str, str]] = []
+    for name in section_names(data):
+        root = parse_xml(data[name])
+        for p in root.iter():
+            if _local(getattr(p, "tag", "")) != "p":
+                continue
+            text = re.sub(r"\s+", "", paragraph_text_full(p))
+            if len(text) >= _ORDER_MIN_LEN:
+                out.append((text[:_ORDER_PREFIX], text[:20]))
+    return out
+
+
+def check_reading_order(pdf: str | Path, hwpx: str | Path) -> list[Finding]:
+    """HWPX 문단의 문서 순서가 PDF 의 쪽·세로 배치 순서와 같은지 본다(본문이 엉뚱한 쪽으로 밀리는 사고 검출).
+
+    앵커는 문단 앞 8글자(공백 제거). PDF 와 HWPX 양쪽에서 유일한 앵커만 비교해 오탐을 줄인다.
+    같은 쪽에서는 ±36pt 이상 거꾸로 갈 때, 다른 쪽이면 앞선 문단이 더 뒤 쪽에 있을 때 FAIL.
+    """
+    import fitz
+
+    anchors = _doc_anchors(hwpx)
+    doc = fitz.open(str(pdf))
+    lines: list[tuple[int, float, str]] = []  # (page, y0, 공백 제거 줄 글자)
+    for pno, page in enumerate(doc, 1):
+        for block in page.get_text("dict")["blocks"]:
+            for ln in block.get("lines", []):
+                text = re.sub(r"\s+", "", "".join(sp["text"] for sp in ln["spans"]))
+                if text:
+                    lines.append((pno, ln["bbox"][1], text))
+    doc.close()
+    counts: dict[str, int] = {}
+    for key, _ in anchors:
+        counts[key] = counts.get(key, 0) + 1
+    placed: list[tuple[str, int, float]] = []  # (표시 문구, page, y)
+    for key, shown in anchors:
+        if counts[key] != 1:
+            continue
+        hits = [(pno, y) for pno, y, text in lines if text.startswith(key)]
+        if len(hits) == 1:
+            placed.append((shown, hits[0][0], hits[0][1]))
+    bad: list[str] = []
+    prev = None
+    for cur in placed:
+        if prev is not None:
+            (pt, ppage, py), (ct, cpage, cy) = prev, cur
+            if cpage < ppage or (cpage == ppage and cy < py - _ORDER_Y_TOL):
+                bad.append(f"'{ct}'(p{cpage}) 가 '{pt}'(p{ppage}) 보다 앞에 배치")
+                continue  # prev 는 유지해 한 번의 밀림이 연쇄 오보가 되지 않게 한다
+        prev = cur
+    if bad:
+        return [_f("PDF_READING_ORDER", Status.FAIL,
+                   "구조 검사 FAIL: 문서 순서와 PDF 배치 순서가 다름(본문이 엉뚱한 쪽·위치로 밀림 의심)", None,
+                   "; ".join(bad[:5]))]
+    return [_f("PDF_READING_ORDER", Status.PASS,
+               f"자동 검사 PASS: 문서 순서와 PDF 배치 순서 일치(비교 문단 {len(placed)}개)", None)]
