@@ -1,17 +1,14 @@
 ---
 name: k-navi-mvp-highlight
-description: >
-  케이네비(K-Navi) Streamlit 도보 내비게이션 화면녹화를 KICXUP 발표용 하이라이트로
-  자른다. Windows 로컬 경로는 클라우드 VM에서 열리지 않고, Drive MCP는 10MB 한도가
-  있다. 쓸 장면만 Keep하고 창 전환·진단로그·랜드마크 0/3·Manage app은 뺀다.
-  다음 요청에 반드시 사용: "케이네비 영상", "K-Navi 녹화", "MVP 하이라이트",
-  "발표 영상 잘라", "KICXUP 데모 클립", "여의도역 도보 내비게이션 편집",
-  "knavi highlight", "이 녹화 편집해줘"(케이네비/도보 내비 맥락).
-  재편집·자막("실내 테스트")·16:9 PPT 변환도 이 스킬.
-  ※ 지원사업 문서 작성/채움/다듬기는 bizdoc-hub. 이 스킬은 화면녹화 컷만.
+description: >-
+  케이네비 화면 녹화를 발표용 짧은 영상으로 자를 때 써요. “케이네비 영상”, “K-Navi 녹화”, “MVP 하이라이트”, “발표 영상 잘라”, “KICXUP 데모 클립”, “이 녹화 편집해줘” 같은 말을 하면 쓸 장면만 골라 이어 붙이고 16:9 발표 화면도 만들어요.
 ---
-
 # k-navi-mvp-highlight — KICXUP MVP 화면녹화 하이라이트
+
+## 실행 환경 (Grok Bot에서 실행할 때)
+- 영상 편집(ffmpeg)은 박스(/workspace)에서 한다. 원본이 노트북에 있으면 CopyToBox(machineId `b09d5493-c6d4-4760-b6fa-a855d89774e9`)로 가져오고, 드라이브에 있으면 DownloadFile(구글 드라이브)로 받는다(크기 제한 없음). 공유 권한을 바꾸게 했다면 끝나고 되돌리라고 알려준다.
+- 결과 영상은 사용자에게 파일로 보내거나, 요청하면 드라이브에 올린다.
+
 
 ## 언제 쓰나
 
@@ -29,11 +26,11 @@ description: >
 Windows `c:\Users\…\Downloads\…mp4` 문자열 ≠ 파일. VM에 없으면 Drive.
 
 1. URL에서 file id (`/file/d/<id>/view`).
-2. Drive MCP `download_file_content`는 **10MB 한도** → 이 원본(~27MB)은 실패.
+2. 구글 드라이브 연결 `download_file_content`는 **10MB 한도** → 이 원본(~27MB)은 실패.
 3. 공유가 막혀 있으면 `gdown` 실패. 뷰어 공유 후:
    `gdown --fuzzy 'https://drive.google.com/file/d/<id>/view' -O /tmp/knavi_recording.mp4`
 4. anyone-writer로 열었으면 **작업 후 제한됨으로 되돌리라고 사용자에게 말한다.**
-5. 빈 mp4를 Drive `create_file`로 올리지 말 것. 산출은 Cursor 아티팩트.
+5. 빈 mp4를 Drive `create_file`로 올리지 말 것. 산출 영상은 사용자에게 파일로 전달한다(SendToUser/드라이브 업로드).
 
 이 세션 원본 id: `1_BUufLAantULLQkHEQshEAHMgxAcjxqz` (`케이네비 녹화영상 .mp4`, 2:21, 620×1006, 무음).
 
@@ -64,11 +61,11 @@ ffmpeg -y -i "$SRC" -filter_complex "
 [0:v]trim=start=30.50:end=37.20,setpts=PTS-STARTPTS,crop=620:920:0:48[v2];
 [0:v]trim=start=46.00:end=53.00,setpts=PTS-STARTPTS,crop=620:920:0:48[v3];
 [v1][v2][v3]concat=n=3:v=1:a=0[vout]
-" -map "[vout]" -an -c:v libx264 -pix_fmt yuv420p /opt/cursor/artifacts/knavi_mvp_highlight.mp4
+" -map "[vout]" -an -c:v libx264 -pix_fmt yuv420p /workspace/out/knavi_mvp_highlight.mp4
 
-ffmpeg -y -i /opt/cursor/artifacts/knavi_mvp_highlight.mp4 \
+ffmpeg -y -i /workspace/out/knavi_mvp_highlight.mp4 \
   -vf "scale=620:920,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=0x081C3A" \
-  -an -c:v libx264 -pix_fmt yuv420p /opt/cursor/artifacts/knavi_mvp_highlight_16x9.mp4
+  -an -c:v libx264 -pix_fmt yuv420p /workspace/out/knavi_mvp_highlight_16x9.mp4
 ```
 
 영상은 git 커밋 금지.
@@ -79,7 +76,7 @@ ffmpeg -y -i /opt/cursor/artifacts/knavi_mvp_highlight.mp4 \
 - 세 장면이 위 Keep 순서. 창 전환·JSON·랜드마크 0/3·Manage app 없음.
 - 16:9는 세로 앱 + 남색 패딩. PPT Solution(3) 또는 현재단계(8).
 - 나레이션: “목적지를 넣으면 보행 경로가 바로 그려집니다. 여의도역까지 403m, 약 5분.”
-- 저장 전 `videoReview`로 화면 글자를 확인한다.
+- 저장 전 ffmpeg로 프레임 몇 장을 PNG로 뽑아 Read로 화면 글자를 직접 확인한다.
 
 ## 함정
 

@@ -1,17 +1,17 @@
 ---
 name: document-quality-orchestrator
 description: >-
-  auto_write 문서 품질 개선 하네스 오케스트레이터. 완성된 DOCX(사업계획서·R&D계획서·
-  컨설팅/정책자금/인증/수출/현장클리닉 보고서 등)의 품질을 자동으로 끌어올린다. 양식 안내문구
-  삭제, 글머리표·표 공백 정리, 빈 문단 삭제, 핵심문장 Bold/Underline 강조, 문서 유형 자동분류,
-  PSST 구조검사, 인포그래픽 삽입 제안, 100점 품질점수 산정·85점 게이트, 원본 백업·롤백까지 수행.
-  '문서 품질 개선', 'DOCX 후처리', '양식 안내문구 삭제', '글머리표 공백 정리', '인포그래픽 제안',
-  'auto_write 문서검수', '제출문서 서식 보정', 'PSST 검사', '품질점수 산정', '문서 최종검수',
-  '사업계획서 다듬어줘', '보고서 정리해줘' 요청 시 반드시 사용. 다시 실행·재실행·수정·보완·
-  부분 재실행(특정 단계만)·회귀 검수 요청도 이 스킬로 처리.
+  다 쓴 사업계획서·보고서(워드)를 제출 전에 다듬을 때 써요. “사업계획서 다듬어줘”, “보고서 정리해줘”, “양식 안내문구 삭제”, “글머리표 공백 정리”, “PSST 검사”, “품질점수 산정”, “문서 최종검수” 같은 말을 하면 서식을 정리하고 핵심 문장을 강조한 뒤 100점 점수를 매겨요. 원본은 백업해 둬요.
 ---
-
 # 문서 품질 개선 하네스 오케스트레이터
+
+## 실행 환경 (Grok Bot에서 실행할 때)
+- 이 스킬에 나오는 `D:\…`, `C:\Users\ekth3\…`, `바탕 화면\…` 경로와 `py -3.11` / `python` / `pwsh` 명령은 다솜님 Windows 노트북 기준이다. Shell·Read에 machineId `b09d5493-c6d4-4760-b6fa-a855d89774e9` 를 넣어 노트북에서 PowerShell로 실행·읽기 한다. 큰 파일이나 바이너리는 CopyToBox로 박스에 가져와 처리하고, 결과물을 노트북에 둬야 하면 CopyFromBox로 돌려놓는다. 노트북이 연결돼 있지 않으면(ListMachines로 확인) 그렇게 알리고 멈춘다.
+- 원본 파일은 절대 덮어쓰지 않는다(새 파일로 저장). 삭제·이동·메일 발송·제출 같은 되돌릴 수 없는 일은 사용자가 그 자리에서 분명히 승인했을 때만 한다.
+- 원문에 남아 있는 Claude Code 전용 요소(슬래시 커맨드 `/…`, `.claude/agents/*` 에이전트, `Agent(...)` 호출, `model: "opus"`, 훅, CLAUDE.md 자동주입)는 여기 없다. 슬래시 커맨드는 같은 CLI를 직접 실행하거나 노트북의 `<프로젝트>\.claude\commands\<이름>.md` 를 읽어 그 절차를 따른다. 에이전트 이름은 '단계/역할'로 읽고 직접 순서대로 수행한다(작성과 검수를 분리해야 하면 검수만 서브에이전트에 맡긴다). 에이전트 정의가 필요하면 `<프로젝트>\.claude\agents\<이름>.md` 또는 `C:\Users\ekth3\.claude\agents\<이름>.md` 를 읽는다.
+- `docs/…`, `app/…` 같은 상대경로는 해당 프로젝트 폴더(예: `D:\auto_write\docs\…`) 기준이다. `.omc/wiki` 위키는 노트북 `D:\.omc\wiki` 에 있다.
+- 다른 스킬 이름(예: `cross-form-submission`)은 Grok Bot 스킬 id와 같다.
+
 
 완성된 DOCX 를 입력받아 **백업 → 유형분류 → 결정론적 후처리 → PSST/구조검사 → 이미지 제안 →
 품질점수 → 게이트 → 보완루프 → 저장 → 리포트** 를 한 번에 수행한다. 전 과정은 AI 키 없이
@@ -71,6 +71,8 @@ python hwp_docx.py 결과.docx -o 제출.hwp      # 완성 DOCX → 제출용 HW
 
 ## 단계별 담당 (커맨드 ↔ 에이전트 ↔ 코드)
 
+> 표의 `/…` 커맨드는 노트북 Claude Code 전용이다. 여기서는 오른쪽 "코드" 열의 함수를 쓰는 CLI(`document_quality_orchestrator.py`, `_build_chochang.py inspect` 등)를 노트북에서 직접 실행하거나, 이 스킬 폴더 `references/` 의 해당 단계 설명서를 따른다.
+
 | 단계 | 커맨드 | 에이전트 | 코드 |
 |------|--------|----------|------|
 | HWP↔DOCX 변환 | (자동/필요시) | doc-architect+doc-safety-guard | `hwp_docx_convert.convert` / docx-hwp-conversion 스킬 |
@@ -111,3 +113,6 @@ python hwp_docx.py 결과.docx -o 제출.hwp      # 완성 DOCX → 제출용 HW
 ## 금지
 
 원본 덮어쓰기, 백업 없는 수정, Secret/.env 출력, 유료 API 무단 호출, 실패의 성공 보고, 기존 생성 기능 삭제.
+
+## 세부 단계 설명서 (같은 폴더 references/)
+각 단계의 상세 규칙은 이 스킬 폴더의 `references/*.md` 에 있다(원래 `D:\auto_write\.claude\skills\*.md`): backup-and-rollback, document-type-classification, docx-template-cleanup, bullet-spacing-normalization, table-whitespace-cleanup, paragraph-font-sizing, content-emphasis, psst-structure-check, infographic-suggestion, document-quality-scoring, document-quality-inspection. 해당 단계만 다시 해 달라는 요청이면 그 파일을 읽고 그 단계만 실행한다.

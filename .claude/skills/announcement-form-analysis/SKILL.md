@@ -1,16 +1,18 @@
 ---
 name: announcement-form-analysis
 description: >-
-  정부지원사업 공고문 + 운영기관별 사업계획서 양식(HWP/HWPX/DOCX)을 한 세트로 읽어
-  핵심 조건·마감·평가기준을 정리하고, 여러 양식을 비교표로 만들어 "어디에 지원하고 무엇을
-  써야 하는지"까지 도출하는 분석 스킬. HWP는 직접 못 읽으므로 auto_write 프로젝트의
-  document_ingest 함수로 텍스트를 추출한 뒤 분석한다. '공고 분석', '공고문 분석해줘',
-  '양식 분석', '사업계획서 양식 분석', '이 공고 어디에 지원', '운영기관 비교', '양식 비교',
-  '지원사업 분석', '이 폴더 공고/양식 분석', '제출조건 정리', '평가기준 정리', 'HWP 공고 분석'
-  요청 시 반드시 사용. 재실행·부분 분석(공고만/양식만)·추가 양식 비교·다른 폴더 재분석도 이 스킬로 처리.
+  공고문이나 사업계획서 양식을 받았을 때 써요. “공고 분석”, “공고문 분석해줘”, “양식 분석”, “이 공고 어디에 지원”, “운영기관 비교”, “제출조건 정리”, “평가기준 정리”, “HWP 공고 분석”, “공고문분석해서 사업비 확인해줘” 같은 말을 하면 자격·마감·제출서류·평가기준을 표로 정리하고 어디에 무엇을 강조해 쓸지, 고객사에 물어볼 것까지 알려줘요.
 ---
-
 # announcement-form-analysis — 정부지원사업 공고·양식 통합 분석
+
+## 실행 환경 (Grok Bot에서 실행할 때)
+- 이 스킬에 나오는 `D:\…`, `C:\Users\ekth3\…`, `바탕 화면\…` 경로와 `py -3.11` / `python` / `pwsh` 명령은 다솜님 Windows 노트북 기준이다. Shell·Read에 machineId `b09d5493-c6d4-4760-b6fa-a855d89774e9` 를 넣어 노트북에서 PowerShell로 실행·읽기 한다. 큰 파일이나 바이너리는 CopyToBox로 박스에 가져와 처리하고, 결과물을 노트북에 둬야 하면 CopyFromBox로 돌려놓는다. 노트북이 연결돼 있지 않으면(ListMachines로 확인) 그렇게 알리고 멈춘다.
+- 원본 파일은 절대 덮어쓰지 않는다(새 파일로 저장). 삭제·이동·메일 발송·제출 같은 되돌릴 수 없는 일은 사용자가 그 자리에서 분명히 승인했을 때만 한다.
+- 원문에 남아 있는 Claude Code 전용 요소(슬래시 커맨드 `/…`, `.claude/agents/*` 에이전트, `Agent(...)` 호출, `model: "opus"`, 훅, CLAUDE.md 자동주입)는 여기 없다. 슬래시 커맨드는 같은 CLI를 직접 실행하거나 노트북의 `<프로젝트>\.claude\commands\<이름>.md` 를 읽어 그 절차를 따른다. 에이전트 이름은 '단계/역할'로 읽고 직접 순서대로 수행한다(작성과 검수를 분리해야 하면 검수만 서브에이전트에 맡긴다). 에이전트 정의가 필요하면 `<프로젝트>\.claude\agents\<이름>.md` 또는 `C:\Users\ekth3\.claude\agents\<이름>.md` 를 읽는다.
+- `docs/…`, `app/…` 같은 상대경로는 해당 프로젝트 폴더(예: `D:\auto_write\docs\…`) 기준이다. `.omc/wiki` 위키는 노트북 `D:\.omc\wiki` 에 있다.
+- 다른 스킬 이름(예: `cross-form-submission`)은 Grok Bot 스킬 id와 같다.
+- 노트북 파일이 아니라 사용자가 채팅/드라이브로 준 파일이면 박스(/workspace)에서 같은 방법(파이썬)으로 처리해도 된다. 단 한글 COM(.hwp 저장)은 노트북에서만 된다.
+
 
 > 완성된 분석 결과물은 "지원자가 바로 판단·작성에 쓸 수 있는 표"다.
 > 단순 텍스트 받아쓰기가 아니라 **조건 정리 + 양식 비교 + 가성비 추천**까지가 산출물.
@@ -62,7 +64,7 @@ for i, f in enumerate(sorted(SRC.glob("*.hwp"))):   # glob 으로 한글경로 �
 ```
 
 - 실행: `$py = "C:\Users\ekth3\AppData\Local\Programs\Python\Python311\python.exe"; & $py <script>`
-- **콘솔에서 한글이 깨져 보여도 무시** — 파일은 UTF-8로 정상 저장된다. 추출 결과는 `Read` 툴로 읽으면 정상.
+- **콘솔에서 한글이 깨져 보여도 무시** — 파일은 UTF-8로 정상 저장된다. 추출 결과는 Read(노트북 파일은 machineId 지정)로 읽으면 정상.
 - `extract_additional_text` 내부: `.hwp` → `extract_hwp_markdown_text` → 실패 시 `extract_hwp_preview_text(PrvText 스트림)` 폴백. 표는 markdown 표로 어느 정도 복원됨.
 
 ### Step 2. 공고문 분석 (1개)
@@ -101,7 +103,7 @@ for i, f in enumerate(sorted(SRC.glob("*.hwp"))):   # glob 으로 한글경로 �
 
 ## 핵심 제약·함정 (검증됨)
 
-- **HWP 직접 읽기 금지** → 반드시 `extract_additional_text`. `Read` 툴로 .hwp 직접 열면 깨진 바이너리.
+- **HWP 직접 읽기 금지** → 반드시 `extract_additional_text`. Read(노트북 파일은 machineId 지정)로 .hwp 직접 열면 깨진 바이너리.
 - **한글/OneDrive 경로** → `Path.glob("*.hwp")`로 잡고 ASCII 출력 폴더에 UTF-8 저장. 경로 문자열 직접 전달 금지.
 - **콘솔 한글 깨짐 = 정상**(cp949 출력 한계). 파일 인코딩(UTF-8)과 무관.
 - **추출 품질 차이**: 양식이 표 위주면 셀이 줄바꿈으로 풀려 나올 수 있음(예: 짧은 양식은 840자처럼 나옴 = 원래 짧은 양식). 너무 짧으면 `extract_hwp_preview_text` 폴백 결과인지, 원래 짧은 양식인지 원문 길이로 구분.
