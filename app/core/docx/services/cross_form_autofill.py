@@ -1199,7 +1199,8 @@ def match_fields(
 # 매칭될 때만** 체크. 모호(0개·2개+)·소스 무값이면 보류(자동 체크 금지, 날조 0).
 
 # 빈(미선택) 체크박스 / 이미 체크된 박스 기호 집합. 사용자 선택: □ → ■.
-_EMPTY_BOX_CHARS = "□☐▢◻◽⬚〼"
+# U+1943('᥃')은 한컴 기호 글꼴의 빈 체크박스가 변환돼 들어온 글리프다(실양식: 신청구분·신청분야 선택칸).
+_EMPTY_BOX_CHARS = "□☐▢◻◽⬚〼᥃"
 _CHECKED_BOX_CHARS = "■☑☒✓✔◼◾🗹"
 _EMPTY_BOX_RE = re.compile("[" + _EMPTY_BOX_CHARS + "]")
 _ANY_BOX_RE = re.compile("[" + _EMPTY_BOX_CHARS + _CHECKED_BOX_CHARS + "]")

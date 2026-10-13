@@ -3,12 +3,13 @@ from __future__ import annotations
 import re
 from pathlib import Path
 from core.docx.services.hwpx_protected_regions import normalized_cell_label
+from auto_write.services.submit_finish.body_fill import heading_key, json_reference_inputs
 
 
 def reference_sections(refs, labels=()):
     from docx import Document
     sections = {}
-    allowed = {normalized_cell_label(label) for label in labels}
+    allowed = {heading_key(label) for label in labels}
     duplicates = set()
     for ref in refs:
         path = Path(ref if isinstance(ref,(str,Path)) else ref.saved_path)
@@ -21,9 +22,10 @@ def reference_sections(refs, labels=()):
             style = paragraph.style.name if paragraph.style else ''
             # Heading styles are a positive boundary. Short standalone lines are
             # accepted only when the following paragraph is ordinary body text.
-            heading = style.startswith('Heading') or style in {'Title','Subtitle'} or normalized_cell_label(text) in allowed
+            # F3: "1. 아이디어 제안배경"처럼 번호 붙은 제목도 같은 라벨로 본다(정확 일치 유지).
+            heading = style.startswith('Heading') or style in {'Title','Subtitle'} or heading_key(text) in allowed
             if heading:
-                current = normalized_cell_label(text)
+                current = heading_key(text)
                 if current in sections:
                     duplicates.add(current)
                 sections.setdefault(current, {'label':text,'body':[],'images':[]})
@@ -55,7 +57,14 @@ def direct_cell_plan(index, identity, refs, meta):
     from core.docx.services.hwpx_fill import _GUIDANCE_CONDITIONAL_RE, _conditional_guidance_value
     candidate_grants = authorize_guidance_value_writes(index)
     sections = reference_sections(refs, [g.field_label for g in candidate_grants])
+    # F3: 참고자료 JSON(회사 마스터·사업계획 데이터·반복표)도 입력으로 쓴다. 명시 identity 우선.
+    json_in = json_reference_inputs(refs)
+    identity = {**json_in['identity'], **{k:v for k,v in identity.items() if str(v).strip()}}
+    record_meta = {**json_in['records'], **(meta.get('hwpx_records') or {})}
     facts = {normalized_cell_label(k):str(v) for k,v in identity.items() if str(v).strip()}
+    for k,v in list(identity.items()):
+        if str(v).strip():
+            facts.setdefault(heading_key(k), str(v))
     representative = facts.get(normalized_cell_label('대표자'))
     team = facts.get(normalized_cell_label('팀명'))
     if representative and team:
@@ -72,8 +81,8 @@ def direct_cell_plan(index, identity, refs, meta):
                 continue
             notes.append(f'[conditional] {label} RESOLVED')
         elif grant.kind in {'GUIDANCE_VALUE','EMPTY_NARRATIVE'}:
-            section = sections.get(key)
-            value = '\n'.join(section['body']) if section else facts.get(key)
+            section = sections.get(heading_key(label))
+            value = '\n'.join(section['body']) if section else (facts.get(key) or facts.get(heading_key(label)))
             if not value:
                 notes.append(f'[narrative] {label} NO_SOURCE')
                 continue
@@ -96,12 +105,27 @@ def direct_cell_plan(index, identity, refs, meta):
     grouped = {}
     for grant in records:
         grouped.setdefault(grant.record_label,[]).append(grant)
+    record_norm = {normalized_cell_label(k): v for k, v in record_meta.items()}
     for label, targets in grouped.items():
-        provided = (meta.get('hwpx_records') or {}).get(label)
+        provided = record_meta.get(label)
+        if provided is None:
+            # 줄바꿈·공백만 다른 표기도 같은 라벨로 본다.
+            provided = record_norm.get(normalized_cell_label(label))
         if provided is None:
             # Record label equivalence is explicit, restricted to a suffix.
             short = re.sub(r'\s*(?:등\s*)?보유현황$','',label).strip()
-            provided = (meta.get('hwpx_records') or {}).get(short)
+            provided = record_meta.get(short)
+        if provided is None:
+            # '지식재산권 등록 현황'·'수상경력(경진대회 등)'·'정부과제 수행실적' 처럼 끝 괄호·'현황/실적' 꼬리만 다른 표기.
+            base = re.sub(r'\s*[(（][^)）]*[)）]\s*$','',label).strip()
+            tail = re.sub(r'\s*(?:등\s*)?(?:보유|등록|수행)?\s*(?:현황|실적)$','',base).strip()
+            for cand in (base, tail):
+                if cand and cand != label:
+                    provided = record_meta.get(cand)
+                    if provided is None:
+                        provided = record_norm.get(normalized_cell_label(cand))
+                    if provided is not None:
+                        break
         if provided is None:
             raw = facts.get(normalized_cell_label(label)) or facts.get(normalized_cell_label(re.sub(r'\s*(?:등\s*)?보유현황$','',label)))
             if raw:
@@ -113,18 +137,26 @@ def direct_cell_plan(index, identity, refs, meta):
                     notes.append(f'[record-row] {label} FIELD_COUNT_MISMATCH')
         if not isinstance(provided,list):
             continue
-        capacity=max(g.record_index for g in targets)+1
+        slots=sorted({g.record_index for g in targets})   # 채울 수 있는 행(예시가 든 첫 행 등은 빠질 수 있음)
+        capacity=len(slots)
         if len(provided)>capacity:
             notes.append(f'[record-row] {label} OVERFLOW')
-        for row in range(min(len(provided),capacity)):
-            row_targets=[g for g in targets if g.record_index==row]
-            item=provided[row]
-            if not isinstance(item,dict) or set(map(normalized_cell_label,item)) != set(normalized_cell_label(g.field_label) for g in row_targets):
+        for pos in range(min(len(provided),capacity)):
+            row_targets=[g for g in targets if g.record_index==slots[pos]]
+            item=provided[pos]
+            header_keys=set(normalized_cell_label(g.field_label) for g in row_targets)
+            if not isinstance(item,dict) or not item or not set(map(normalized_cell_label,item)) <= header_keys:
                 notes.append(f'[record-row] {label} FIELD_COUNT_MISMATCH'); continue
             fields={normalized_cell_label(k):str(v) for k,v in item.items()}
-            if not all(fields[normalized_cell_label(g.field_label)].strip() for g in row_targets):
+            given=[g for g in row_targets if fields.get(normalized_cell_label(g.field_label),'').strip()]
+            if not given:
                 continue
-            for grant in row_targets:
+            for grant in given:
                 grants.append(grant); values[grant]=fields[normalized_cell_label(grant.field_label)]
-            notes.append(f'[record-row] {label} WRITTEN')
+            if len(given)==len(row_targets):
+                notes.append(f'[record-row] {label} WRITTEN')
+            else:
+                # 일부 항목만 근거가 있는 행: 있는 값만 쓰고 나머지는 비워 둔 채 사용자 확인 대상으로 남긴다(날조 0).
+                missing=[g.field_label for g in row_targets if g not in given]
+                notes.append(f'[record-row] {label} ROW_PARTIAL REVIEW 비움: {", ".join(missing)}')
     return grants, values, notes, images

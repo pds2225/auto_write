@@ -2480,6 +2480,12 @@ def _coverage_pairs(index):
                 continue
             values = [c for c in table.cells if _cell_placed(c) and c.row == label_cell.row
                       and c.row_span == label_cell.row_span and c.col == label_cell.col + label_cell.col_span]
+            if not values:
+                # 세로형 서술 블록: 표 폭 전체를 쓰는 라벨 행 바로 아래의 전폭 칸이 값칸이다(단일 열 표 등).
+                width = max((c.col + c.col_span for c in table.cells if _cell_placed(c)), default=0)
+                if label_cell.col == 0 and label_cell.col_span == width:
+                    values = [c for c in table.cells if _cell_placed(c) and c.col == 0 and c.col_span == width
+                              and c.row == label_cell.row + label_cell.row_span and c.row_span == 1]
             if len(values) != 1:
                 continue
             value = values[0]
@@ -2521,7 +2527,45 @@ def find_guidance_value_targets(index: HwpxStructureIndex) -> tuple[CellValueAut
         if re.search(r"생년|설립일|개시일|날짜|연월일", label) and kind == "PART_VALUE":
             continue
         result.append(_cell_grant(index, table, section, cell, label, kind, part))
+    for grant in _placeholder_narrative_targets(index, parts):
+        groups.setdefault((grant.part, normalized_cell_label(grant.field_label)), []).append(grant)
+        result.append(grant)
     return tuple(g for g in result if len(groups[(g.part, normalized_cell_label(g.field_label))]) == 1)
+
+
+_NARRATIVE_PLACEHOLDER_RE = re.compile(r"^[\-–•·ㅇ○]?\s*(?:텍스트|내용(?:\s*(?:입력|작성))?|text)\s*$", re.IGNORECASE)
+
+
+def _placeholder_narrative_targets(index, parts) -> list:
+    """'- 텍스트' 한 줄만 든 단일 칸 서술 상자 → 바로 앞 제목 표(예: '1.' | '문제인식')의 제목을 라벨로 하는 서술 칸.
+
+    칸 글자가 자리표시 단어와 빈 줄뿐일 때만 대상이다(실제 글이 있으면 건드리지 않는다).
+    """
+    out = []
+    tops = [t for t in index.tables if t.parent_table_index is None and t.story_scope == "body"]
+    for pos, table in enumerate(tops):
+        placed = [c for c in table.cells if _cell_placed(c)]
+        if len(table.cells) != 1 or len(placed) != 1 or pos == 0 or table.addresses_overlap:
+            continue
+        cell = placed[0]
+        if cell.has_nested_table or cell.has_non_text_object:
+            continue
+        section = next(s for s in index.sections if s.section_index == table.section_index)
+        lines = [section.paragraphs[i].raw_text.strip() for i in cell.paragraph_indexes]
+        filled = [x for x in lines if x]
+        if not filled or not all(_NARRATIVE_PLACEHOLDER_RE.match(x) for x in filled):
+            continue
+        prev = tops[pos - 1]
+        prev_section = next(s for s in index.sections if s.section_index == prev.section_index)
+        texts = [_cell_joined(prev_section, c).strip() for c in prev.cells if _cell_placed(c)]
+        texts = [t for t in texts if t]
+        if not texts or len(texts) > 4 or any(len(t) > 30 for t in texts):
+            continue
+        title = texts[-1]
+        if re.fullmatch(r"[\d.\s]+", title):
+            continue
+        out.append(_cell_grant(index, table, section, cell, title, "EMPTY_NARRATIVE", parts[table.table_index]))
+    return out
 
 
 def authorize_guidance_value_writes(index: HwpxStructureIndex) -> tuple[CellValueAuthorization, ...]:
@@ -2530,6 +2574,52 @@ def authorize_guidance_value_writes(index: HwpxStructureIndex) -> tuple[CellValu
 
 def guidance_value_authorization_is_current(index, grant) -> bool:
     return isinstance(grant, CellValueAuthorization) and grant in authorize_guidance_value_writes(index)
+
+
+_CHARPR_COLOR_CACHE: dict[tuple[str, int], dict[str, str]] = {}
+
+
+def _charpr_colors(index) -> dict[str, str]:
+    """index 원본 header.xml 의 charPr 글자색 지도({id: '#RRGGBB'}). 실패하면 빈 사전."""
+    key = (str(index.source_path), int(getattr(index, "source_size", 0) or 0))
+    if key not in _CHARPR_COLOR_CACHE:
+        colors: dict[str, str] = {}
+        try:
+            from zipfile import ZipFile
+            from lxml import etree
+            with ZipFile(index.source_path) as archive:
+                head = etree.fromstring(archive.read("Contents/header.xml"))
+            for el in head.iter():
+                if etree.QName(el).localname == "charPr" and el.get("id"):
+                    colors[el.get("id")] = el.get("textColor") or ""
+        except Exception:
+            colors = {}
+        _CHARPR_COLOR_CACHE[key] = colors
+    return _CHARPR_COLOR_CACHE[key]
+
+
+def _cell_is_example_styled(index, section, cell) -> bool:
+    """칸 글자가 예시색 안내문(순수 파랑, 또는 빨강 등 + '기재·작성' 지시문)으로만 적혀 있는가 — 엔진 규칙과 동일."""
+    colors = _charpr_colors(index)
+    if not colors:
+        return False
+    from .hwpx_fill import _LETTER_RE, _is_example_color, _is_pure_blue, _looks_like_instruction
+    seen = False
+    all_blue = True
+    colored: list[str] = []
+    for pi in cell.paragraph_indexes:
+        for run in section.paragraphs[pi].runs:
+            text = run.raw_text or ""
+            if not text.strip():
+                continue
+            color = colors.get(run.char_pr_id or "", "")
+            if _is_example_color(color):
+                seen = True
+                colored.append(text)
+                all_blue = all_blue and _is_pure_blue(color)
+            elif _LETTER_RE.search(text):
+                return False
+    return seen and (all_blue or _looks_like_instruction("".join(colored)))
 
 
 def find_record_row_targets(index: HwpxStructureIndex) -> tuple[CellValueAuthorization, ...]:
@@ -2554,7 +2644,8 @@ def find_record_row_targets(index: HwpxStructureIndex) -> tuple[CellValueAuthori
                 for header in headers:
                     matches = [c for c in table.cells if _cell_placed(c) and c.row == label_cell.row + offset
                                and c.row_span == 1 and c.col == header.col and c.col_span == header.col_span
-                               and not _cell_joined(section,c).strip() and not c.has_nested_table and not c.has_non_text_object]
+                               and not c.has_nested_table and not c.has_non_text_object
+                               and (not _cell_joined(section,c).strip() or _cell_is_example_styled(index, section, c))]
                     if len(matches) != 1:
                         targets = []
                         break
@@ -2562,7 +2653,69 @@ def find_record_row_targets(index: HwpxStructureIndex) -> tuple[CellValueAuthori
                 for header, value in targets:
                     result.append(_cell_grant(index, table, section, value, _cell_joined(section, header),
                         "RECORD_VALUE", parts[table.table_index], label, offset - 1))
+    result.extend(_header_row_record_targets(index, parts))
     return tuple(result)
+
+
+def _table_headings(index) -> dict[int, str]:
+    """표 바로 앞의 비어 있지 않은 본문 문단 글자(□·ㅇ 같은 글머리표 제거) — 헤더행 반복 표의 이름."""
+    out: dict[int, str] = {}
+    for section in index.sections:
+        last = ""
+        for para in section.paragraphs:
+            if para.table_index is None:
+                text = re.sub(r"^[\s□■▣◆◇○●ㅇ·\-–—*※▶▷>]+", "", para.raw_text or "").strip()
+                if text:
+                    last = text
+            elif para.table_index not in out:
+                out[para.table_index] = last
+    return out
+
+
+def _header_row_record_targets(index, parts) -> list:
+    """'머리글 행 + 빈 데이터 행들' 반복 표(지식재산권·수상경력·인력 현황 등)의 기록 칸.
+
+    첫 행이 모두 짧은 항목명(2칸 이상)이고 아래 행의 같은 열 칸이 비었거나 예시 서식이면 기록 표다.
+    표 이름은 표 바로 앞 문단(예: '□ 지식재산권 등록 현황')이며 앞 문단이 없으면 대상에서 뺀다.
+    """
+    headings = _table_headings(index)
+    out = []
+    for table in index.tables:
+        if table.story_scope != "body" or table.parent_table_index is not None or table.addresses_overlap:
+            continue
+        name = headings.get(table.table_index, "")
+        if not name or len(name) > 60:
+            continue
+        section = next(s for s in index.sections if s.section_index == table.section_index)
+        placed = [c for c in table.cells if _cell_placed(c)]
+        if not placed:
+            continue
+        top = min(c.row for c in placed)
+        headers = sorted([c for c in placed if c.row == top and c.row_span == 1], key=lambda c: c.col)
+        if len(headers) < 2 or len(headers) != len([c for c in placed if c.row == top]):
+            continue
+        if not all(_safe_cell_label(_cell_joined(section, h)) for h in headers):
+            continue
+        last_row = max(c.row + c.row_span for c in placed)
+        for row in range(top + 1, last_row):
+            targets = []
+            for header in headers:
+                matches = [c for c in placed if c.row == row and c.row_span == 1 and c.col == header.col
+                           and c.col_span == header.col_span and not c.has_nested_table and not c.has_non_text_object
+                           and (not _cell_joined(section, c).strip() or _cell_is_example_styled(index, section, c))]
+                if len(matches) != 1:
+                    # '□ 특허 □ 실용신안' 같은 선택 칸은 체크박스 단계의 몫이라 기록 대상에서만 뺀다.
+                    choice = [c for c in placed if c.row == row and c.col == header.col
+                              and re.search("[□☐▢◻◽" + chr(0x1943) + "]", _cell_joined(section, c))]
+                    if len(choice) == 1:
+                        continue
+                    targets = []
+                    break
+                targets.append((header, matches[0]))
+            for header, value in targets:
+                out.append(_cell_grant(index, table, section, value, _cell_joined(section, header),
+                    "RECORD_VALUE", parts[table.table_index], name, row - top - 1))
+    return out
 
 
 def record_authorization_is_current(index, grant) -> bool:
