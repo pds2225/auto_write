@@ -37,12 +37,24 @@ def _from_check(result: Any) -> dict[str, str | bool]:
     return _fail(result.detail or f"{result.defects} defects", result.detail)
 
 
-def _skip_format(code: str, suffix: str) -> dict[str, str | bool]:
-    return _ok(f"{code} skipped: artifact is {suffix or 'unknown'} (format mismatch)")
+def _skip_format(code: str, suffix: str) -> dict[str, Any]:
+    """형식이 달라 적용되지 않는 규칙.
+
+    기존 소비자 호환을 위해 status 는 PASS 로 두되 basis=skipped_format 과 사유·위치를 남긴다.
+    집계(summary)는 이를 '통과'가 아니라 '근거 있는 N/A'로 센다.
+    """
+    shown = suffix or "unknown"
+    return {
+        **_ok(f"{code} skipped: artifact is {shown} (format mismatch)"),
+        "basis": "skipped_format",
+        "reason": f"{code} 는 .hwpx 전용 규칙이고 산출물은 {shown}",
+        "location": f"artifact suffix={shown}; scope=.hwpx",
+    }
 
 
 def _process(code: str, where: str) -> dict[str, str | bool]:
-    return _ok(f"{code} process invariant ({where}); not an artifact predicate")
+    """산출물을 직접 검사하지 않는 프로세스 불변식 — PASS 로 두되 basis=process 로 구분 집계한다."""
+    return {**_ok(f"{code} process invariant ({where}); not an artifact predicate"), "basis": "process"}
 
 
 def build_lrule_guards(

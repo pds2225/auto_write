@@ -378,3 +378,148 @@ def resize_hwpx_picture(
         "orgSz_preserved": True,
         "imgRect_preserved": rect is None or True,
     }
+
+
+def minimal_picture_template():
+    """An inline OWPML picture skeleton for templates with no existing picture."""
+    hc = 'http://www.hancom.co.kr/hwpml/2011/core'
+    pic = etree.Element(_q('pic'), id='1', zOrder='0', numberingType='PICTURE', textWrap='TOP_AND_BOTTOM', textFlow='BOTH_SIDES', lock='0', dropcapstyle='None', href='', groupLevel='0', instid='1', reverse='0')
+    etree.SubElement(pic,_q('offset'),x='0',y='0')
+    etree.SubElement(pic,_q('orgSz'),width='1',height='1')
+    etree.SubElement(pic,_q('curSz'),width='1',height='1')
+    etree.SubElement(pic,_q('flip'),horizontal='0',vertical='0')
+    etree.SubElement(pic,_q('rotationInfo'),angle='0',centerX='0',centerY='0',rotateimage='1')
+    rendering=etree.SubElement(pic,_q('renderingInfo'))
+    for name in ('transMatrix','scaMatrix','rotMatrix'):
+        etree.SubElement(rendering,f'{{{hc}}}{name}',e1='1',e2='0',e3='0',e4='0',e5='1',e6='0')
+    rect=etree.SubElement(pic,_q('imgRect'))
+    for i in range(4):
+        etree.SubElement(rect,f'{{{hc}}}pt{i}',x='0',y='0')
+    etree.SubElement(pic,_q('imgClip'),left='0',right='0',top='0',bottom='0')
+    etree.SubElement(pic,_q('inMargin'),left='0',right='0',top='0',bottom='0')
+    etree.SubElement(pic,f'{{{hc}}}img',binaryItemIDRef='image1',bright='0',contrast='0',effect='REAL_PIC',alpha='0')
+    etree.SubElement(pic,_q('effects'))
+    etree.SubElement(pic,_q('sz'),width='1',widthRelTo='ABSOLUTE',height='1',heightRelTo='ABSOLUTE',protect='0')
+    etree.SubElement(pic,_q('pos'),treatAsChar='1',affectLSpacing='0',flowWithText='1',allowOverlap='0',holdAnchorAndSO='0',vertRelTo='PARA',horzRelTo='PARA',vertAlign='TOP',horzAlign='CENTER',vertOffset='0',horzOffset='0')
+    etree.SubElement(pic,_q('outMargin'),left='0',right='0',top='0',bottom='0')
+    etree.SubElement(pic,_q('shapeComment')).text='사용자 제공 이미지'
+    return pic
+
+
+def insert_cell_reference_images(in_hwpx, out_hwpx, images, *, authorization_source=None, values=None):
+    """Insert only explicit DOCX inline images in previously authorized cells."""
+    from io import BytesIO
+    from PIL import Image
+    from core.docx.services.hwpx_analysis_adapter import index_hwpx_structure
+    from core.docx.services.hwpx_fill import _same_file
+    src,dst=Path(in_hwpx),Path(out_hwpx)
+    if _same_file(src,dst):
+        raise ValueError('원본 덮어쓰기 금지')
+    index=index_hwpx_structure(src)
+    from core.docx.services.hwpx_protected_regions import guidance_value_authorization_is_current, _cell_joined
+    if authorization_source is None or values is None:
+        raise ValueError('IMAGE_AUTHORIZATION_REQUIRED')
+    original=index_hwpx_structure(authorization_source)
+    for grant in images:
+        if not guidance_value_authorization_is_current(original,grant):
+            raise ValueError('STALE_IMAGE_AUTHORIZATION')
+        if grant.kind not in {'GUIDANCE_VALUE','EMPTY_NARRATIVE'}:
+            raise ValueError('IMAGE_NOT_NARRATIVE_CELL')
+        if grant.table_index >= len(index.tables):
+            raise ValueError('IMAGE_CELL_CHANGED')
+        table=index.tables[grant.table_index]
+        matches=[c for c in table.cells if (c.row,c.col,c.row_span,c.col_span,c.physical_tr_index,c.physical_tc_index)==(grant.row,grant.col,grant.row_span,grant.col_span,grant.physical_tr_index,grant.physical_tc_index)]
+        expected=values.get(grant,values.get(grant.field_label,''))
+        section=next(s for s in index.sections if s.section_member==grant.section_member)
+        if len(matches)!=1 or not str(expected).strip() or _cell_joined(section,matches[0])!=''.join(str(expected).splitlines()):
+            raise ValueError('IMAGE_CELL_TEXT_CHANGED')
+    with zipfile.ZipFile(src) as archive:
+        infos=archive.infolist(); data={i.filename:archive.read(i.filename) for i in infos}
+    parser=etree.XMLParser(resolve_entities=False,no_network=True)
+    roots={g.section_member:etree.fromstring(data[g.section_member],parser) for g in images}
+    next_paragraph_id = max(
+        [int(p.get('id')) for root in roots.values() for p in root.iter(_q('p'))
+         if p.get('id', '').isdigit()] + [0]
+    ) + 1
+    hpf=etree.fromstring(data['Contents/content.hpf'],parser)
+    opf='http://www.idpf.org/2007/opf/'
+    manifest=next((node for node in hpf.iter() if _local(node.tag)=='manifest'),None)
+    if manifest is not None:
+        opf=etree.QName(manifest).namespace or opf
+    if manifest is None:
+        raise ValueError('MANIFEST_MISSING')
+    header=etree.fromstring(data['Contents/header.xml'],parser) if 'Contents/header.xml' in data else None
+    hh='http://www.hancom.co.kr/hwpml/2011/head'
+    def centered(ref):
+        if header is None:
+            return ref
+        paras=list(header.iter(f'{{{hh}}}paraPr'))
+        original=next((p for p in paras if p.get('id')==ref),None)
+        if original is None:
+            return ref
+        clone=copy.deepcopy(original)
+        new_id=str(max([int(p.get('id')) for p in paras if p.get('id','').isdigit()]+[0])+1)
+        clone.set('id',new_id)
+        align=clone.find(f'{{{hh}}}align')
+        if align is None:
+            align=etree.SubElement(clone,f'{{{hh}}}align')
+        align.set('horizontal','CENTER')
+        original.getparent().append(clone)
+        original.getparent().set('itemCnt',str(len(list(original.getparent()))))
+        return new_id
+    next_id=_next_image_id(data['Contents/content.hpf'].decode('utf-8'))
+    added={}
+    for grant,specs in images.items():
+        root=roots[grant.section_member]
+        table=index.tables[grant.table_index]
+        node=list(root.iter(_q('tbl')))[table.table_index_in_section]
+        cell=list(list(node.iterchildren(_q('tr')))[grant.physical_tr_index].iterchildren(_q('tc')))[grant.physical_tc_index]
+        sub=cell.find(_q('subList'))
+        size=cell.find(_q('cellSz'))
+        width=int(size.get('width','0')) if size is not None else 0
+        margins=cell.find(_q('cellMargin'))
+        if margins is not None:
+            width-=int(margins.get('left','0'))+int(margins.get('right','0'))
+        if width<=0:
+            raise ValueError('IMAGE_CELL_WIDTH_UNKNOWN')
+        template=next(iter(sub.iterchildren(_q('p'))))
+        for spec in specs:
+            with Image.open(BytesIO(spec['blob'])) as im:
+                px=im.size
+            if min(px)<=0:
+                raise ValueError('IMAGE_SIZE_INVALID')
+            max_units=150*_HWPUNIT_PER_MM
+            display=min(width,max_units,max_units*px[0]/px[1])
+            image_id=f'image{next_id}';next_id+=1
+            href=f'BinData/{image_id}{spec["suffix"]}'
+            added[href]=spec['blob']
+            etree.SubElement(manifest,f'{{{opf}}}item',id=image_id,href=href,**{'media-type':'image/png' if spec['suffix']=='.png' else 'image/jpeg','isEmbeded':'1'})
+            pic=build_picture_element(minimal_picture_template(),image_id=image_id,px=px,width_mm=display/_HWPUNIT_PER_MM,comment=spec.get('caption',''))
+            paragraph=etree.SubElement(sub,_q('p'),**dict(template.attrib))
+            paragraph.set('id', str(next_paragraph_id))
+            next_paragraph_id += 1
+            paragraph.set('paraPrIDRef',centered(template.get('paraPrIDRef','0')))
+            etree.SubElement(paragraph,_q('run'),charPrIDRef='0').append(pic)
+            if spec.get('caption'):
+                caption=etree.SubElement(sub,_q('p'),**dict(template.attrib))
+                caption.set('id', str(next_paragraph_id))
+                next_paragraph_id += 1
+                caption.set('paraPrIDRef',paragraph.get('paraPrIDRef'))
+                etree.SubElement(etree.SubElement(caption,_q('run'),charPrIDRef='0'),_q('t')).text=spec['caption']
+    for name,root in roots.items():
+        data[name]=etree.tostring(root,xml_declaration=True,encoding='UTF-8',standalone=True)
+    data['Contents/content.hpf']=etree.tostring(hpf,xml_declaration=True,encoding='UTF-8',standalone=True)
+    if header is not None:
+        data['Contents/header.xml']=etree.tostring(header,xml_declaration=True,encoding='UTF-8',standalone=True)
+    dst.parent.mkdir(parents=True,exist_ok=True)
+    fd,tmp=tempfile.mkstemp(dir=dst.parent,suffix='.hwpx');os.close(fd)
+    try:
+        with zipfile.ZipFile(tmp,'w') as archive:
+            for info in sorted(infos,key=lambda i:i.filename!='mimetype'):
+                archive.writestr(info,data[info.filename])
+            for name,blob in added.items():
+                archive.writestr(name,blob)
+        os.replace(tmp,dst)
+    finally:
+        if os.path.exists(tmp):os.unlink(tmp)
+    return {'added':len(added)}

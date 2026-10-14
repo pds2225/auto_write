@@ -388,6 +388,8 @@ class PdfPairGenerateResult:
     blocked: bool
     reason: str
     evidence: str = ""
+    attempts: int = 0
+    attempt_reasons: tuple[str, ...] = ()
 
 
 def hangul_pdf_tool() -> str | None:
@@ -441,6 +443,14 @@ def _write_l050_evidence(source: Path, dest: Path, tool: str) -> str:
     return str(evidence)
 
 
+def _refused_saveas_reason(prior: list[str]) -> str:
+    """SaveAs 거부 사유. 앞선 시도(예: 1차 타임아웃)의 원인을 최종 reason 에도 보존한다."""
+    reason = "BLOCKED-by-form: Hangul refused SaveAs PDF for this form"
+    if prior:
+        reason += " (이전 시도 실패: " + "; ".join(prior) + ")"
+    return reason
+
+
 def _try_hangul_com_pdf(source: Path, dest: Path) -> PdfPairGenerateResult | None:
     """Windows 한글 COM SaveAs PDF.
 
@@ -458,40 +468,41 @@ def _try_hangul_com_pdf(source: Path, dest: Path) -> PdfPairGenerateResult | Non
     if not hancom_com_available():
         return None
     dest.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        export_pdf_via_com(source, dest)
-    except HangulComTimeout as exc:
-        if dest.is_file():
-            try:
-                dest.unlink()
-            except OSError:
-                pass
-        return PdfPairGenerateResult(
-            False,
-            False,
-            True,
-            f"BLOCKED: {exc}",
-        )
-    except Exception:
-        if dest.is_file() and dest.stat().st_size == 0:
-            try:
-                dest.unlink()
-            except OSError:
-                pass
-        return PdfPairGenerateResult(
-            False,
-            False,
-            True,
-            "BLOCKED-by-form: Hangul refused SaveAs PDF for this form",
-        )
-    if dest.is_file() and dest.stat().st_size > 0:
-        return PdfPairGenerateResult(True, False, False, "Hangul COM SaveAs PDF", "")
-    return PdfPairGenerateResult(
-        False,
-        False,
-        True,
-        "BLOCKED-by-form: Hangul refused SaveAs PDF for this form",
-    )
+    import time
+    reasons = []
+    for attempt in range(1, 3):
+        try:
+            # export_pdf_via_com always performs its owned-PID cleanup in finally.
+            # Never enumerate/kill newly appearing user windows from this layer.
+            export_pdf_via_com(source, dest)
+        except HangulComTimeout as exc:
+            reasons.append(str(exc))
+            if dest.is_file():
+                try:
+                    dest.unlink()
+                except OSError:
+                    pass
+            if attempt == 1:
+                time.sleep(5)
+                continue
+            return PdfPairGenerateResult(False, False, True, f"BLOCKED: {exc}",
+                attempts=attempt, attempt_reasons=tuple(reasons))
+        except Exception:
+            if dest.is_file() and dest.stat().st_size == 0:
+                try:
+                    dest.unlink()
+                except OSError:
+                    pass
+            reason = _refused_saveas_reason(reasons)
+            return PdfPairGenerateResult(False, False, True, reason,
+                attempts=attempt, attempt_reasons=tuple(reasons+[reason]))
+        if dest.is_file() and dest.stat().st_size > 0:
+            reasons.append("Hangul COM SaveAs PDF")
+            return PdfPairGenerateResult(True, False, False, reasons[-1], "",
+                attempt, tuple(reasons))
+        reason = _refused_saveas_reason(reasons)
+        return PdfPairGenerateResult(False, False, True, reason,
+            attempts=attempt, attempt_reasons=tuple(reasons+[reason]))
 
 
 def try_generate_sibling_pdf(path: str | Path) -> PdfPairGenerateResult:
@@ -634,6 +645,8 @@ def sibling_pdf_attempt(path: str | Path) -> dict[str, Any]:
         "skipped": gen.skipped,
         "blocked": gen.blocked,
         "reason": gen.reason,
+        "attempts": gen.attempts,
+        "attempt_reasons": list(gen.attempt_reasons),
         "evidence": gen.evidence,
         "missing": missing_pdf_pair(path),
         "mechanized": False,

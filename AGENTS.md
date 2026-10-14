@@ -1,10 +1,10 @@
 # AGENTS.md — auto_write 에이전트 협업 규약
 
 > AI 에이전트(Claude Code / Codex 등)가 `D:\auto_write` 에서 작업할 때의 규약.
-> 세션 시작·재개: `TASK.md` 먼저. `RESUME.md`는 세션 체크포인트만 읽는다. 입구 맵: `docs/BIZDOC_HUB_MAP.md`.
+> 작업 시작·재개 전 `git fetch origin --prune` 후 `origin/main:TASK.md` → `origin/main:RESUME.md`를 반드시 읽는다. 입구 맵: `docs/BIZDOC_HUB_MAP.md`.
 > 상세 작업 지침은 `CLAUDE.md`, 하네스 설계는 `docs/HARNESS_TEAM_DESIGN.md` 참조.
 >
-> **세션 시작 시** `git fetch origin --prune` 후 `origin/main:TASK.md`의 LIST와 열린 TASK를 먼저 확인한다.
+> **모든 위치의 작업 시작 시** `git fetch origin --prune` 후 `origin/main:TASK.md`의 LIST와 열린 TASK를 먼저 확인하고, `origin/main:RESUME.md`를 반드시 읽는다.
 > 자동 `git pull`은 하지 않는다. 그 다음 `.session/closeout_due.json` 의 `due` 가 true 이면
 > (로컬 Claude 훅은 `python scripts/session_closeout.py sync-disk` 로 디스크 깃발 동기)
 > **이 (agent, location) 이 acks 에 없을 때만** `RESUME.md` 를 갱신하고
@@ -17,7 +17,7 @@
 ## TASK SSOT — 모든 에이전트 공통
 
 - 개발 작업의 유일한 공식 정본은 `origin/main:TASK.md`.
-- 시작 순서: `git fetch origin --prune` → TASK.md `# 0` LIST → 열린 TASK의 `8-1` → 필요 시 `RESUME.md`.
+- 시작 순서: `git fetch origin --prune` → `origin/main:TASK.md`의 `# 0` LIST와 열린 TASK의 `8-1` → `origin/main:RESUME.md` 필수 확인. 로컬·다른 PC·클라우드·GitHub 및 어떤 작업 브랜치에서도 같은 순서를 따른다.
 - `RESUME.md`는 중단 지점·로그·재개 힌트만 보관하며 TASK 상태/우선순위를 변경하지 않는다.
 - 작업 중 TASK 변경은 현재 작업 브랜치의 `TASK.md`에 기록하고, main 머지 후 공식 상태가 된다.
 - Google Drive는 백업/열람용 미러만 허용한다. GitHub TASK와 Drive 문서를 병행 편집 원본으로 두지 않는다.
@@ -172,6 +172,7 @@ PR 본문 골격은 `.github/PULL_REQUEST_TEMPLATE.md` 를 따른다.
 - GitHub 공유는 이번 사용자 승인 범위와 저장소의 PR·자동병합 규칙을 따른다. 원격 main에서 두 파일이 실제 읽히는지 확인하고 링크를 보고한다. main 직접 push는 금지한다.
 - 공개 저장소이므로 프로젝트 외 자동화·개인 기록·메일/캘린더 내용·Secret·로컬 증거/data/백업은 포함하지 않는다. 기존 로컬 `SESSION_RECAP.md` 전체 회고와 개인 체크포인트는 보존하고, 공개 가능한 프로젝트 내용만 공유판에 옮긴다.
 - 다른 PC·클라우드는 `git fetch origin` 후 `origin/main:TASK.md`, `origin/main:RESUME.md`, `origin/main:docs/SESSION_RECAP.md`를 먼저 읽는다. 로컬 변경·브랜치를 확인하기 전에 자동 pull/reset/clean을 하지 않는다.
+- **시작 전 필수 확인:** 위 시작 순서대로 원격 TASK와 RESUME를 읽기 전에는 제품 코드 수정·테스트·새 작업 착수를 하지 않는다. 읽은 main SHA와 현재 상태·다음 액션을 짧게 보고한다. 로컬 RESUME만 읽고 원격 확인을 생략하지 않는다. fetch 또는 원격 파일 조회가 실패하면 실패 이유를 보고하고 해결한 뒤 시작한다. RESUME는 TASK의 상태·우선순위를 덮어쓰지 않는다.
 
 ---
 
@@ -179,6 +180,7 @@ PR 본문 골격은 `.github/PULL_REQUEST_TEMPLATE.md` 를 따른다.
 
 | 날짜 | 변경 내용 | 사유 |
 |------|----------|------|
+| 2026-10-06 | 모든 위치에서 작업 전 원격 TASK→RESUME 필수 확인 | 「딴데서 작업시작할떄 읽으라고 강제해」 |
 | 2026-10-06 | §10 프로젝트 회고·재개 기록의 GitHub 공유 경로와 공개 범위 | 다른 위치에서도 세션을 이어가려는 사용자 요청 |
 | 2026-09-28 | §9 PR·코드리뷰 한국어. 요청 원문 「v_up처럼 코드리뷰나 pr 한글로나오게해줘」 | v_up과 같이 제목 설명·본문·리뷰가 한글로 나오게 함 |
 | 2026-09-23 | §8 에이전트가 띄운 임시 파일·창·프로세스 자동 정리 규칙 추가 | 검증 후 불필요한 임시 창·프로세스를 안전하게 정리하되 사용자 작업은 보존 |

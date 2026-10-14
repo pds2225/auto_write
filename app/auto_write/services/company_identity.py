@@ -50,8 +50,14 @@ def company_profile_identity(profile: dict | None) -> dict[str, str]:
     exact: dict[str, str] = {}
     alias: dict[str, str] = {}
     passthrough: dict[str, str] = {}
+    from auto_write.services.submit_finish.body_fill import scalar_value
+
     for raw_key, raw_value in profile.items():
-        value = "" if raw_value is None else str(raw_value).strip()
+        # 회사 마스터 항목({value, confidence})은 값만 꺼낸다. 사전 원문이 칸에 들어가지 않게.
+        value = scalar_value(raw_value) if isinstance(raw_value, dict) else (
+            "" if raw_value is None else str(raw_value).strip()
+        )
+        value = value or ""
         if not value:
             continue
         key = str(raw_key).strip()
@@ -85,6 +91,13 @@ def identity_from_label_text(text: str) -> dict[str, str]:
             continue
         if label_key(label) == team_key:
             identity.setdefault("팀명", value)
+            continue
+        explicit = {"팀원수": "팀원수", "구분": "구분", "기업형태": "기업형태",
+                    "참가형태": "참가형태", "아이디어명": "아이디어명", "사업자명": "사업자명",
+                    "지식재산권": "지식재산권", "지식재산권등보유현황": "지식재산권 등 보유현황"}
+        compact = label_key(label)
+        if compact in explicit:
+            identity.setdefault(explicit[compact], value)
             continue
         canon = _canon_field(label)
         if canon and _valid_value(canon, value):
@@ -124,6 +137,12 @@ def build_direct_fill_identity(project_input: Any) -> dict[str, str]:
         organization_name = str(profile.get("name") or "").strip()
     if organization_name:
         identity.setdefault("기업명", organization_name)
+
+    # 참고자료 JSON(회사 마스터·사업계획 데이터)의 값. 위 명시 입력이 우선한다.
+    from auto_write.services.submit_finish.body_fill import json_reference_inputs
+
+    for key, value in json_reference_inputs(getattr(project_input, "references", None) or ()).get("identity", {}).items():
+        identity.setdefault(key, value)
 
     # 사용자 원문만 exact label 창업아이템 개요 후보로 넘긴다. 생성하거나 추론하지 않는다.
     answers = getattr(project_input, "answers", None) or {}
