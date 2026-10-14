@@ -564,6 +564,8 @@ def submit_hwpx(
     field_writes: Optional[dict[str, str]] = None,
     expected_sha256: str | None = None,
     lrule_gate: bool = False,
+    require_render_evidence: bool = False,
+    template_survival_baseline: str | Path | None = None,
 ) -> SubmitReport:
     """HWPX 양식을 채우고 수용검사 게이트로 판정해 제출 가능 여부를 확정한다.
 
@@ -576,6 +578,12 @@ def submit_hwpx(
             최종 제출본은 허용하지 않는다(``_DRAFT`` + ``APPROVAL_REQUIRED``).
         lrule_gate: True면 전수 LRule/Finalizer와 증거 저장까지 확인한다.
             라이브러리 기본값은 기존 R9 경로를 유지하며 제출 CLI에서는 항상 켠다.
+        require_render_evidence: True면 재열기·전체 렌더·시각검수·candidate/render hash
+            증거가 모두 PASS가 아니면 FINAL을 허용하지 않는다. 기본값 False는 기존
+            라이브러리 호출 호환성을 유지한다.
+        template_survival_baseline: preserve_template 구조 생존 비교에 사용할 원본 양식.
+            생략 시 현재 in_hwpx를 사용한다. 사전 analyzer staging 뒤 submit되는 경로는
+            반드시 최초 업로드 원본을 넘겨 staging 단계의 구조 손실까지 함께 검출한다.
         normalize_colors: True(기본)면 채움 직후 잔존 예시 유색체를 검정으로 정규화해
             수용검사 colored 결함을 자동 해소한다(채운 값 검정은 fill_hwpx 가 이미 처리).
             ``submission_cleanup=True`` 이면 cleanup 의 force_black 이 동일 역할을 하므로
@@ -746,7 +754,7 @@ def submit_hwpx(
         for v in src_map.values() if str(v or "").strip()
     ]
     render_validator = None
-    if preserve_template:
+    if preserve_template or require_render_evidence:
         from core.docx.services.native_hwp import verify_hwpx_native
 
         def render_validator(candidate: str) -> dict[str, Any]:
@@ -761,6 +769,11 @@ def submit_hwpx(
         fixed_cell_overflow=report.overflow_cells,
         render_validator=render_validator,
         acceptance_baseline=str(src),
+        template_survival_baseline=(
+            str(template_survival_baseline or src) if preserve_template else None
+        ),
+        require_protected_anchors=preserve_template,
+        require_render_evidence=require_render_evidence,
     )
     report.integrity = gate.as_dict()
     report.acceptance = gate.acceptance_report
