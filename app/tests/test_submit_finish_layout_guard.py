@@ -487,3 +487,48 @@ def test_narrative_box_split_only_when_the_original_box_was_empty(tmp_path):
     assert r1["cell_rows"] == 1 and r2["cell_rows"] == 0 and r3["cell_rows"] == 0
     rows = list(_section(tmp_path / "o1.hwpx").iter(HPX + "tr"))
     assert len(rows) >= 2
+
+
+def test_split_title_section_detected_when_title_page_is_nearly_empty(tmp_path):
+    from auto_write.services.submit_finish.layout_guard import find_split_title_sections, section_min_ratios
+    body = [(60, 100 + 14 * i, f"줄 {i}") for i in range(52)]
+    final = _pdf(tmp_path, "f.pdf", [[(60, 100, "서약서 제목")], body])      # 제목만 있는 쪽 + 꽉 찬 표 쪽
+    base = _pdf(tmp_path, "b.pdf", [body])
+    spans, base_spans = section_spans(final, []), section_spans(base, [])
+    assert find_overflow_sections(spans, base_spans) == []                 # 마지막 쪽이 꽉 찼으므로 꼬리 넘침은 아님
+    assert find_split_title_sections(spans, base_spans, section_min_ratios(final, [])) == [0]
+    assert find_split_title_sections(base_spans, base_spans, section_min_ratios(base, [])) == []
+
+
+def test_paragraph_drop_explained_by_blank_spacers_is_not_a_form_change(tmp_path):
+    from auto_write.services.submit_finish.final_check import _paragraph_drop_is_blank_spacers
+    base = tmp_path / "base.hwpx"
+    _write_hwpx(base, _p("본문") + _p("") + _p("") + _p("") + _p("끝"))
+    fewer_blanks = tmp_path / "fewer.hwpx"
+    _write_hwpx(fewer_blanks, _p("본문") + _p("") + _p("끝"))
+    lost_text = tmp_path / "lost.hwpx"
+    _write_hwpx(lost_text, _p("본문") + _p("") + _p("") + _p(""))
+    assert _paragraph_drop_is_blank_spacers(base, fewer_blanks, {"문단": (5, 3)}) is True
+    assert _paragraph_drop_is_blank_spacers(base, lost_text, {"문단": (5, 4)}) is False   # 글 문단이 사라짐
+    assert _paragraph_drop_is_blank_spacers(base, fewer_blanks, {"문단": (5, 3), "표": (1, 2)}) is False
+
+
+def test_seal_already_past_right_edge_is_pulled_back_left(tmp_path):
+    src = tmp_path / "in.hwpx"
+    _write_hwpx(src, _p("대표자  박다솜          (서명/인)"))
+    stamped = tmp_path / "stamped.hwpx"
+    stamp_seals(src, stamped, [SealSpec(owner="박다솜", image=_seal_img(tmp_path), user_approved=True,
+                                        bind_roles=("representative",), width_mm=17)])
+    probe = tmp_path / "probe.hwpx"
+    make_probe(stamped, probe)
+    w = 17 / 25.4 * 72
+    # probe 렌더에서 직인이 이미 오른쪽 끝(표식 오른쪽 끝 500+~40)을 넘어 앉은 경우
+    pdf = _pdf(tmp_path, "probe.pdf", [[(60, 100, "대표자 박다솜"), (500, 100, "(서명/인)")]],
+               images={0: [((520, 80, 520 + w, 80 + w), _png(300, 300))]})
+    with fitz.open(str(pdf)) as d:
+        right_edge = max(wd[2] for wd in d[0].get_text("words"))
+    out = tmp_path / "aligned.hwpx"
+    assert align_to_markers(probe, pdf, out)["aligned"] == 1
+    raw = int(next(_section(out).iter(HPX + "pos")).get("horzOffset"))
+    off = raw - (1 << 32) if raw >= (1 << 31) else raw     # 부호 있는 값으로 복원
+    assert 520 + off / 100 + w <= right_edge + 0.5

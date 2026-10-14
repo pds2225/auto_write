@@ -231,3 +231,21 @@ def test_image_requires_reissued_origin_and_exact_current_body(tmp_path):
     with pytest.raises(ValueError,match='STALE'):insert_cell_reference_images(out,final,forged,authorization_source=src,values=written)
     with pytest.raises(ValueError,match='TEXT_CHANGED'):insert_cell_reference_images(out,final,images,authorization_source=src,values={k:'wrong' for k in written})
     assert not final.exists()
+
+
+def test_reference_image_is_placed_before_matching_caption_paragraph(tmp_path):
+    """본문에 같은 캡션 문단이 있으면 그림을 그 바로 앞에 넣고 캡션을 중복해 붙이지 않는다(상자 끝에 몰리지 않음)."""
+    src=package(tmp_path,narrative_table());ref=references(tmp_path/'ref.docx')
+    out,written,notes,images=apply(tmp_path,src,{},[ref])
+    grant=next(iter(images))
+    label=grant.field_label
+    caption=f'{label} 합성 본문 2: 제공된 설명으로 확인한다.'
+    specs=[{**images[grant][0],'caption':caption}]
+    final=tmp_path/'placed.hwpx'
+    insert_cell_reference_images(out,final,{grant:specs},authorization_source=src,values=written)
+    paras=root(final).xpath('//hp:tc[.//hp:pic]//hp:subList/hp:p',namespaces=NS)
+    texts=[('' if p.xpath('.//hp:pic',namespaces=NS) else ''.join(p.itertext())) for p in paras]   # 그림 문단은 설명 주석 글자 제외
+    pic_at=next(i for i,p in enumerate(paras) if p.xpath('.//hp:pic',namespaces=NS))
+    assert texts[pic_at+1]==caption                      # 그림 바로 뒤에 원래 캡션 문단
+    assert sum(1 for t in texts if t==caption)==1, texts # 캡션 중복 없음
+    assert pic_at<len(paras)-2                           # 상자 맨 끝이 아님

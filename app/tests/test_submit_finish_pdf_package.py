@@ -112,3 +112,13 @@ def test_package_end_to_end_mock(tmp_path):
                               converter=lambda s, d: _pdf(d, 1), retry_wait=0)
     assert conv.ok and merged.ok and merged.total_pages == 3
     assert merged.out.name == "(제출) 신청서_가나_홍길동_합본.pdf"
+
+
+def test_hwp_pid_snapshot_drops_processes_that_exit_while_settling(monkeypatch):
+    """직전 실행이 남긴 한글이 막 종료되는 중이면 '사용자 프로세스가 사라짐'으로 오탐하지 않는다."""
+    import core.docx.services.hwp_docx_convert as hc
+
+    seq = iter([{100, 200}, {100}])
+    monkeypatch.setattr(hc, "_hangul_image_pids", lambda: next(seq))
+    monkeypatch.setattr(pp, "_PID_SETTLE_SECONDS", 0)
+    assert pp._hwp_pids() == {100}

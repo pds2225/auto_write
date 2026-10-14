@@ -77,6 +77,9 @@ def _resolve_out(out: Path, overwrite: bool, versioned: bool) -> Path:
     return out
 
 
+_PID_SETTLE_SECONDS = 1.5
+
+
 def _hwp_pids() -> set[int] | None:
     try:
         from core.docx.services.hwp_docx_convert import _hangul_image_pids
@@ -86,7 +89,12 @@ def _hwp_pids() -> set[int] | None:
         except ImportError:
             return None
     try:
-        return set(_hangul_image_pids())
+        first = set(_hangul_image_pids())
+        if not first:
+            return first
+        # 막 종료되는 중인 한글(직전 실행이 남긴 프로세스)을 '사용자 프로세스'로 오인하지 않도록 잠시 뒤 다시 본다.
+        time.sleep(_PID_SETTLE_SECONDS)
+        return first & set(_hangul_image_pids())
     except Exception:
         return None
 

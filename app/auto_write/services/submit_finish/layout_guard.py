@@ -315,14 +315,44 @@ def section_anchor_texts(root) -> list[str]:
     return out
 
 
+_PAGE_NUMBER_RE = re.compile(r"^[\-–—\s]*\d+[\-–—\s]*$")
+
+
 def _page_fill_ratio(page) -> float:
+    """쪽 내용 하단 비율. 쪽 번호('- 3 -' 등 아래쪽 숫자 줄)는 내용이 아니므로 뺀다."""
     bottom = 0.0
+    height = page.rect.height or 1.0
     for block in page.get_text("dict")["blocks"]:
-        bottom = max(bottom, block["bbox"][3])
-    return bottom / page.rect.height if page.rect.height else 1.0
+        for line in block.get("lines", []):
+            text = "".join(sp["text"] for sp in line["spans"]).strip()
+            if not text or (_PAGE_NUMBER_RE.match(text) and line["bbox"][1] > height * 0.9):
+                continue
+            bottom = max(bottom, line["bbox"][3])
+        if not block.get("lines"):
+            bottom = max(bottom, block["bbox"][3])   # 그림 블록
+    return bottom / height
 
 
 def section_spans(pdf, anchors: Sequence[str]) -> list[tuple[int, int, float]] | None:
+    full = _section_spans_full(pdf, anchors)
+    return None if full is None else full[0]
+
+
+def section_min_ratios(pdf, anchors: Sequence[str]) -> list[float] | None:
+    """각 부의 가장 희박한 쪽 비율(쪽 번호 제외). 제목만 홀로 남은 쪽을 찾는 데 쓴다."""
+    full = _section_spans_full(pdf, anchors)
+    return None if full is None else full[1]
+
+
+def find_split_title_sections(final_spans, baseline_spans, min_ratios) -> list[int]:
+    """원본에서는 한 쪽이던 부가 둘 이상으로 늘었고 그중 한 쪽이 거의 비었으면(제목만 남고 표가 다음 쪽으로 밀림) 그 부 번호."""
+    if not final_spans or not baseline_spans or not min_ratios or len(final_spans) != len(baseline_spans):
+        return []
+    return [k for k, ((f0, f1, _r), (b0, b1, _q)) in enumerate(zip(final_spans, baseline_spans))
+            if b1 == b0 and f1 > f0 and k < len(min_ratios) and min_ratios[k] < _SPARSE_RATIO]
+
+
+def _section_spans_full(pdf, anchors: Sequence[str]):
     """각 부(0=첫 앵커 앞, k=앵커 k)의 (첫 쪽, 마지막 쪽, 마지막 쪽 내용 하단 비율). 쪽은 1부터.
 
     앵커를 PDF 에서 못 찾으면 None(판정 불가)."""
@@ -351,7 +381,7 @@ def section_spans(pdf, anchors: Sequence[str]) -> list[tuple[int, int, float]] |
         starts.append(hit + 1)
         cursor = hit + 1
     starts.append(len(firsts) + 1)
-    return [(starts[k], starts[k + 1] - 1, ratios[starts[k + 1] - 2]) for k in range(len(starts) - 1)]
+    return [(starts[k], starts[k + 1] - 1, ratios[starts[k + 1] - 2]) for k in range(len(starts) - 1)],         [min(ratios[starts[k] - 1:starts[k + 1] - 1] or [1.0]) for k in range(len(starts) - 1)]
 
 
 def find_overflow_sections(final_spans, baseline_spans) -> list[int]:
@@ -365,6 +395,33 @@ def find_overflow_sections(final_spans, baseline_spans) -> list[int]:
     return out
 
 
+_BLANK_LINE_HWPUNIT = 1600   # 빈 문단 한 줄(약 16pt)
+
+
+def _shrink_row_height(tc, amount: int) -> None:
+    """칸 높이는 '최소 높이'라 빈 문단만 지우면 줄이 줄지 않는다 — 같은 행 칸들과 표의 높이도 함께 줄인다."""
+    tr = tc.getparent()
+    if tr is None or _local(getattr(tr, "tag", "")) != "tr":
+        return
+    for cell in tr:
+        if _local(getattr(cell, "tag", "")) != "tc":
+            continue
+        for ch in cell:
+            if _local(getattr(ch, "tag", "")) == "cellSz":
+                try:
+                    ch.set("height", str(max(1000, int(ch.get("height", "0")) - amount)))
+                except ValueError:
+                    pass
+    tbl = tr.getparent()
+    if tbl is not None:
+        for ch in tbl:
+            if _local(getattr(ch, "tag", "")) == "sz":
+                try:
+                    ch.set("height", str(max(1000, int(ch.get("height", "0")) - amount)))
+                except ValueError:
+                    pass
+
+
 def remove_one_spacer(root, section_index: int) -> bool:
     """section_index 번째 부(앵커 기준)의 마지막 빈 문단 하나를 제거한다. 없으면 False."""
     paragraphs = [p for p in root if _local(p.tag) == "p"]
@@ -376,6 +433,50 @@ def remove_one_spacer(root, section_index: int) -> bool:
         if _is_blank_spacer(p):
             root.remove(p)
             return True
+    # 표 안 빈 문단(칸 끝 여백): 최상위 표의 칸에서 글이 있는 문단 뒤의 빈 문단을 하나 줄인다.
+    for host in reversed(paragraphs[start:end]):
+        for tc in reversed([t for t in host.iter() if _local(getattr(t, "tag", "")) == "tc"]):
+            sub = next((c for c in tc if _local(getattr(c, "tag", "")) == "subList"), None)
+            if sub is None:
+                continue
+            paras = [q for q in sub if _local(getattr(q, "tag", "")) == "p"]
+            if len(paras) < 3 or any(_local(getattr(x, "tag", "")) == "tbl" for q in paras for x in q.iter()):
+                continue
+            if not any(_full_text(q) for q in paras):
+                continue
+            # 연속한 빈 문단이 있으면 그중 하나를, 없으면 글 사이에 낀 빈 문단(첫·끝 제외)을 하나 줄인다.
+            blanks = [i for i, q in enumerate(paras) if _is_blank_spacer(q)]
+            runs = [i for i in blanks if (i + 1 < len(paras) and _is_blank_spacer(paras[i + 1]))
+                    or (i > 0 and _is_blank_spacer(paras[i - 1]))]
+            inner = [i for i in blanks if 0 < i < len(paras) - 1]
+            pick = (runs or inner or blanks or [None])[-1]
+            if pick is not None:
+                sub.remove(paras[pick])
+                _shrink_row_height(tc, _BLANK_LINE_HWPUNIT)
+                return True
+    # 빈 문단이 더는 없으면, 내용보다 훨씬 높게 잡힌 행의 최소 높이를 한 번에 8pt씩 줄인다(글자·표 구조 불변).
+    for host in reversed(paragraphs[start:end]):
+        for tr in reversed([t for t in host.iter() if _local(getattr(t, "tag", "")) == "tr"]):
+            tcs = [c for c in tr if _local(getattr(c, "tag", "")) == "tc"]
+            if not tcs or any(_local(getattr(x, "tag", "")) in ("tbl", "pic") for c in tcs for x in c.iter()):
+                continue
+            sizes = []
+            for c in tcs:
+                cs = next((x for x in c if _local(getattr(x, "tag", "")) == "cellSz"), None)
+                sp = next((x for x in c if _local(getattr(x, "tag", "")) == "cellSpan"), None)
+                if cs is None or sp is None or sp.get("rowSpan", "1") != "1":
+                    sizes = []
+                    break
+                lines = sum(max(1, -(-len(_full_text(q)) // _CHARS_PER_LINE)) for q in c.iter()
+                            if _local(getattr(q, "tag", "")) == "p")
+                sizes.append((int(cs.get("height", "0")), lines * 1100 + 600))
+            if not sizes:
+                continue
+            height = max(h for h, _n in sizes)
+            need = max(n for _h, n in sizes)
+            if height - need >= 400:
+                _shrink_row_height(tcs[0], min(1600, height - need))
+                return True
     return False
 
 

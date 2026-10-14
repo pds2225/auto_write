@@ -157,10 +157,12 @@ def align_to_markers(probe_hwpx, probe_pdf, out_hwpx) -> dict[str, Any]:
             right_limit = max(right_limit, rect.x1)
             target_x0 = min(target_x0, right_limit - width)
             delta = target_x0 - x0
-            if delta < 0:
+            pull_left = delta < 0 and x0 + width > right_limit + 0.5
+            if delta < 0 and not pull_left:
                 delta = 0.0
             pos = _pos(pic)
-            pos.set("horzOffset", str(int(round(delta * 100))))
+            # 오른쪽 끝을 넘은 직인은 왼쪽으로 당긴다(한글은 음수 오프셋을 부호 없는 32비트로 저장한다).
+            pos.set("horzOffset", str(int(round(delta * 100)) & 0xFFFFFFFF))
             aligned += 1
     for name, root in roots.items():
         data[name] = serialize_xml(root, data[name])

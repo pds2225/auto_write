@@ -66,6 +66,12 @@ def check_hwpx_structure(
 
             diff = compare_hwpx_forms(baseline_form, hwpx)
             edits = getattr(diff, "form_phrase_edits", 0)
+            blank_only = _paragraph_drop_is_blank_spacers(baseline_form, hwpx, diff.structure_deltas)
+            if blank_only and not getattr(diff, "form_phrase_drops", 0) and edits <= expected_phrase_edits:
+                # 쪽 넘침 보정이 지운 건 원본의 줄 간격용 빈 문단뿐이다 — 양식 구조 변경이 아니다.
+                diff.structure_deltas = {}
+                if edits == 0:
+                    diff.structure_ok = True
             only_expected_edits = (not diff.form_intact and not diff.structure_deltas
                                    and not getattr(diff, "form_phrase_drops", 0)
                                    and 0 < edits <= expected_phrase_edits)
@@ -82,6 +88,38 @@ def check_hwpx_structure(
         except Exception as exc:
             findings.append(_mk("FORM_INTACT", Status.UNVERIFIED, "기술적 검증 미실행", f"{type(exc).__name__}: {exc}"))
     return findings
+
+
+def _blank_paragraph_count(hwpx) -> int:
+    from lxml import etree
+
+    from .hwpx_xml import parse_xml, read_hwpx, section_names
+
+    _infos, data = read_hwpx(hwpx)
+    n = 0
+    for name in section_names(data):
+        for p in parse_xml(data[name]).iter():
+            if etree.QName(p).localname != "p":
+                continue
+            if any(etree.QName(x).localname in {"tbl", "pic", "ctrl", "container", "ole", "rect", "equation"}
+                   for x in p.iter() if x is not p):
+                continue
+            if not "".join(t.text or "" for t in p.iter() if etree.QName(t).localname == "t").strip():
+                n += 1
+    return n
+
+
+def _paragraph_drop_is_blank_spacers(baseline, hwpx, deltas) -> bool:
+    """구조 델타가 '문단 수 감소' 하나뿐이고 감소분이 빈 문단 감소로 설명되면 True."""
+    if set(deltas or {}) != {"문단"}:
+        return False
+    before, after = deltas["문단"]
+    if after >= before:
+        return False
+    try:
+        return _blank_paragraph_count(baseline) - _blank_paragraph_count(hwpx) >= before - after
+    except Exception:
+        return False
 
 
 def summarize(findings: list[Finding]) -> dict[str, Any]:

@@ -54,7 +54,8 @@ class SubmitFinishResult:
     named_pdf_blocked: bool = False
 
 
-_MAX_COMPACT = 6  # 빈 문단 정리 반복 상한(렌더 1회 ≈ 15초)
+_MAX_PER_SECTION = 6  # 한 부에 줄이기를 시도하는 최대 횟수
+_MAX_COMPACT = 24  # 빈 문단 정리 반복 상한(렌더 1회 ≈ 15초)
 
 
 def run_submit_finish(inp: SubmitFinishInputs) -> SubmitFinishResult:
@@ -105,7 +106,8 @@ def run_submit_finish(inp: SubmitFinishInputs) -> SubmitFinishResult:
     pre_conv = None  # 레이아웃 보정 중 마지막으로 렌더한 신청서 PDF 결과(그대로 F6 에 쓴다)
     if inp.layout_guard:
         from .layout_guard import (anchors_of, baseline_page_start_titles, compact_overflow,
-                                   find_overflow_sections, repair_layout, section_spans)
+                                   find_overflow_sections, find_split_title_sections, repair_layout,
+                                   section_min_ratios, section_spans)
         from .seal_align import align_to_markers, make_probe
 
         titles: list[str] = []
@@ -134,21 +136,30 @@ def run_submit_finish(inp: SubmitFinishInputs) -> SubmitFinishResult:
             anchors = anchors_of(cur)
             base_spans = section_spans(base_pdf, anchors)
             removed_total = 0
+            tries: dict[int, int] = {}       # 부별 시도 횟수 — 줄여도 안 나아지는 부가 예산을 다 먹지 않게 한다
+            gave_up: set[int] = set()
             for _ in range(_MAX_COMPACT):
                 spans = section_spans(pre_conv.pdf, anchors)
-                over = find_overflow_sections(spans, base_spans)
+                # 제목만 홀로 한 쪽을 차지하고 표가 다음 쪽으로 밀린 부를 먼저(조금만 줄이면 풀린다), 꼬리 넘침 부를 뒤에 시도한다.
+                split_first = find_split_title_sections(spans, base_spans, section_min_ratios(pre_conv.pdf, anchors))
+                over = split_first + [k for k in find_overflow_sections(spans, base_spans) if k not in split_first]
+                over = [k for k in over if k not in gave_up]
                 if not over:
                     break
+                target = over[0]
                 dst = nxt("compact")
-                cr = compact_overflow(cur, dst, over[0])
-                if not cr["removed"]:
-                    F.append(Finding("LAYOUT_OVERFLOW_TAIL", Status.REVIEW,
-                                     "시각적 오류 의심: 값이 길어 한 부의 끝이 다음 쪽으로 넘어갔으나 줄일 빈 문단이 없음 — 사용자 확인 필요",
-                                     source="engine", meta={"section": over[0]}))
-                    break
+                cr = compact_overflow(cur, dst, target)
+                tries[target] = tries.get(target, 0) + 1
+                if not cr["removed"] or tries[target] > _MAX_PER_SECTION:
+                    gave_up.add(target)
+                    if not cr["removed"]:
+                        F.append(Finding("LAYOUT_OVERFLOW_TAIL", Status.REVIEW,
+                                         "시각적 오류 의심: 값이 길어 한 부의 끝이 다음 쪽으로 넘어갔으나 줄일 빈 문단이 없음 — 사용자 확인 필요",
+                                         source="engine", meta={"section": target}))
+                    continue
                 cur = dst
                 removed_total += 1
-                compact_steps.append(over[0])
+                compact_steps.append(target)
                 pre_conv = convert_hwpx_to_pdf(cur, app_pdf, converter=inp.converter, overwrite=True)
                 if not pre_conv.ok:
                     break

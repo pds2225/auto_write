@@ -495,12 +495,22 @@ def insert_cell_reference_images(in_hwpx, out_hwpx, images, *, authorization_sou
             added[href]=spec['blob']
             etree.SubElement(manifest,f'{{{opf}}}item',id=image_id,href=href,**{'media-type':'image/png' if spec['suffix']=='.png' else 'image/jpeg','isEmbeded':'1'})
             pic=build_picture_element(minimal_picture_template(),image_id=image_id,px=px,width_mm=display/_HWPUNIT_PER_MM,comment=spec.get('caption',''))
-            paragraph=etree.SubElement(sub,_q('p'),**dict(template.attrib))
+            # 본문에 같은 캡션 문단이 이미 있으면 그 바로 앞에 그림을 넣는다(그림이 상자 끝에 몰리지 않게).
+            cap_key=re.sub(r'[^\w가-힣]','',str(spec.get('caption') or '')).casefold()
+            cap_target=None
+            if cap_key:
+                cap_target=next((q for q in sub.iterchildren(_q('p'))
+                                 if re.sub(r'[^\w가-힣]','',''.join(q.itertext())).casefold()==cap_key),None)
+            paragraph=etree.Element(_q('p'),**dict(template.attrib))
+            if cap_target is not None:
+                cap_target.addprevious(paragraph)
+            else:
+                sub.append(paragraph)
             paragraph.set('id', str(next_paragraph_id))
             next_paragraph_id += 1
             paragraph.set('paraPrIDRef',centered(template.get('paraPrIDRef','0')))
             etree.SubElement(paragraph,_q('run'),charPrIDRef='0').append(pic)
-            if spec.get('caption'):
+            if spec.get('caption') and cap_target is None:
                 caption=etree.SubElement(sub,_q('p'),**dict(template.attrib))
                 caption.set('id', str(next_paragraph_id))
                 next_paragraph_id += 1
