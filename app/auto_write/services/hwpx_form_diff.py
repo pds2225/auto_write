@@ -287,6 +287,7 @@ def _merge_split_narrative_rows(old_root, new_root) -> int:
 
 def _compare_roots(a,b,colors=None):
     from core.docx.services.hwpx_protected_regions import is_value_cell_guidance
+    from core.docx.services.hwpx_fill import _is_hwpx_example_scaffold
     rep=FormDiffReport()
     ca,cb=_counts(a),_counts(b)
     controls = {'checkBtn','radioBtn','edit','comboBox','listBox','button','ole','ctrl','secPr','header','footer','footNote','endNote'}
@@ -310,7 +311,9 @@ def _compare_roots(a,b,colors=None):
                     rep.notes.append('셀 주소/병합 변경')
             ot,nt=_own_text(old),_own_text(new)
             value_cell=_value_cell(old)
-            guidance=value_cell and is_value_cell_guidance("".join(ot))
+            old_joined="".join(ot)
+            # 엔진이 합법적으로 덮어쓰는 예시 자리표시(전부-0 날짜·O마스크 등)도 안내문과 동일하게 본다.
+            guidance=value_cell and (is_value_cell_guidance(old_joined) or _is_hwpx_example_scaffold(old_joined))
             if not guidance and _is_placeholder_narrative_cell(old):
                 value_cell=guidance=True   # '- 텍스트' 한 줄만 든 단일 칸 서술 상자(엔진 서술 칸 규칙과 동일)
             blank=value_cell and not any(t.strip() for t in ot)
