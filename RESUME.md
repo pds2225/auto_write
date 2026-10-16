@@ -2,6 +2,12 @@
 
 > 이 파일과 docs/SESSION_RECAP.md는 GitHub main의 공유 기록이다. TASK 우선순위·상태의 정본은 origin/main:TASK.md다.
 
+## 주간 검토 체크포인트 — 2026-10-16
+- 범위: 직전 실행(2026-10-09 16:01 KST) 이후 GitHub 기본 브랜치·PR·Actions를 읽기 전용 검토했다. PR 기준 병합은 `walk` 30건, `mail` 24건, `marketgate` 4건, `auto_write` 3건이다. `worklog-private`·`claude-skills` 자동 동기화도 계속됐다.
+- `auto_write` 원격 `main`은 `14a908a`. 제출 마감 F1~F7, 원본 양식 생존/렌더 증거 게이트, 빈 양식 일괄 측정 도구가 반영됐다. 마포 12쪽·본문 97% 유사도와 5개 양식 회귀가 기록됐지만, 열린 draft #222에는 마포 시각 FAIL 2건과 묶음 테스트 간헐 실패 1건이 남아 있다.
+- 핵심 위험: 열린 #223은 기본 브랜치가 아닌 `master` 대상이고 GitHub에서 CONFLICTING이며 324개 파일/100커밋으로 잡혀 있다. 날짜 자리표시 오탐 수정 자체는 85 passed/2 skipped지만, base·범위를 바로잡기 전 병합하면 안 된다. `marketgate` #176도 draft이며 7개 표적 테스트·Preview E2E는 통과했으나 아직 미병합이다.
+- 다음: #223을 최신 `main` 기준 최소 변경으로 재구성한 뒤 표적 회귀를 다시 확인한다. #222는 마포 표 경계 FAIL과 간헐 테스트 원인을 해소하고, G밸리 REVIEW를 사람이 확인하기 전까지 제출 적합으로 표현하지 않는다.
+
 ## 로컬 자동화 체크포인트 — 2026-10-16
 - `automation-2` 일일 브리핑을 읽기 전용으로 실행했다. 6개 캘린더의 오늘·내일 일정, 최근 중요 미확인 Gmail, 오전 7시 로컬 할 일 캐시를 확인했다.
 - 개인 일정·메일 내용은 Git 공유 기록에 남기지 않고 로컬 산출물 `D:\v_up\worklog\briefings\2026-10-16.html`에만 저장했다.
