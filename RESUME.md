@@ -2,6 +2,11 @@
 
 > 이 파일과 docs/SESSION_RECAP.md는 GitHub main의 공유 기록이다. TASK 우선순위·상태의 정본은 origin/main:TASK.md다.
 
+## 인수인계 확인 — 2026-10-19
+- 지금 세션: `HANDOFF_ASTRA.md` 존재·내용과 Git 미추적 상태를 확인했다. 프로젝트 목표, Phase 1~3, 금지 범위, 고정 규칙 12개, 환경, 계획 요청 5개가 들어 있다. 인수인계 파일과 제품 코드는 수정하지 않았다. 테스트·커밋·push·병합 없음.
+- 원격 확인: main `f694525530479af0d0eec4f6cd5e09c77e4ee94b`(ls-remote 대조), #223 main 병합 완료, #222 OPEN/DRAFT/main. 아래 10/16의 #223 충돌 기록은 과거 상태다. fetch --prune은 기존 worktree metadata 권한 오류로 실패했으며 기존 작업은 보존했다.
+- 다음 액션: 아스트라는 `HANDOFF_ASTRA.md` 6번에 따라 Phase 2·3 계획을 작성한다. 이번에는 계획·개발을 시작하지 않았다. 53→75 수치는 인수인계 기록이며 이번에 재측정하지 않았다. #222 병합 금지·양식별 튜닝 금지를 유지한다.
+
 ## 주간 검토 체크포인트 — 2026-10-16
 - 범위: 직전 실행(2026-10-09 16:01 KST) 이후 GitHub 기본 브랜치·PR·Actions를 읽기 전용 검토했다. PR 기준 병합은 `walk` 30건, `mail` 24건, `marketgate` 4건, `auto_write` 3건이다. `worklog-private`·`claude-skills` 자동 동기화도 계속됐다.
 - `auto_write` 원격 `main`은 `14a908a`. 제출 마감 F1~F7, 원본 양식 생존/렌더 증거 게이트, 빈 양식 일괄 측정 도구가 반영됐다. 마포 12쪽·본문 97% 유사도와 5개 양식 회귀가 기록됐지만, 열린 draft #222에는 마포 시각 FAIL 2건과 묶음 테스트 간헐 실패 1건이 남아 있다.
@@ -25,7 +30,7 @@
 - 다음: 10:00 중진공 신청 → mail-monitor P0 4개 점검 → 18:00 노동청 의견서 순으로 진행한다.
 
 ## 0. 현재 상태 — 2026-10-06
-- 2026-10-07 #217 Mimo QA BLOCKER: engine-coverage-fixes에서 PDF 재시도의 최종 reason에 이전 timeout/SaveAs 원인을 보존하는 3줄 최소 수정. 지정 L005/L050·COM 보호 회귀 24 passed. 전체 pytest 실행 중. 기존 assert 변경 없음. 다음: 전체 결과 확인 후 해당 코드만 같은 브랜치 commit/push, merge 금지.
+- 2026-10-19 #217 요구사항 대조: 지정 회귀 24 passed/0 failed, 보존된 전체 pytest 2300 passed/0 failed/6 skipped/23 subtests passed, exit 0 확인. 당시 3줄 수정은 engine-coverage-fixes(f567336)에 미커밋으로 남아 있으며 해당 원격 브랜치는 삭제됨. 동일 BLOCKER는 별도 커밋 b808da4525b97ce6d3ae73e61d7d9c7b27f6bf80으로 현재 main f694525에 반영됨. #217은 2026-10-08 병합 상태(merge 7f1e29b)이며 이번 점검에서 commit/push/merge·테스트 재실행 없음. 기존 로컬 변경 보존. 다음: 수정 효과는 main 기준 확인하며 과거 브랜치를 중복 push하지 않는다. 실제 COM RPC 장애 해결은 별개다.
 - 2026-10-07 별도 #217 COM 표적 검증: engine-coverage-fixes(f567336)에서 중단 케이스 3 passed/18.77초/exit 0, mock 보호 회귀 6 passed. RPC 0x800706ba 재발로 실제 변환 성공은 미확인. 제품/원본/#218 수정 및 병합 없음. 상세는 해당 워크트리 docs/ENGINE_COVERAGE_FIXES.md §7. 다음은 실제 COM 장애 별도 해결; 전체 suite 반복 금지.
 - 문서 PR #215는 main에 병합됐다. main 기준 SHA는 12b5095f9fbeacb02257b3f169d5924f7fc947a2다. AGENTS.md·CLAUDE.md에 모든 위치에서 fetch 후 원격 TASK→RESUME 필수 확인을 명시했고, GitHub 공유판을 실제 조회했다.
 - 현재 codex/round5-fill-fixes는 위 main에서 생성했다. 현재 기간·병합 범위·양옆 라벨 경계와 괄호 실값 보호를 수정했다. 기간 보류는 인라인 동의어 경로에도 적용한다. 커밋: 8284b26(값 채움), 2cb684e8d3310411019656f015b3054451990a9f(PDF mock). 영향 회귀 89 passed/0 failed. 이 코드에서 전체 Windows pytest 1회: 2275 passed/0 failed/5 기존 skipped/23 subtests passed, exit 0. Draft PR #216(https://github.com/pds2225/auto_write/pull/216), main 미병합. 이후 변경은 검증 문서뿐이다.
