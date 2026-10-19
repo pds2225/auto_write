@@ -1,4 +1,9 @@
 # RESUME.md — 다른 위치에서 이어가기
+## PR #223 리뷰 재확인 — 2026-10-19
+- 요청 범위는 읽기 전용 PR 조사. #223은 2026-10-18 16:05:19Z 이미 main에 병합됨(commit `f694525530479af0d0eec4f6cd5e09c77e4ee94b`); merge 전 base `14a908a`, head `a33726d`. 현재 GitHub API는 병합 PR의 mergeable/mergeState를 `null/unknown`으로 반환하므로 과거 `mergeable=false` 직접 원인은 현재 상태에서 재구성 불가.
+- PR 리뷰 인라인 P1은 여전히 unresolved 표시: `_rerun130_resilient_driver.py`가 배치 시작 전체 PID baseline에서 빠진 모든 Hwp.exe를 timeout 후 강제 종료할 수 있다. 병합된 코드에도 `baseline_hwp` 차집합 종료가 남아 있음.
+- 당시 체크는 `docs-gate` 성공, Cursor Approval Agent run 성공(단, 코멘트는 Bugbot 체크 없음·P1 잔존으로 승인 거부). PR 본문 85 passed/2 skipped는 해당 P1 안전성 회귀를 검증하지 않음.
+- 다음 조치(별도 수정 작업 시): worker 시작 직전 PID snapshot으로 범위를 좁히고 실제 생성 PID만 종료하도록 최소 수정, 동시 사용자 Hwp.exe 보존·timeout cleanup 테스트 추가; 관련 테스트 6개와 새 프로세스 소유권 테스트 재실행. PR은 이미 병합됐으므로 후속 수정은 새 브랜치/PR로 진행.
 
 > 이 파일과 docs/SESSION_RECAP.md는 GitHub main의 공유 기록이다. TASK 우선순위·상태의 정본은 origin/main:TASK.md다.
 
@@ -100,3 +105,4 @@ git show origin/main:docs/SESSION_RECAP.md
 
 
 - 2026-10-07 재개 확인: 선행 blocker 해소. PR #217은 OPEN/DRAFT, base=main, head=codex/engine-coverage-fixes, 현재 GitHub head SHA=f567336c221476e3ab81d9caf46af70ca3355ed3. 후속 codex/engine-full-pipeline 워크트리는 해당 선행 브랜치에서 시작했고, evaluation_service.py 및 회귀 테스트, hwpx_pipeline_finalize.py 신규 구현이 미커밋 상태다. 선행 PR 미병합이라 보호 파일 수정은 계속 금지. 다음: 신규 HWPX finalize 테스트와 공고 점수 회귀를 실행하고, 나머지 파이프라인 구현을 이어간다.
+
