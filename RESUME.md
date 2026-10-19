@@ -106,3 +106,8 @@ git show origin/main:docs/SESSION_RECAP.md
 
 - 2026-10-07 재개 확인: 선행 blocker 해소. PR #217은 OPEN/DRAFT, base=main, head=codex/engine-coverage-fixes, 현재 GitHub head SHA=f567336c221476e3ab81d9caf46af70ca3355ed3. 후속 codex/engine-full-pipeline 워크트리는 해당 선행 브랜치에서 시작했고, evaluation_service.py 및 회귀 테스트, hwpx_pipeline_finalize.py 신규 구현이 미커밋 상태다. 선행 PR 미병합이라 보호 파일 수정은 계속 금지. 다음: 신규 HWPX finalize 테스트와 공고 점수 회귀를 실행하고, 나머지 파이프라인 구현을 이어간다.
 
+
+## 이어가기 메모 — PR #223 쉬운 설명/실행 위치
+- 사용자 후속 요청: 앞선 리뷰 결론을 쉬운 말로 설명하고 요구사항 체크 및 다음 작업 위치를 안내한다.
+- 리뷰 요청은 완료: #223은 이미 main에 병합됐고, 배치 타임아웃 때 사용자 Hwp.exe까지 종료 가능한 위험은 병합 커밋에도 남아 있다. 추가 코드 수정은 아직 요청되지 않았다.
+- 다음에 수정 요청이 오면 `D:\auto_write`에서 새 브랜치로 시작하고 `app\tools\_rerun130_resilient_driver.py`와 프로세스 정리 관련 테스트만 최소 수정·검증한다.
