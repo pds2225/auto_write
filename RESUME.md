@@ -1,4 +1,9 @@
 # RESUME.md — 다른 위치에서 이어가기
+## 로컬 자동화 체크포인트 — 2026-10-21
+- `automation-2` 일일 브리핑을 읽기 전용으로 실행해 6개 캘린더의 오늘·내일 일정, 중요 미확인 Gmail, Todoist와 직전 로컬 할 일 캐시를 확인했다.
+- 개인 일정·메일 내용은 Git 공유 기록에 남기지 않고 로컬 산출물 `D:\v_up\worklog\briefings\2026-10-21.html`에만 저장했다.
+- 메일 읽음 처리·회신·발송, 캘린더·할 일 수정, 결제·보안·배포 설정 변경은 하지 않았다. 브리핑 렌더 검수 후 자동화 메모만 갱신한다.
+
 ## PR #223 리뷰 재확인 — 2026-10-19
 - 요청 범위는 읽기 전용 PR 조사. #223은 2026-10-18 16:05:19Z 이미 main에 병합됨(commit `f694525530479af0d0eec4f6cd5e09c77e4ee94b`); merge 전 base `14a908a`, head `a33726d`. 현재 GitHub API는 병합 PR의 mergeable/mergeState를 `null/unknown`으로 반환하므로 과거 `mergeable=false` 직접 원인은 현재 상태에서 재구성 불가.
 - PR 리뷰 인라인 P1은 여전히 unresolved 표시: `_rerun130_resilient_driver.py`가 배치 시작 전체 PID baseline에서 빠진 모든 Hwp.exe를 timeout 후 강제 종료할 수 있다. 병합된 코드에도 `baseline_hwp` 차집합 종료가 남아 있음.
