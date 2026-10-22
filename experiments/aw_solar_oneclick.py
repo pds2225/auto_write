@@ -105,6 +105,7 @@ def main():
     p.add_argument("--repo",default="")
     p.add_argument("--output",default=str(Path(os.getenv("LOCALAPPDATA",tempfile.gettempdir()))/"AW-Solar-Compare"))
     p.add_argument("--no-browser",action="store_true")
+    p.add_argument("--retry-failed-once",action="store_true",help="After investigating prior failure, permit one additional API attempt per failed model")
     a=p.parse_args()
     out=Path(a.output).resolve()
     suffix=hashlib.sha256(json.dumps(CASE,ensure_ascii=False,sort_keys=True).encode()).hexdigest()[:14]
@@ -122,17 +123,19 @@ def main():
         for name in ("baseline","solar"):
             if state["results"].get(name,{}).get("ok"):
                 print("[REUSE]",name);continue
-            if state["attempts"].get(name,0)>0:
-                print("[STOP]",name,"이전 API 호출 가능성이 있어 재호출 차단");continue
-            state["attempts"][name]=1
+            if state["attempts"].get(name,0)>0 and (not a.retry_failed_once or state["attempts"][name]>=2):
+                print("[STOP]",name,"기존 결과 보존 · 추가 과금 재호출 차단");continue
+            state["attempts"][name]=state["attempts"].get(name,0)+1
             atomic(data_file,state)
             print("[CALL]",name)
             try:
                 state["results"][name]=run(name,settings,AW)
                 print("[PASS]",name)
             except Exception as e:
-                state["results"][name]={"ok":False,"error":type(e).__name__}
-                print("[FAIL]",name,type(e).__name__)
+                code=getattr(e,"status_code",None)
+                status=(" HTTP "+str(code)) if code else ""
+                state["results"][name]={"ok":False,"error":type(e).__name__+status}
+                print("[FAIL]",name,type(e).__name__+status)
             atomic(data_file,state)
     html_file.parent.mkdir(parents=True,exist_ok=True)
     html_file.write_text(report(state),encoding="utf-8")
