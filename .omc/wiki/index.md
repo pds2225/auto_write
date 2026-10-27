@@ -107,3 +107,5 @@
 - [Session 2026-08-16 AIMY PSST 체크포인트](session-2026-08-16-aimy-psst.md) — # Session 2026-08-16 AIMY PSST 체크포인트
 - [Session 2026-08-20 K-Navi MVP](session-2026-08-20-k-navi-mvp.md) — # Session 2026-08-20 K-Navi MVP
 - [Session 2026-08-20 — STAR 위성항법 출처 + 스킬수확](session-2026-08-20-star-gnss.md) — # Session 2026-08-20 — STAR 위성항법 출처 + 스킬수확
+
+- [한글 HTML 경유 변환 검증](hancom-html-import-20261026.md) — 외부 형식 열기 실패와 원본 사진 보존
