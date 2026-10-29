@@ -79,6 +79,20 @@
     <h3>작성계획 — {{ workspace.plan.target_section }}</h3>
     <p><strong>사용자 지시:</strong> {{ workspace.plan.user_instruction or '지시 없음' }}</p>
     <p><strong>선택 재료:</strong> {{ workspace.plan.selected_material_ids|join(', ') or '없음 — 생성 시 표시 필요' }}</p>
+    <h4>[1][2][3] 번호별 작성계획 해석</h4>
+    {% if workspace.plan.ai_interpreted_actions %}
+      {% for action in workspace.plan.ai_interpreted_actions %}
+        <p><strong>[{{ action.number }}] {{ action.action }}</strong> — {{ action.original }}</p>
+      {% endfor %}
+    {% else %}
+      <p>선택된 기존 재료 없음 — 새 서술은 생성 표시 필요</p>
+    {% endif %}
+    <h4>원문 출처 위치 (내부 Locator)</h4>
+    {% for src in workspace.plan.source_locators %}
+      <p>{{ src.source_file }}{% if src.page %} / {{ src.page }}쪽{% else %} / 실제 페이지 미확인{% endif %}
+         · {{ src.locator }}</p>
+    {% endfor %}
+    <p class="inline-note">지시 불명확으로 표시된 항목은 승인할 수 없습니다. 지시를 수정해 계획을 다시 생성해주세요.</p>
     <p><strong>채움 순서:</strong> 사실 전사 → 유사 사실 → 생성(표시)</p>
     <p><strong>출처:</strong> {{ workspace.plan.source_locators|length }}개 정밀 위치. 출처에 없는 페이지 번호는 표시하지 않습니다.</p>
     <p><strong>현재 상태:</strong> {% if workspace.approved %}사용자 승인됨{% else %}사용자 승인 대기{% endif %}</p>
