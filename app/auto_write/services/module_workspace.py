@@ -24,6 +24,7 @@ ROOT = Path(tempfile.gettempdir()) / "aw009_p0_workspaces"
 LIMIT_BYTES = 20 * 1024 * 1024
 _HEADING = re.compile(r"^\s*(?:\d{1,2}(?:[.-]\d{1,2}){0,2}[.)]?\s+|[ⅠⅡⅢⅣⅤ][. ]\s*)(.{2,95})$")
 _KEYWORD = re.compile(r"[가-힣A-Za-z0-9]{2,}")
+_MAJOR_TOC = re.compile(r"^\s*(?:\d{1,2}[.)]\s+|[ⅠⅡⅢⅣⅤ][. ]\s*)")
 _FORMATS = {".docx", ".hwpx", ".hwp", ".pdf", ".txt", ".md"}
 
 
@@ -60,14 +61,29 @@ def _elements(name: str, data: bytes) -> list[dict[str, Any]]:
 
     if suffix == ".docx":
         doc = Document(io.BytesIO(data))
-        for i, paragraph in enumerate(doc.paragraphs):
-            style = str(getattr(paragraph.style, "name", "") or "").lower()
-            add(paragraph.text, {"format": "docx", "paragraph": i},
-                heading=style.startswith(("heading", "제목")))
-        for ti, table in enumerate(doc.tables):
-            for ri, row in enumerate(table.rows):
-                for ci, cell in enumerate(row.cells):
-                    add(cell.text, {"format": "docx", "table": ti, "row": ri, "cell": ci})
+        from docx.text.paragraph import Paragraph
+        from docx.table import Table
+        pi = ti = 0
+        # Preserve document order: paragraphs and tables may be interleaved.
+        for element in doc.element.body.iterchildren():
+            if _local(element.tag) == "p":
+                paragraph = Paragraph(element, doc)
+                style = str(getattr(paragraph.style, "name", "") or "").lower()
+                add(paragraph.text, {"format": "docx", "paragraph": pi},
+                    heading=style in {"heading 1", "제목 1"})
+                pi += 1
+            elif _local(element.tag) == "tbl":
+                table = Table(element, doc)
+                seen_cells = set()
+                for ri, row in enumerate(table.rows):
+                    for ci, cell in enumerate(row.cells):
+                        # Merged cells have the same underlying XML node.
+                        identity = id(cell._tc)
+                        if identity in seen_cells:
+                            continue
+                        seen_cells.add(identity)
+                        add(cell.text, {"format": "docx", "table": ti, "row": ri, "cell": ci})
+                ti += 1
     elif suffix == ".hwpx":
         with zipfile.ZipFile(io.BytesIO(data)) as archive:
             sections = sorted((n for n in archive.namelist()
@@ -75,9 +91,8 @@ def _elements(name: str, data: bytes) -> list[dict[str, Any]]:
                               key=lambda n: int(re.search(r"(\d+)\.xml$", n).group(1)))
             for s in sections:
                 root = etree.fromstring(archive.read(s))
-                for pi, paragraph in enumerate(root.iter()):
-                    if _local(paragraph.tag) != "p":
-                        continue
+                paragraphs = [p for p in root.iter() if _local(p.tag) == "p"]
+                for pi, paragraph in enumerate(paragraphs):
                     # A table-cell paragraph carries its own location; no fake page index.
                     cell = next((a for a in paragraph.iterancestors()
                                  if _local(a.tag) == "tc"), None)
@@ -118,7 +133,7 @@ def _name_heading(text: str, explicit: bool) -> bool:
 
 def _toc(rows: list[dict[str, Any]], override: str = "") -> list[dict[str, str]]:
     names = [x.strip() for x in override.splitlines() if x.strip()] if override.strip() else [
-        r["text"] for r in rows if _name_heading(r["text"], r["heading"])
+        r["text"] for r in rows if (r["heading"] or _MAJOR_TOC.match(r["text"]))
     ]
     ordered: list[str] = []
     for name in names:
@@ -210,9 +225,28 @@ def plan(workspace_id: str, section_id: str, selected_block_ids: list[str],
                "source_file": blocks[k][0]["source_file"],
                "page": blocks[k][1]["page"], "locator": blocks[k][1]["locator"]}
               for k in selected_block_ids]
-    # Do not treat ambiguous free-form instructions as verified actions.
-    actions = [{"material_id": x["id"], "action": "사용자 지시 확인 필요",
-                "text": x["text"][:220]} for x in chosen]
+    # Interpret only explicit, unambiguous number directives. Unknown text is
+    # displayed rather than silently reworded into an authoritative AI decision.
+    actions = []
+    segments = {
+        int(n): value.strip()
+        for n, value in re.findall(
+            r"\[(\d+)\]([^\[]*)(?=\[\d+\]|$)", instruction.strip()
+        )
+    }
+    for i, item in enumerate(chosen, 1):
+        phrase = segments.get(i, "")
+        action = "지시 불명확 — 승인 전 확인"
+        if re.search(r"그대로|원문 유지|수정하지", phrase):
+            action = "원문 그대로"
+        elif re.search(r"추가|삽입|넣어", phrase):
+            action = "해당 파트에 추가"
+        elif re.search(r"수정|보완|재작성", phrase):
+            action = "해당 파트에서 보완"
+        elif not instruction.strip():
+            action = "선택 원문 활용"
+        actions.append({"material_id": item["id"], "number": i, "action": action,
+                        "original": item["text"][:220]})
     result = {"target_section": section_id, "selected_material_ids": selected_block_ids,
               "user_instruction": instruction.strip(),
               "ai_interpreted_actions": actions,
