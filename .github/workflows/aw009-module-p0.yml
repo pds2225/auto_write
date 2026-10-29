@@ -1,6 +1,8 @@
 name: AW-009 module P0 tests
 
 on:
+  push:
+    branches: ["feature/aw009-module-p0-20261029"]
   pull_request:
     paths:
       - "app/auto_write/services/module_workspace.py"
