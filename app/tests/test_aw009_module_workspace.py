@@ -129,3 +129,19 @@ def test_number_instructions_only_interpreted_when_unambiguous():
     assert result["ai_interpreted_actions"][0]["action"] == "원문 그대로"
     assert result["ai_interpreted_actions"][1]["action"] == "해당 파트에 추가"
     assert result["selected_material_ids"] == blocks
+
+
+def test_ambiguous_numbered_plan_cannot_execute():
+    ann, tmpl, refs = sample_inputs()
+    state = aw.start(ann, tmpl, refs, roles_confirmed=True)
+    block = state["modules"][0]["blocks"][0]["id"]
+    aw.plan(state["id"], "section-1", [block], "좋은 문장을 써줘")
+    with pytest.raises(ValueError, match="모호"):
+        aw.approve(state["id"])
+    assert not aw.get(state["id"])["approved"]
+
+
+def test_invalid_announcement_file_type_refused():
+    _, tmpl, refs = sample_inputs()
+    with pytest.raises(ValueError, match="첨부파일"):
+        aw.start(("bad.exe", b"executable"), tmpl, refs, roles_confirmed=True)
