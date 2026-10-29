@@ -573,27 +573,81 @@ def _aw009_section_question(profile, section_title: str):
     return candidates[0][1]
 
 
+
+def _aw009_execute_hwpx_part(state: dict, source_name: str, template_bytes: bytes, section_title: str) -> dict:
+    """Fill one matched HWPX field for the approved 대목차 using existing writers."""
+    from .services.aw009_hwpx_part import build_draft_text, fill_current_section
+
+    profile = project_service.analyze_uploaded_template(source_name, template_bytes)
+    if not profile.source_hwpx:
+        raise ValueError("HWP/HWPX 원본을 HWPX로 고정하지 못해 대목차 채움을 실행할 수 없습니다.")
+    draft = build_draft_text(state["plan"]["selected_materials"], state["plan"]["user_instruction"])
+    project_id = project_service.create_project(profile.template_id, f"AW009 · {section_title[:50]}")
+    project_service.save_project_form(
+        project_id=project_id,
+        answers={"user_brief": draft, "user_notes": draft},
+        project_title=f"AW009 · {section_title[:50]}",
+        organization_name="",
+        evidence_topics="",
+        reference_files=[],
+        improve_partial=False,
+        psst_only=False,
+        disable_images=True,
+    )
+    out_dir = storage.project_dir(project_id) / "output"
+    out_path = out_dir / "output.hwpx"
+    result = fill_current_section(
+        profile.source_hwpx,
+        out_path,
+        section_title=section_title,
+        draft_text=draft,
+    )
+    if not result.ok or not result.output or not result.output.is_file():
+        raise ValueError(
+            "HWPX 대목차 한정 채움이 거부되었습니다: "
+            + (result.reason or "UNKNOWN")
+        )
+    if not result.scope_ok:
+        raise ValueError(
+            "HWPX 채움은 됐지만 스코프 증거가 없어 완료할 수 없습니다: "
+            + (result.reason or "SCOPE")
+        )
+    return {
+        "project_id": project_id,
+        "question_id": result.field_label,
+        "target_section": section_title,
+        "artifact": str(result.output),
+        "artifact_size": result.output.stat().st_size,
+        "generation_label_required": state["plan"]["generation_label_required"],
+        "status": "ENGINE_OUTPUT_UNVERIFIED",
+        "hwpx_field_label": result.field_label,
+        "hwpx_field_kind": result.kind,
+        "source_sha256": result.source_sha256,
+        "scope_ok": result.scope_ok,
+        "note": "HWPX 현재대목차 엔진 출력. MODULE/LOCATOR E2E·한컴 렌더 증거 붙기 전 DONE 금지.",
+    }
+
+
 def _aw009_execute_approved_part(state: dict) -> dict:
     """Use only the pre-existing section-scoped drafting engine, never generate() for whole document."""
     folder = module_workspace._base(state["id"])
     source = state["template_file"]
     source_name = str(source["filename"])
     suffix = Path(source_name).suffix.lower()
-    if suffix != ".docx":
-        raise ValueError(
-            "HWP/HWPX 원본의 대목차 한정 채움 검증 게이트가 없어 실행하지 않았습니다. "
-            "DOCX 파트 작성과 HWPX 실문서 증거를 분리 검증해야 합니다."
-        )
     template_bytes = (folder / source["stored"]).read_bytes()
     if not template_bytes or __import__("hashlib").sha256(template_bytes).hexdigest() != source["sha256"]:
         raise ValueError("원본 양식 해시가 일치하지 않습니다.")
     section_id = state["plan"]["target_section"]
     section_title = next(item["title"] for item in state["toc"] if item["id"] == section_id)
-    profile = project_service.analyze_uploaded_template(source_name, template_bytes)
-    question = _aw009_section_question(profile, section_title)
     selected = state["plan"]["selected_materials"]
     if not selected and not state["plan"]["user_instruction"]:
         raise ValueError("선택한 근거가 없고 생성 지시도 없습니다.")
+    if suffix in {".hwpx", ".hwp"}:
+        return _aw009_execute_hwpx_part(state, source_name, template_bytes, section_title)
+    if suffix != ".docx":
+        raise ValueError("HWP/HWPX/DOCX만 지원합니다.")
+    profile = project_service.analyze_uploaded_template(source_name, template_bytes)
+    question = _aw009_section_question(profile, section_title)
     selected_context = "\n\n".join(
         f"[{i+1}] {item['source_file']} / "
         f"{'p.' + str(item['page']) if item['page'] is not None else '페이지 미확인'}\n{item['text']}"
