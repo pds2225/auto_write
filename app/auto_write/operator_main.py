@@ -20,6 +20,7 @@ from .services.git_sync_service import GitSyncError, GitSyncService
 from .services.lrule_console_service import LRuleConsoleService
 from .services.system_map_service import SystemMapService
 from .services.workflow_monitor import WorkflowMonitor
+from .services import module_workspace
 from .utils import read_json, sanitize_user_filename
 
 
@@ -470,6 +471,13 @@ async def operator_home(request: Request):
     architecture = system_map.overview()
     rule_summary = lrule_console.summary()
     runs = workflow_monitor.list_runs(8)
+    workspace_id = request.query_params.get("workspace_id", "")
+    workspace = None
+    if workspace_id:
+        try:
+            workspace = module_workspace.get(workspace_id)
+        except (ValueError, FileNotFoundError, KeyError):
+            workspace = None
     return templates.TemplateResponse(
         request,
         "operator_home.html",
@@ -478,9 +486,175 @@ async def operator_home(request: Request):
             architecture=architecture,
             rule_summary=rule_summary,
             recent_runs=runs,
+            workspace=workspace,
             error=request.query_params.get("error", ""),
         ),
     )
+
+
+
+
+def _aw009_error(message: str, workspace_id: str = "") -> RedirectResponse:
+    target = "/console"
+    if workspace_id:
+        target += f"?workspace_id={quote(workspace_id, safe='')}&error={quote(message[:500], safe='')}"
+    else:
+        target += f"?error={quote(message[:500], safe='')}"
+    return RedirectResponse(url=target, status_code=303)
+
+
+@app.post("/console/modules/start")
+async def module_start(
+    template_file: UploadFile = File(...),
+    announcement_file: UploadFile | None = File(default=None),
+    reference_files: list[UploadFile] | None = File(default=None),
+    combined: str = Form(default=""),
+    role_confirmed: str = Form(default=""),
+    toc_override: str = Form(default=""),
+):
+    """Store sources and preview the form TOC/modules. Absolutely no generation here."""
+    try:
+        template = await _read_upload(template_file)
+        announcement = (await _read_upload(announcement_file)) if announcement_file and announcement_file.filename else None
+        refs = [await _read_upload(item) for item in (reference_files or []) if item.filename]
+        state = module_workspace.start(
+            announcement, template, refs,
+            combined=_form_checked(combined),
+            roles_confirmed=_form_checked(role_confirmed),
+            toc_override=toc_override,
+        )
+        return RedirectResponse(url=f"/console?workspace_id={state['id']}", status_code=303)
+    except Exception as exc:
+        return _aw009_error(f"{type(exc).__name__}: {exc}")
+
+
+@app.post("/console/modules/plan")
+async def module_compose(request: Request):
+    """Create a visible, non-executing plan from exact selected block IDs."""
+    form = await request.form()
+    wid = str(form.get("workspace_id", ""))
+    try:
+        module_workspace.plan(
+            wid,
+            str(form.get("section_id", "")),
+            [str(x) for x in form.getlist("material_ids")],
+            str(form.get("instruction", "")),
+        )
+        return RedirectResponse(url=f"/console?workspace_id={wid}", status_code=303)
+    except Exception as exc:
+        return _aw009_error(f"{type(exc).__name__}: {exc}", wid)
+
+
+def _aw009_section_question(profile, section_title: str):
+    """Never silently fill a different section on an uncertain heading match."""
+    from difflib import SequenceMatcher
+    import re
+    def normalize(text):
+        return re.sub(r"[^가-힣a-z0-9]+", "", str(text).lower())
+    target = normalize(section_title)
+    candidates = []
+    for question in profile.questions:
+        if str(question.target.get("kind", "")) != "section":
+            continue
+        name = normalize(question.label)
+        if not name:
+            continue
+        score = SequenceMatcher(None, target, name).ratio()
+        if target == name:
+            score = 1.0
+        elif min(len(target), len(name)) >= 5 and (target in name or name in target):
+            score = max(score, 0.9)
+        candidates.append((score, question))
+    candidates.sort(key=lambda row: row[0], reverse=True)
+    if not candidates or candidates[0][0] < 0.72:
+        raise ValueError("현재 양식 대목차와 엔진 question_id를 안전하게 매칭할 수 없습니다. 오매칭 방지를 위해 작성 차단.")
+    if len(candidates) > 1 and candidates[1][0] >= candidates[0][0] - 0.03:
+        raise ValueError("대목차에 대응하는 엔진 대상이 2개 이상입니다. 임의 선택을 금지합니다.")
+    return candidates[0][1]
+
+
+def _aw009_execute_approved_part(state: dict) -> dict:
+    """Use only the pre-existing section-scoped drafting engine, never generate() for whole document."""
+    folder = module_workspace._base(state["id"])
+    source = state["template_file"]
+    source_name = str(source["filename"])
+    suffix = Path(source_name).suffix.lower()
+    if suffix != ".docx":
+        raise ValueError(
+            "HWP/HWPX 원본의 대목차 한정 채움 검증 게이트가 없어 실행하지 않았습니다. "
+            "DOCX 파트 작성과 HWPX 실문서 증거를 분리 검증해야 합니다."
+        )
+    template_bytes = (folder / source["stored"]).read_bytes()
+    if not template_bytes or __import__("hashlib").sha256(template_bytes).hexdigest() != source["sha256"]:
+        raise ValueError("원본 양식 해시가 일치하지 않습니다.")
+    section_id = state["plan"]["target_section"]
+    section_title = next(item["title"] for item in state["toc"] if item["id"] == section_id)
+    profile = project_service.analyze_uploaded_template(source_name, template_bytes)
+    question = _aw009_section_question(profile, section_title)
+    selected = state["plan"]["selected_materials"]
+    if not selected and not state["plan"]["user_instruction"]:
+        raise ValueError("선택한 근거가 없고 생성 지시도 없습니다.")
+    selected_context = "\n\n".join(
+        f"[{i+1}] {item['source_file']} / "
+        f"{'p.' + str(item['page']) if item['page'] is not None else '페이지 미확인'}\n{item['text']}"
+        for i, item in enumerate(selected)
+    )
+    context = (
+        "AW-009 승인된 단일 대목차 작성. 대상: " + section_title + "\n"
+        + "이 섹션만 작성하며 다른 섹션은 수정하지 않는다. 사실은 출처로 검증하고, "
+        + "근거 없는 값은 만들지 않는다.\n"
+        + "사용자 지시: " + state["plan"]["user_instruction"] + "\n"
+        + "선택된 원문 재료:\n" + selected_context
+    )
+    project_id = project_service.create_project(profile.template_id, f"AW009 · {section_title[:50]}")
+    project_service.save_project_form(
+        project_id=project_id,
+        answers={"user_brief": context, "user_notes": context},
+        project_title=f"AW009 · {section_title[:50]}",
+        organization_name="",
+        evidence_topics="",
+        reference_files=[("AW009_selected_materials.txt", selected_context.encode("utf-8"))]
+        if selected_context else [],
+        improve_partial=False,
+        psst_only=False,
+        disable_images=True,
+    )
+    artifact = project_service.regenerate_sections(
+        project_id, [question.question_id], refinement_context=context,
+    )
+    actual = storage.load_project_input(project_id).answers.get(question.question_id, "")
+    if not str(actual).strip():
+        raise ValueError("현재 파트에 실제로 작성된 답안이 없어 완료할 수 없습니다.")
+    path = _preferred_result(project_id)
+    if not path or not path.is_file():
+        raise ValueError("기존 엔진이 실제 결과 파일을 생성하지 못했습니다.")
+    return {"project_id": project_id, "question_id": question.question_id,
+            "target_section": section_title, "artifact": str(path),
+            "artifact_size": path.stat().st_size,
+            "generation_label_required": state["plan"]["generation_label_required"],
+            "status": "ENGINE_OUTPUT_UNVERIFIED",
+            "note": "실제 MODULE/LOCATOR E2E와 원본 HWPX 채움 증거 전에는 DONE 금지."}
+
+
+@app.post("/console/modules/approve")
+async def module_approve(request: Request):
+    form = await request.form()
+    wid = str(form.get("workspace_id", ""))
+    try:
+        state = module_workspace.approve(wid)
+        # Engine invocation is reachable exclusively after persisted user approval.
+        module_workspace.record_execution(wid, "RUNNING")
+        result = _aw009_execute_approved_part(state)
+        module_workspace.record_execution(wid, "ENGINE_OUTPUT_UNVERIFIED", **result)
+        return RedirectResponse(url=f"/console?workspace_id={wid}", status_code=303)
+    except Exception as exc:
+        try:
+            state = module_workspace.get(wid)
+            if state.get("approved"):
+                module_workspace.record_execution(wid, "BLOCKED", reason=str(exc))
+        except Exception:
+            pass
+        return _aw009_error(f"{type(exc).__name__}: {exc}", wid)
 
 
 @app.post("/console/documents/write")
