@@ -645,7 +645,7 @@ async def module_approve(request: Request):
         # Engine invocation is reachable exclusively after persisted user approval.
         module_workspace.record_execution(wid, "RUNNING")
         result = _aw009_execute_approved_part(state)
-        module_workspace.record_execution(wid, "ENGINE_OUTPUT_UNVERIFIED", **result)
+        module_workspace.record_execution(wid, "ENGINE_OUTPUT_UNVERIFIED", **{k: v for k, v in result.items() if k != "status"})
         return RedirectResponse(url=f"/console?workspace_id={wid}", status_code=303)
     except Exception as exc:
         try:
