@@ -26,12 +26,12 @@ def docx(*paragraphs: str) -> bytes:
 
 
 def sample_hwpx() -> bytes:
-    xml = b'''<?xml version="1.0" encoding="UTF-8"?>
+    xml = '''<?xml version="1.0" encoding="UTF-8"?>
     <hs:sec xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section"
             xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph">
       <hp:p><hp:run><hp:t>1. 시장 경쟁</hp:t></hp:run></hp:p>
       <hp:p><hp:run><hp:t>경쟁사 비교표의 실제 내용</hp:t></hp:run></hp:p>
-    </hs:sec>'''
+    </hs:sec>'''.encode("utf-8")
     b = io.BytesIO()
     with zipfile.ZipFile(b, "w") as z:
         z.writestr("Contents/section0.xml", xml)
