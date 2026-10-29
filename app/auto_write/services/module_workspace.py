@@ -178,6 +178,8 @@ def start(announcement: tuple[str, bytes] | None,
     if len(files) > 22:
         raise ValueError("한 작업에 최대 22개 파일까지 허용합니다.")
     for name, data in files:
+        if Path(name).suffix.lower() not in _FORMATS:
+            raise ValueError(f"지원하지 않는 첨부파일: {name}")
         if len(data) > LIMIT_BYTES or not data:
             raise ValueError(f"파일이 비어 있거나 20MB를 초과합니다: {name}")
     toc = _toc(_elements(*template), toc_override)
@@ -267,6 +269,8 @@ def approve(workspace_id: str) -> dict[str, Any]:
     state = get(workspace_id)
     if state["status"] != "PLAN_READY":
         raise ValueError("Composition Plan이 생성되어야 승인할 수 있습니다.")
+    if any(a["action"].startswith("지시 불명확") for a in state["plan"]["ai_interpreted_actions"]):
+        raise ValueError("번호별 자연어 지시가 모호합니다. Composition Plan을 명확히 수정해야 작성할 수 있습니다.")
     state["approved"] = True
     state["status"] = "APPROVED"
     state["plan"]["approved"] = True
