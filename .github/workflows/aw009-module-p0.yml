@@ -24,7 +24,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install minimal parser and test dependencies
-        run: python -m pip install "pytest>=8" "python-docx>=1.1.2" "lxml>=5" "PyMuPDF>=1.24.0"
+        run: python -m pip install "pytest>=8" "python-docx>=1.1.2" "lxml>=5" "PyMuPDF==1.26.4"
       - name: Syntax compile changed Python files
         run: python -m compileall -q app/auto_write/services/module_workspace.py app/auto_write/operator_main.py app/tests/test_aw009_module_workspace.py
       - name: Run AW-009 module scope tests
