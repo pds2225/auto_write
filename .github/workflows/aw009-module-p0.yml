@@ -1,0 +1,33 @@
+name: AW-009 module P0 tests
+
+on:
+  push:
+    branches: ["feature/aw009-module-p0-20261029"]
+  pull_request:
+    paths:
+      - "app/auto_write/services/module_workspace.py"
+      - "app/auto_write/operator_main.py"
+      - "app/auto_write/templates/operator_home.html"
+      - "app/tests/test_aw009_module_workspace.py"
+      - ".github/workflows/aw009-module-p0.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  module-p0:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install minimal parser and test dependencies
+        run: python -m pip install "pytest>=8" "python-docx>=1.1.2" "lxml>=5" "PyMuPDF==1.26.4"
+      - name: Syntax compile changed Python files
+        run: python -m compileall -q app/auto_write/services/module_workspace.py app/auto_write/operator_main.py app/tests/test_aw009_module_workspace.py
+      - name: Run AW-009 module scope tests
+        env:
+          PYTHONPATH: app
+        run: python -m pytest -q app/tests/test_aw009_module_workspace.py
