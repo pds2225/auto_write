@@ -112,3 +112,20 @@ def test_hwpx_module_keeps_exact_original_bytes_and_structure_locator():
     assert all(b["locator"]["format"] == "hwpx" for b in blocks)
     assert all("section" in b["locator"] and "paragraph" in b["locator"] for b in blocks)
     assert all(b["page"] is None for b in blocks)
+
+
+def test_nested_form_heading_is_not_a_new_major_toc():
+    announcement = ("공고.txt", b"announcement")
+    template = ("양식.docx", docx("1. 사업개요", "1-1. 개요", "2. 시장분석"))
+    state = aw.start(announcement, template, [], roles_confirmed=True)
+    assert [row["title"] for row in state["toc"]] == ["1. 사업개요", "2. 시장분석"]
+
+
+def test_number_instructions_only_interpreted_when_unambiguous():
+    announcement, template, references = sample_inputs()
+    state = aw.start(announcement, template, references, roles_confirmed=True)
+    blocks = [b["id"] for m in state["modules"] for b in m["blocks"]][:2]
+    result = aw.plan(state["id"], "section-1", blocks, "[1]은 그대로. [2]는 표에 추가.")
+    assert result["ai_interpreted_actions"][0]["action"] == "원문 그대로"
+    assert result["ai_interpreted_actions"][1]["action"] == "해당 파트에 추가"
+    assert result["selected_material_ids"] == blocks
