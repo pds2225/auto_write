@@ -1,2 +1,0 @@
-"""Template analysis helpers."""
-

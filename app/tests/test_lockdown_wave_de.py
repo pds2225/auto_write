@@ -186,8 +186,8 @@ def test_agents_section7_skill_hook_still_present():
 
 def test_coverage_counts_unchanged_by_de_convention():
     counts = _coverage()["counts"]
-    assert counts["mechanized"] == 69
+    assert counts["mechanized"] == 72
     assert counts["gap"] == 1
-    assert counts["judgment"] == 101
-    assert counts["total"] == 171
+    assert counts["judgment"] == 102
+    assert counts["total"] == 175
     assert _lesson("L050")["id"].startswith("L050")

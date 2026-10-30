@@ -91,6 +91,33 @@ def test_whitespace_only_cell_counts_as_blank(compare):
     assert rep.value_fills == 1 and rep.form_phrase_edits == 0
 
 
+def _value_cell_doc(label: str, value: str) -> str:
+    """라벨 칸 + 값 칸(같은 행, 서로 붙은 열)을 가진 표 1개짜리 섹션 XML.
+
+    ``subList`` 로 감싸야 한다 — 안내문/예시 칸 판정 후 마스킹(``_compare_roots``)이
+    ``tc.iterchildren(subList)`` 의 ``p`` 자식만 지우기 때문에, 실제 HWPX 스키마와
+    같은 중첩이어야 마스킹이 실제로 동작하는 것을 검증할 수 있다."""
+    row = (
+        f'<tr><tc><cellAddr rowAddr="0" colAddr="0"/><cellSpan rowSpan="1" colSpan="1"/>'
+        f'<subList><p><run><t>{label}</t></run></p></subList></tc>'
+        f'<tc><cellAddr rowAddr="0" colAddr="1"/><cellSpan rowSpan="1" colSpan="1"/>'
+        f'<subList><p><run><t>{value}</t></run></p></subList></tc></tr>'
+    )
+    return f'<sec xmlns="{_HP}"><tbl>{row}</tbl></sec>'
+
+
+def test_all_zero_date_scaffold_cell_counts_as_guidance_replacement(compare):
+    # '0000. 00. 00' 같은 전부-0 날짜 자리표시는 엔진이 합법적으로 덮어쓰는 예시값이다(hwpx_fill._is_hwpx_example_scaffold
+    # 와 동일 판정). 값 칸으로 인식되면 양식 문구 수정이 아니라 안내문 교체(정상)로 세어야 한다(#rerun130 L3 그룹A).
+    rep = compare(
+        _value_cell_doc("생년월일", "0000. 00. 00"),
+        _value_cell_doc("생년월일", "1990.01.01"),
+    )
+    assert rep.guidance_replacements == 1
+    assert rep.form_phrase_edits == 0
+    assert rep.form_intact is True
+
+
 # --- 양식 훼손(결함) --------------------------------------------------------
 
 def test_removed_form_phrase_is_a_drop(compare):

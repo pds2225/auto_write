@@ -197,10 +197,12 @@ def test_cli_fill_smoke(tmp_path):
     prof_path = tmp_path / "profile.json"
     prof_path.write_text(json.dumps(
         {"identity": {}, "career": [
-            {"period": "2020", "company": "A", "position": "P", "duty": "D"}]},
+            {"period": "2020", "company": "A", "position": "P", "duty": "D"},
+            {"period": "2021", "company": "B", "position": "Q", "duty": "E"}]},
         ensure_ascii=False), encoding="utf-8")
     out = tmp_path / "out.hwpx"
 
+    # 양식 반복행 2개에 경력 2건을 모두 채운다(반복칸 일부만 채우면 L규칙 채움 단계가 FAIL → _DRAFT).
     rc = main(["fill", str(src), "--profile", str(prof_path), "-o", str(out)])
     assert rc == 0
     assert out.exists()

@@ -117,6 +117,9 @@ class Finalizer:
                 elif status == STATUS_NA and not reason:
                     can_finalize = False
                     reasons.append(f"{entry.get('id', '?')} N/A has no reason")
+                elif status == STATUS_NA and not evidence:
+                    can_finalize = False
+                    reasons.append(f"{entry.get('id', '?')} N/A has no evidence (근거 없는 N/A)")
                 elif status == STATUS_USER_OVERRIDE and (not evidence or entry.get("reviewer") != "user"):
                     can_finalize = False
                     reasons.append(f"{entry.get('id', '?')} USER_OVERRIDE lacks user evidence")

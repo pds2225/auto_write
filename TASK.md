@@ -92,6 +92,7 @@ TASK 1개 = 반드시 1줄. LIST의 TASK_ID와 DETAILS의 TASK_ID는 반드시 1
 REQUEST_SOLVED=YES가 아닌 작업은 완료 표시 금지.
 -->
 
+[~] T-20261006-02 | HWPX 직접 채움의 안내문·파트·기록행·서술·참고이미지·PDF·양식 비교 커버리지를 보완한다
 [~] AW-001 | 문서 작성이 정해진 검사 경로를 거쳐 끝나게 한다
 [~] T-20261006-01 | Round-5 현재 기간·괄호 값 채움 수정과 한글 2022 PDF 타임아웃 재현
 [ ] AW-002 | GitHub와 작업 상태를 안전하게 주고받게 한다
@@ -5029,3 +5030,14 @@ PENDING_TASKS:
 - PDF: 한글 2022 12.0.0.893에서 2026년 HWP 원본 사본(65.609초/2페이지), 2025년 HWPX 원본 사본(1.578초/2페이지), 변경 추적+문구 삽입 사본(3.953초/3페이지)의 기존 SaveAs[PDF] 모두 성공. 기존 120초 타임아웃은 재현되지 않았다.
 - 사용자는 실패 파일 경로를 모른다고 답했다. PDF 코어는 근거 없는 수정 없이 유지하며 정확한 실패 입력 확보 후 재현이 필요하다. REQUEST_SOLVED=NO / TASK_STATUS=PARTIAL.
 - Draft PR #216: https://github.com/pds2225/auto_write/pull/216, main 미병합. 상세 결과 docs/ROUND5_FILL_FIXES.md. 다음: 정확한 실패 입력 확보 후 PDF 타임아웃 재현·수정. 전체 suite 재실행은 하지 않았다.
+
+
+# T-20261006-02 — 엔진 채움 커버리지 보완
+## 8-1. 사용자 원문
+> CODEX_PROMPT.md 지시대로 진행해 (2026-10-06 ㅇㅇ 확인).
+## 범위와 현재 상태
+- base: origin/codex/round5-fill-fixes 2f630a62eef6377c3ccdfc15d75587c5c17a4bd2. main 12b5095, PR #214/#216 모두 draft.
+- 기존 D1~D6 변경 검토 및 선행 공유 마무리. 기존 P0/F01·정확 쓰기 계약·기존 테스트·#214 submit 인자/시그니처 보존. 새 blank-cell 경로는 반복 라벨 2개로 제한하여 보류 우회를 차단; 제목 없는 섹션의 기존 중복 진단 유지.
+- 날짜/서명/동의 자동입력·생성이미지·범위 밖 코어·main push/merge/force-push 금지.
+- 2026-10-07 사용자 최신 지시: 기존 변경 보존·diff 검토·필요 회귀, 합성 샘플만 commit/push 후 main 대상 draft PR. 병합 금지. 초기 영향 회귀 343 pass/7 fail/3 skip; 실패 원인 수정 및 로컬 검증 입력 확보 후 직접 영향 66 pass. 지정 회귀 351 pass/2 skip, 신규 gate 34 pass/1 skip; 전체 Windows pytest 1회는 중단되어 합격 미확인; 독립 안전 QA PASS. 실양식 렌더 qualification 미확인으로 PARTIAL 유지.
+- REQUEST_SOLVED=NO. 검증 결과는 docs/ENGINE_COVERAGE_FIXES.md에 기록한다.

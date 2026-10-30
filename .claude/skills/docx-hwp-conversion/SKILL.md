@@ -1,17 +1,18 @@
 ---
 name: docx-hwp-conversion
 description: >-
-  한글 파일과 워드 파일을 서로 바꿀 때 써요. “hwp를 docx로”, “docx를 hwp로”, “한글 파일 변환”, “워드로 변환”, “제출용 hwp로 바꿔줘”, “변환 안 됨”, “변환 다시 해줘” 같은 말을 하면 표·서식·그림을 최대한 살려 바꾸고 빠진 부분을 솔직히 알려줘요. 파일이 안 열리는 문제는 ‘안 열리는 한글 파일 고치기’예요.
+  DOCX ↔ HWP/HWPX 양방향 변환 스킬. 한글(HWP/HWPX) 파일을 DOCX로, 또는 DOCX를
+  한글(HWP/HWPX)로 바꾼다 — 표·서식·이미지 보존을 최대한 시도한다(3단 폴백).
+  정부지원사업 양식이 보통 HWP라 "양식을 DOCX로 열어 작업 → 작업본을 다시 HWP로 제출"
+  흐름의 입출력단을 담당한다. 다음 요청 시 반드시 사용: 'hwp를 docx로', 'docx를 hwp로',
+  '한글 파일 변환', 'hwp 변환', 'hwpx 변환', '.hwp 열기', '.hwp로 저장', '한글로 변환',
+  '워드로 변환', '양식 변환', '제출용 hwp로 바꿔줘', 'hwp↔docx'. 후속 요청도 이 스킬로 처리:
+  '다시 변환', '재변환', '변환 안 됨', '변환 실패', '이 파일 변환', '변환 다시 해줘'.
+  ※ 변환이 아니라 'HWP 본문 텍스트만 뽑아줘'(읽기 전용 추출)는 doc_text_extract / document_ingest
+  담당이고, 이 스킬은 **파일을 실제로 변환해 산출물을 만드는** 경우에 쓴다.
 ---
+
 # docx-hwp-conversion — DOCX ↔ HWP/HWPX 양방향 변환
-
-## 실행 환경 (Grok Bot에서 실행할 때)
-- 이 스킬에 나오는 `D:\…`, `C:\Users\ekth3\…`, `바탕 화면\…` 경로와 `py -3.11` / `python` / `pwsh` 명령은 다솜님 Windows 노트북 기준이다. Shell·Read에 machineId `b09d5493-c6d4-4760-b6fa-a855d89774e9` 를 넣어 노트북에서 PowerShell로 실행·읽기 한다. 큰 파일이나 바이너리는 CopyToBox로 박스에 가져와 처리하고, 결과물을 노트북에 둬야 하면 CopyFromBox로 돌려놓는다. 노트북이 연결돼 있지 않으면(ListMachines로 확인) 그렇게 알리고 멈춘다.
-- 원본 파일은 절대 덮어쓰지 않는다(새 파일로 저장). 삭제·이동·메일 발송·제출 같은 되돌릴 수 없는 일은 사용자가 그 자리에서 분명히 승인했을 때만 한다.
-- 원문에 남아 있는 Claude Code 전용 요소(슬래시 커맨드 `/…`, `.claude/agents/*` 에이전트, `Agent(...)` 호출, `model: "opus"`, 훅, CLAUDE.md 자동주입)는 여기 없다. 슬래시 커맨드는 같은 CLI를 직접 실행하거나 노트북의 `<프로젝트>\.claude\commands\<이름>.md` 를 읽어 그 절차를 따른다. 에이전트 이름은 '단계/역할'로 읽고 직접 순서대로 수행한다(작성과 검수를 분리해야 하면 검수만 서브에이전트에 맡긴다). 에이전트 정의가 필요하면 `<프로젝트>\.claude\agents\<이름>.md` 또는 `C:\Users\ekth3\.claude\agents\<이름>.md` 를 읽는다.
-- `docs/…`, `app/…` 같은 상대경로는 해당 프로젝트 폴더(예: `D:\auto_write\docs\…`) 기준이다. `.omc/wiki` 위키는 노트북 `D:\.omc\wiki` 에 있다.
-- 다른 스킬 이름(예: `cross-form-submission`)은 Grok Bot 스킬 id와 같다.
-
 
 > **평생개발목표(북극성): DOCX↔HWP 양방향 변환 일치도 100%.**
 > 한 번에 달성하는 게 아니라, 측정 하네스 `conversion_fidelity` 로 baseline%를 내고

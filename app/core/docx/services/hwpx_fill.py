@@ -166,6 +166,18 @@ def _real_existing_text(text: str) -> bool:
     return True
 
 
+def _cell_has_inline_label_lines(tc) -> bool:
+    """칸 안 문단 중 '라벨: 값' 모양 줄(콜론 앞이 짧은 라벨)이 하나라도 있는가."""
+    for sub in _direct(tc, "subList"):
+        for p in _direct(sub, "p"):
+            flat = "".join(t.text or "" for t in _inline_texts(p))
+            if (":" in flat or "：" in flat) and any(
+                len(lab.strip()) <= 12 for lab, _v, _a, _b in _iter_line_fields(flat)
+            ):
+                return True
+    return False
+
+
 def _note_existing_value(bucket: list, label: str, tc=None, labels: list | None = None) -> None:
     """Record a skipped write when the cell already holds a real value."""
     row = col = None
@@ -655,6 +667,7 @@ def _fill_inline_fields_in_p(
     p, wants, used_keys: set, filled: dict, span_notes: Optional[list] = None,
     existing_labels: Optional[list] = None,
     exact_held: Optional[set] = None,
+    black: Optional["_BlackCharPr"] = None,
 ) -> bool:
     """hp:p 하나의 인라인 필드(`라벨 : ______`)를 채운다 — 1.5(셀)·1.8(본문) 공용 커널.
 
@@ -697,10 +710,29 @@ def _fill_inline_fields_in_p(
             break
 
     fields = list(_iter_line_fields(flat))
+    # t 별 flat 구간(값 구간 글자가 예시색 안내체인지 보기 위함)
+    t_spans: list[tuple[int, int, Any]] = []
+    cursor = 0
+    for t in ts:
+        t_len = len(t.text or "")
+        t_spans.append((cursor, cursor + t_len, t))
+        cursor += t_len
     # 역순 스플라이스: 뒤 구간부터 교체해야 앞 필드 offset 이 유효.
     for label_raw, value_raw, f_start, f_end in reversed(fields):
         visible = _is_visible_blank(value_raw)
         real_value = _real_existing_text(value_raw)
+        lead_adjusted = False
+        if (not visible and value_raw.strip() and black is not None
+                and _spans_are_example_style(
+                    [t for a, b, t in t_spans
+                     if a < f_end and b > f_start and flat[max(a, f_start):min(b, f_end)].strip()], black)):
+            visible, real_value = True, False  # 콜론 뒤가 예시색 안내문 → 값으로 교체할 빈칸
+            # 라벨 run 끝의 공백이 값 구간에 걸려 있으면 run 경계를 넘지 않게 첫 글자부터 교체한다.
+            lead = len(value_raw) - len(value_raw.lstrip())
+            if lead:
+                f_start += lead
+                value_raw = value_raw.lstrip()
+                lead_adjusted = True
         if not visible and not real_value:
             continue
         field_key = _key(label_raw)
@@ -732,12 +764,39 @@ def _fill_inline_fields_in_p(
                 _note_unfilled_span(span_notes, lbl, _tc_of(p))
                 _hold_exact_label(exact_held, field_key, want_key)
                 break
-            if _splice_run_text(p, f_start, f_end, " " + str(val)):
+            if _splice_run_text(p, f_start, f_end, ("" if lead_adjusted else " ") + str(val)):
                 filled[lbl] = str(val)
                 used_keys.add(want_key)
                 changed = True
             break
     return changed
+
+
+_PUA_RE = re.compile("[" + chr(0xE000) + "-" + chr(0xF8FF) + "]")
+
+
+def _label_before_box_options(flat: str) -> Optional[list[tuple[int, str]]]:
+    """'본점 □ 지점 □' 처럼 박스가 라벨 '뒤'에 오는 줄의 [(box_pos, 옵션라벨)]. 해당 형식이 아니면 None.
+
+    마지막 박스 뒤에 라벨이 없고(= 일반 '박스 → 라벨' 읽기로는 마지막 박스가 라벨 없는 상태가 됨),
+    첫 박스 앞에 콜론으로 끝나지 않는 글자가 있을 때만 이 형식으로 본다. 체크된 박스(■)도 구간 경계로 쓰되
+    옵션은 빈 박스만 돌려준다(이미 체크된 칸은 건드리지 않음)."""
+    boxes = list(_ANY_BOX_RE.finditer(flat))
+    if len(boxes) < 2 or flat[boxes[-1].end():].strip():
+        return None
+    head = flat[: boxes[0].start()].strip()
+    if not head or head.endswith((":", "：")):
+        return None
+    options: list[tuple[int, str]] = []
+    prev_end = 0
+    for m in boxes:
+        label = _option_text(_PUA_RE.sub("", flat[prev_end:m.start()])).strip(" ,/·ㆍ")
+        prev_end = m.end()
+        if not label:
+            return None
+        if _EMPTY_BOX_RE.match(m.group(0)):
+            options.append((m.start(), label))
+    return options
 
 
 def _parse_checkbox_options(flat: str) -> tuple[str, list[tuple[int, str]]]:
@@ -748,6 +807,9 @@ def _parse_checkbox_options(flat: str) -> tuple[str, list[tuple[int, str]]]:
     이미 체크된 박스(■/☑ 등)는 옵션으로 세지 않는다 → 재실행이 안 건드림(멱등).
     box_pos 는 flat offset — _splice_run_text 와 동일한 _inline_texts 결합 기준.
     """
+    before = _label_before_box_options(flat)
+    if before is not None:
+        return "", before
     boxes = list(_EMPTY_BOX_RE.finditer(flat))
     if not boxes:
         return "", []
@@ -1042,21 +1104,94 @@ _GUIDANCE_PAREN_RE = re.compile(
 )
 
 
+_GUIDANCE_CONDITIONAL_RE = re.compile(
+    r"^(?=.{1,60}$).*(?:경우(?:에만|에\s*한해)?\s*(?:기재|작성|기입)|"
+    r"시(?:에)?만?\s*(?:기재|작성|기입)|해당\s*시\s*(?:기재|작성)|경우에\s*한함)$"
+)
+
+
+def _conditional_guidance_value(guide_text: str, label: str, identity: dict) -> str | None:
+    """Evaluate only explicit registration/team facts, never company-name aliases."""
+    if not _GUIDANCE_CONDITIONAL_RE.fullmatch(re.sub(r"\s+", " ", guide_text).strip()):
+        return None
+    normalized = {re.sub(r"\s+", "", str(k)): str(v).strip() for k, v in identity.items()}
+    key = re.sub(r"\s+", "", label)
+    if "사업자" in guide_text or "법인" in guide_text:
+        number = normalized.get("사업자등록번호", "")
+        if re.fullmatch(r"\d{3}-?\d{2}-?\d{5}", number):
+            return normalized.get(key) or None
+        if number in {"해당없음", "없음", "미등록"} or any("예비창업" in normalized.get(k, "") for k in ("구분", "기업형태")):
+            return "해당없음"
+        return None
+    if "팀" in guide_text:
+        if any("개인" in normalized.get(k, "") for k in ("구분", "참가형태", "기업형태")):
+            return "해당없음"
+        if key in {"팀명", "팀원수"}:
+            return normalized.get(key) or None
+    return None
+
+
+# 글자 없이 불릿만 반복된 칸(예: 줄마다 '·' 하나) — 서술칸의 자리표시자다. '-' 한 글자는 실값('없음' 표기)일 수 있어 제외.
+_BULLET_ONLY_RE = re.compile(r"(?:[·•ㆍ○◦ㅇ\-–—*▪▫]\s*){2,}")
+# 양식 제작자가 서술칸에 넣어 둔 자리표시 단어(칸 전체가 이 단어일 때만).
+_PLACEHOLDER_TOKENS = {"텍스트", "text", "내용입력", "내용을입력하세요", "여기에입력", "입력하세요", "직접입력"}
+
+
 def _is_hwpx_guidance_placeholder(text: str) -> bool:
     """값 칸 자체가 무엇을 쓰라는 짧은 안내뿐이면 빈칸으로 본다."""
     raw = re.sub(r"\s+", " ", str(text or "")).strip()
-    if re.fullmatch(r"ex\s*\)\s*\S.{0,230}", raw, re.IGNORECASE):
+    if re.fullmatch(r"[◦•·ㆍ○ㅇ\-–—*▪▫]?\s*ex\s*\)\s*\S.{0,230}", raw, re.IGNORECASE):
         return True
     if not raw or len(raw) > 90:
         return False
+    if _BULLET_ONLY_RE.fullmatch(raw) or re.sub(r"\s+", "", raw).lower() in _PLACEHOLDER_TOKENS:
+        return True
     return bool(
         _GUIDANCE_CONTACT_RE.fullmatch(raw)
         or _GUIDANCE_VALUE_RE.fullmatch(raw)
         or _GUIDANCE_PAREN_RE.fullmatch(raw)
+        or _GUIDANCE_CONDITIONAL_RE.fullmatch(raw)
     )
 
 _EXAMPLE_CHOICE_RE = re.compile(r"\s*/\s*")
 _REGION_SCAFFOLD_CHARS_RE = re.compile(r"[O○〇ㅇ0\s·・.\-도특별시군구읍면동로길번지]")
+
+
+# 만 나이 자리표시('(만   세)', '    .   .   . (만   세)') — 생년월일 값에서 계산해 채운다.
+_AGE_SCAFFOLD_RE = re.compile(r"[년월일.:/\-]*[\(（]만세[\)）]")
+_BIRTH_DATE_RE = re.compile(r"(?<!\d)(\d{4})\s*[.년/\-]\s*(\d{1,2})\s*[.월/\-]\s*(\d{1,2})")
+_AGE_REF_KEYS = ("기준일", "작성일", "제출일", "신청일")
+
+
+def _age_scaffold_value(cell_text: str, value: str, identity: dict) -> Optional[str]:
+    """셀이 '(만 세)' 자리표시이고 value 가 생년월일이면 '1992.04.06 (만 34세)' 를 돌려준다. 아니면 None.
+
+    기준일은 identity 의 기준일·작성일·제출일(YYYY-MM-DD 또는 YYYY.MM.DD)이 있으면 그것, 없으면 오늘이다."""
+    from datetime import date
+
+    if not _AGE_SCAFFOLD_RE.fullmatch(re.sub(r"\s+", "", cell_text or "")):
+        return None
+    m = _BIRTH_DATE_RE.search(str(value))
+    if not m:
+        return None
+    try:
+        born = date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    except ValueError:
+        return None
+    ref = date.today()
+    for key in _AGE_REF_KEYS:
+        raw = str(identity.get(key, "")).strip()
+        rm = _BIRTH_DATE_RE.search(raw) if raw else None
+        if rm:
+            try:
+                ref = date(int(rm.group(1)), int(rm.group(2)), int(rm.group(3)))
+                break
+            except ValueError:
+                pass
+    age = ref.year - born.year - ((ref.month, ref.day) < (born.month, born.day))
+    if age < 0 or age > 120:
+        return None
+    return f"{m.group(1)}.{int(m.group(2)):02d}.{int(m.group(3)):02d} (만 {age}세)"
 
 
 def _is_hwpx_example_scaffold(text: str) -> bool:
@@ -1072,6 +1207,8 @@ def _is_hwpx_example_scaffold(text: str) -> bool:
     if any(mark in raw for mark in ("□", "☐", "■", "☑")):
         return False
     compact = re.sub(r"\s+", "", raw)
+    if _AGE_SCAFFOLD_RE.fullmatch(compact):
+        return True
     if _EXAMPLE_OMASK_RE.fullmatch(compact):
         return True
     if _EXAMPLE_GUIDED_OMASK_RE.fullmatch(raw):
@@ -1126,27 +1263,84 @@ def _cell_is_fillable(tc) -> bool:
 
 
 
-def _cell_has_blue_example_style(tc, black: Optional[_BlackCharPr]) -> bool:
-    """값 칸 전체가 파란 예시체이면 현재 매칭된 프로필 값으로 교체 가능한가.
+def _is_example_color(color: Optional[str]) -> bool:
+    """양식이 '안내·예시 글자'에 쓰는 색인가 — 채도 높은 파랑·빨강 계열과 중간 회색.
 
-    텍스트 자체가 실값처럼 보여도 charPr가 양식 예시 파랑(#0000FF)인 경우에만 True.
-    호출 위치가 이미 라벨↔identity 매칭 뒤이므로 해당 프로필 필드가 있을 때만 적용된다.
-    """
-    if black is None or _has_form_control(tc) or _cell_has_nested_table(tc):
+    실양식 실측: 킥스업(#0000FF)·마켓게이트 신청서식(#FF0000/#0909D9)·STAR(#0000FF)·수원 멘토(#0000FF).
+    검정·흰색·미지정·진한/연한 회색(문서 본문색)은 예시색이 아니다."""
+    c = re.sub(r"[^0-9A-Fa-f]", "", color or "")
+    if len(c) != 6:
+        return False
+    r, g, b = int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16)
+    top, low = max(r, g, b), min(r, g, b)
+    if top - low >= 0x60 and top >= 0x80:
+        return True                       # 채도 높은 색(파랑·빨강·초록 계열)
+    return top - low <= 0x10 and 0x60 <= top <= 0xB0  # 중간 회색 예시체
+
+
+_LETTER_RE = re.compile(r"[가-힣A-Za-z0-9]")
+
+
+# '무엇을 쓰라'는 지시문 끝맺음(예시색이 파랑이 아닐 때 안내문임을 확인하는 글자 근거).
+_INSTRUCTION_TEXT_RE = re.compile(
+    r"^.{2,90}?(?:기재|작성|기입|입력)"
+    r"(?:\s*(?:하세요|해\s*주세요|해주세요|바랍니다|하십시오|하시오))?"
+    r"(?:\s*[\(（][^()（）]{0,40}[\)）])?[\s.]*$"
+)
+
+
+def _looks_like_instruction(text: str) -> bool:
+    flat = re.sub(r"\s+", " ", str(text or "")).strip()
+    return bool(flat) and (
+        bool(_INSTRUCTION_TEXT_RE.match(flat))
+        or bool(re.match(r"^[◦•·ㆍ○ㅇ\-–—*▪▫]?\s*(?:ex|예|예시)\s*[)):：]", flat, re.IGNORECASE))
+    )
+
+
+def _is_pure_blue(color: str) -> bool:
+    c = re.sub(r"[^0-9A-Fa-f]", "", color or "").upper()
+    return c == "0000FF"
+
+
+def _spans_are_example_style(texts, black: Optional[_BlackCharPr]) -> bool:
+    """texts(hp:t 목록)의 실제 글자가 전부 예시색 run 에 있는가(글자 없는 기호·공백 run 은 무시).
+
+    순수 파랑(#0000FF)은 기존대로 예시체로 신뢰한다. 빨강·기타 예시색·회색은 실값이 그 색으로 적히는
+    양식도 있으므로(보존해야 하는 유색 기존 값) 글자도 '기재·작성' 같은 지시문일 때만 예시체로 본다."""
+    if black is None:
         return False
     seen = False
-    for t in _cell_texts(tc):
-        if not str(t.text or "").strip():
+    all_blue = True
+    colored_text: list[str] = []
+    for t in texts:
+        text = str(t.text or "")
+        if not text.strip():
             continue
         run = t.getparent()
         if run is None or _local(getattr(run, "tag", "")) != "run":
             return False
-        ref = run.get("charPrIDRef") or ""
-        color = re.sub(r"[^0-9A-Fa-f]", "", black.colors.get(ref, "") or "").upper()
-        if color != "0000FF":
-            return False
-        seen = True
-    return seen
+        color = black.colors.get(run.get("charPrIDRef") or "", "") or ""
+        if _is_example_color(color):
+            seen = True
+            colored_text.append(text)
+            if not _is_pure_blue(color):
+                all_blue = False
+        elif _LETTER_RE.search(text):
+            return False                    # 본문색 글자가 섞이면 실값일 수 있다
+    if not seen:
+        return False
+    return all_blue or _looks_like_instruction("".join(colored_text))
+
+
+def _cell_has_blue_example_style(tc, black: Optional[_BlackCharPr]) -> bool:
+    """값 칸 전체가 '예시색'(파랑·빨강 계열·회색) 안내체이면 현재 매칭된 프로필 값으로 교체 가능한가.
+
+    텍스트 자체가 실값처럼 보여도 charPr 가 양식 예시색인 경우에만 True. 본문색 run 은 글자(한글·영숫자)가
+    없는 기호·공백일 때만 허용한다. 호출 위치가 이미 라벨↔identity 매칭 뒤이므로 해당 프로필 필드가
+    있을 때만 적용된다."""
+    if black is None or _has_form_control(tc) or _cell_has_nested_table(tc):
+        return False
+    return _spans_are_example_style(list(_cell_texts(tc)), black)
 
 
 _REGION_PROTECTED_LABEL_RE = re.compile(
@@ -1410,9 +1604,25 @@ def _current_period_value_cell(tbl, label_tc, cells: list, *, notes=None, label=
     periods = []
     ambiguous_header = False
     label_row = _row_of(label_tc)
+    if _cell_rowspan(label_tc) > 1:
+        # 세로로 병합된 블록 라벨(반복 표 머리글 옆)은 위쪽 다른 블록의 기간 머리글을 따르지 않는다.
+        return _value_cell(label_tc, cells)
+    table_width = max((( _cell_addr(c) or 0) + _cell_colspan(c) for r in _direct(tbl, "tr") for c in _direct(r, "tc")), default=0)
     for row in _direct(tbl, "tr"):
         if row is label_row:
             break
+        # 새 블록의 시작(전폭 칸 행, 또는 자체 머리글을 가진 세로 병합 블록 라벨 행)이면 위쪽 기간 머리글을 버린다.
+        row_cells = _direct(row, "tc")
+        full_width = len(row_cells) == 1 and table_width >= 2 and _cell_colspan(row_cells[0]) >= table_width
+        block_head = any(
+            _cell_rowspan(c) > 1 and (_cell_addr(c) or 0) == 0 and sum(
+                1 for o in row_cells if o is not c and _is_label_like(o)
+                and not _PERIOD_HEADER_RE.fullmatch(re.sub(r"\s+", "", _cell_text(o)))
+            ) >= 2
+            for c in row_cells
+        )
+        if full_width or block_head:
+            periods, ambiguous_header = [], False
         row_periods = []
         header_row = True
         for cell in _direct(row, "tc"):
@@ -1841,11 +2051,23 @@ def _fill_section_xml(
     edited: list = []  # L074: lineseg strip 대상(편집된 tc/p)
     table_used: dict[Any, set[str]] = {}
 
+    # 같은 라벨이 반복되는 표(수상 이력 칸 여러 개, 행마다 같은 '성명' 등): '라벨#2' 키로 n 번째 라벨 칸 값을
+    # 따로 준다(n≥2, 문서 순서). '라벨'(번호 없음)은 기존대로 첫 채울 칸에 쓴다. 명시한 값만 쓰므로 날조가 아니다.
+    nth_values: dict[str, dict[int, tuple[str, str]]] = {}
+    plain_identity: dict[str, str] = {}
+    for lbl, val in identity.items():
+        m = re.fullmatch(r"(.+?)\s*#\s*(\d+)", str(lbl))
+        if m and int(m.group(2)) >= 2 and _key(m.group(1)):
+            if str(val or "").strip():
+                nth_values.setdefault(_key(m.group(1)), {})[int(m.group(2))] = (m.group(1).strip(), str(val))
+        else:
+            plain_identity[lbl] = val
     wants = [
         (_key(lbl), lbl, val)
-        for lbl, val in identity.items()
+        for lbl, val in plain_identity.items()
         if str(val or "").strip()
     ]
+    nth_seen: dict[str, int] = {}
 
     # 1) 표 라벨→값 칸 채움 (cellAddr 기반 값칸 선택 + 라벨칸 보호)
     for tbl in root.iter(_q("tbl")):
@@ -1857,7 +2079,17 @@ def _fill_section_xml(
                 cell_key = _key(_cell_text(tc))
                 if not cell_key:
                     continue
-                for want_key, lbl, val in wants:
+                cell_wants = wants
+                for base_key, by_n in nth_values.items():
+                    if _label_matches(cell_key, base_key):
+                        nth_seen[base_key] = nth_seen.get(base_key, 0) + 1
+                        hit = by_n.get(nth_seen[base_key])
+                        if hit is not None:
+                            # n 번째 라벨 칸: 명시한 값을 우선 사용(base_key 자체로 매칭, 사용 표시는 n 별로 따로).
+                            cell_wants = [(base_key, hit[0], hit[1])] + [w for w in wants if w[0] != base_key]
+                            used_keys.discard(base_key)
+                            table_used.get(tbl, set()).discard(base_key)
+                for want_key, lbl, val in cell_wants:
                     if want_key in used_keys:
                         continue
                     if prior_support and _is_applicant_identity(want_key):
@@ -1905,6 +2137,11 @@ def _fill_section_xml(
                     if not _cell_is_fillable(target) and not blue_example:
                         # 실값만 EXISTING_VALUE. ____·더미날짜·□ 는 각자 게이트에 남긴다.
                         if _cell_has_real_value(target):
+                            if _cell_has_inline_label_lines(target):
+                                # '전 화: …' 처럼 줄마다 라벨이 있는 칸은 인라인 경로(1.5)가 줄 단위로 채운다 —
+                                # 키를 소모하지 않고 기존값 기록만 남긴다.
+                                _note_existing_value(span_notes, lbl, target, existing_labels)
+                                break
                             table_used[tbl].add(want_key)
                             _note_existing_value(span_notes, lbl, target, existing_labels)
                             _hold_exact_label(exact_held, cell_key, want_key)
@@ -1920,6 +2157,18 @@ def _fill_section_xml(
                         _note_unfilled_span(span_notes, lbl, target)
                         _hold_exact_label(exact_held, cell_key, want_key)
                         break
+                    guide_text = re.sub(r"\s+", " ", _cell_text(target)).strip()
+                    if _GUIDANCE_CONDITIONAL_RE.fullmatch(guide_text):
+                        conditional = _conditional_guidance_value(guide_text, _cell_text(tc), identity)
+                        if conditional is None:
+                            span_notes.append(f"[conditional] {_cell_text(tc)} UNDECIDED")
+                            table_used[tbl].add(want_key)
+                            _hold_exact_label(exact_held, cell_key, want_key)
+                            break
+                        val = conditional
+                    age_value = _age_scaffold_value(_cell_text(target), str(val), identity)
+                    if age_value is not None:
+                        val, scaffold = age_value, True
                     if _set_cell_text(target, str(val), black, replace_scaffold=scaffold):
                         filled[lbl] = str(val)
                         used_keys.add(want_key)
@@ -1942,7 +2191,7 @@ def _fill_section_xml(
                 for p in _direct(sub, "p"):
                     if _fill_inline_fields_in_p(
                         p, wants, inline_used, filled, span_notes, existing_labels,
-                        exact_held,
+                        exact_held, black,
                     ):
                         changed = True
                         edited.append(p)
@@ -2057,7 +2306,7 @@ def _fill_section_xml(
                 body_used = set()
             if _fill_inline_fields_in_p(
                 p, wants, body_used, filled, span_notes, existing_labels,
-                exact_held,
+                exact_held, black,
             ):
                 changed = True
                 edited.append(p)
@@ -2123,6 +2372,13 @@ def _fill_section_xml(
             f01_bucket["style"].update(style)
         if f01_changed:
             changed = True
+
+    if span_notes is not None:
+        for tc in root.iter(_q("tc")):
+            if _AGE_SCAFFOLD_RE.fullmatch(re.sub(r"\s+", "", _cell_text(tc))):
+                note = f"[computed] {_left_label_text(tc) or '생년월일'} 만 나이 칸: 생년월일 근거 없음 — 사용자 확인 필요(REVIEW)"
+                if note not in span_notes:
+                    span_notes.append(note)
 
     if not changed:
         return xml_bytes, filled, replaced, used_keys
@@ -3266,3 +3522,88 @@ def commit_t02_label_writes(
         report.ok = False
         return report
     return commit_exact_text_writes(src, dst, exact, source_sha256=index.source_sha256)
+
+
+def commit_guidance_value_writes(in_hwpx, out_hwpx, grants, values):
+    """All-or-nothing cell writes, reissued grants and outside-cell XML equality."""
+    import tempfile
+    from core.docx.services.hwpx_analysis_adapter import index_hwpx_structure
+    from core.docx.services.hwpx_protected_regions import (
+        guidance_value_authorization_is_current, record_authorization_is_current,
+    )
+    src, dst = Path(in_hwpx), Path(out_hwpx)
+    if _same_file(src, dst):
+        raise ValueError("원본 덮어쓰기 금지")
+    index = index_hwpx_structure(src)
+    planned = [(g, str(values.get(g, values.get(g.field_label, "")))) for g in grants]
+    planned = [(g, v) for g, v in planned if v.strip()]
+    for grant, value in planned:
+        current = record_authorization_is_current(index, grant) if grant.kind == "RECORD_VALUE" else guidance_value_authorization_is_current(index, grant)
+        if not current:
+            raise ValueError("STALE_CELL_AUTHORIZATION")
+        if re.search(r"생년|설립일|개시일|날짜|연월일|서명|날인|동의", grant.field_label) and value != "해당없음":
+            raise ValueError("UNCONFIRMED_DATE_OR_SIGNATURE")
+    with zipfile.ZipFile(src) as archive:
+        infos = archive.infolist()
+        data = {i.filename: archive.read(i.filename) for i in infos}
+    parser = etree.XMLParser(resolve_entities=False, no_network=True)
+    roots = {g.section_member: etree.fromstring(data[g.section_member], parser) for g, _ in planned}
+    before = {n: copy.deepcopy(r) for n, r in roots.items()}
+    header = etree.fromstring(data['Contents/header.xml'], parser) if 'Contents/header.xml' in data else None
+    black = _BlackCharPr(header)
+    changed = {}
+    for grant, value in planned:
+        table = index.tables[grant.table_index]
+        xml_table = list(roots[grant.section_member].iter(_q('tbl')))[table.table_index_in_section]
+        cell = _direct(_direct(xml_table, 'tr')[grant.physical_tr_index], 'tc')[grant.physical_tc_index]
+        sub = next(iter(_direct(cell, 'subList')), None)
+        if sub is None or not _direct(sub, 'p'):
+            raise ValueError('VALUE_PARAGRAPH_MISSING')
+        paragraphs = _direct(sub, 'p')
+        first = copy.deepcopy(paragraphs[0])
+        char = next(iter(first.iter(_q('run'))), None)
+        ref = black.black_ref(char.get('charPrIDRef', '0') if char is not None else '0')
+        for paragraph in paragraphs:
+            sub.remove(paragraph)
+        lines = value.splitlines() or [value]
+        lines += [""] * max(0, len(paragraphs) - len(lines))
+        for line in lines:
+            paragraph = etree.Element(_q('p'), **dict(first.attrib))
+            # Retain paragraph identity/style, but never stale line-layout cache.
+            paragraph.set('id', str(max([int(p.get('id','0')) for r in roots.values() for p in r.iter(_q('p')) if p.get('id','0').isdigit()] + [0]) + 1))
+            run = etree.SubElement(paragraph, _q('run'), charPrIDRef=ref)
+            etree.SubElement(run, _q('t')).text = line
+            sub.append(paragraph)
+        changed[grant.field_label] = value
+    # Mask only authorized cell paragraph content; cell geometry stays compared.
+    for name, root in roots.items():
+        old = before[name]
+        masked_new = copy.deepcopy(root)
+        for grant, _ in planned:
+            if grant.section_member != name:
+                continue
+            table = index.tables[grant.table_index]
+            for tree in (old, masked_new):
+                tb = list(tree.iter(_q('tbl')))[table.table_index_in_section]
+                tc = _direct(_direct(tb,'tr')[grant.physical_tr_index],'tc')[grant.physical_tc_index]
+                for sub in _direct(tc,'subList'):
+                    for paragraph in _direct(sub,'p'):
+                        sub.remove(paragraph)
+        if etree.tostring(old,method='c14n') != etree.tostring(masked_new,method='c14n'):
+            raise ValueError('OUTSIDE_CELL_XML_CHANGED')
+        data[name] = etree.tostring(root,xml_declaration=True,encoding='UTF-8',standalone=True)
+    if black.changed:
+        data['Contents/header.xml'] = etree.tostring(header,xml_declaration=True,encoding='UTF-8',standalone=True)
+    dst.parent.mkdir(parents=True,exist_ok=True)
+    fd, temporary = tempfile.mkstemp(dir=dst.parent,suffix='.hwpx'); os.close(fd)
+    try:
+        with zipfile.ZipFile(temporary,'w') as archive:
+            for info in sorted(infos,key=lambda i:i.filename != 'mimetype'):
+                if info.filename == 'mimetype':
+                    info.compress_type = zipfile.ZIP_STORED
+                archive.writestr(info,data[info.filename])
+        os.replace(temporary,dst)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+    return changed

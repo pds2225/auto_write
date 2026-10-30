@@ -1224,6 +1224,39 @@ class ProjectService:
             authorization_is_current=authorization_is_current,
             commit_t02_label_writes=commit_t02_label_writes,
         )
+        from core.docx.services.hwpx_analysis_adapter import index_hwpx_structure
+        from core.docx.services.hwpx_fill import commit_guidance_value_writes
+        from .hwpx_narrative_source import direct_cell_plan
+        cell_source = Path(wire.fill_source)
+        cell_authorization_source = cell_source
+        cell_staging = output_dir / f".cell-auth-{os.getpid()}.hwpx"
+        image_staging = output_dir / f".image-auth-{os.getpid()}.hwpx"
+        cell_grants, cell_values, cell_notes, cell_images = direct_cell_plan(
+            index_hwpx_structure(cell_source), identity, project_input.references,
+            project_input.project_meta or {},
+        )
+        cell_written = {}
+        image_review: list[str] = []
+        if cell_grants and not field_writes:
+            cell_written = commit_guidance_value_writes(cell_source, cell_staging, cell_grants, cell_values)
+            cell_source = cell_staging
+            # F4(opt-in): 섹션별 지정 이미지. 설정이 없으면 기존 동작 그대로.
+            from .submit_finish.body_fill import json_reference_inputs
+            json_in = json_reference_inputs(project_input.references)
+            section_entries = list((project_input.project_meta or {}).get("section_images") or []) + json_in["section_images"]
+            if section_entries:
+                from .submit_finish.section_images import plan_section_images
+                cell_images, image_notes = plan_section_images(
+                    section_entries, cell_grants, cell_values,
+                    current_hwpx=cell_source, base_dirs=json_in["base_dirs"], queued=cell_images,
+                )
+                cell_notes.extend(image_notes)
+                image_review = [n for n in image_notes if n.endswith(" REVIEW")]
+            if cell_images:
+                from .hwpx_pic_insert import insert_cell_reference_images
+                insert_cell_reference_images(cell_source, image_staging, cell_images, authorization_source=cell_authorization_source, values=cell_values)
+                cell_source = image_staging
+        wire.fill_source = cell_source
         expected_sha = F01_CANONICAL_SHA256 if field_writes else None
         if wire.written and expected_sha:
             original_sha = hashlib.sha256(source.read_bytes()).hexdigest()
@@ -1239,10 +1272,17 @@ class ProjectService:
                 normalize_colors=False,
                 submission_cleanup=False,
                 preserve_template=True,
+                require_render_evidence=True,
+                template_survival_baseline=source,
                 field_writes=field_writes or None,
                 expected_sha256=expected_sha,
             )
             report.filled.update(wire.written)
+            report.filled.update(cell_written)
+            report.notes.extend(cell_notes)
+            for note in image_review:
+                if note not in report.residual:
+                    report.residual.append(note)
             if (
                 "창업아이템 개요" in identity
                 and "창업아이템 개요" not in report.filled
@@ -1285,8 +1325,9 @@ class ProjectService:
                 if note not in report.notes:
                     report.notes.append(note)
         finally:
-            if staging.exists():
-                staging.unlink()
+            for temporary in (staging, cell_staging, image_staging):
+                if temporary.exists():
+                    temporary.unlink()
         results_dir = self.storage.results_dir(project_id)
         results_dir.mkdir(parents=True, exist_ok=True)
         final_path = Path(report.final)
@@ -1300,6 +1341,8 @@ class ProjectService:
             )
         except Exception:
             visual_render = "ENVIRONMENT_BLOCKED"
+        from .hwpx_form_diff import compare_hwpx_forms
+        cell_diff = compare_hwpx_forms(source, final_path) if final_path.is_file() else None
         report_path = output_dir / "hwpx_route.json"
         write_json(
             report_path,
@@ -1308,6 +1351,11 @@ class ProjectService:
                 "source": str(source),
                 "output": str(final_path),
                 "visual_render": visual_render,
+                "form_diff_allowed": {
+                    "choice_marks": cell_diff.choice_marks,
+                    "guidance_replacements": cell_diff.guidance_replacements,
+                    "value_paragraphs": cell_diff.value_paragraphs,
+                } if cell_diff else {},
                 "t02_analyzer": {
                     "written": sorted(wire.written),
                     "pending": list(wire.pending),
